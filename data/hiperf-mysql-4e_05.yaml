@@ -1,0 +1,1850 @@
+- en: Chapter 5\. Optimizing Server Settings
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第5章 优化服务器设置
+- en: In this chapter, we’ll explain a process by which you can create a suitable
+    configuration file for your MySQL server. It is a roundabout trip, with many points
+    of interest and side trips to scenic overlooks. These side trips are necessary.
+    Determining the shortest path to a suitable configuration doesn’t start with studying
+    configuration options and asking which ones you should set or how you should change
+    them. Nor does it begin with examining server behavior and asking whether any
+    configuration options can improve it. It’s best to start with an understanding
+    of MySQL’s internals and behavior. You can then use that knowledge as a guide
+    for how to configure MySQL. Finally, you can compare the desired configuration
+    to the current configuration and correct any significant and worthwhile differences.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将解释一个过程，通过这个过程你可以为你的MySQL服务器创建一个合适的配置文件。这是一个迂回的旅程，有许多有趣的地方和风景名胜。这些旁支旅程是必要的。确定适当配置的最短路径并不是从研究配置选项和询问应该设置哪些选项或如何更改它们开始。也不是从检查服务器行为和询问是否有任何配置选项可以改进它开始。最好从理解MySQL的内部机制和行为开始。然后你可以将这些知识用作如何配置MySQL的指南。最后，你可以将期望的配置与当前配置进行比较，并纠正任何重要且有价值的差异。
+- en: People often ask, “What’s the optimal configuration file for my server with
+    32 GB of RAM and 12 CPU cores?” Unfortunately, it’s not that simple. You should
+    configure the server for the workload, data, and application requirements, not
+    just the hardware. MySQL has scores of settings that you can change—but you shouldn’t.
+    It’s usually better to configure the basic settings correctly (and there are only
+    a few that matter in most cases) and spend more time on schema optimization, indexes,
+    and query design. After you’ve set MySQL’s basic configuration options correctly,
+    the potential gains from further changes are usually small.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 人们经常问：“对于拥有32GB RAM和12个CPU核心的服务器，最佳配置文件是什么？”不幸的是，事情并不那么简单。你应该根据工作负载、数据和应用程序要求来配置服务器，而不仅仅是硬件。MySQL有许多设置可以更改，但你不应该这样做。通常最好正确配置基本设置（在大多数情况下只有少数几个是重要的），并花更多时间在模式优化、索引和查询设计上。在正确设置MySQL的基本配置选项之后，进一步更改的潜在收益通常很小。
+- en: On the other hand, the potential downside of fiddling with the configuration
+    can be great. The MySQL defaults are there with good reason. Changing them without
+    understanding the impact can lead to crashes, constant stalls, or slow performance.
+    As such, you should never blindly trust what someone reports as an optimal configuration
+    from popular help sites like the MySQL forums or Stack Overflow.^([1](ch05.html#ch01fn20))
+    Always review any changes by reading the associated manual entry and test carefully.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一方面，随意更改配置的潜在风险是巨大的。MySQL的默认设置是有充分理由的。不明确地了解影响就进行更改可能导致崩溃、持续停顿或性能下降。因此，你永远不应该盲目相信像MySQL论坛或Stack
+    Overflow这样的热门帮助网站上的某人报告的最佳配置。始终通过阅读相关手册条目并仔细测试来审查任何更改。
+- en: So what *should* you do? You should make sure the basics such as the InnoDB
+    buffer pool and logfile size are appropriate. Then you should set a few safety
+    options if you want to prevent undesired behavior (but note that these usually
+    won’t improve performance—they’ll only avoid problems). Then leave the rest of
+    the settings alone. If you experience a problem, begin by diagnosing it carefully.
+    If your problem is caused by a part of the server whose behavior can be corrected
+    with a configuration option, then you might need to change it.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那么你应该做什么呢？你应该确保像InnoDB缓冲池和日志文件大小这样的基本设置是合适的。然后，如果你想要防止不良行为，你应该设置一些安全选项（但请注意，这些通常不会提高性能，它们只会避免问题）。然后就让其他设置保持不变。如果你遇到问题，首先要仔细诊断。如果你的问题是由服务器的某个部分造成的，而这个部分的行为可以通过配置选项进行更正，那么你可能需要进行更改。
+- en: Sometimes you might also need to set specific configuration options that can
+    have a significant performance impact in special cases. However, these should
+    not be part of a basic server configuration file. You should set them only when
+    you find the specific performance problems they address. That’s why we don’t suggest
+    that you approach configuration options by looking for bad things to improve.
+    If something needs to be improved, it should show up in query response times.
+    It’s best to start your search with queries and their response times, not with
+    configuration options. This could save you a lot of time and prevent many problems.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时候你可能还需要设置特定的配置选项，这些选项在特殊情况下可能会对性能产生显著影响。然而，这些选项不应该是基本服务器配置文件的一部分。只有在发现它们解决的具体性能问题时才应该设置它们。这就是为什么我们不建议你通过寻找需要改进的坏事来处理配置选项。如果有什么需要改进的，它应该在查询响应时间中显示出来。最好从查询和它们的响应时间开始搜索，而不是从配置选项开始。这可以为你节省大量时间并避免许多问题。
+- en: Another good way to save time and trouble is to use the defaults unless you
+    know you shouldn’t. There is safety in numbers, and a lot of people are running
+    with default settings. That makes them the most thoroughly tested settings. Unexpected
+    bugs can arise when you change things needlessly.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个节省时间和麻烦的好方法是除非你知道你不应该，否则使用默认设置。人多力量大，很多人都在使用默认设置。这使得它们成为经过最彻底测试的设置。不必要更改事物时可能会出现意外错误。
+- en: How MySQL’s Configuration Works
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MySQL的配置工作原理
+- en: We’ll begin by explaining MySQL’s configuration mechanisms before covering what
+    you should configure in MySQL. MySQL is generally pretty forgiving about its configuration,
+    but following these suggestions may save you a lot of work and time.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将首先解释MySQL的配置机制，然后再讨论你应该在MySQL中配置什么。MySQL通常对其配置相当宽容，但遵循这些建议可能会为你节省大量工作和时间。
+- en: 'The first thing to know is where MySQL gets configuration information: from
+    command-line arguments and settings in its configuration file. On Unix-like systems,
+    the configuration file is typically located at */etc/my.cnf* or */etc/mysql/my.cnf*.
+    If you use your operating system’s startup scripts, this is typically the only
+    place you’ll specify configuration settings. If you start MySQL manually, which
+    you might do when you’re running a test installation, you can also specify settings
+    on the command line. The server actually reads the contents of the configuration
+    file, removes any comment lines and newlines, and then processes it together with
+    the command-line options.'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先要了解的是 MySQL 从哪里获取配置信息：从命令行参数和配置文件中的设置。在类 Unix 系统上，配置文件通常位于 */etc/my.cnf* 或
+    */etc/mysql/my.cnf*。如果您使用操作系统的启动脚本，这通常是您指定配置设置的唯一位置。如果您手动启动 MySQL，可能在运行测试安装时会这样做，您也可以在命令行上指定设置。服务器实际上会读取配置文件的内容，删除任何注释行和换行符，然后与命令行选项一起处理。
+- en: Warning
+  id: totrans-10
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Any settings you decide to use permanently should go into the global configuration
+    file instead of being specified at the command line. Otherwise, you risk accidentally
+    starting the server without them. It’s also a good idea to keep all of your configuration
+    files in a single place so that you can inspect them easily.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您决定永久使用的任何设置都应放入全局配置文件中，而不是在命令行中指定。否则，您可能会意外地启动服务器而没有这些设置。另外，将所有配置文件放在一个地方也是个好主意，这样您可以轻松检查它们。
+- en: 'Be sure you know where your server’s configuration file is located! We’ve seen
+    people try unsuccessfully to configure a server with a file it doesn’t read, such
+    as */etc/my.cnf* on Debian servers, which look in */etc/mysql/my.cnf* for their
+    configuration. Sometimes there are files in several places, perhaps because a
+    previous system administrator was confused as well. If you don’t know which files
+    your server reads, you can ask it:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请确保知道服务器的配置文件位于何处！我们曾见过一些人试图使用服务器不读取的文件进行配置，例如 Debian 服务器上的 */etc/my.cnf*，而这些服务器会在
+    */etc/mysql/my.cnf* 中查找配置。有时会有文件位于多个���置，也许是因为以前的系统管理员也感到困惑。如果您不知道服务器读取哪些文件，可以询问它：
+- en: '[PRE0]'
+  id: totrans-13
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: The configuration file is in the standard INI format and is divided into sections,
+    each of which begins with a line that contains the section name in square brackets.
+    A MySQL program will generally read the section that has the same name as that
+    program, and many client programs also read the `client` section, which gives
+    you a place to put common settings. The server usually reads the `mysqld` section.
+    Be sure you place your settings in the correct section in the file, or they will
+    have no effect.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 配置文件采用标准的 INI 格式，并分为多个部分，每个部分以包含部分名称的方括号开头的行开始。MySQL 程序通常会读取与该程序同名的部分，许多客户端程序也会读取
+    `client` 部分，这为您提供了一个放置常见设置的地方。服务器通常会读取 `mysqld` 部分。请确保将设置放在文件中的正确部分，否则它们将不起作用。
+- en: Syntax, Scope, and Dynamism
+  id: totrans-15
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 语法、作用域和动态性
+- en: 'Configuration settings are written in all lowercase, with words separated by
+    underscores or dashes. The following are equivalent, and you might see both forms
+    in command lines and configuration files:'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 配置设置以全小写形式编写，单词之间用下划线或破折号分隔。以下是等效的写法，在命令行和配置文件中可能会看到这两种形式：
+- en: '[PRE1]'
+  id: totrans-17
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: We suggest that you pick a style and use it consistently. This makes it easier
+    to search for settings in your files.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们建议您选择一种风格并保持一致。这样可以更容易地在文件中搜索设置。
+- en: 'Configuration settings can have several scopes. Some settings are server-wide
+    (global scope), others are different for each connection (session scope), and
+    others are per-object. Many session-scoped variables have global equivalents,
+    which you can think of as defaults. If you change the session-scoped variable,
+    it affects only the connection from which you changed it, and the changes are
+    lost when the connection closes. Here are some examples of the variety of behaviors
+    of which you should be aware:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 配置设置可以具有多个作用域。一些设置是服务器范围的（全局作用域），其他设置对每个连接都不同（会话作用域），还有一些是针对每个对象的。许多会话作用域变量都有全局等效变量，您可以将其视为默认值。如果更改会话作用域变量，则仅影响更改它的连接，并且在连接关闭时更改将丢失。以下是您应该了解的各种行为的一些示例：
+- en: The `max_connections` variable is globally scoped.
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`max_connections` 变量是全局作用域的。'
+- en: The `sort_buffer_size` variable has a global default, but you can set it per
+    session as well.
+  id: totrans-21
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`sort_buffer_size` 变量具有全局默认值，但您也可以为每个会话设置它。'
+- en: The `join_buffer_size` variable has a global default and can be set per session,
+    but a single query that joins several tables can allocate one join buffer *per
+    join*, so there might be several join buffers per query.
+  id: totrans-22
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`join_buffer_size` 变量具有全局默认值，并且可以为每个会话设置，但是一个查询连接多个表可能会为每个连接分配一个连接缓冲区，因此可能会有多个连接缓冲区。'
+- en: 'In addition to setting variables in the configuration files, you can change
+    many (but not all) of them while the server is running. MySQL refers to these
+    as *dynamic* configuration variables. The following statements show different
+    ways to change the session and global values of `sort_buffer_size` dynamically:'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了在配置文件中设置变量外，您还可以在服务器运行时更改许多（但不是全部）变量。MySQL 将这些称为*动态*配置变量。以下语句展示了动态更改 `sort_buffer_size`
+    的会话和全局值的不同方法：
+- en: '[PRE2]'
+  id: totrans-24
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: If you set variables dynamically, be aware that those settings will be lost
+    when MySQL shuts down. If you want to keep the settings, you’ll have to update
+    your configuration file as well.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果动态设置变量，请注意当 MySQL 关闭时这些设置将丢失。如果要保留设置，您必须更新配置文件。
+- en: Tip
+  id: totrans-26
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: If you set a variable’s global value while the server is running, the values
+    for the current session and any other existing sessions are not affected. Keep
+    this in mind if your clients rely on persistent database connections. This is
+    because the session values are initialized from the global value when the connections
+    are created. You should inspect the output of `SHOW GLOBAL VARIABLES` after each
+    change to make sure it’s had the desired effect.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您在服务器运行时设置变量的全局值，则当前会话和任何其他现有会话的值不受影响。如果您的客户端依赖于持久性数据库连接，请记住这一点。这是因为当连接创建时，会话值是从全局值初始化的。您应该在每次更改后检查`SHOW
+    GLOBAL VARIABLES`的输出，以确保它产生了预期的效果。
+- en: 'There is also a special value you can assign to variables with the `SET` command:
+    the keyword `DEFAULT`. Assigning this value to a session-scoped variable sets
+    that variable to the corresponding globally scoped variable’s value. This is useful
+    for resetting session-scoped variables back to the values they had when you opened
+    the connection. We advise you not to use it for global variables because it probably
+    won’t do what you want—that is, it doesn’t set the values back to what they were
+    when you started the server or even the value specified in the configuration file;
+    it sets the variable to the compiled-in default.'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以使用`SET`命令为变量分配一个特殊值：关键字`DEFAULT`。将此值分配给会话作用域变量会将该变量设置为相应全局作用域变量的值。这对于将会话作用域变量重置为打开连接时的值非常有用。我们建议您不要将其用于全局变量，因为它可能不会达到您想要的效果——也就是说，它不会将值设置回您启动服务器时的值，甚至不会设置为配置文件中指定的值；它将变量设置为编译时的默认值。
+- en: Persisted System Variables
+  id: totrans-29
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 持久化系统变量
+- en: If all of this variable scoping and configuration business wasn’t complicated
+    enough, you also had to be aware that if MySQL was restarted, it would revert
+    back to what you had in your configuration file—even if you had used `SET GLOBAL`
+    to change a global variable. This meant that you had to manage a configuration
+    file *and* the runtime configuration of MySQL as well as ensure they stayed in
+    sync with each other. If you wanted to increase `max_connections` for your servers,
+    you had to issue a `SET GLOBAL max_connections` command on each running instance
+    and then follow up with editing the configuration file to reflect your new configuration.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果所有这些变量作用域和配置业务还不够复杂，您还必须意识到，如果重新启动MySQL，它将恢复到配置文件中的内容，即使您使用`SET GLOBAL`更改全局变量。这意味着您必须管理一个配置文件*和*MySQL的运行时配置，并确保它们彼此保持同步。如果您想增加服务器的`max_connections`，您必须在每个运行实例上发出`SET
+    GLOBAL max_connections`命令，然后跟着编辑配置文件以反映您的新配置。
+- en: MySQL 8.0 introduced a new feature called [persisted system variables](https://oreil.ly/ZDwXZ),
+    which helps to make this a little less complicated. The new syntax `SET PERSIST`
+    now allows you to set the value once for runtime and MySQL will write this setting
+    out to disk, enabling it to be used at the next restart.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 8.0引入了一个名为[持久化系统变量](https://oreil.ly/ZDwXZ)的新功能，有助于使这个过程变得稍微简单一些。新的语法`SET
+    PERSIST`现在允许您为运行时设置值一次，MySQL将把这个设置写入磁盘，使其能够在下次重启时使用。
+- en: Side Effects of Setting Variables
+  id: totrans-32
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 设置变量的副作用
+- en: Setting variables dynamically can have unexpected side effects, such as flushing
+    dirty blocks from buffers. Be careful which settings you change online because
+    this can cause the server to do a lot of work.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 动态设置变量可能会产生意想不到的副作用，比如刷新缓冲区中的脏块。在线更改哪些设置时要小心，因为这可能会导致服务器做大量工作。
+- en: 'Sometimes you can infer a variable’s behavior from its name. For example, `max_heap_table_size`
+    does what it sounds like: it specifies the *maximum* size to which implicit in-memory
+    temporary tables are allowed to grow. However, the naming conventions aren’t completely
+    consistent, so you can’t always guess what a variable will do by looking at its
+    name.'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时您可以从变量的名称推断出其行为。例如，`max_heap_table_size`的功能就如其名：它指定了隐式内存临时表允许增长的*最大*大小。然而，命名约定并不完全一致，因此您不能总是通过查看名称来猜测变量的功能。
+- en: 'Let’s take a look at some commonly used variables and the effects of changing
+    them dynamically:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看一下一些常用变量及更改它们动态的影响：
+- en: '`table_open_cache`'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`table_open_cache`'
+- en: 'Setting this variable has no immediate effect: the effect is delayed until
+    the next time a thread opens a table. When this happens, MySQL checks the variable’s
+    value. If the value is larger than the number of tables in the cache, the thread
+    can insert the newly opened table into the cache. If the value is smaller than
+    the number of tables in the cache, MySQL deletes unused tables from the cache.'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 设置此变量没有立即效果：效果会延迟到下次线程打开表时。当这种情况发生时，MySQL会检查变量的值。如果值大于缓存中的表数，线程可以将新打开的表插入缓存中。如果值小于缓存中的表数，MySQL会从缓存中删除未使用的表。
+- en: '`thread_cache_size`'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`thread_cache_size`'
+- en: 'Setting this variable has no immediate effect: the effect is delayed until
+    the next time a connection is closed. At that time, MySQL checks whether there
+    is space in the cache to store the thread. If so, it caches the thread for future
+    reuse by another connection. If not, it kills the thread instead of caching it.
+    In this case, the number of threads in the cache, and hence the amount of memory
+    the thread cache uses, does not immediately decrease; it decreases only when a
+    new connection removes a thread from the cache to use it. (MySQL adds threads
+    to the cache only when connections close and removes them from the cache only
+    when new connections are created.)'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 设置此变量没有立即效果：效果会延迟到下次连接关闭时。此时，MySQL���检查缓存中是否有空间来存储线程。如果有，它会将线程缓存以便将来由另一个连接重用。如果没有，它会杀死线程而不是将其缓存。在这种情况下，缓存中的线程数以及线程缓存使用的内存量不会立即减少；只有当新连接从缓存中移除线程以使用它时，它才会减少。（MySQL仅在连接关闭时添加线程到缓存中，并且仅在创建新连接时从缓存中删除线程。）
+- en: '`read_buffer_size`'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`read_buffer_size`'
+- en: MySQL doesn’t allocate any memory for this buffer until a query needs it, but
+    then it immediately allocates the entire chunk of memory specified here.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL不会为这个缓冲区分配任何内存，直到查询需要它，但然后它��即分配这里指定的整个内存块。
+- en: '`read_rnd_buffer_size`'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`read_rnd_buffer_size`'
+- en: MySQL doesn’t allocate any memory for this buffer until a query needs it, and
+    then it allocates only as much memory as needed. (The name `max_​read_​rnd_buffer_size`
+    would describe this variable more accurately.)
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL不会为这个缓冲区分配任何内存，直到查询需要它，然后它只会分配所需的内存。（`max_​read_​rnd_buffer_size`这个名称更准确地描述了这个变量。）
+- en: The official MySQL documentation explains what these variables do in detail,
+    and this isn’t an exhaustive list. Our goal here is simply to show you what behavior
+    to expect when you change a few common variables.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 官方的MySQL文档详细解释了这些变量的作用，这并不是一个详尽的列表。我们在这里的目标只是向你展示当你更改一些常见变量时可以期望的行为。
+- en: You should not raise the value of a per-connection setting globally unless you
+    know it’s the right thing to do. Some buffers are allocated all at once, even
+    if they’re not needed, so a large global setting can be a huge waste. Instead,
+    you can raise the value when a query needs it.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除非你知道这样做是正确的，否则不要全局提高每个连接设置的值。有些缓冲区即使不需要也会一次性分配，因此一个很大的全局设置可能是一个巨大的浪费。相反，当一个查询需要时，你可以提高这个值。
+- en: Planning Your Variable Changes
+  id: totrans-46
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 规划你的变量更改
+- en: 'Be careful when setting variables. More is not always better, and if you set
+    the values too high, you can easily cause problems: you might run out of memory
+    or cause your server to swap.'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在设置变量时要小心。更多并不总是更好，如果你将值设置得太高，你很容易引起问题：你可能会耗尽内存或导致服务器交换。
+- en: Referring back to [Chapter 2](ch02.html#monitoring_in_a_reliability_engineering),
+    monitor your SLOs to ensure that your changes don’t affect the customer experience.
+    Benchmarks aren’t enough because they’re not real. If you don’t measure your server’s
+    actual performance, you might hurt performance without knowing it. We’ve seen
+    many cases where someone changed a server’s configuration and thought it improved
+    performance, when in fact the server’s performance worsened overall because of
+    a different workload at a different time of day or day of the week.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 参考[第2章](ch02.html#monitoring_in_a_reliability_engineering)，监控你的SLOs以确保你的更改不会影响客户体验。基准测试并不足够，因为它们不是真实的。如果你不测量服务器的实际性能，你可能会在不知情的情况下损害性能。我们看到许多情况下，有人更改了服务器的配置并认为它提高了性能，而实际上由于不同时间或不同日期的不同工作负载，服务器的性能整体上恶化了。
+- en: Ideally, you’re using a version control system to track changes to your configuration
+    files. This strategy can be very effective at correlating a performance change
+    or SLO breach to a specific configuration change. Just be aware that changing
+    the configuration file doesn’t actually do anything by default—you have to change
+    the runtime setting too.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理想情况下，你正在使用版本控制系统跟踪对配置文件的更改。这种策略可以非常有效地将性能变化或SLO违规与特定配置更改相关联。只是要注意，默认情况下更改配置文件并不会做任何事情——你必须同时更改运行时设置。
+- en: Before you start changing your configuration, you should optimize your queries
+    and your schema, addressing at least the obvious things such as adding indexes.
+    If you get deep into tweaking the configuration and then change your queries or
+    schema, you might need to reevaluate the configuration. Keep in mind that unless
+    your hardware, workload, and data are completely static, chances are you’ll need
+    to revisit your configuration later. And in fact, most people’s servers don’t
+    even have a steady workload throughout the day—meaning that the “perfect” configuration
+    for the middle of the morning is not right for midafternoon! Obviously, chasing
+    the mythical “perfect” configuration is completely impractical. Thus, you don’t
+    need to squeeze every last ounce of performance out of your server; in fact, the
+    return for such an investment of time will probably be very small. We suggest
+    that you focus on optimizing for your peak workload and then stop at “good enough,”
+    unless you have reason to believe you’re forgoing a significant performance improvement.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在开始更改配置之前，你应该优化你的查询和模式，至少解决一些明显的问题，比如添加索引。如果你深入调整配置，然后更改查询或模式，你可能需要重新评估配置。请记住，除非你的硬件、工作负载和数据完全静态，否则你很可能需要稍后重新审视你的配置。事实上，大多数人的服务器甚至一天中的工作负载都不是完全稳定的——这意味着上午中间的“完美”配置并不适合下午中午！显然，追求神话般的“完美”配置是完全不切实际的。因此，你不需要从服务器中挤出每一丝性能；事实上，这样投入时间的回报可能非常小。我们建议你专注于优化你的高峰工作负载，然后在“足够好”的地方停下，除非你有理由相信你正在放弃重大的性能改进。
+- en: What Not to Do
+  id: totrans-51
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 不要做什么
+- en: 'Before we get started with server configuration, we want to encourage you to
+    avoid a few common practices that we’ve found to be risky or practically not worth
+    the effort. Warning: rants ahead!'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在开始服务器配置之前，我们想鼓励你避免一些我们发现有风险或实际上不值得努力的常见做法。警告：下面有抱怨！
+- en: You might be expected (or believe that you’re expected) to set up a benchmark
+    suite and “tune” your server by changing its configuration iteratively in search
+    of optimal settings. This usually is not something we advise most people to do.
+    It requires so much work and research, and the potential payoff is so small in
+    most cases, that it can be a huge waste of time. You are probably better off spending
+    that time on other things such as checking your backups, monitoring changes in
+    query plans, and so on.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能期望（或者认为你被期望）建立一个基准测试套件，并通过迭代更改其配置来“调整”服务器以寻找最佳设置。这通常不是我们建议大多数人做的事情。这需要很多工作和研究，而在大多数情况下潜在回报是如此之小，以至于可能是一种巨大的时间浪费。你可能最好将那些时间花在其他事情上，比如检查你的备份，监控查询计划的变化等等。
+- en: You should not “tune by ratio.” The classic “tuning ratio” is the rule of thumb
+    that your InnoDB buffer pool hit ratio should be higher than some percentage,
+    and you should increase the cache size if the hit rate is too low. This is very
+    wrong advice. Regardless of what anyone tells you, *the cache hit ratio has nothing
+    to do with whether the cache is too large or too small*. To begin with, the hit
+    ratio depends on the workload—some workloads simply aren’t cacheable no matter
+    how big the cache is—and secondly, cache hits are meaningless, for reasons we’ll
+    explain later. It sometimes happens that when the cache is too small, the hit
+    rate is low, and increasing the cache size increases the hit rate. However, this
+    is an accidental correlation and does not indicate anything about performance
+    or proper sizing of the cache.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你不应该“按比率调优”。经典的“调优比率”是一个经验法则，即你的InnoDB缓冲池命中率应该高于某个百分比，如果命中率太低，你应该增加缓存大小。这是非常错误的建议。不管别人告诉你什么，*缓存命中率与缓存是太大还是太小无关*。首先，命中率取决于工作负载——有些工作负载无论缓存有多大都无法缓存，其次，缓存命中是毫无意义的，我们稍后会解释原因。有时候当缓存太小时，命中率较低，增加缓存大小会增加命中率。然而，这只是一个偶然的相关性，并不表示任何关于性能或正确缓存大小的信息。
+- en: 'The problem with correlations that sometimes appear to be true is that people
+    begin to believe they will always be true. Oracle DBAs abandoned ratio-based tuning
+    years ago, and we wish MySQL DBAs would follow their lead.^([2](ch05.html#ch01fn21))
+    We wish even more fervently that people wouldn’t write “tuning scripts” that codify
+    these dangerous practices and teach them to thousands of people. This leads to
+    our next suggestion of what not to do: don’t use tuning scripts! There are several
+    very popular ones that you can find on the internet. It’s probably best to ignore
+    them.'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时候看起来正确的相关性的问题在于人们开始相信它们将永远正确。Oracle DBA多年前就放弃了基于比率的调优，我们希望MySQL DBA能够效仿他们的做法。我们更加热切地希望人们不要编写“调优脚本”，将这些危险的做法编码化并传授给成千上万的人。这导致了我们下一个建议：不要使用调优脚本！互联网上有几个非常流行的调优脚本。最好还是将它们忽略掉。
+- en: We also suggest that you avoid the word *tuning*, which we’ve used liberally
+    in the past few paragraphs. We favor *configuration* or *optimization* instead
+    (as long as that’s what you’re actually doing). The word *tuning* conjures up
+    images of an undisciplined novice who tweaks the server and sees what happens.
+    We suggested in the previous section that this practice is best left to those
+    who are researching server internals. “Tuning” your server can be a stunning waste
+    of time.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还建议你避免使用*调优*这个词，我们在过去几段中大量使用了这个词。我们更倾向于使用*配置*或*优化*（只要你确实在做这个）。*调优*这个词让人联想到一个无纪律的新手，调整服务器然后看看发生了什么。我们在前一节中建议这种做法最好留给那些正在研究服务器内部的人。“调优”你的服务器可能是一种令人惊讶的时间浪费。
+- en: On a related topic, searching the internet for configuration advice is not always
+    a great idea. You can find a lot of bad advice in blogs, forums, and so on. Although
+    many experts contribute what they know online, it is not always easy to tell who
+    is qualified. We can’t give unbiased recommendations about where to find real
+    experts, of course. But we can say that the credible, reputable MySQL service
+    providers are a safer bet in general than what a simple internet search turns
+    up because people who have happy customers are probably doing something right.
+    Even their advice, however, can be dangerous to apply without testing and understanding
+    because it might have been directed at a situation that differed from yours in
+    a way you don’t understand.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在相关主题上，搜索互联网上的配置建议并不总是一个好主意。你可以在博客、论坛等地方找到很多错误的建议。尽管许多专家在线贡献他们所知道的东西，但很难判断谁是合格的。当然，我们无法对在哪里找到真正专家给出公正的建议。但我们可以说，可信赖的、声誉良好的MySQL服务提供商通常比简单的互联网搜索结果更可靠，因为拥有满意客户的人可能做对了一些事情。然而，即使是他们的建议，如果没有测试和理解，应用起来也可能是危险的，因为它可能是针对一个你不理解的与你的情况不同的情况。
+- en: Finally, don’t believe the popular memory consumption formula—yes, the very
+    one that MySQL itself prints out when it crashes. (We won’t repeat it here.) This
+    formula is from an ancient time. It is not a reliable or even useful way to understand
+    how much memory MySQL can use in the worst case. You might see some variations
+    on this formula on the internet, too. These are similarly flawed, even though
+    they add in more factors that the original formula doesn’t have. The truth is
+    that you can’t put an upper bound on MySQL’s memory consumption. It is not a tightly
+    regulated database server that controls memory allocation.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，不要相信流行的内存消耗公式——是的，就是MySQL自己在崩溃时打印出来的那个。（我们不会在这里重复它。）这个公式来自一个古老的时代。这不是一个可靠甚至有用的了解MySQL在最坏情况下可以使用多少内存的方法。你可能在互联网上看到一些关于这个公式的变体。这些同样存在缺陷，即使它们添加了原始公式没有的更多因素。事实是你无法对MySQL的内存消耗设定上限。它不是一个严格控制内存分配的数据库服务器。
+- en: Creating a MySQL Configuration File
+  id: totrans-59
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 创建一个MySQL配置文件
+- en: As we mentioned at the beginning of this chapter, we don’t have a one-size-fits-all
+    “best configuration file” for, say, a 4 CPU server with 16 GB of memory and 12
+    hard drives. You really do need to develop your own configurations because even
+    a good starting point will vary widely depending on how you’re using the server.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在本章开头提到的，我们没有适用于比如说一个有4个CPU、16GB内存和12个硬盘的服务器的“最佳配置文件”。你确实需要开发自己的配置，因为即使一个良好的起点也会根据你如何使用服务器而有很大的不同。
+- en: Minimal Configuration
+  id: totrans-61
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 最小配置
+- en: 'We’ve created a minimal sample configuration file for this book, which you
+    can use as a good starting point for your own servers.^([3](ch05.html#ch01fn22))
+    You must choose values for a few of the settings; we’ll explain those later in
+    this chapter. Our base file, built around MySQL 8.0, looks like this:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们为本书创建了一个最小的示例配置文件，你可以将其用作你自己服务器的良好起点。你必须为一些设置选择值；我们稍后会在本章解释这些设置。我们的基础文件，围绕MySQL
+    8.0构建，看起来像这样：
+- en: '[PRE3]'
+  id: totrans-63
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: This might seem *too* minimal in comparison to what you’re used to seeing, but
+    it’s actually more than many people need. There are a few other types of configuration
+    options that you are likely to use as well, such as binary logging; we’ll cover
+    those later in this and other chapters.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这与您习惯看到的可能*太*简单了，但实际上已经超出了许多人的需求。还有一些其他类型的配置选项，您可能也会经常使用，比如二进制日志记录；我们将在本章和其他章节中详细介绍这些内容。
+- en: The first thing we configured is the location of the data. We chose */var/lib/mysql*
+    for this, because it’s a popular location on many Unix variants. There is nothing
+    wrong with choosing another location; you decide. We’ve put the *.pid* file in
+    the same location, but many operating systems will want to place it in */var/run*
+    instead. That’s fine, too. We simply needed to have something configured for these
+    settings. By the way, don’t let the socket and *.pid* file be located according
+    to the server’s compiled-in defaults; there are some bugs in various MySQL versions
+    that can cause problems with this. It’s best to set these locations explicitly.
+    (We’re not advising you to choose different locations; we’re just advising you
+    to make sure the *my.cnf* file mentions those locations explicitly, so they won’t
+    change and break things if you upgrade the server.)
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们配置的第一件事是数据的位置。我们选择了*/var/lib/mysql*，因为这是许多Unix变体上的常用位置。选择其他位置也没有问题；由您决定。我们将*.pid*文件放在相同位置，但许多���作系统可能希望将其放在*/var/run*中。这也可以。我们只是需要为这些设置配置一些内容。顺便说一句，不要让套接字和*.pid*文件根据服务器的编译默认位置放置；各种MySQL版本中可能会出现一些错误，可能会导致问题。最好明确设置这些位置。（我们不建议选择不同的位置；我们只建议确保*my.cnf*文件明确提到这些位置，这样在升级服务器时它们不会更改并破坏事情。）
+- en: We also specified that *mysqld* should run as the *mysql* user account on the
+    operating system. You’ll need to make sure this account exists and that it owns
+    the data directory and all files within. The port is set to the default of `3306`,
+    but sometimes you’ll want to change that.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还指定了*mysqld*应以操作系统上的*mysql*用户帐户运行。您需要确保此帐户存在，并且拥有数据目录和其中的所有文件。端口设置为默认的`3306`，但有时您可能需要更改。
+- en: In MySQL 8.0, a new configuration option, `innodb_dedicated_server`, was introduced.
+    This option examines the available memory on the server and configures four additional
+    variables (`innodb_buffer_pool_size`, `innodb_log_file_size`, `innodb_​log_​files_​in_group`,
+    and `innodb_flush_method`) appropriately for a dedicated database server, which
+    simplifies calculating and changing these values. This can be especially useful
+    in a cloud environment, where you might run a virtual machine (VM) with 128 GB
+    of RAM and then reboot it to scale up to 256 GB RAM. MySQL here would be self-configuring,
+    and you don’t need to manage changing the values in the configuration file. This
+    is often the best way to manage these four settings.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 8.0 中，引入了一个新的配置选项，`innodb_dedicated_server`。此选项会检查服务器上的可用内存，并适当配置四个附加变量（`innodb_buffer_pool_size`、`innodb_log_file_size`、`innodb_log_files_in_group`和`innodb_flush_method`）以用于专用数据库服务器，这简化了计算和更改这些值。在云环境中，这可能特别有用，您可能会运行具有128
+    GB RAM的虚拟机（VM），然后重新启动以扩展到256 GB RAM。MySQL在这里将自动配置，您无需管理更改配置文件中的值。这通常是管理这四个设置的最佳方法。
+- en: Most of the other settings in our sample file are pretty self-explanatory, and
+    many of them are a matter of judgment. We’ll explore several of them throughout
+    the rest of this chapter. We’ll also discuss some safety settings later in this
+    chapter, which can be very helpful for making your server more robust and helping
+    to prevent bad data and other problems. We don’t show those settings here.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们示例文件中的大多数其他设置都相当容易理解，其中许多是主观判断的问题。我们将在本章的其余部分探讨其中几个。我们还将在本章后面讨论一些安全设置，这些设置可以帮助使您的服务器更加健壮，并有助于防止糟糕的数据和其他问题。我们这里不展示这些设置。
+- en: One setting to explain here is the `open_files_limit` option. We’ve set this
+    as large as possible on a typical Linux system. Open file handles are very cheap
+    on modern operating systems. If this setting isn’t large enough, you’ll see error
+    24, “too many open files.”
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里要解释的一个设置是`open_files_limit`选项。在典型的Linux系统上，我们将其设置为尽可能大。在现代操作系统上，打开文件句柄非常便宜。如果此设置不够大，您将看到错误24，“打开文件过多”。
+- en: Skipping all the way to the end, the last section in the configuration file
+    is for client programs like *mysql* and *mysqladmin* and simply lets them know
+    how to connect to the server. You should set the values for client programs to
+    match those you chose for the server.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 跳到最后，配置文件中的最后一节是用于*mysql*和*mysqladmin*等客户端程序的，只是让它们知道如何连接到服务器。您应该设置客户端程序的值与您为服务器选择的值相匹配。
+- en: Inspecting MySQL Server Status Variables
+  id: totrans-71
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 检查 MySQL 服务器状态变量
+- en: 'Sometimes you can use the output from `SHOW GLOBAL STATUS` as input to your
+    configuration to help customize the settings better for your workload. For the
+    best results, look both at absolute values and at how the values change over time,
+    preferably with several snapshots at peak and off-peak times. You can use the
+    following command to see incremental changes to status variables every 60 seconds:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时，您可以使用`SHOW GLOBAL STATUS`的输出作为配置的输入，以帮助更好地为您的工作负载定制设置。为了获得最佳结果，最好同时查看绝对值和值随时间变化的情况，最好在高峰和低峰时间进行多次快照。您可以使用以下命令每60秒查看状态变量的增量变化：
+- en: '[PRE4]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: We will frequently refer to changes in status variables over time as we explain
+    various configuration settings. We will usually expect you to be examining the
+    output of a command such as the one we just showed. Other helpful tools that can
+    provide a compact display of status counter changes are Percona Toolkit’s *pt-mext*
+    or *pt-mysql-summary*.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们解释各种配置设置时，我们经常会提到随时间变化的状态变量的变化。通常我们期望您检查类似我们刚刚展示的命令的输出。其他有用的工具，可以提供紧凑的状态计数器变化显示的有Percona
+    Toolkit的*pt-mext*或*pt-mysql-summary*。
+- en: Now that we’ve shown you the preliminaries, we’ll take you on a guided tour
+    of some server internals, interleaved with advice on configuration. This will
+    give you the background you’ll need to choose appropriate values for configuration
+    options when we return to the sample configuration file later.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经向你展示了一些基础知识，我们将带你参观一些服务器内部，并交替提供配置建议。这将为你选择适当的配置选项值提供所需的背景知识，当我们稍后返回示例配置文件时。
+- en: Configuring Memory Usage
+  id: totrans-76
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 配置内存使用
+- en: Using `innodb_dedicated_server` will typically use 50%–75% of your RAM. This
+    leaves you with at least 25% for per-connection memory allocations, operating
+    system overhead, and other memory settings. We go over each of these in the following
+    sections, and then we take a more detailed look at the various MySQL caches’ requirements.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`innodb_dedicated_server`通常会使用50%–75%的RAM。这至少为每个连接的内存分配、操作系统开销和其他内存设置留出了25%。我们将在接下来的部分详细介绍每一个，并然后更详细地查看各种MySQL缓存的需求。
+- en: Per-Connection Memory Needs
+  id: totrans-78
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 每个连接的内存需求
+- en: MySQL needs a small amount of memory just to hold a connection (typically with
+    an associated dedicated thread) open. It also requires a base amount of memory
+    to execute any given query. You’ll need to set aside enough memory for MySQL to
+    execute queries during peak load times. Otherwise, your queries will be starved
+    for memory, and they will run poorly or fail.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL需要一小部分内存来保持连接（通常与一个关联的专用线程）的打开状态。它还需要一定的内存来执行任何给定的查询。你需要为MySQL在高负载时段执行查询留出足够的内存。否则，你的查询将因内存不足而运行不佳或失败。
+- en: It’s useful to know how much memory MySQL will consume during peak usage, but
+    some usage patterns can unexpectedly consume a lot of memory, which makes this
+    hard to predict. Prepared statements are one example because you can have many
+    of them open at once. Another example is the InnoDB data dictionary (more about
+    this later).
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 了解MySQL在高峰使用期间将消耗多少内存是有用的，但某些使用模式可能会意外地消耗大量内存，这使得难以预测。准备好的语句就是一个例子，因为你可以同时打开许多这样的语句。另一个例子是InnoDB数据字典（稍后会详细介绍）。
+- en: You don’t need to assume a worst-case scenario when trying to predict peak memory
+    consumption. For example, if you configure MySQL to allow a maximum of one hundred
+    connections, it theoretically might be possible to simultaneously run large queries
+    on all one hundred connections, but in reality this probably won’t happen. Queries
+    that use many large temporary tables or complex stored procedures are the most
+    likely causes of high per-connection memory consumption.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在尝试预测峰值内存消耗时，你不需要假设最坏情况。例如，如果你配置MySQL允许最多一百个连接，理论上可能同时在所有一百个连接上运行大型查询，但实际上这可能不会发生。使用许多大型临时表或复杂存储过程的查询是高每个连接内存消耗的最有可��的原因。
+- en: Reserving Memory for the Operating System
+  id: totrans-82
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 为操作系统保留内存
+- en: Just as with queries, you need to reserve enough memory for the operating system
+    to do its work. This involves running any local monitoring software, configuration
+    management tooling, scheduled jobs, and so forth. The best indication that the
+    operating system has enough memory is that it’s not actively swapping (paging)
+    virtual memory to disk.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就像查询一样，你需要为操作系统保留足够的内存来完成其工作。这涉及运行任何本地监控软件、配置管理工具、定期作业等。操作系统有足够内存的最好指标是它没有主动将虚拟内存交换（分页）到磁盘。
+- en: The InnoDB Buffer Pool
+  id: totrans-84
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: InnoDB缓冲池
+- en: 'The InnoDB buffer pool needs more memory than anything else, as it’s generally
+    the most important variable for performance. The InnoDB buffer pool doesn’t just
+    cache indexes: it also holds row data, the adaptive hash index, the change buffer,
+    locks, and other internal structures. InnoDB also uses the buffer pool to help
+    it delay writes, so it can merge many writes together and perform them sequentially.
+    In short, InnoDB relies *heavily* on the buffer pool, and you should be sure to
+    allocate enough memory to it. You can use variables from `SHOW` commands or tools
+    such as *innotop* to monitor your InnoDB buffer pool’s memory usage.'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB缓冲池需要比其他任何东西都更多的内存，因为它通常是性能的最重要变量。InnoDB缓冲池不仅仅缓存索引：它还保存行数据、自适应哈希索引、更改缓冲区、锁定和其他内部结构。InnoDB还使用缓冲池来帮助延迟写入，这样它可以合并许多写入并按顺序执行它们。简而言之，InnoDB严重依赖于缓冲池，你应该确保为其分配足够的内存。你可以使用`SHOW`命令的变量或诸如*innotop*之类的工具来监视你的InnoDB缓冲池的内存使用情况。
+- en: If you don’t have much data and you know that your data won’t grow quickly,
+    you don’t need to overallocate memory to the buffer pool. It’s not really beneficial
+    to make it much larger than the size of the tables and indexes that it will hold.
+    There’s nothing wrong with planning ahead for a rapidly growing database, of course,
+    but sometimes we see huge buffer pools with a tiny amount of data. This isn’t
+    necessary.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你没有太多数据，并且知道你的数据不会快速增长，那么你不需要为缓冲池过度分配内存。将其大小远远大于它将容纳的表和索引的大小并不真正有益。当然，提前规划一个快速增长的数据库也没有错，但有时我们会看到一个微不足道的数据量却有着巨大的缓冲池。这是不必要的。
+- en: Large buffer pools come with some challenges, such as long shutdown and warm-up
+    times. If there are a lot of dirty (modified) pages in the buffer pool, InnoDB
+    can take a long time to shut down because it writes the dirty pages to the datafiles
+    upon shutdown. You can force it to shut down quickly, but then it just has to
+    do more recovery when it restarts, so you can’t actually speed up the shutdown
+    and restart cycle time. If you know in advance when you need to shut down, you
+    can change the `innodb_max_dirty_pages_pct` variable at runtime to a lower value,
+    wait for the flush thread to clean up the buffer pool, and then shut down once
+    the number of dirty pages becomes small. You can monitor the number of dirty pages
+    by watching the `innodb_buffer_pool_pages_dirty` server status variable or using
+    *innotop* to monitor `SHOW INNODB STATUS`. You can also use the variable `innodb_fast_shutdown`
+    to tweak how shutdown occurs.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大型缓冲池带来一些挑战，例如长时间的关闭和热身时间。如果缓冲池中有许多脏（修改的）页面，InnoDB在关闭时可能需要很长时间，因为它会在关闭时将脏页写入数据文件。你可以强制它快速关闭，但然后它只需在重新启动时执行更多的恢复，因此实际上无法加快关闭和重新启动周期时间。如果你事先知道需要关闭的时间，可以在运行时将`innodb_max_dirty_pages_pct`变量更改为较低的值，等待刷新线程清理缓冲池，然后在脏页数量变少时关闭。你可以通过观察`innodb_buffer_pool_pages_dirty`服务器状态变量或使用*innotop*监视`SHOW
+    INNODB STATUS`来监视脏页的数量。你还可以使用变量`innodb_fast_shutdown`来调整关闭的方式。
+- en: Lowering the value of the `innodb_max_dirty_pages_pct` variable doesn’t actually
+    guarantee that InnoDB will keep fewer dirty pages in the buffer pool. Instead,
+    it controls the threshold at which InnoDB stops being “lazy.” InnoDB’s default
+    behavior is to flush dirty pages with a background thread, merging writes together
+    and performing them sequentially for efficiency. This behavior is called “lazy”
+    because it lets InnoDB delay flushing dirty pages in the buffer pool unless it
+    needs to use the space for some other data. When the percentage of dirty pages
+    exceeds the threshold, InnoDB will flush pages as quickly as it can to try to
+    keep the dirty page count lower. These page cleaner operations have been greatly
+    [optimized](https://oreil.ly/S8ong) from previous behavior, including being able
+    to configure multiple threads to perform flushing.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 降低`innodb_max_dirty_pages_pct`变量的值并不能保证InnoDB在缓冲池中保留较少的脏页。相反，它控制了InnoDB停止“懒惰”的阈值。InnoDB的默认行为是使用后台线程刷新脏页，将写操作合并在一起并按顺序执行以提高效率。这种行为被称为“懒惰”，因为它允许InnoDB延迟刷新缓冲池中的脏页，除非需要为其他数据使用空间。当脏页的百分比超过阈值时，InnoDB会尽快刷新页面，以尝试保持较低的脏页计数。这些页面清理操作已经从以前的行为中得到了很大的[优化](https://oreil.ly/S8ong)，包括能够配置多个线程执行刷新。
+- en: When MySQL starts back up again, the buffer pool cache is empty, also referred
+    to as a *cold cache*. All of the benefits of having rows and pages in memory are
+    now gone. Thankfully, by default the configuration options `innodb_buffer_pool_dump_at_shutdown`
+    and `innodb_buffer_pool_load_at_startup` work together to warm the server at startup.
+    The load at startup takes time, but it can speed up the performance of a server
+    much faster than waiting for it to naturally populate.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当MySQL再次启动时，缓冲池缓存为空，也称为*冷缓存*。现在，将所有行和页面放入内存的好处都消失了。幸运的是，默认情况下，配置选项`innodb_buffer_pool_dump_at_shutdown`和`innodb_buffer_pool_load_at_startup`一起在启动时使服务器变热。启动时的加载需要时间，但它可以比等待自然填充更快地提高服务器的性能。
+- en: The Thread Cache
+  id: totrans-90
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 线程缓存
+- en: The thread cache holds threads that aren’t currently associated with a connection
+    but are ready to serve new connections. When there’s a thread in the cache and
+    a new connection is created, MySQL removes the thread from the cache and gives
+    it to the new connection. When the connection is closed, MySQL places the thread
+    back into the cache, if there’s room. If there isn’t room, MySQL destroys the
+    thread. As long as MySQL has a free thread in the cache, it can respond rapidly
+    to connection requests because it doesn’t have to create a new thread for each
+    connection.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 线程缓存保存着当前没有与连接关联但准备为新连接提供服务的线程。当缓存中有一个线程且创建了新连接时，MySQL会将线程从缓存中移除并分配给新连接。当连接关闭时，如果有空间，MySQL会将线程放回缓存中。如果没有空间，MySQL会销毁线程。只要MySQL在缓存中有空闲线程，它就可以快速响应连接请求，因为它不必为每个连接创建新线程。
+- en: The `thread_cache_size` variable specifies the number of threads MySQL can keep
+    in the cache. You probably won’t need to change this from the default value of
+    `-1` or auto-sized unless your server gets many connection requests. To check
+    whether the thread cache is large enough, watch the `Threads_created` status variable.
+    We generally try to keep the thread cache large enough that we see fewer than
+    10 new threads created each second, but it’s often pretty easy to get this number
+    lower than one per second.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`thread_cache_size`变量指定MySQL可以在缓存中保留的线程数。除非你的服务器收到许多连接请求，否则你可能不需要将其从默认值`-1`或自动大小更改。要检查线程缓存是否足够大，请观察`Threads_created`状态变量。通常我们尝试保持线程缓存足够大，以便每秒创建的新线程少于10个，但通常很容易将这个数字降低到每秒不到一个。'
+- en: 'A good approach is to watch the `Threads_connected` variable and try to set
+    `thread_cache_size` large enough to handle the typical fluctuation in your workload.
+    For example, if `Threads_connected` usually stays between 100 and 120, you can
+    set the cache size to 20\. If it stays between 500 and 700, a thread cache of
+    200 should be large enough. Think of it this way: at 700 connections, there are
+    probably no threads in the cache; at 500 connections, there are 200 cached threads
+    ready to be used if the load increases to 700 again.'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个好的方法是观察`Threads_connected`变量并尝试将`thread_cache_size`设置为足够大以处理工作负载的典型波动。例如，如果`Threads_connected`通常保持在100到120之间，你可以将缓存大小设置为20。如果保持在500到700之间，200个线程缓存应该足够大。可以这样想：在700个连接时，可能没有线程在缓存中；在500个连接时，有200个缓存线程准备在负载再次增加到700时使用。
+- en: Making the thread cache very large is probably not necessary for most uses,
+    but keeping it small doesn’t save much memory, so there’s little benefit in doing
+    so. Each thread that’s in the thread cache or sleeping typically uses around 256
+    KB of memory. This is not very much compared to the amount of memory a thread
+    can use when a connection is actively processing a query. In general, you should
+    keep your thread cache large enough that `Threads_created` doesn’t increase very
+    often. If this is a very large number, however (e.g., many thousands of threads),
+    you might want to set it lower because some operating systems don’t handle very
+    large numbers of threads well, even when most of them are sleeping.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使线程缓存非常大可能对大多数用途来说并不是必要的，但保持较小的线程缓存并不能节省太多内存，因此这样做几乎没有什么好处。每个在线程缓存中或正在休眠的线程通常使用大约256
+    KB的内存。与连接在积极处理查询时线程可以使用的内存量相比，这并不多。一般来说，你应该保持线程缓存足够大，以便`Threads_created`不会经常增加。然而，如果这是一个非常大的数字（例如，成千上万的线程），你可能希望将其设置得更低，因为一些操作系统即使大多数线程处于休眠状态时也无法很好地处理非常大的线程数量。
+- en: Configuring MySQL’s I/O Behavior
+  id: totrans-95
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 配置MySQL的I/O行为
+- en: A few configuration options affect how MySQL synchronizes data to disk and performs
+    recovery. These can affect performance dramatically because they involve I/O operations.
+    They also represent a trade-off between performance and data safety. In general,
+    it’s expensive to ensure that your data is written to disk immediately and consistently.
+    If you’re willing to risk the danger that a disk write won’t really make it to
+    permanent storage, you can increase concurrency and/or reduce I/O waits, but you’ll
+    have to decide for yourself how much risk you can tolerate.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些配置选项会影响MySQL如何将数据同步到磁盘并执行恢复操作。这些选项可能会对性能产生显著影响，因为它们涉及I/O操作。它们也代表了性能和数据安全之间的权衡。一般来说，确保数据立即和一致地写入磁盘是很昂贵的。如果你愿意冒磁盘写入可能不会真正到达永久存储的风险，你可以增加并发性和/或减少I/O等待时间，但你必须自己决定可以容忍多少风险。
+- en: InnoDB permits you to control not only how it recovers but also how it opens
+    and flushes its data, which greatly affects recovery and overall performance.
+    InnoDB’s recovery process is automatic and always runs when InnoDB starts, although
+    you can influence what actions it takes. Leaving aside recovery and assuming nothing
+    ever crashes or goes wrong, there’s still a lot to configure for InnoDB. It has
+    a complex chain of buffers and files designed to increase performance and guarantee
+    ACID properties, and each piece of the chain is configurable. [Figure 5-1](#innodbapostrophes_buffers_and_files)
+    illustrates these files and buffers.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB允许你控制它的恢复方式以及如何打开和刷新其数据，这对恢复和整体性能有很大影响。InnoDB的恢复过程是自动的，并且总是在InnoDB启动时运行，尽管你可以影响它采取的行动。撇开恢复不谈，假设从不崩溃或出现问题，对于InnoDB仍有很多配置要做。它有一个复杂的缓冲区和文件链设计用于提高性能并保证ACID属性，每个链的部分都是可配置的。[图5-1](#innodbapostrophes_buffers_and_files)说明了这些文件和缓冲区。
+- en: A few of the most important things to change for normal usage are the InnoDB
+    logfile size, how InnoDB flushes its log buffer, and how InnoDB performs I/O.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于正常使用来说，需要更改的一些最重要的事项是InnoDB日志文件大小、InnoDB如何刷新其日志缓冲区以及InnoDB如何执行I/O。
+- en: '![](assets/hpm4_0501.png)'
+  id: totrans-99
+  prefs: []
+  type: TYPE_IMG
+  zh: '![图片](assets/hpm4_0501.png)'
+- en: Figure 5-1\. InnoDB’s buffers and files
+  id: totrans-100
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图5-1。InnoDB的缓冲区和文件
+- en: The InnoDB Transaction Log
+  id: totrans-101
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: InnoDB事务日志
+- en: InnoDB uses its log to reduce the cost of committing transactions. Instead of
+    flushing the buffer pool to disk when each transaction commits, it logs the transactions.
+    The changes transactions make to data and indexes often map to random locations
+    in the tablespace, so flushing these changes to disk would require random I/O.
+    InnoDB assumes it’s using conventional disks, where random I/O is much more expensive
+    than sequential I/O because of the time it takes to seek to the correct location
+    on disk and wait for the desired part of the disk to rotate under the head.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB使用其日志来降低提交事务的成本。它不是在每个事务提交时将缓冲池刷新到磁盘，而是记录事务。事务对数据和索引所做的更改通常映射到表空间中的随机位置，因此将这些更改刷新到磁盘将需要随机I/O。InnoDB假设它正在使用传统磁盘，其中随机I/O比顺序I/O更昂贵，因为寻找正确位置并等待所需部分磁盘旋转到磁头下的时间更长。
+- en: InnoDB uses its log to convert this random disk I/O into sequential I/O. Once
+    the log is safely on disk, the transactions are permanent, even though the changes
+    haven’t been written to the datafiles yet. If something bad happens (such as a
+    power failure), InnoDB can replay the log and recover the committed transactions.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB使用��日志将这种随机磁盘I/O转换为顺序I/O。一旦日志安全地存储在磁盘上，事务就是永久的，即使更改尚未写入数据文件。如果发生不良事件（例如断电），InnoDB可以重放日志并恢复已提交的事务。
+- en: 'Of course, InnoDB does ultimately have to write the changes to the datafiles
+    because the log has a fixed size. It writes to the log in a circular fashion:
+    when it reaches the end of the log, it wraps around to the beginning. It can’t
+    overwrite a log record if the changes contained there haven’t been applied to
+    the datafiles because this would erase the only permanent record of the committed
+    transaction.'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当然，InnoDB最终必须将更改写入数据文件，因为日志的大小是固定的。它以循环方式写入日志：当它到达日志末尾时，它会回到开头。如果尚未将其中包含的更改应用于数据文件，它不能覆盖日志记录，因为这将擦除已提交事务的唯一永久记录。
+- en: InnoDB uses a background thread to flush the changes to the datafiles intelligently.
+    This thread can group writes together and make the data writes sequential for
+    improved efficiency. In effect, the transaction log converts random datafile I/O
+    into mostly sequential logfile and datafile I/O. Moving flushes into the background
+    makes queries complete more quickly and helps cushion the I/O system from spikes
+    in the query load.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB使用后台线程智能地将更改刷新到数据文件。该线程可以将写入组合在一起，并使数据写入顺序以提高效率。实际上，事务日志将随机数据文件I/O转换为主要是顺序的日志文件和数据文件I/O。将刷新移到后台使查询更快完成，并帮助缓冲I/O系统免受查询负载的波动影响。
+- en: The overall logfile size is controlled by `innodb_log_file_size` and `innodb_​log_​files_in_group`,
+    and it’s very important for write performance. If you took our earlier advice
+    and used `innodb_dedicated_server`, these are managed for you based on how much
+    memory your system has.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 日志文件的整体大小由`innodb_log_file_size`和`innodb_​log_​files_in_group`控制，对写入性能非常重要。如果您遵循我们之前的建议并使用`innodb_dedicated_server`，则根据系统内存量来管理这些设置。
+- en: Log Buffer
+  id: totrans-107
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 日志缓冲区
+- en: When InnoDB changes any data, it writes a record of the change into its *log
+    buffer*, which it keeps in memory. InnoDB flushes the buffer to the logfiles on
+    disk when the buffer gets full, when a transaction commits, or once per second,
+    whichever comes first. Increasing the buffer size, which is 1 MB by default, can
+    help reduce I/O if you have large transactions. The variable that controls the
+    buffer size is called `innodb_log_buffer_size`.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当InnoDB更改任何数据时，它会将更改记录写入其保存在内存中的*日志缓冲区*。当缓冲区变满、事务提交或每秒一次时，InnoDB会将缓冲区刷新到磁盘上的日志文件。增加缓冲区大小（默认为1
+    MB）可以帮助减少I/O，特别是对于大型事务。控制缓冲区大小的变量称为`innodb_log_buffer_size`。
+- en: You usually don’t need to make the buffer very large. The recommended range
+    is 1–8 MB, and this usually will be enough unless you write a lot of huge `BLOB`
+    records. The log entries are very compact compared to InnoDB’s normal data. They
+    are not page based, so they don’t waste space storing whole pages at a time. InnoDB
+    also makes log entries as short as possible. They are sometimes even stored as
+    a few integers, indicating the type of operation logged and any parameters needed
+    by that operation!
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常不需要使缓冲区非常大。推荐的范围是1-8 MB，这通常足够，除非您写入大量巨大的`BLOB`记录。与InnoDB的正常数据相比，日志条目非常紧凑。它们不是基于页面的，因此不会浪费空间一次存储整个页面。InnoDB还尽可能地使日志条目短小。有时甚至将它们存储为几个整数，指示记录的操作类型和该操作所需的任何参数！
+- en: How InnoDB flushes the log buffer
+  id: totrans-110
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: InnoDB如何刷新日志缓冲区
+- en: When InnoDB flushes the log buffer to the logfiles on disk, it locks the buffer
+    with a mutex, flushes it up to the desired point, and then moves any remaining
+    entries to the front of the buffer. It is possible that more than one transaction
+    will be ready to flush its log entries when the mutex is released. InnoDB uses
+    a group commit feature that can commit all of them to the log in a single I/O
+    operation.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当InnoDB将日志缓冲区刷新到磁盘上的日志文件时，它会使用互斥锁锁定缓冲区，将其刷新到所需点，然后将任何剩余条目移动到缓冲区的前面。当互斥锁被释放时，可能会有���个事务准备刷新其日志条目。InnoDB使用组提交功能，可以将所有这些事务一次性提交到日志中。
+- en: The log buffer *must* be flushed to durable storage to ensure that committed
+    transactions are fully durable. If you care more about performance than durability,
+    you can change `innodb_flush_log_at_trx_commit` to control where and how often
+    the log buffer is flushed.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 必须将日志缓冲区刷新到持久存储以确保已提交的事务完全持久。如果您更关心性能而不是持久性，可以更改`innodb_flush_log_at_trx_commit`以控制何时以及多频繁刷新日志缓冲区。
+- en: 'Possible settings are as follows:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可能的设置如下：
+- en: '`0`'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`0`'
+- en: Write the log buffer to the logfile and flush the logfile every second but do
+    nothing at transaction commit.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将日志缓冲区写入日志文件并每秒刷新一次日志文件，但在事务提交时不执行任何操作。
+- en: '`1`'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`1`'
+- en: Write the log buffer to the logfile and flush it to durable storage every time
+    a transaction commits. This is the default (and safest) setting; it guarantees
+    that you won’t lose any committed transactions unless the disk or operating system
+    “fakes” the flush operation.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将日志缓冲区写入日志文件并在每次事务提交时刷新到持久存储。这是默认（也是最安全）的设置；它保证您不会丢失任何已提交的事务，除非磁盘或操作系统“伪造”刷新操作。
+- en: '`2`'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`2`'
+- en: Write the log buffer to the logfile at every commit but don’t flush it. InnoDB
+    schedules a flush once every second. The most important difference from the `0`
+    setting is that `2` won’t lose any transactions if the MySQL process crashes.
+    If the entire server crashes or loses power, however, you can still lose transactions.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在每次提交时将日志缓冲区写入日志文件，但不要刷新它。InnoDB每秒调度一次刷新。与`0`设置最重要的区别是，如果MySQL进程崩溃，`2`不会丢失任何事务。但是，如果整个服务器崩溃或断电，您仍然可能会丢失事务。
+- en: It’s important to know the difference between *writing* the log buffer to the
+    logfile and *flushing* the log to durable storage. In most operating systems,
+    writing the buffer to the log simply moves the data from InnoDB’s memory buffer
+    to the operating system’s cache, which is also in memory. It doesn’t actually
+    write the data to durable storage. Thus, settings `0` and `2` *usually* result
+    in at most one second of lost data if there’s a crash or a power outage because
+    the data might exist only in the operating system’s cache. We say “usually” because
+    InnoDB tries to flush the logfile to disk about once per second no matter what,
+    but it is possible to lose more than a second of transactions in some cases, such
+    as when a flush gets stalled.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重要的是要知道将日志缓冲区写入日志文件和将日志刷新到持久存储之间的区别。在大多数操作系统中，将缓冲区写入日志只是将数据从InnoDB的内存缓冲区移动到操作系统的缓存中，该缓存也位于内存中。它实际上并没有将数据写入持久存储。因此，设置`0`和`2`通常会导致在崩溃或停电时最多丢失一秒钟的数据，因为数据可能仅存在于操作系统的缓存中。我们说“通常”是因为InnoDB会尝试无论如何每秒刷新一次日志文件到磁盘，但在某些情况下可能会丢失超过一秒钟的事务，例如刷新被阻塞时。
+- en: Sometimes the hard disk controller or operating system fakes a flush by putting
+    the data into yet *another* cache, such as the hard disk’s own cache. This is
+    faster but very dangerous because the data might still be lost if the drive loses
+    power. This is even worse than setting `innodb_flush_log_at_trx_commit` to something
+    other than `1` because it can cause data corruption, not just lost transactions.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时硬盘控制器或操作系统通过将数据放入另一个缓存中（例如硬盘自己的缓存）来伪造刷新。这样做更快，但非常危险，因为如果驱动器断电，数据可能仍然会丢失。这比将`innodb_flush_log_at_trx_commit`设置为`1`更糟糕，因为它可能导致数据损坏，而不仅仅是丢失事务。
+- en: Setting `innodb_flush_log_at_trx_commit` to anything other than `1` can cause
+    you to lose transactions. However, you might find the other settings useful if
+    you don’t care about durability (the D in ACID). Maybe you just want some of InnoDB’s
+    other features, such as clustered indexes, resistance to data corruption, and
+    row-level locking.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将`innodb_flush_log_at_trx_commit`设置为除`1`之外的任何值可能会导致您丢失事务。但是，如果您不关心耐久性（ACID中的D），则可能会发现其他设置有用。也许您只想要InnoDB的其他一些功能，例如聚集索引、抗数据损坏和行级锁定。
+- en: The best configuration for high-performance transactional needs is to leave
+    `innodb_flush_log_at_trx_commit` set to `1` and place the logfiles on a RAID volume
+    with a battery-backed write cache and SSDs. This is both safe and very fast. In
+    fact, we dare say that any production database server that’s expected to handle
+    a serious workload needs to have this kind of hardware.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 高性能事务需求的最佳配置是将`innodb_flush_log_at_trx_commit`设置为`1`，并将日志文件放在具有带电池支持写缓存和固态硬盘的RAID卷上。这既安全又非常快速。事实上，我们敢说，任何预计要处理严重工作负载的生产数据库服务器都需要具有这种硬件。
+- en: How InnoDB opens and flushes logfiles and datafiles
+  id: totrans-124
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 如何打开和刷新InnoDB的日志文件和数据文件
+- en: The `innodb_flush_method` option lets you configure how InnoDB actually interacts
+    with the filesystem. Despite its name, it also affects how InnoDB reads data,
+    not just how it writes it.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`innodb_flush_method`选项允许您配置InnoDB实际与文件系统的交互方式。尽管它的名称是这样，但它也影响InnoDB读取数据的方式，而不仅仅是写入数据的方式。'
+- en: Warning
+  id: totrans-126
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Changing how InnoDB performs I/O operations can affect performance greatly,
+    so be sure you understand what you’re doing before you change anything!
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更改InnoDB执行I/O操作的方式可能会极大地影响性能，因此在更改任何内容之前，请确保您了解自己在做什么！
+- en: This is a slightly confusing option because it affects both the logfiles and
+    the datafiles, and it sometimes does different things to each kind of file. It
+    would be nice to have one configuration option for the logs and another for the
+    datafiles, but they’re combined.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个稍微令人困惑的选项，因为它既影响日志文件又影响数据文件，并且有时对每种类型的文件执行不同的操作。希望有一个配置选项用于日志和另一个用于数据文件，但它们被合并在一起。
+- en: If you use a Unix-like operating system and your RAID controller has a battery-backed
+    write cache, we recommend that you use `O_DIRECT`. If not, either the default
+    or `O_DIRECT` will probably be the best choice, depending on your application.
+    If you opted to use `innodb_dedicated_server`, as we mentioned earlier, this option
+    is set automatically for you.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您使用类Unix操作系统，并且您的RAID控制器具有带电池支持写缓存，我们建议您使用`O_DIRECT`。如果没有，无论是默认设置还是`O_DIRECT`都可能是最佳选择，这取决于您的应用程序。如果您选择使用我们之前提到的`innodb_dedicated_server`，此选项将自动为您设置。
+- en: The InnoDB Tablespace
+  id: totrans-130
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: InnoDB表空间
+- en: InnoDB keeps its data in a *tablespace*, which is essentially a virtual filesystem
+    spanning one or many files on disk. InnoDB uses the tablespace for many purposes,
+    not just for storing tables and indexes. It keeps its undo log (information necessary
+    to re-create old row versions), change buffer, doublewrite buffer, and other internal
+    structures in the tablespace.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB将其数据保存在一个*表空间*中，这实质上是一个跨越磁盘上一个或多个文件的虚拟文件系统。InnoDB使用表空间不仅用于存储表和索引，还用于许多其他目的。它在表空间中保存其撤销日志（重新创建旧行版本所需的信息）、更改缓冲区、双写缓冲区和其他内部结构。
+- en: Configuring the tablespace
+  id: totrans-132
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 配置表空间
+- en: 'You specify the tablespace files with the `innodb_data_file_path` configuration
+    option. The files are all contained in the directory given by `innodb_data_home_dir`.
+    Here’s an example:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用`innodb_data_file_path`配置选项指定表空间文件。所有文件都包含在由`innodb_data_home_dir`给定的目录中。以下是一个示例：
+- en: '[PRE5]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'That creates a 3 GB tablespace in three files. Sometimes people wonder whether
+    they can use multiple files to spread load across drives, like this:'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将创建一个3 GB的表空间，分为三个文件。有时人们会想知道是否可以使用多个文件将负载分布到不同的驱动器上，就像这样：
+- en: '[PRE6]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: While that does indeed place the files in different directories, which represent
+    different drives in this example, InnoDB concatenates the files end-to-end. Thus,
+    you usually don’t gain much this way. InnoDB will fill the first file, then the
+    second when the first is full, and so on; the load isn’t really spread in the
+    fashion you need for higher performance. A RAID controller is a smarter way to
+    spread load.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管确实将文件放置在不同目录中，这些目录在此示例中代表不同的驱动器，但InnoDB会将文件端对端连接起来。因此，通常你不会通过这种方式获得太多好处。InnoDB会填满第一个文件，然后在第一个文件满时填满第二个文件，依此类推；负载并没有以你需要的方式分布以获得更高的性能。RAID控制器是一种更智能的负载分布方式。
+- en: 'To allow the tablespace to grow if it runs out of space, you can make the last
+    file auto-extend as follows:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果表空间空间不足而需要增长，您可以使最后一个文件自动扩展，如下所示：
+- en: '[PRE7]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'The default behavior is to create a single 10 MB auto-extending file. If you
+    make the file auto-extend, it’s a good idea to place an upper limit on the tablespace’s
+    size to keep it from growing very large because once it grows, it doesn’t shrink.
+    For example, the following limits the auto-extending file to 2 GB:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认行为是创建一个单个10 MB的自动扩展文件。如果使文件自动扩展，最好设置表空间大小的上限，以防止其变得非常大，因为一旦增长，就不会缩小。例如，以下限制了自动扩展文件为2
+    GB：
+- en: '[PRE8]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Managing a single tablespace can be a hassle, especially if it auto-extends
+    and you want to reclaim the space (for this reason, we recommend disabling the
+    auto-extend feature or at least setting a reasonable cap on the space). The only
+    way to reclaim space is to dump your data, shut down MySQL, delete all the files,
+    change the configuration, restart, let InnoDB create new empty files, and restore
+    your data. InnoDB is completely unforgiving about its tablespace: you cannot simply
+    remove files or change their sizes. It will refuse to start if you corrupt its
+    tablespace. It is likewise very strict about its logfiles. If you’re used to casually
+    moving files around as you could do with MyISAM, take heed!'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 管理单个表空间可能会很麻烦，特别是如果它自动扩展并且您想要回收空间（因此，我们建议禁用自动扩展功能，或者至少设置一个合理的空间上限）。回收空间的唯一方法是转储数据，关闭MySQL，删除所有文件，更改配置，重新启动，让InnoDB创建新的空文件，并恢复数据。InnoDB对其表空间非常严格：您不能简单地删除文件或更改其大小。如果破坏了其表空间，它将拒绝启动。它对其日志文件也非常严格。如果您习惯于像MyISAM一样随意移动文件，要小心！
+- en: The `innodb_file_per_table` option lets you configure InnoDB to use one file
+    per table. It stores the data in the database directory as *tablename.ibd* files.
+    This makes it easier to reclaim space when you drop a table. However, placing
+    the data in multiple files can actually result in more wasted space overall because
+    it trades internal fragmentation in the single InnoDB tablespace for wasted space
+    in the *.ibd* files.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`innodb_file_per_table`选项允许您配置InnoDB使用每个表一个文件。它将数据存储在数据库目录中的*tablename.ibd*文件中。这样在删除表时更容易回收空间。然而，将数据放在多个文件中实际上可能导致整体浪费更多空间，因为它将单个InnoDB表空间中的内部碎片换成了*.ibd*文件中的浪费空间。'
+- en: Even if you enable the `innodb_file_per_table` option, you’ll still need the
+    main tablespace for the undo logs and other system data. It will be smaller if
+    you’re not storing all the data in it.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使启用了`innodb_file_per_table`选项，您仍然需要主表空间来存储撤销日志和其他系统数据。如果不将所有数据存储在其中，则其大小会更小。
+- en: Some people like to use `innodb_file_per_table` just because of the extra manageability
+    and visibility it gives you. For example, it’s much faster to find a table’s size
+    by examining a single file than it is to use `SHOW TABLE STATUS`, which has to
+    perform more complex work to determine how many pages are allocated to a table.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有些人喜欢使用`innodb_file_per_table`仅仅是因为它给您带来额外的可管理性和可见性。例如，通过检查单个文件来查找表的大小要比使用`SHOW
+    TABLE STATUS`更快，后者必须执行更复杂的工作来确定为表分配了多少页。
+- en: Warning
+  id: totrans-146
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: 'There has always been a dark side to `innodb_file_per_table`: slow `DROP TABLE`
+    performance. This can be severe enough to cause a noticeable server-wide stall
+    for two reasons.'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`innodb_file_per_table`一直存在一个阴暗面：`DROP TABLE`性能慢。这可能严重到足以导致整个服务器出现明显的停顿，原因有两个。'
+- en: 'Dropping the table unlinks (deletes) the file at the filesystem level, which
+    can be very slow on some filesystems (ext3, we’re looking at you). You can shorten
+    the duration of this with tricks on the filesystem: link the *.ibd* file to a
+    zero-sized file, then delete the file manually instead of waiting for MySQL to
+    do it.'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 删除表会在文件系统级别取消链接（删除）文件，在某些文件系统上可能会非常慢（ext3，我们在看你）。您可以通过文件系统上的技巧缩短此过程的持续时间：将*.ibd*文件链接到一个大小为零的文件，然后手动删除文件，而不是等待MySQL执行此操作。
+- en: When you enable this option, each table gets its own tablespace inside InnoDB.
+    It turns out that removing the tablespace actually requires InnoDB to lock and
+    scan the buffer pool while it looks for pages belonging to this tablespace, which
+    is very slow on a server with a large buffer pool. This is improved if you break
+    the buffer pool into many parts using `innodb_buffer_pool_instances`.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您启用此选项时，每个表在InnoDB内部都有自己的表空间。事实证明，删除表空间实际上需要InnoDB锁定并扫描缓冲池，同时查找属于该表空间的页面，在具有大缓冲池的服务器上非常慢。如果使用`innodb_buffer_pool_instances`将缓冲池分成多个部分，这将得到改善。
+- en: Several fixes have been applied to various versions of MySQL along the way.
+    As of 8.0.23, this should no longer be an issue.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在MySQL的各个版本中已经应用了几个修复程序。截至8.0.23，这不应再是一个问题。
+- en: What’s the final recommendation? We suggest that you use `innodb_file_per_table`
+    and cap the size of your shared tablespace to make your life easier. If you run
+    into any circumstances that make this painful, as noted previously, consider one
+    of the fixes we suggested.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最终的建议是什么？我们建议您使用`innodb_file_per_table`并限制共享表空间的大小，以使您的生活更轻松。如果遇到任何使这变得痛苦的情况，如前所述，请考虑我们建议的其中一种修复方法。
+- en: Old row versions and the tablespace
+  id: totrans-152
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 旧的行版本和表空间
+- en: InnoDB’s tablespace can grow very large in a write-heavy environment. If transactions
+    stay open for a long time (even if they’re not doing any work) and they’re using
+    the default `REPEATABLE READ` transaction isolation level, InnoDB won’t be able
+    to remove old row versions because the uncommitted transactions will still need
+    to be able to see them. InnoDB stores the old versions in the tablespace, so it
+    continues to grow as more data is updated. The purge process is multithreaded
+    but may need to be tuned for workloads if you experience problems with purge lag
+    (`innodb_​purge_threads` and `innodb_purge_batch_size`).
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在写入密集的环境中，InnoDB的表空间可能会变得非常大。如果事务保持打开状态很长时间（即使它们没有执行任何工作），并且它们使用默认的`REPEATABLE
+    READ`事务隔离级别，InnoDB将无法删除旧的行版本，因为未提交的事务仍需要能够查看它们。InnoDB将旧版本存储在表空间中，因此随着更新更多数据，它将继续增长。清除过程是多线程的，但如果您遇到清除滞后问题（`innodb_​purge_threads`和`innodb_purge_batch_size`），可能需要对工作负载进行调整。
+- en: 'The output of `SHOW INNODB STATUS` can help you pinpoint the problem. Look
+    at the history list length in the `TRANSACTIONS` section; it shows the size of
+    the undo log:'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SHOW INNODB STATUS`的输出可以帮助您准确定位问题。查看`TRANSACTIONS`部分中的历史列表长度；它显示了撤销日志的大小：'
+- en: '[PRE9]'
+  id: totrans-155
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: If you have a large undo log and your tablespace is growing because of it, you
+    can force MySQL to slow down enough for InnoDB’s purge thread to keep up. This
+    might not sound attractive, but there’s no alternative. Otherwise, InnoDB will
+    keep writing data and filling up your disk until the disk runs out of space or
+    the tablespace reaches the limits you’ve defined.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您有一个大的撤销日志，并且您的表空间因此而增长，您可以强制MySQL减慢速度，以便InnoDB的清除线程跟得上。这听起来可能不那么吸引人，但没有其他选择。否则，InnoDB将继续写入数据并填满您的磁盘，直到磁盘耗尽空间或表空间达到您定义的限制。
+- en: To throttle the writes, set the `innodb_max_purge_lag` variable to a value other
+    than `0`. This value indicates the maximum number of transactions that can be
+    waiting to be purged before InnoDB starts to delay further queries that update
+    data. You’ll have to know your workload to decide on a good value. As an example,
+    if your average transaction affects 1 KB of rows and you can tolerate 100 MB of
+    unpurged rows in your tablespace, you could set the value to `100000`.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要限制写入速度，将`innodb_max_purge_lag`变量设置为非`0`值。此值表示在InnoDB开始延迟更新数据的进一步查询之前，可以等待清除的最大事务数。您需要了解您的工作负载以决定一个好的值。举个例子，如果您的平均事务影响1
+    KB的行，并且您的表空间可以容忍100 MB的未清除行，您可以将该值设置为`100000`。
+- en: Bear in mind that unpurged row versions affect all queries because they effectively
+    make your tables and indexes larger. If the purge thread simply can’t keep up,
+    performance can decrease. Setting the `innodb_max_purge_lag` variable will slow
+    down performance too, but it’s the lesser of the two evils.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请记住，未清除的行版本会影响所有查询，因为它们实际上会使您的表和索引变得更大。如果清除线程无法跟上，性能可能会下降。设置`innodb_max_purge_lag`变量也会降低性能，但这是两害相权取其轻的选择。
+- en: Other I/O Configuration Options
+  id: totrans-159
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 其他I/O配置选项
+- en: The `sync_binlog` option controls how MySQL flushes the binary log to disk.
+    Its default value is `1`, which means MySQL will perform flushing and keep binary
+    logs durable and safe. This is the recommended setting, and we caution you against
+    setting this to any other value.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`sync_binlog`选项控制MySQL将二进制日志刷新到磁盘的方式。其默认值为`1`，这意味着MySQL将执行刷新并保持二进制日志持久和安全。这是推荐的设置，我们警告您不要将其设置为其他任何值。'
+- en: If you don’t keep `sync_binlog` set at `1`, it’s likely that a crash will cause
+    your binary log to be out of sync with your transactional data. This can easily
+    break replication and make recovery impossible, especially if your databases are
+    using global transaction IDs (more on this in [Chapter 9](ch09.html#replication-id000008)).
+    The safety provided by leaving this at `1` far outweighs the I/O performance penalty
+    that is incurred.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您不将`sync_binlog`设置为`1`，很可能会导致崩溃使您的二进制日志与事务数据不同步。这很容易破坏复制并使恢复变得不可能，特别是如果您的数据库正在使用全局事务ID（更多信息请参见[第9章](ch09.html#replication-id000008)）。保持此设置为`1`提供的安全性远远超过产生的I/O性能惩罚。
+- en: We covered RAID in more depth in [Chapter 4](ch04.html#operating_system_and_hardware_optimizat),
+    but it’s worth repeating here that good-quality RAID controllers, with battery-backed
+    write caches set to use the write-back policy, can handle thousands of writes
+    per second and still give you durable storage. The data gets written to a fast
+    cache with a battery, so it will survive even if the system loses power. When
+    the power comes back, the RAID controller will write the data from the cache to
+    the disk before making the disk available for use. Thus, a good RAID controller
+    with a large enough battery-backed write cache can improve performance dramatically
+    and is a very good investment. Of course, solid-state storage is also the recommended
+    solution at this point, which dramatically improves I/O performance as well.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在[第4章](ch04.html#operating_system_and_hardware_optimizat)中更深入地讨论了RAID，但在这里值得重申，具有设置为使用写回策略的带电池支持写缓存的高质量RAID控制器可以处理成千上万次写入，并仍然为您提供持久性存储。数据被写入一个带电池的快速缓存中，因此即使系统断电，数据也会存活。当电源恢复时，RAID控制器将从缓存中将数据写入磁盘，然后使磁盘可供使用。因此，具有足够大的带电池支持写缓存的良好RAID控制器可以显着提高性能，并且是非���值得投资的。当然，固态存储也是目前推荐的解决方案，可以显著提高I/O性能。
+- en: Configuring MySQL Concurrency
+  id: totrans-163
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 配置MySQL并发性
+- en: When you’re running MySQL in a high-concurrency workload, you might run into
+    bottlenecks you wouldn’t otherwise experience. This section explains how to detect
+    these problems when they happen and how to get the best performance possible under
+    these workloads.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您在高并发工作负载中运行MySQL时，您可能会遇到在其他情况下不会遇到的瓶颈。本节解释了如何在发生这些问题时检测这些问题，并如何在这些工作负载下获得最佳性能。
+- en: If you have problems with InnoDB concurrency and you are not running at least
+    MySQL 5.7, the solution is usually to upgrade the server. Older versions still
+    held a lot of high concurrency scalability challenges. Everything queued on global
+    mutexes such as the buffer pool mutex, and the server practically ground to a
+    halt. If you upgrade to one of the newer versions of MySQL, you don’t need to
+    limit concurrency in most cases.
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您在InnoDB并发性方面遇到问题，并且您的MySQL版本低于5.7，解决方案通常是升级服务器。旧版本仍存在许多高并发性可扩展性挑战。所有排队在全局互斥体上，如缓冲池互斥体，服务器实际上几乎停滞不前。如果您升级到较新版本的MySQL，大多数情况下不需要限制并发性。
+- en: If you find yourself hitting this bottleneck, your best option is to shard your
+    data. If sharding is not a viable path forward, you may need to limit concurrency.
+    InnoDB has its own “thread scheduler” that controls how threads enter its kernel
+    to access data and what they can do once they’re inside the kernel. The most basic
+    way to limit concurrency is with the `innodb_thread_concurrency` variable, which
+    limits how many threads can be in the kernel at once. A value of `0` means there
+    is no limit on the number of threads. If you are having InnoDB concurrency problems
+    in older MySQL versions, this variable is the most important one to configure.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果发现自己遇到了这个瓶颈，最好的选择是对数据进行分片。如果分片不是可行的解决方案，可能需要限制并发性。InnoDB有自己的“线程调度器”，控制着线程如何进入其内核以访问数据以及它们在内核内部可以做什么。限制并发性的最基本方法是使用`innodb_thread_concurrency`变量，它限制了同时可以在内核中的线程数量。值为`0`表示线程数量没有限制。如果在较旧的MySQL版本中遇到InnoDB并发问题，那么这个变量是最重要的一个需要配置的。
+- en: '[MySQL’s online documentation](https://oreil.ly/ThOBP) provides the best guide
+    for configuration here. You will have to experiment to find the best value for
+    your system, but our recommendation is to start with setting `innodb_thread_concurrency`
+    to the same number of CPU cores you have available and then begin tuning up or
+    down as needed.'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[MySQL的在线文档](https://oreil.ly/ThOBP)提供了这里配置的最佳指南。您将不得不进行实验，找到适合您系统的最佳值，但我们建议从将`innodb_thread_concurrency`设置为可用CPU核心数量开始，然后根据需要进行调整。'
+- en: If more than the allowed number of threads are already in the kernel, a thread
+    can’t enter the kernel. InnoDB uses a two-phase process to try to let threads
+    enter as efficiently as possible. The two-phase policy reduces the overhead of
+    context switches caused by the operating system scheduler. The thread first sleeps
+    for `innodb_thread_sleep_delay` microseconds and then tries again. If it still
+    can’t enter, it goes into a queue of waiting threads and yields to the operating
+    system.
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果已经有超过允许数量的线程在内核中，线程就无法进入内核。InnoDB使用两阶段过程尝试让线程尽可能高效地进入。两阶段策略减少了由操作系统调度程序引起的上下文切换开销。线程首先休眠`innodb_thread_sleep_delay`微秒，然后再次尝试。如果仍然无法进入，它将进入等待线程队列，并让出给操作系统。
+- en: The default sleep time in the first phase is 10,000 microseconds. Changing this
+    value can help in high-concurrency environments, when the CPU is underused with
+    a lot of threads in the “sleeping before entering queue” status. The default value
+    can also be much too large if you have a lot of small queries because it adds
+    to query latency.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一阶段的默认睡眠时间为10,000微秒。在高并发环境下，当CPU未充分利用且有大量线程处于“进入队列前休眠”状态时，更改此值可能有所帮助。如果有大量小查询，那么默认值可能过大，因为它会增加查询延迟。
+- en: Once a thread is inside the kernel, it has a certain number of “tickets” that
+    let it back into the kernel for “free,” without any concurrency checks. This limits
+    how much work it can do before it has to get back in line with other waiting threads.
+    The `innodb_concurrency_tickets` option controls the number of tickets. It rarely
+    needs to be changed unless you have a lot of extremely long-running queries. Tickets
+    are granted per query, not per transaction. Once a query finishes, its unused
+    tickets are discarded.
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦线程进入内核，它就有一定数量的“票”，让它可以“免费”地重新进入内核，而无需进行任何并发检查。这限制了它在必须重新排队与其他等待线程之前可以完成的工作量。`innodb_concurrency_tickets`选项控制票的数量。除非有大量运行时间极长的查询，否则很少需要更改。票据是按查询而不是按事务授予的。一旦查询完成，未使用的票据将被丢弃。
+- en: In addition to the bottlenecks in the buffer pool and other structures, there’s
+    another concurrency bottleneck at the commit stage, which is largely I/O bound
+    because of flush operations. The `innodb_commit_concurrency` variable governs
+    how many threads can commit at the same time. Configuring this option might help
+    if there’s a lot of thread thrashing even when `innodb_thread_concurrency` is
+    set to a low value.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了缓冲池和其他结构中的瓶颈外，在提交阶段还存在另一个并发瓶颈，这主要是由于刷新操作而导致的I/O绑定。`innodb_commit_concurrency`变量控制着同时可以提交的线程数量。如果即使将`innodb_thread_concurrency`设置为较低值时仍然存在大量线程抖动，配置此选项可能会有所帮助。
+- en: Safety Settings
+  id: totrans-172
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 安全设置
+- en: 'After your basic configuration settings are in place, you may wish to enable
+    a number of settings that make the server safer and more reliable. Some of them
+    influence performance because safety and reliability are often more costly to
+    guarantee. Some are just sensible, however: they prevent silly mistakes such as
+    inserting nonsensical data into the server. And some don’t make a difference in
+    day-to-day operations but prevent bad things from happening in edge cases.'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在基本配置设置完成后，您可能希望启用一些使服务器更安全和可靠的设置。其中一些会影响性能，因为安全性和可靠性通常更���贵。但有些只是明智的：它们防止插入荒谬数据到服务器中。还有一些在日常运营中没有影响，但可以防止在边缘情况下发生糟糕的事情。
+- en: 'Let’s look at a collection of useful options for general server behavior first:'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们首先看一些通用服务器行为的有用选项集：
+- en: '`max_connect_errors`'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`max_connect_errors`'
+- en: If something goes wrong with your networking for a moment, there is an application
+    or configuration error, or there is another problem that prevents connections
+    from completing successfully for a brief period of time, clients can get blocked
+    and will be unable to connect again until you flush the host cache. The default
+    setting for this option (`100`) is so small that this problem can happen too easily.
+    You might want to increase it, and in fact, if you know that the server is adequately
+    secured against brute-force attacks, you can just make it very large to effectively
+    disable blocking of hosts due to connection errors. If `skip_name_resolve` is
+    enabled, however, the `max_connect_errors` option will have no effect because
+    its behavior depends on the *host* cache, which is disabled by `skip_name_resolve`.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您��网络出现问题一小段时间，存在应用程序或配置错误，或者有其他问题导致连接在短时间内无法成功完成，客户端可能会被阻塞，并且无法再次连接，直到刷新主机缓存。此选项的默认设置（`100`）太小，以至于这个问题可能会太容易发生。您可能希望增加它，实际上，如果您知道服务器已充分防范了暴力攻击，您可以将其设置得非常大，以有效地禁用由于连接错误而阻止主机的功能。但是，如果启用了`skip_name_resolve`，`max_connect_errors`选项将不起作用，因为其行为取决于*主机*缓存，而`skip_name_resolve`已禁用了主机缓存。
+- en: '`max_connections`'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`max_connections`'
+- en: This setting acts like an emergency brake to keep your server from being overwhelmed
+    by a surge of connections from the application. If the application misbehaves
+    or the server encounters a problem such as a stall, a lot of new connections can
+    be opened. But opening a connection does no good if it can’t execute queries,
+    so being denied with a “too many connections” error is a way to fail fast and
+    fail cheaply.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此设置就像一个紧急刹车，防止您的服务器被应用程序的连接激增所淹没。如果应用程序表现不佳或服务器遇到问题，如停顿，可能会打开大量新连接。但如果无法执行查询，那么打开连接是没有用的，因此被拒绝并显示“连接过多”错误是一种快速失败和廉价失败的方式。
+- en: Set `max_connections` high enough to accommodate the usual load that you think
+    you’ll experience as well as a safety margin to permit logging in and administering
+    the server. For example, if you think you’ll have 300 or so connections in normal
+    operations, you might set this to 500 or so. If you don’t know how many connections
+    you’ll get, 500 is not an unreasonable starting point anyway. The default is 151,
+    but that’s not enough for a lot of applications.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将`max_connections`设置得足够高，以容纳您认为会经历的常规负载以及一个安全裕度，以便登录和管理服务器。例如，如果您认为在正常运作中会有大约300个连接，您可能会将其设置为500左右。如果您不知道会有多少连接，500也不是一个不合理的起点。默认值为151，但对许多应用程序来说这是不够的。
+- en: Beware also of surprises that might make you hit the limit of connections. For
+    example, if you restart an application server, it might not close its connections
+    cleanly, and MySQL might not realize they’ve been closed. When the application
+    server comes back up and tries to open connections to the database, it might be
+    refused due to the dead connections that haven’t timed out yet. This can also
+    come into play if you do not use persistent connections and your application does
+    not disconnect gracefully. The server will keep a connection around until it reaches
+    a TCP timeout or, in the worst case, until the number of seconds configured with
+    `wait_timeout`.
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还要注意可能导致连接限制的意外情况。例如，如果重新启动应用程序服务器，它可能不会干净地关闭其连接，而MySQL可能不会意识到这些连接已关闭。当应用程序服务器重新启动并尝试打开到数据库的连接时，可能会因尚未超时的死连接而被拒绝。如果您不使用持久连接，且您的应用程序没有正常断开连接，这也可能发生。服务器将保留连接直到达到TCP超时或者在最坏的情况下，直到使用`wait_timeout`配置的秒数。
+- en: Watch the `max_used_connections` status variable over time. It is a high-water
+    mark that shows you if the server has had a spike in connections at some point.
+    If it reaches `max_connections`, chances are a client has been denied at least
+    once.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着时间的推移，观察`max_used_connections`状态变量。这是一个高水位标记，显示服务器是否在某个时间点出现了连接激增。如果达到`max_connections`，很有可能至少有一个客户端被拒绝过。
+- en: '`skip_name_resolve`'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`skip_name_resolve`'
+- en: 'This setting disables another networking- and authentication-related trap:
+    DNS lookups. DNS is one of the weak points in MySQL’s connection process. When
+    you connect to the server, by default it tries to determine the hostname from
+    which you’re connecting and uses that as part of the authentication credentials
+    (that is, your credentials are your username, hostname, and password—not just
+    your username and password). But to verify your hostname, the server needs to
+    perform a forward-confirmed reverse DNS lookup (or “double reverse DNS lookup”),
+    which involves both a reverse and a forward DNS lookup before accepting the connection.
+    This is all fine until DNS starts to have problems, which is pretty much a certainty
+    at some point in time. When that happens, everything piles up, and eventually
+    the connection times out. To prevent this, we strongly recommend that you set
+    this option, which disables DNS lookups during authentication. However, if you
+    do this, you will need to convert all of your hostname-based grants to use IP
+    addresses, wildcards, or the special hostname “localhost” because hostname-based
+    accounts will be disabled.'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此设置禁用了另一个与网络和身份验证相关的陷阱：DNS查找。DNS是MySQL连接过程中的一个弱点。当您连接到服务器时，默认情况下会尝试确定您连接的主机名，并将其用作身份验证凭据的一部分（也就是说，您的凭据是您的用户名、主机名和密码，而不仅仅是用户名和密码）。但要验证您的主机名，服务器需要执行一个正向确认的反向DNS查找（或“双重反向DNS查找”），在接受连接之前需要进行反向和正向DNS查找。这一切都很好，直到DNS开始出现问题，这在某个时间点几乎是肯定的。当发生这种情况时，一切都会积累起来，最终连接会超时。为了防止这种情况发生，我们强烈建议您设置此选项，该选项在身份验证期间禁用DNS查找。但是，如果您这样做，您将需要将所有基于主机名的授权转换为使用IP地址、通配符或特殊主机名“localhost”，因为基于主机名的帐户将被禁用。
+- en: '`sql_mode`'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`sql_mode`'
+- en: This setting can accept a variety of options that modify server behavior. We
+    don’t recommend changing these just for the fun of it; it’s better to let MySQL
+    be MySQL in most ways and not try to make it behave like other database servers.
+    (Many client and GUI tools expect MySQL to have its own flavor of SQL, for example,
+    so if you change it to speak more ANSI-compliant SQL some things might break.)
+    However, several of the settings are very useful, and some might be worth considering
+    in your specific cases. In the past, MySQL was generally very loose about `sql_mode`,
+    but it is much more strict in later versions.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此设置可以接受多种修改服务器行为的选项。我们不建议仅仅出于好玩而更改这些设置；最好让MySQL保持MySQL的大部分特性，不要试图使其像其他数据库服务器一样运行。（许多客户端和GUI工具期望MySQL具有自己的SQL风格，例如，如果您将其更改为使用更符合ANSI标准的SQL，可能会导致某些功能出现问题。）但是，其中几个设置非常有用，某些情况下可能值得考虑。过去，MySQL通常对`sql_mode`非常宽松，但在后续版本中变得更加严格。
+- en: However, be aware that it might not be a good idea to change these settings
+    for existing applications because doing so might make the server incompatible
+    with the application’s expectations. It’s pretty common for people to unwittingly
+    write queries that refer to columns not in the `GROUP BY` clause or use aggregate
+    functions, for example, so if you want to enable the `ONLY_FULL_GROUP_BY` option,
+    it’s a good idea to do it in a development or staging server first and only deploy
+    it in production once you’re sure everything is working.
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，请注意，对于现有应用程序更改这些设置可能不是一个好主意，因为这样做可能会使服务器与应用程序的期望不兼容。例如，人们很常见地无意中编写查询，引用了`GROUP
+    BY`子句中不存在的列或使用聚合函数，因此，如果您想启用`ONLY_FULL_GROUP_BY`选项，最好先在开发或分段服务器上执行，只有在确保一切正常运行后才在生产环境中部署。
+- en: Also, be sure to check for changes to the default `sql_mode` as you plan upgrades
+    to your databases. Changes to this variable may be incompatible with your existing
+    application, and you need to preemptively test this beforehand. We talk more about
+    upgrading in [Appendix A](app01.html#appendix_a_upgrading_mysql).
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，在计划升级数据库时，请务必检查默认`sql_mode`的更改。对此变量的更改可能与您现有的应用程序不兼容，您需要提前进行测试。我们在[附录A](app01.html#appendix_a_upgrading_mysql)中更详细地讨论升级问题。
+- en: '`sysdate_is_now`'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`sysdate_is_now`'
+- en: This is another setting that might be backward incompatible with applications’
+    expectations. But if you don’t explicitly desire the `SYSDATE()` function to have
+    nondeterministic behavior, which can break replication and make point-in-time
+    recovery from backups unreliable, you might want to enable this option and make
+    its behavior deterministic.
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是另一个可能与应用程序期望不兼容的设置。但是，如果您不明确希望`SYSDATE()`函数具有非确定性行为，这可能会破坏复制并使来自备份的时间点恢复不可靠，您可能希望启用此选项并使其行为确定性。
+- en: '`read_only` and `super_read_only`'
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`read_only`和`super_read_only`'
+- en: The `read_only` option prevents unprivileged users from making changes on replicas,
+    which should be receiving changes only via replication, not from the application.
+    We strongly recommend setting replicas to read-only mode.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`read_only`选项防止非特权用户在副本上进行更改，副本应该仅通过复制接收更改，而不是来自应用程序。我们强烈建议将副本设置为只读模式。'
+- en: There is a more restrictive read-only option, `super_read_only`, which prevents
+    even users with the `SUPER` privilege from being able to write data. With this
+    enabled, the only thing that can write changes to your database is replication.
+    We also *strongly* recommend enabling `super_read_only`. It will prevent you from
+    accidentally using an administrator account to write data to a read-only replica,
+    putting it out of sync.
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还有一个更为严格的只读选项，`super_read_only`，即使具有`SUPER`特权的用户也无法写入数据。启用此选项后，唯一可以向数据库写入更改的是复制。我们还*强烈*建议启用`super_read_only`。这将防止您意外使用管理员帐户向只读副本写入数据，使其不同步。
+- en: Advanced InnoDB Settings
+  id: totrans-193
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 高级InnoDB设置
+- en: 'Some of these InnoDB options are quite important for server performance, and
+    there are also a couple of safety options:'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些InnoDB选项对服务器性能非常重要，还有一些安全选项：
+- en: '`innodb_autoinc_lock_mode`'
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`innodb_autoinc_lock_mode`'
+- en: This option controls how InnoDB generates auto-incrementing primary key values,
+    which can be a bottleneck in some cases, such as high-concurrency inserts. If
+    you have many transactions waiting on the auto-increment lock (you can see this
+    in `SHOW ENGINE INNODB STATUS`), you should investigate this setting. We won’t
+    repeat the manual’s explanation of the options and their behaviors.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此选项控制InnoDB如何生成自增主键值，这在某些情况下可能成为瓶颈，例如高并发插入。如果有许多事务在等待自增锁（您可以在`SHOW ENGINE INNODB
+    STATUS`中看到此信息），则应该调查此设置。我们不会重复手册对选项及其行为的解释。
+- en: '`innodb_buffer_pool_instances`'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`innodb_buffer_pool_instances`'
+- en: This setting divides the buffer pool into multiple segments in MySQL 5.5 and
+    newer and is probably one of the most important ways to improve MySQL’s scalability
+    on multicore machines with a highly concurrent workload. Multiple buffer pools
+    partition the workload so that some of the global mutexes are not such hot contention
+    points.
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此设置在MySQL 5.5及更高版本中将缓冲池分成多个段，可能是改善MySQL在具有高并发工作负载的多核机器上的可伸缩性的最重要方法之一。多个缓冲池将工作负载分区，以便一些全局互斥锁不会成为如此热点争用点。
+- en: '`innodb_io_capacity`'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`innodb_io_capacity`'
+- en: InnoDB used to be hardcoded to assume that it ran on a single hard disk capable
+    of one hundred I/O operations per second. This was a bad default. Now you can
+    inform InnoDB how much I/O capacity is available to it. InnoDB sometimes needs
+    this set quite high (tens of thousands on extremely fast storage such as PCIe
+    flash devices) to flush dirty pages in a steady fashion, for reasons that are
+    quite complex to explain.^([4](ch05.html#ch01fn23))
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB过去被硬编码为假定其在能够进行一百次I/O操作的单个硬盘上运行。这是一个糟糕的默认设置。现在您可以告知InnoDB可用的I/O容量。有时InnoDB需要将此设置设置得非常高（例如在极快的存储设备上，如PCIe闪存设备上设置为数万次）以稳定地刷新脏页，原因相当复杂，难以解释。^([4](ch05.html#ch01fn23))
+- en: '`innodb_read_io_threads` and `innodb_write_io_threads`'
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`innodb_read_io_threads`和`innodb_write_io_threads`'
+- en: These options control how many background threads are available for I/O operations.
+    The default in recent versions of MySQL is to have four read threads and four
+    write threads, which is enough for a lot of servers, especially with the native
+    asynchronous I/O available since MySQL 5.5\. If you have many hard drives and
+    a high-concurrency workload and you see that the threads are having a hard time
+    keeping up, you can increase the number of threads, or you can simply set them
+    to the number of physical spindles you have for I/O (even if they’re behind a
+    RAID controller).
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些选项控制了可用于 I/O 操作的后台线程数量。在 MySQL 的最新版本中，默认设置为四个读线程和四个写线程，对于许多服务器来说已经足够了，尤其是自
+    MySQL 5.5 以来提供了本机异步 I/O。如果您有许多硬盘和高并发工作负载，并且发现线程难以跟上，您可以增加线程数量，或者您可以简单地将它们设置为您用于
+    I/O 的物理磁盘数量（即使它们位于 RAID 控制器后面）。
+- en: '`innodb_strict_mode`'
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`innodb_strict_mode`'
+- en: This setting makes InnoDB throw errors instead of warnings for some conditions,
+    especially invalid or possibly dangerous `CREATE TABLE` options. If you enable
+    this option, be certain to check all of your `CREATE TABLE` options because it
+    might not let you create some tables that used to be fine. Sometimes it’s a bit
+    pessimistic and overly restrictive. You wouldn’t want to find this out while trying
+    to restore a backup.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此设置使 InnoDB 在某些情况下（尤其是无效或可能危险的`CREATE TABLE`选项）抛出错误而不是警告。如果您启用此选项，请务必检查所有的`CREATE
+    TABLE`选项，因为它可能不允许您创建一些以前可以的表。有时它有点悲观和过于限制性。您不希望在尝试恢复备份时才发现这一点。
+- en: '`innodb_old_blocks_time`'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`innodb_old_blocks_time`'
+- en: InnoDB has a two-part buffer pool LRU list, which is designed to prevent ad
+    hoc queries from evicting pages that are used many times over the long term. One-off
+    queries such as those issued by *mysqldump* will typically bring a page into the
+    buffer pool LRU list, read the rows from it, and move on to the next page. In
+    theory, the two-part LRU list will prevent this page from displacing pages that
+    will be needed for a long time by placing it into the “young” sublist and only
+    moving it to the “old” sublist after it has been accessed multiple times. But
+    InnoDB is not configured to prevent this by default because the page has multiple
+    rows, and thus the multiple accesses to read rows from the page will cause it
+    to be moved to the “old” sublist immediately, placing pressure on pages that need
+    a long lifetime. This variable specifies the number of milliseconds that must
+    elapse before a page can move from the “young” part of the LRU list to the “old”
+    part. It’s set to `0` by default, and setting it to a small value such as `1000`
+    (one second) has proven very effective in our benchmarks.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB 有一个两部分��冲池 LRU 列表，旨在防止临时查询驱逐长期多次使用的页面。一次性查询（例如 *mysqldump* 发出的查询）通常会将页面带入缓冲池
+    LRU 列表，从中读取行，并继续下一个页面。理论上，两部分 LRU 列表将防止此页面驱逐需要长期存在的页面，将其放入“年轻”子列表中，并在多次访问后才将其移至“老”子列表。但默认情况下，InnoDB
+    未配置为防止这种情况发生，因为页面有多行，因此多次访问以读取行将导致其立即移至“老”子列表，对需要长寿命的页面施加压力。此变量指定页面从 LRU 列表的“年轻”部分移至“老”部分之前必须经过的毫秒数。默认设置为`0`，将其设置为一个小值，例如`1000`（一秒），在我们的基准测试中已被证明非常有效。
+- en: Summary
+  id: totrans-207
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: After you’ve worked through this chapter, you should have a server configuration
+    that is much better than the defaults. Your server should be fast and stable,
+    and you should not need to tweak the configuration unless you run into an unusual
+    circumstance.
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在您完成本章后，您应该拥有比默认配置好得多的服务器配置。您的服务器应该快速稳定，除非遇到异常情况，否则您不需要调整配置。
+- en: To review, we suggest that you begin with our sample configuration file, set
+    the basic options for your server and workload, and add safety options as desired.
+    That’s really all you need to do.
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总结一下，我们建议您从我们的示例配置文件开始，为您的服务器和工作负载设置基本选项，并根据需要添加安全选项。这确实是您需要做的全部。
+- en: 'If you’re running a dedicated database server, then the best option you can
+    set is `innodb_dedicated_server`, which handles 90% of your performance configuration.
+    If you are unable to use this option, then the most important options are these
+    two:'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您正在运行专用数据库服务器，那么您可以设置的最佳选项是`innodb_dedicated_server`，它处理了您 90% 的性能配置。如果您无法使用此选项，则最重要的选项是这两个：
+- en: '`innodb_buffer_pool_size`'
+  id: totrans-211
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`innodb_buffer_pool_size`'
+- en: '`innodb_log_file_size`'
+  id: totrans-212
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`innodb_log_file_size`'
+- en: Congratulations—you just solved the vast majority of real-world configuration
+    problems we’ve seen!
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 恭喜您——您刚刚解决了我们见过的绝大多数真实世界配置问题！
+- en: We’ve also made a lot of suggestions about what not to do. The most important
+    of these are not to “tune” your server and not to use ratios, formulas, or “tuning
+    scripts” as a basis for setting the configuration variables.
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还提出了很多关于不要做什么的建议。其中最重要的是不要“调整”您的服务器，也不要使用比率、公式或“调整脚本”作为设置配置变量的依据。
+- en: ^([1](ch05.html#ch01fn20-marker)) For example, MySQL can run incredibly fast
+    if you turn off durability settings, but it will also leave your data vulnerable
+    to loss during a crash.
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch05.html#ch01fn20-marker)) 例如，如果关闭 MySQL 的耐久性设置，它可以运行得非常快，但也会在崩溃时使您的数据容易丢失。
+- en: ^([2](ch05.html#ch01fn21-marker)) If you are not convinced that “tuning by ratio”
+    is bad, please read [*Optimizing Oracle Performance*](https://oreil.ly/DWM2I)
+    by Cary Millsap and Jeff Holt (O’Reilly). They even devote an appendix to the
+    topic, with a tool that can artificially generate any cache hit ratio you wish,
+    no matter how badly your system is performing! Of course, it’s all for the purpose
+    of illustrating how useless the ratio is.
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch05.html#ch01fn21-marker)) 如果您还不相信“按比率调整”是不好的，请阅读 [*优化 Oracle 性能*](https://oreil.ly/DWM2I)
+    一书，作者是 Cary Millsap 和 Jeff Holt（O’Reilly）。他们甚至在附录中专门讨论了这个主题，并提供了一个工具，可以人为生成任何您希望的缓存命中率，无论您的系统表现如何糟糕！当然，这都是为了说明比率是多么无用。
+- en: ^([3](ch05.html#ch01fn22-marker)) Please note that versions of MySQL remove,
+    deprecate, and change some options; check the docs for details.
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([3](ch05.html#ch01fn22-marker)) 请注意，MySQL 的各个版本会移除、弃用和更改一些选项；请查看文档以获取详细信息。
+- en: ^([4](ch05.html#ch01fn23-marker)) For follow-up reading, see the Percona blog
+    posts [“Give Love to Your SSDs—Reduce innodb_io_capacity_max”](https://oreil.ly/aSGC6),
+    [“InnoDB Flushing in Action for Percona Server for MySQL”](https://oreil.ly/CdzsQ),
+    and [“Tuning MySQL/InnoDB Flushing for a Write-Intensive Workload”](https://oreil.ly/mnA8m).
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([4](ch05.html#ch01fn23-marker)) 有关后续阅读，请参阅 Percona 博客文章[“给你的SSD一些爱—减少innodb_io_capacity_max”](https://oreil.ly/aSGC6)，[“Percona
+    Server for MySQL中的InnoDB刷新实践”](https://oreil.ly/CdzsQ)，以及[“针对写入密集型工作负载调整MySQL/InnoDB刷新”](https://oreil.ly/mnA8m)。

@@ -1,0 +1,2545 @@
+- en: Chapter 8\. Query Performance Optimization
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第八章。查询性能优化
+- en: In the previous chapters we explained schema optimization and indexing, which
+    are necessary for high performance. But they aren’t enough—you also need to design
+    your queries well. If your queries are bad, even the best-designed schema and
+    indexes will not perform well.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前几章中，我们解释了模式优化和索引，这对于高性能是必要的。但这还不够——您还需要设计良好的查询。如果您的查询不好，即使是设计最佳的模式和索引也不会表现良好。
+- en: Query optimization, index optimization, and schema optimization go hand in hand.
+    As you gain experience writing queries in MySQL, you will learn how to design
+    tables and indexes to support efficient queries. Similarly, what you learn about
+    optimal schema design will influence the kinds of queries you write. This process
+    takes time, so we encourage you to refer back to these three chapters as you learn
+    more.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询优化、索引优化和模式优化是相辅相成的。随着在 MySQL 中编写查询的经验增加，您将学会如何设计表和索引以支持高效的查询。同样，您所学到的关于最佳模式设计将影响您编写的查询类型。这个过程需要时间，因此我们鼓励您在学习过程中参考这三章。
+- en: 'This chapter begins with general query design considerations: the things you
+    should consider first when a query isn’t performing well. We then dig much deeper
+    into query optimization and server internals. We show you how to find out how
+    MySQL executes a particular query, and you’ll learn how to change the query execution
+    plan. Finally, we’ll look at some places MySQL doesn’t optimize queries well and
+    explore query optimization patterns that help MySQL execute queries more efficiently.'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章从一般查询设计考虑开始：当查询性能不佳时，您应该首先考虑的事项。然后我们深入研究查询优化和服务器内部。我们将向您展示如何找出 MySQL 如何执行特定查询，并学习如何更改查询执行计划。最后，我们将看看
+    MySQL 无法很好地优化查询的一些地方，并探索有助于 MySQL 更有效地执行查询的查询优化模式。
+- en: Our goal is to help you understand deeply how MySQL really executes queries,
+    so you can reason about what is efficient or inefficient, exploit MySQL’s strengths,
+    and avoid its weaknesses.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的目标是帮助您深入了解 MySQL 如何真正执行查询，以便您可以思考什么是高效或低效的，利用 MySQL 的优势，避免其弱点。
+- en: Why Are Queries Slow?
+  id: totrans-5
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 查询为什么慢？
+- en: Before trying to write fast queries, remember that it’s all about response time.
+    Queries are tasks, but they are composed of subtasks, and those subtasks consume
+    time. To optimize a query, you must optimize its subtasks by eliminating them,
+    making them happen fewer times, or making them happen more quickly.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在尝试编写快速查询之前，请记住这一切都关乎响应时间。查询是任务，但它们由子任务组成，这些子任务消耗时间。要优化查询，必须通过消除它们、减少发生次数或加快发生速度来优化其子任务。
+- en: In general, you can think of a query’s lifetime by mentally following the query
+    through its sequence diagram from the client to the server, where it is parsed,
+    planned, and executed, and then back again to the client. Execution is one of
+    the most important stages in a query’s lifetime. It involves lots of calls to
+    the storage engine to retrieve rows, as well as postretrieval operations such
+    as grouping and sorting.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，您可以通过在脑海中跟随查询的序列图，从客户端到服务器，解析、规划和执行，然后再返回客户端，来思考查询的生命周期。执行是查询生命周期中最重要的阶段之一。它涉及大量调用存储引擎以检索行，以及后检索操作，如分组和排序。
+- en: While accomplishing all these tasks, the query spends time on the network, in
+    the CPU, and in operations like statistics, planning, locking (mutex waits), and
+    most especially, calls to the storage engine to retrieve rows. These calls consume
+    time in memory operations, CPU operations, and especially I/O operations if the
+    data isn’t in memory. Depending on the storage engine, a lot of context switching
+    and/or system calls might also be involved.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在完成所有这些任务的同时，查询在网络、CPU 和诸如统计、规划、锁定（互斥等待）以及尤其是调用存储引擎检索行等操作上花费时间。这些调用在内存操作、CPU
+    操作以及特别是 I/O 操作中消耗时间，如果数据不在内存中的话。根据存储引擎的不同，可能还涉及大量的上下文切换和/或系统调用。
+- en: In every case, excessive time may be consumed because the operations are performed
+    needlessly, performed too many times, or are too slow. The goal of optimization
+    is to avoid that by eliminating or reducing operations or making them faster.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在每种情况下，由于操作是不必要地执行、执行次数过多或速度太慢，可能会消耗过多时间。优化的目标是通过消除或减少操作或使其更快来避免这种情况。
+- en: Again, this isn’t a complete or accurate picture of a query’s life. Our goal
+    here is to show the importance of understanding a query’s life cycle and thinking
+    in terms of where the time is consumed. With that in mind, let’s see how to optimize
+    queries.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再次强调，这并不是查询生命周期的完整或准确图景。我们在这里的目标是展示理解查询生命周期的重要性，并从时间消耗的角度思考。有了这个理念，让我们看看如何优化查询。
+- en: 'Slow Query Basics: Optimize Data Access'
+  id: totrans-11
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 慢查询基础知识：优化数据访问
+- en: 'The most basic reason a query doesn’t perform well is because it’s working
+    with too much data. Some queries just have to sift through a lot of data, which
+    can’t be helped. That’s unusual, though; most bad queries can be changed to access
+    less data. We’ve found it useful to analyze a poorly performing query in two steps:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询性能不佳的最基本原因是因为它处理了太多数据。有些查询必须筛选大量数据，这是无法避免的。不过，这种情况并不常见；大多数糟糕的查询可以更改以访问更少的数据。我们发现分析性能不佳的查询有两个步骤是有用的：
+- en: Find out whether your application is retrieving more data than you need. That
+    usually means it’s accessing too many rows, but it might also be accessing too
+    many columns.
+  id: totrans-13
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 查找应用程序是否检索了比所需更多的数据。通常这意味着它访问了太多行，但也可能访问了太多列。
+- en: Find out whether the *MySQL server* is analyzing more rows than it needs.
+  id: totrans-14
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 查找*MySQL 服务器*是否分析了比所需更多的行。
+- en: Are You Asking the Database for Data You Don’t Need?
+  id: totrans-15
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 您是否请求了不需要的数据？
+- en: Some queries ask for more data than they need and then throw some of it away.
+    This demands extra work of the MySQL server, adds network overhead,^([1](ch08.html#ch01fn47))
+    and consumes memory and CPU resources on the application server.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有些查询请求了比所需更多的数据，然后丢弃了其中一些。这会给 MySQL 服务器增加额外的工作量，增加网络开销，并在应用程序服务器上消耗内存和 CPU 资源。
+- en: 'Here are a few typical mistakes:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是一些典型的错误：
+- en: Fetching more rows than needed
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 检索比所需更多的行
+- en: One common mistake is assuming that MySQL provides results on demand, rather
+    than calculating and returning the full result set. We often see this in applications
+    designed by people familiar with other database systems. These developers are
+    used to techniques such as issuing a `SELECT` statement that returns many rows,
+    then fetching the first *`N`* rows and closing the result set (e.g., fetching
+    the 100 most recent articles for a news site when they only need to show 10 of
+    them on the front page). They think MySQL will provide them with these 10 rows
+    and stop executing the query, but what MySQL really does is generate the complete
+    result set. The client library then fetches all the data and discards most of
+    it. The best solution is to add a `LIMIT` clause to the query.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个常见的错误是假设MySQL按需提供结果，而不是计算并返回完整的结果集。我们经常在由熟悉其他数据库系统的人设计的应用程序中看到这种情况。这些开发人员习惯于发出返回许多行的`SELECT`语句，然后获取前*`N`*行并关闭结果集（例如，在新闻网站上获取最近的100篇文章，而他们只需要在首页显示其中的10篇）。他们认为MySQL会提供这10行并停止执行查询，但MySQL实际上会生成完整的结果集。客户端库然后获取所有数据并丢弃大部分数据。最佳解决方案是在查询中添加`LIMIT`子句。
+- en: Fetching all columns from a multitable join
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从多表连接中检索所有列
+- en: 'If you want to retrieve all actors who appear in the film *Academy Dinosaur*,
+    don’t write the query this way:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你想检索出出现在电影*Academy Dinosaur*中的所有演员，不要这样写查询：
+- en: '[PRE0]'
+  id: totrans-22
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'That returns all columns from all three tables. Instead, write the query as
+    follows:'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这会返回三个表中的所有列。相反，将查询写成如下形式：
+- en: '[PRE1]'
+  id: totrans-24
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: Fetching all columns
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 检索所有列
+- en: You should always be suspicious when you see `SELECT *`. Do you really need
+    all the columns? Probably not. Retrieving all columns can prevent optimizations
+    such as covering indexes, as well as add I/O, memory, and CPU overhead for the
+    server. Some DBAs discourage `SELECT *` universally because of this fact and to
+    reduce the risk of problems when someone alters the table’s column list.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你看到`SELECT *`时，你应该持怀疑态度。你真的需要所有的列吗？可能不需要。检索所有列可能会阻止优化，如覆盖索引，并为服务器增加I/O、内存和CPU开销。一些数据库管理员普遍不赞成`SELECT
+    *`，因为这个事实以及为了减少当有人修改表的列列表时出现问题的风险。
+- en: Of course, asking for more data than you really need is not always bad. In many
+    cases we’ve investigated, people tell us the wasteful approach simplifies development
+    because it lets the developer use the same bit of code in more than one place.
+    That’s a reasonable consideration as long as you know what it costs in terms of
+    performance. It might also be useful to retrieve more data than you actually need
+    if you use some type of caching in your application or if you have another benefit
+    in mind. Fetching and caching full objects might be preferable to running many
+    separate queries that retrieve only parts of the object.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当然，并不总是坏事要求比实际需要的数据更多。在我们调查的许多情况下，人们告诉我们这种浪费的方法简化了开发，因为它允许开发人员在多个地方使用相同的代码片段。只要你知道这在性能方面的代价，��是一个合理的考虑。如果你的应用程序中使用某种类型的缓存，或者你有其他目的，检索比实际需要的数据更多可能也是有用的。检索和缓存完整对象可能比运行许多单独的查询检索对象的部分更可取。
+- en: Fetching the same data repeatedly
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重复检索相同的数据
+- en: If you’re not careful, it’s quite easy to write application code that retrieves
+    the same data repeatedly from the database server, executing the same query to
+    fetch it. For example, if you want to find out a user’s profile image URL to display
+    next to a list of comments, you might request this repeatedly for each comment.
+    Or you could cache it the first time you fetch it and reuse it thereafter. The
+    latter approach is much more efficient.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果不小心，很容易编写应用程序代码，从数据库服务器中重复检索相同的数据，执行相同的查询以获取它。例如，如果你想找出用户的个人资料图片URL以显示在评论列表旁边，你可能会为每条评论重复请求这个信息。或者你可以在第一次获取后缓存它并在以后重复使用。后一种方法更有效。
+- en: Is MySQL Examining Too Much Data?
+  id: totrans-30
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: MySQL 是否检查了太多数据？
+- en: 'Once you’re sure your queries *retrieve* only the data you need, you can look
+    for queries that *examine* too much data while generating results. In MySQL, the
+    simplest query cost metrics are:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦确定你的查询只检索你需要的数据，你可以寻找生成结果时检查了太多数据的查询。在MySQL中，最简单的查询成本指标是：
+- en: Response time
+  id: totrans-32
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 响应时间
+- en: Number of rows examined
+  id: totrans-33
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 检查的行数
+- en: Number of rows returned
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 返回的行数
+- en: None of these metrics is a perfect way to measure query cost, but they reflect
+    roughly how much data MySQL must access internally to execute a query and translate
+    approximately into how fast the query runs. All three metrics are logged in the
+    slow query log, so looking at the slow query log is one of the best ways to find
+    queries that examine too much data.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些指标都不是衡量查询成本的完美方式，但它们大致反映了MySQL执行查询时必须内部访问多少数据，并大致转化为查询运行的速度。这三个指标都记录在慢查询日志中，因此查看慢查询日志是发现检查了太多数据的查询的最佳方法之一。
+- en: Response time
+  id: totrans-36
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 响应时间
+- en: Beware of taking query response time at face value. Hey, isn’t that the opposite
+    of what we’ve been telling you? Not really. It’s still true that response time
+    is what matters, but it’s a bit complicated.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 警惕只看查询响应时间。嘿，这不是我们一直告诉你的相反吗？其实不然。响应时间仍然很重要，但有点复杂。
+- en: 'Response time is the sum of two things: service time and queue time. *Service
+    time* is how long it takes the server to actually process the query. *Queue time*
+    is the portion of response time during which the server isn’t really executing
+    the query—it’s waiting for something, such as waiting for an I/O operation to
+    complete, waiting for a row lock, and so forth. The problem is, you can’t break
+    the response time down into these components unless you can measure them individually,
+    which is usually hard to do. In general, the most common and important waits you’ll
+    encounter are I/O and lock waits, but you shouldn’t count on it being just those
+    two because it varies a lot. I/O and lock waits are important because they are
+    the most detrimental to performance.'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 响应时间是服务时间和队列时间的总和。*服务时间*是服务器实际处理查询所需的时间。*队列时间*是响应时间中服务器实际上并未执行查询的部分——它在等待某些事情，比如等待I/O操作完成、等待行锁等。问题在于，除非你可以单独测量这些组件，否则你无法将响应时间分解为这些组件。通常，你会遇到的最常见和重要的等待是I/O和锁等待，但你不应该只依赖这两种，因为情况变化很大。I/O和锁等待之所以重要，是因为它们对性能的影响最大。
+- en: As a result, response time is not consistent under varying load conditions.
+    Other factors—such as storage engine locks (like row locks), high concurrency,
+    and hardware—can have a considerable impact on response times, too. Response time
+    can also be both a symptom and a cause of problems, and it’s not always obvious
+    which is the case.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，在不同负载条件下，响应时间并不一致。其他因素——如存储引擎锁（如行锁）、高并发和硬件——也会对响应时间产生相当大的影响。响应时间也可能是问题的症状和原因，而且并不总是明显哪种情况。
+- en: 'When you look at a query’s response time, you should ask yourself whether the
+    response time is reasonable for the query. We don’t have space for a detailed
+    explanation in this book, but you can actually calculate a quick upper-bound estimate
+    (QUBE) of query response time using the techniques explained in Tapio Lahdenmaki
+    and Mike Leach’s book *Relational Database Index Design and the Optimizers* (Wiley).
+    In a nutshell: examine the query execution plan and the indexes involved, determine
+    how many sequential and random I/O operations might be required, and multiply
+    these by the time it takes your hardware to perform them. Add it all up and you
+    have a yardstick to judge whether a query is slower than it could or should be.'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你查看查询的响应时间时，你应该问自己查询的响应时间是否合理。我们在本书中没有详细解释的空间，但你实际上可以使用Tapio Lahdenmaki和Mike
+    Leach的书*关系数据库索引设计和优化器*（Wiley）中解释的技术计算查询响应时间的快速上限估计（QUBE）。简而言之：检查查询执行计划和涉及的索引，确定可能需要多少个顺序和随机I/O操作，并将这些乘以硬件执行它们所需的时间。把它们加起来，你就有一个判断查询是否比可能或应���更慢的标准。
+- en: Rows examined and rows returned
+  id: totrans-41
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 检查的行数和返回的行数
+- en: It’s useful to think about the number of rows examined when analyzing queries
+    because you can see how efficiently the queries are finding the data you need.
+    However, this is not a perfect metric for finding “bad” queries. Not all row accesses
+    are equal. Shorter rows are faster to access, and fetching rows from memory is
+    much faster than reading them from disk.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在分析查询时，考虑检查的行数是有用的，因为你可以看到查询是否高效地找到你需要的数据。然而，这并不是一个找到“坏”查询的完美指标。并非所有行访问都是相等的。较短的行访问速度更快，从内存中获取行比从磁盘中读取行要快得多。
+- en: Ideally, the number of rows examined would be the same as the number returned,
+    but in practice this is rarely possible. For example, when constructing rows with
+    joins, the server must access multiple rows to generate each row in the result
+    set. The ratio of rows examined to rows returned is usually small—say, between
+    1:1 and 10:1—but sometimes it can be orders of magnitude larger.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理想情况下，检查的行数应该与返回的行数相同，但实际上这很少可能。例如，在构建连接行时，服务器必须访问多个行以生成结果集中的每一行。检查的行数与返回的行数的比率通常很小——比如，1:1到10:1之间，但有时可能相差几个数量级。
+- en: Rows examined and access types
+  id: totrans-44
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 扫描的行数和访问类型
+- en: When you’re thinking about the cost of a query, consider the cost of finding
+    a single row in a table. MySQL can use several access methods to find and return
+    a row. Some require examining many rows, but others might be able to generate
+    the result without examining any.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你考虑查询的成本时，考虑在表中找到单个行的成本。MySQL可以使用多种访问方法来查找和返回行。有些需要检查许多行，但其他可能能够在不检查任何行的情况下生成结果。
+- en: The access method(s) appear in the `type` column in `EXPLAIN`’s output. The
+    access types range from a full table scan to index scans, range scans, unique
+    index lookups, and constants. Each of these is faster than the one before it because
+    it requires reading less data. You don’t need to memorize the access types, but
+    you should understand the general concepts of scanning a table, scanning an index,
+    range accesses, and single-value accesses.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 访问方法出现在`EXPLAIN`输出的`type`列中。访问类型从完整表扫描到索引扫描、范围扫描、唯一索引查找和常量。每种访问类型都比前一种更快，因为它需要读取的数据更少。你不需要记住访问类型，但你应该理解扫描表、扫描索引、范围访问和单值访问的一般概念。
+- en: If you aren’t getting a good access type, the best way to solve the problem
+    is usually by adding an appropriate index. We discussed indexing in the previous
+    chapter; now you can see why indexes are so important to query optimization. Indexes
+    let MySQL find rows with a more efficient access type that examines less data.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你没有得到一个好的访问类型，通常解决问题的最佳方法是添加一个适当的索引。我们在前一章讨论了索引；现在你可以看到为什么索引对查询优化如此重要。索引让MySQL能够以更有效的访问类型找到行，从而减少数据的检查。
+- en: 'For example, let’s look at a simple query on the Sakila Sample Database:'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，让我们看一个在Sakila示例数据库上的简单查询：
+- en: '[PRE2]'
+  id: totrans-49
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'This query will return 10 rows, and `EXPLAIN` shows that MySQL uses the `ref`
+    access type on the `idx_fk_film_id` index to execute the query:'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个查询将返回10行，`EXPLAIN`显示MySQL使用`idx_fk_film_id`索引上的`ref`访问类型来执行查询：
+- en: '[PRE3]'
+  id: totrans-51
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: '`EXPLAIN` shows that MySQL estimated it needed to access only 10 rows. In other
+    words, the query optimizer knew the chosen access type could satisfy the query
+    efficiently. What would happen if there were no suitable index for the query?
+    MySQL would have to use a less optimal access type, as we can see if we drop the
+    index and run the query again:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`EXPLAIN` 显示 MySQL 估计只需要访问 10 行。换句话说，查询优化器知道所选的访问类型可以有效地满足查询。如果查询没有合适的索引会发生什么？如果我们删除索引并再次运行查询，MySQL
+    将不得不使用一个不太优化的访问类型，正如我们可以看到的：'
+- en: '[PRE4]'
+  id: totrans-53
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: Predictably, the access type has changed to a full table scan (`ALL`), and MySQL
+    now estimates it’ll have to examine 5,462 rows to satisfy the query. The “Using
+    where” in the `Extra` column shows that the MySQL server is using the `WHERE`
+    clause to discard rows after the storage engine reads them.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可预测的是，访问类型已经变为全表扫描（`ALL`），MySQL 现在估计它将需要检查 5,462 行来满足查询。`Extra`列中的“Using where”显示
+    MySQL 服务器正在使用`WHERE`子句在存储引擎读取行后丢弃行。
+- en: 'In general, MySQL can apply a `WHERE` clause in three ways, from best to worst:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，MySQL 可以以三种方式应用`WHERE`子句，从最好到最差：
+- en: Apply the conditions to the index lookup operation to eliminate nonmatching
+    rows. This happens at the storage engine layer.
+  id: totrans-56
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将条件应用于索引查找操作，以消除不匹配的行。这发生在存储引擎层。
+- en: Use a covering index (“Using index” in the `Extra` column) to avoid row accesses,
+    and filter out nonmatching rows after retrieving each result from the index. This
+    happens at the server layer, but it doesn’t require reading rows from the table.
+  id: totrans-57
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用覆盖索引（`Extra`列中的“Using index”）避免行访问，并在从索引检索每个结果后过滤掉不匹配的行。这发生在服务器层，但不需要从表中读取行。
+- en: Retrieve rows from the table, then filter nonmatching rows (“Using where” in
+    the `Extra` column). This happens at the server layer and requires the server
+    to read rows from the table before it can filter them.
+  id: totrans-58
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从表中检索行，然后过滤不匹配的行（“在`Extra`列中使用 where”）。这发生在服务器层，需要服务器在过滤行之前从表中读取行。
+- en: 'This example illustrates how important it is to have good indexes. Good indexes
+    help your queries get a good access type and examine only the rows they need.
+    However, adding an index doesn’t always mean that MySQL will access and return
+    the same number of rows. For example, here’s a query that uses the `COUNT()`^([2](ch08.html#ch01fn48))
+    aggregate function:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个例子说明了拥有良好索引是多么重要。良好的索引帮助你的查询获得良好的访问类型，并仅检查它们需要的行。然而，添加索引并不总是意味着 MySQL 将访问和返回相同数量的行。例如，这里有一个使用`COUNT()`^([2](ch08.html#ch01fn48))聚合函数的查询：
+- en: '[PRE5]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'This query returns only 200 rows, as shown, but how many rows does it need
+    to read? We can check this with `EXPLAIN`, as we talked about in the previous
+    chapter:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此查询仅返回 200 行，但它需要读取多少行？我们可以通过`EXPLAIN`来检查，就像我们在上一章中讨论的那样：
+- en: '[PRE6]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Ouch! Reading thousands of rows only to need 200 means that we’re doing much
+    more work than necessary. An index can’t reduce the number of rows examined for
+    a query like this one because there’s no `WHERE` clause to eliminate rows.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 糟糕！读取数千行只需要 200 行意味着我们做了比必要更多的工作。对于这样的查询，索引无法减少检查的行数，因为没有`WHERE`子句来消除行。
+- en: Unfortunately, MySQL does not tell you how many of the rows it accessed were
+    used to build the result set; it tells you only the total number of rows it accessed.
+    Many of these rows could be eliminated by a `WHERE` clause and end up not contributing
+    to the result set. In the previous example, after removing the index on `sakila.film_actor`,
+    the query accessed every row in the table and the `WHERE` clause discarded all
+    but 10 of them. Only the remaining 10 rows were used to build the result set.
+    Understanding how many rows the server accesses and how many it really uses requires
+    reasoning about the query.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，MySQL 不会告诉你它访问的行中有多少被用来构建结果集；它只告诉你它访问的总行数。这些行中的许多行可能会被`WHERE`子句消除，并最终不会对结果集做出贡献。在前面的例子中，删除`sakila.film_actor`上的索引后，查询访问了表中的每一行，而`WHERE`子句丢弃了除了其中的
+    10 行之外的所有行。只有剩下的 10 行被用来构建结果集。理解服务器访问了多少行以及它实际使用了多少行需要对查询进行推理。
+- en: 'If you find that a huge number of rows were examined to produce relatively
+    few rows in the result, you can try some more sophisticated fixes:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果发现为了生成相对较少的结果而检查了大量行，你可以尝试一些更复杂的修复方法：
+- en: Use covering indexes, which store data so that the storage engine doesn’t have
+    to retrieve the complete rows. (We discussed these in [Chapter 7](ch07.html#indexing_for_high_performance).)
+  id: totrans-66
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使���覆盖索引，它存储数据，使得存储引擎不必检索完整的行。（我们在[第 7 章](ch07.html#indexing_for_high_performance)中讨论过这些。）
+- en: Change the schema. An example is using summary tables (discussed in [Chapter 6](ch06.html#schema_design_and_management)).
+  id: totrans-67
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 更改模式。一个例子是使用摘要表（在[第 6 章](ch06.html#schema_design_and_management)中讨论）。
+- en: Rewrite a complicated query so the MySQL optimizer is able to execute it optimally.
+    (We discuss this later in this chapter.)
+  id: totrans-68
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 重写一个复杂的查询，以便 MySQL 优化器能够最佳地执行它。（我们将在本章后面讨论这个问题。）
+- en: Ways to Restructure Queries
+  id: totrans-69
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 重构查询的方法
+- en: As you optimize problematic queries, your goal should be to find alternative
+    ways to get the result you want—but that doesn’t necessarily mean getting the
+    same result set back from MySQL. You can sometimes transform queries into equivalent
+    forms that return the same results and get better performance. However, you should
+    also think about rewriting the query to retrieve *different* results if that provides
+    an efficiency benefit. You might be able to ultimately do the same work by changing
+    the application code as well as the query. In this section, we explain techniques
+    that can help you restructure a wide range of queries and show you when to use
+    each technique.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在优化有问题的查询时，你的目标应该是找到获取你想要的结果的替代方法，但这并不一定意味着从 MySQL 中获得相同的结果集。有时候，你可以将查询转换为返回相同结果且性能更好的等价形式。然而，你也应该考虑重写查询以检索*不同*的结果，如果这样做能提高效率的话。最终，通过改变应用程序代码以及查询，你可能能够完成相同的工作。在本节中，我们将解释一些技术，帮助你重构各种查询，并告诉你何时使用每种技术。
+- en: Complex Queries Versus Many Queries
+  id: totrans-71
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 复杂查询与多个查询
+- en: One important query-design question is whether it’s preferable to break up a
+    complex query into several simpler queries. The traditional approach to database
+    design emphasizes doing as much work as possible with as few queries as possible.
+    This approach was historically better because of the cost of network communication
+    and the overhead of the query parsing and optimization stages.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个重要的查询设计问题是是否更倾向于将复杂查询分解为几个简单查询。传统的数据���设计方法强调尽可能用尽可能少的查询来完成尽可能多的工作。这种方法在历史上更好，因为网络通信的成本和查询解析和优化阶段的开销。
+- en: However, this advice doesn’t apply as much to MySQL because it was designed
+    to handle connecting and disconnecting very efficiently and to respond to small,
+    simple queries very quickly. Modern networks are also significantly faster than
+    they used to be, reducing network latency. Depending on the server version, MySQL
+    can run well over one hundred thousand simple queries per second on commodity
+    server hardware and more than two thousand QPS from a single correspondent on
+    a gigabit network, so running multiple queries isn’t necessarily such a bad thing.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，这个建议在 MySQL 上不太适用，因为它被设计为非常高效地处理连接和断开连接，并且对小型、简单的查询作出快速响应。现代网络也比以前快得多，减少了网络延迟。根据服务器版本，MySQL
+    可以在商品服务器硬件上每秒运行超过十万个简单查询，并且在千兆网络上从单个对应方每秒运行超过两千个 QPS，因此运行多个查询并不一定是一件坏事。
+- en: Connection response is still slow compared to the number of rows MySQL can traverse
+    per second internally, though, which is counted in millions per second for in-memory
+    data. All else being equal, it’s still a good idea to use as few queries as possible,
+    but sometimes you can make a query more efficient by decomposing it and executing
+    a few simple queries instead of one complex one. Don’t be afraid to do this; weigh
+    the costs and go with the strategy that causes less work. We show some examples
+    of this technique a little later in the chapter.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与 MySQL 每秒内部遍历的行数相比，连接响应仍然很慢，尽管对于内存数据，每秒可以计数为百万级。其他条件相同的情况下，尽可能使用较少的查询仍然是个好主意，但有时你可以通过分解查询并执行几个简单的查询而不是一个复杂的查询来使查询更有效。不要害怕这样做；权衡成本，选择导致工作量较少的策略。我们稍后在本章中展示了一些这种技术的例子。
+- en: That said, using too many queries is a common mistake in application design.
+    For example, some applications perform 10 single-row queries to retrieve data
+    from a table when they could use a single 10-row query. We’ve even seen applications
+    that retrieve each column individually, querying each row many times!
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用过多查询是应用设计中的常见错误。例如，一些应用程序执行 10 个单行查询以从表中检索数据，而实际上它们可以使用一个包含 10 行的查询。我们甚至看到一些应用程序会逐个检索每一列，多次查询每一行！
+- en: Chopping Up a Query
+  id: totrans-76
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 分解查询
+- en: Another way to slice up a query is to divide and conquer, keeping it essentially
+    the same but running it in smaller “chunks” that affect fewer rows each time.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种分解查询的方法是分而治之，保持基本相同但在影响更少行的情况下以较小的“块”运行它。
+- en: 'Purging old data is a great example. Periodic purge jobs might need to remove
+    quite a bit of data, and doing this in one massive query could lock a lot of rows
+    for a long time, fill up transaction logs, hog resources, and block small queries
+    that shouldn’t be interrupted. Chopping up the `DELETE` statement and using medium-size
+    queries can improve performance considerably and reduce replication lag when a
+    query is replicated. For example, instead of running this monolithic query:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 清理旧数据是一个很好的例子。定期清理作业可能需要删除大量数据，如果在一个巨大的查询中执行此操作可能会锁定很多行很长时间，填满事务日志，占用资源，并阻塞不应被中断的小查询。分解`DELETE`语句并使用中等大小的查询可以显著提高性能，并在查询被复制时减少复制延迟。例如，与其运行这个庞大的查询：
+- en: '[PRE7]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'You could do something like the following pseudocode:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以做类似以下伪代码：
+- en: '[PRE8]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Deleting 10,000 rows at a time is typically a large enough task to make each
+    query efficient and a short enough task to minimize the impact on the server^([3](ch08.html#ch01fn49))
+    (transactional storage engines might benefit from smaller transactions). It might
+    also be a good idea to add some sleep time between the `DELETE` statements to
+    spread the load over time and reduce the amount of time locks are held.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每次删除 10,000 行通常是一个足够大的任务，使每个查询都有效，并且足够短的任务以最小化对服务器的影响^([3](ch08.html#ch01fn49))（事务存储引擎可能受益于更小的事务）。在`DELETE`语句之间添加一些休眠时间以分散负载并减少锁定时间也可能是个好主意。
+- en: Join Decomposition
+  id: totrans-83
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 连接分解
+- en: 'Many high-performance applications use *join decomposition*. You can decompose
+    a join by running multiple single-table queries instead of a multitable join and
+    then performing the join in the application. For example, instead of this single
+    query:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多高性能应用程序使用*连接分解*。您可以通过运行多个单表查询而不是多表连接来分解连接，然后在应用程序中执行连接。例如，与其这样的单个查询：
+- en: '[PRE9]'
+  id: totrans-85
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'You might run these queries:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可能会运行这些查询：
+- en: '[PRE10]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Why on earth would you do this? It looks wasteful at first glance because you’ve
+    increased the number of queries without getting anything in return. However, such
+    restructuring can actually give significant performance advantages:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为什么要这样做？乍一看，这看起来是浪费的，因为您增加了查询的数量，却没有得到任何回报。然而，这种重组实际上可以带来显著的性能优势：
+- en: Caching can be more efficient. Many applications cache “objects” that map directly
+    to tables. In this example, if the object with the tag `mysql` is already cached,
+    the application can skip the first query. If you find posts with an ID of 123,
+    567, or 9098 in the cache, you can remove them from the `IN()` list.
+  id: totrans-89
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 缓存可能更有效。许多应用程序会缓存直接映射到表的“对象”。在这个例子中，如果带有标签`mysql`的对象已经被缓存，应用程序可以跳过第一个查询。如果在缓存中找到
+    ID 为 123、567 或 9098 的帖子，可以将它们从`IN()`列表中移除。
+- en: Executing the queries individually can sometimes reduce lock contention.
+  id: totrans-90
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 有时逐个执行查询可以减少锁争用。
+- en: Doing joins in the application makes it easier to scale the database by placing
+    tables on different servers.
+  id: totrans-91
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在应用程序中进行连接使得通过将表放置在不同的服务器上更容易扩展数据库。
+- en: The queries themselves can be more efficient. In this example, using an `IN()`
+    list instead of a join lets MySQL sort row IDs and retrieve rows more optimally
+    than might be possible with a join.
+  id: totrans-92
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 查询本身可能更有效率。在这个例子中，使用`IN()`列表而不是连接让 MySQL 对行 ID 进行排序，并更优化地检索行，这可能比使用连接更有效。
+- en: You can reduce redundant row accesses. Doing a join in the application means
+    you retrieve each row only once, whereas a join in the query is essentially a
+    denormalization that might repeatedly access the same data. For the same reason,
+    such restructuring might also reduce the total network traffic and memory usage.
+  id: totrans-93
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以减少冗余的行访问。在应用程序中进行连接意味着您只检索每行一次，而在查询中进行连接本质上是一种反规范化，可能会重复访问相同的数据。出于同样的原因，这种重组也可能减少总网络流量和内存使用。
+- en: As a result, doing joins in the application can be more efficient when you cache
+    and reuse a lot of data from earlier queries, you distribute data across multiple
+    servers, you replace joins with `IN()` lists on large tables, or a join refers
+    to the same table multiple times.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，在应用程序中进行连接时，如果您从先前的查询中缓存和重复使用大量数据，将数据分布在多个服务器上，将连接替换为`IN()`列表在大表上，或者连接多次引用同一表时，可能会更有效率。
+- en: Query Execution Basics
+  id: totrans-95
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 查询执行基础知识
+- en: If you need to get high performance from your MySQL server, one of the best
+    ways to invest your time is in learning how MySQL optimizes and executes queries.
+    Once you understand this, much of query optimization is a matter of reasoning
+    from principles, and query optimization becomes a very logical process.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您需要从 MySQL 服务器获得高性能，最好的投资之一是学习 MySQL 如何优化和执行查询。一旦您理解了这一点，大部分查询优化都是根据原则推理，查询优化变得非常逻辑。
+- en: 'Let’s revisit what we discussed earlier: the process MySQL follows to execute
+    queries. [Figure 8-1](#execution_path_of_a_query) shows what happens when you
+    send MySQL a query:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们重新审视我们之前讨论的内容：MySQL 执行查询的过程。[图 8-1](#execution_path_of_a_query) 展示了当您向 MySQL
+    发送查询时会发生什么：
+- en: The client sends the SQL statement to the server.
+  id: totrans-98
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 客户端将 SQL 语句发送到服务器。
+- en: The server parses, preprocesses, and optimizes it into a query execution plan.
+  id: totrans-99
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 服务器将其解析、预处理并优化为查询执行计划。
+- en: The query execution engine executes the plan by calling the storage engine API.
+  id: totrans-100
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 查询执行引擎通过调用存储引擎 API 执行计划。
+- en: The server sends the result to the client.
+  id: totrans-101
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 服务器将结果发送给客户端。
+- en: '![](assets/hpm4_0801.png)'
+  id: totrans-102
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_0801.png)'
+- en: Figure 8-1\. Execution path of a query
+  id: totrans-103
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 8-1\. 查询的执行路径
+- en: Each of these steps has some extra complexity, which we discuss in the following
+    sections. We also explain which states the query will be in during each step.
+    The query optimization process is particularly complex and important to understand.
+    There are also exceptions or special cases, such as the difference in execution
+    path when you use prepared statements; we discuss that in the next chapter.
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个步骤都有一些额外的复杂性，我们将在接下来的章节��讨论。我们还会解释在每个步骤中查询将处于哪些状态。查询优化过程特别复杂且重要。还有一些例外或特殊情况，比如在使用准备语句时执行路径的差异；我们将在下一章中讨论。
+- en: The MySQL Client/Server Protocol
+  id: totrans-105
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: MySQL 客户端/服务器协议
+- en: Although you don’t need to understand the inner details of MySQL’s client/server
+    protocol, you do need to know how it works at a high level. The protocol is *half-duplex*,
+    meaning that at any given time the MySQL server can be either sending or receiving
+    messages but not both. It also means there is no way to cut a message short.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管您不需要了解 MySQL 客户端/服务器协议的内部细节，但您需要在高层次上了解它是如何工作的。该协议是*半双工*的，这意味着在任何给定时间 MySQL
+    服务器可以发送或接收消息但不能同时进行两者。这也意味着没有办法截断消息。
+- en: 'This protocol makes MySQL communication simple and fast, but it limits it in
+    some ways too. For one thing, it means there’s no flow control; once one side
+    sends a message, the other side must fetch the entire message before responding.
+    It’s like a game of tossing a ball back and forth: only one side has the ball
+    at any instant, and you can’t toss the ball (send a message) unless you have it.'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种协议使得 MySQL 通信简单快速，但也在某些方面限制了它。首先，这意味着没有流量控制；一旦一方发送消息，另一方必须在回复之前获取整个消息。这就像一个来回传球的游戏：任何时候只有一方拿着球，除非你拿到球，否则你无法传球（发送消息）。
+- en: The client sends a query to the server as a single packet of data. This is why
+    the `max_allowed_packet` configuration variable is important if you have large
+    queries.^([4](ch08.html#ch01fn50)) Once the client sends the query, it doesn’t
+    have the ball anymore; it can only wait for results.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 客户端将查询作为单个数据包发送到服务器。这就是为什么如果您有大型查询，`max_allowed_packet` 配置变量很重要。^([4](ch08.html#ch01fn50))
+    一旦客户端发送查询，它就不再控制局面；它只能等待结果。
+- en: In contrast, the response from the server usually consists of many packets of
+    data. When the server responds, the client has to receive the *entire* result
+    set. It cannot simply fetch a few rows and then ask the server not to bother sending
+    the rest. If the client needs only the first few rows that are returned, it either
+    has to wait for all of the server’s packets to arrive and then discard the ones
+    it doesn’t need or disconnect ungracefully. Neither is a good idea, which is why
+    appropriate `LIMIT` clauses are so important.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相比之下，服务器的响应通常由许多数据包组成。当服务器响应时，客户端必须接收*整个*结果集。它不能简单地获取一些行然后要求服务器不再发送其余的行。如果客户端只需要返回的前几行，它要么等待所有服务器的数据包到达然后丢弃它不需要的部分，要么不正常地断开连接。这两种方式都不是好主意，这就是为什么适当使用`LIMIT`子句如此重要。
+- en: 'Here’s another way to think about this: when a client fetches rows from the
+    server, it thinks it’s *pulling* them. But the truth is, the MySQL server is *pushing*
+    the rows as it generates them. The client is only receiving the pushed rows; there
+    is no way for it to tell the server to stop sending rows. The client is “drinking
+    from the fire hose,” so to speak. (Yes, that’s a technical term.)'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里有另一种思考方式：当客户端从服务器获取行时，它认为自己是在*拉*它们。但事实是，MySQL 服务器在生成行时是在*推*行。客户端只接收被推送的行；它无法告诉服务器停止发送行。客户端就像在“从消防水龙头中喝水”，可以这么说。（是的，这是一个技术术语。）
+- en: 'Most libraries that connect to MySQL let you either fetch the whole result
+    set and buffer it in memory or fetch each row as you need it. The default behavior
+    is generally to fetch the whole result and buffer it in memory. This is important
+    because until all the rows have been fetched, the MySQL server will not release
+    the locks and other resources required by the query. The query will be in the
+    “Sending data” state. When the client library fetches the results all at once,
+    it reduces the amount of work the server needs to do: the server can finish and
+    clean up the query as quickly as possible.'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数连接到MySQL的库都可以让您获取整个结果集并将其缓冲在内存中，或者在需要时获取每一行。默认行为通常是获取整个结果并将其缓冲在内存中。这很重要，因为在获取所有行之前，MySQL服务器不会释放查询所需的锁和其他资源。查询将处于“发送数据”状态。当客户端库一次性获取所有结果时，它减少了服务器需要做的工作量：服务器可以尽快完成并清理查询。
+- en: Most client libraries let you treat the result set as though you’re fetching
+    it from the server, although in fact you’re just fetching it from the buffer in
+    the library’s memory. This works fine most of the time, but it’s not a good idea
+    for huge result sets that might take a long time to fetch and use a lot of memory.
+    You can use less memory and start working on the result sooner if you instruct
+    the library not to buffer the result. The downside is that the locks and other
+    resources on the server will remain open while your application is interacting
+    with the library.^([5](ch08.html#ch01fn51))
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数客户端库让您将结果集视为从服务器获取，尽管实际上您只是从库内存中的缓冲区获取。这在大多数情况下运行良好，但对于可能需要很长时间才能获取并使用大量内存的大型结果集，这不是一个好主意。如果指示库不缓冲结果，您可以使用更少的内存并更早开始处理结果。缺点是，当您的应用程序与库交互时，服务器上的锁和其他资源将保持打开状态。^([5](ch08.html#ch01fn51))
+- en: 'Let’s look at an example using PHP. Here’s how you usually query MySQL from
+    PHP:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看一个使用PHP的示例。这是您通常从PHP查询MySQL的方式：
+- en: '[PRE11]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'The code seems to indicate that you fetch rows only when you need them, in
+    the `while` loop. However, the code actually fetches the entire result into a
+    buffer with the `mysql_query()` function call. The `while` loop simply iterates
+    through the buffer. In contrast, the following code doesn’t buffer the results
+    because it uses `mysql_unbuffered_query()` instead of `mysql_query()`:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 代码似乎表明您只在需要时在`while`循环中获取行。然而，代码实际上通过`mysql_query()`函数调用将整个结果获取到缓冲区中。`while`循环只是遍历缓冲区。相比之下，以下代码不会缓冲结果，因为它使用`mysql_unbuffered_query()`而不是`mysql_query()`：
+- en: '[PRE12]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Programming languages have different ways to override buffering. For example,
+    the Perl `DBD::mysql` driver requires you to specify the C client library’s `mysql_​use_result`
+    attribute (the default is `mysql_buffer_result`). Here’s an example:'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 编程语言有不同的方法来覆盖缓冲。例如，Perl的`DBD::mysql`驱动程序要求您指定C客户端库的`mysql_​use_result`属性（默认为`mysql_buffer_result`）。这是一个示例：
+- en: '[PRE13]'
+  id: totrans-118
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'Notice that the call to `prepare()` specified to “use” the result instead of
+    “buffering” it. You can also specify this when connecting, which will make every
+    statement unbuffered:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，调用`prepare()`指定“使用”结果而不是“缓冲”结果。您也可以在连接时指定这一点，这将使每个语句都是非缓冲的：
+- en: '[PRE14]'
+  id: totrans-120
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Query States
+  id: totrans-121
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 查询状态
+- en: 'Each MySQL connection, or *thread*, has a state that shows what it is doing
+    at any given time. There are several ways to view these states, but the easiest
+    is to use the `SHOW FULL PROCESSLIST` command (the states appear in the `Command`
+    column). As a query progresses through its life cycle, its state changes many
+    times, and there are dozens of states. The MySQL manual is the authoritative source
+    of information for all the states, but we list a few here and explain what they
+    mean:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个MySQL连接，或*线程*，都有一个状态，显示其在任何给定时间正在做什么。有几种查看这些状态的方法，但最简单的方法是使用`SHOW FULL PROCESSLIST`命令（状态显示在`Command`列中）。随着查询在其生命周期中的进展，其状态会多次更改，有数十种状态。MySQL手册是所有状态信息的权威来源，但我们在这里列出了一些并解释了它们的含义：
+- en: Sleep
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 休眠
+- en: The thread is waiting for a new query from the client.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 线程正在等待来自客户端的新查询。
+- en: Query
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询
+- en: The thread is either executing the query or sending the result back to the client.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 线程正在执行查询或将结果发送回客户端。
+- en: Locked
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 锁定
+- en: The thread is waiting for a table lock to be granted at the server level. Locks
+    that are implemented by the storage engine, such as InnoDB’s row locks, do not
+    cause the thread to enter the `Locked` state.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 线程正在等待服务器级别授予表锁。由存储引擎实现的锁，例如InnoDB的行锁，不会导致线程进入`Locked`状态。
+- en: Analyzing and statistics
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分析和统计
+- en: The thread is checking storage engine statistics and optimizing the query.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 线程正在检查存储引擎统计信息并优化查询。
+- en: Copying to tmp table [on disk]
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制到临时表[在磁盘上]
+- en: The thread is processing the query and copying results to a temporary table,
+    probably for a `GROUP BY`, for a filesort, or to satisfy a `UNION`. If the state
+    ends with “on disk,” MySQL is converting an in-memory table to an on-disk table.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 线程正在处理查询并将结果复制到临时表，可能是为了`GROUP BY`，进行文件排序，或满足`UNION`。如果状态以“on disk”结尾，MySQL正在将内存表转换为磁盘表。
+- en: Sorting result
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 排序结果
+- en: The thread is sorting a result set.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 线程正在对结果集进行排序。
+- en: It’s helpful to at least know the basic states, so you can get a sense of “who
+    has the ball” for the query. On very busy servers, you might see a normally brief
+    state, such as `statistics`, begin to take a significant amount of time. This
+    usually indicates that something is wrong.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 至少了解基本状态是有帮助的，这样您就可以了解查询的“谁在掌握主动权”。在非��繁忙的服务器上，您可能会看到通常很短暂的状态，例如`statistics`，开始占用大量时间。这通常表示出现了问题。
+- en: The Query Optimization Process
+  id: totrans-136
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 查询优化过程
+- en: 'The next step in the query life cycle turns a SQL query into an execution plan
+    for the query execution engine. This has several substeps: parsing, preprocessing,
+    and optimization. Errors (for example, syntax errors) can be raised at any point
+    in the process. We’re not trying to document the MySQL internals here, so we’re
+    going to take some liberties, such as describing steps separately even though
+    they’re often combined wholly or partially for efficiency. Our goal is simply
+    to help you understand how MySQL executes queries so that you can write better
+    ones.'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询生命周期中的下一步将SQL查询转换为查询执行引擎的执行计划。这包括几个子步骤：解析、预处理和优化。错误（例如，语法错误）可能在过程的任何时候引发。我们并不打算在这里记录MySQL的内部情况，因此我们将采取一些自由，例如即使它们通常为了效率而完全或部分地合并，我们也会单独描述步骤。我们的目标只是帮助您了解MySQL如何执行查询，以便您可以编写更好的查询。
+- en: The parser and the preprocessor
+  id: totrans-138
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 解析器和预处理器
+- en: To begin, MySQL’s *parser* breaks the query into tokens and builds a “parse
+    tree” from them. The parser uses MySQL’s SQL grammar to interpret and validate
+    the query. For instance, it ensures that the tokens in the query are valid and
+    in the proper order, and it checks for mistakes such as quoted strings that aren’t
+    terminated.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，MySQL的*解析器*将查询分解为标记，并从中构建“解析树”。解析器使用MySQL的SQL语法来解释和验证查询。例如，它确保查询中的标记有效且顺序正确，并检查是否存在未终止的引号字符串等错误。
+- en: The *preprocessor* then checks the resulting parse tree for additional semantics
+    that the parser can’t resolve. For example, it checks that tables and columns
+    exist, and it resolves names and aliases to ensure that column references aren’t
+    ambiguous.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*预处理器*然后检查解析树的结果，以解决解析器无法解决的附加语义。例如，它检查表和列是否存在，并解析名称和别名以确保列引用不会产生歧义。'
+- en: Next, the preprocessor checks privileges. This is normally very fast unless
+    your server has large numbers of privileges.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，预处理器检查权限。除非您的服务器具有大量权限，否则这通常非常快。
+- en: The query optimizer
+  id: totrans-142
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 查询优化器
+- en: The parse tree is now valid and ready for the optimizer to turn it into a query
+    execution plan. A query can often be executed many different ways and produce
+    the same result. The optimizer’s job is to find the best option.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 解析树现在有效并准备好供优化器将其转换为查询执行计划。一个查询通常可以以许多不同的方式执行并产生相同的结果。优化器的工作是找到最佳选项。
+- en: 'MySQL uses a cost-based optimizer, which means it tries to predict the cost
+    of various execution plans and choose the least expensive. The unit of cost was
+    originally a single random 4 KB data page read, but it has become more sophisticated
+    and now includes factors such as the estimated cost of executing a `WHERE` clause
+    comparison. You can see how expensive the optimizer estimated a query to be by
+    running the query, then inspecting the `Last_query_cost` session variable:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL使用基于成本的优化器，这意味着它试图预测各种执行计划的成本并选择最便宜的。成本单位最初是一个单个随机的4 KB数据页读取，但现在已变得更加复杂，现在包括诸如执行`WHERE`子句比较的估计成本等因素。您可以通过运行查询，然后检查`Last_query_cost`会话变量来查看优化器估计查询的成本有多昂贵：
+- en: '[PRE15]'
+  id: totrans-145
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'This result means that the optimizer estimated it would need to do about 1,040
+    random data page reads to execute the query. It bases the estimate on statistics:
+    the number of pages per table or index, the *cardinality* (number of distinct
+    values) of the indexes, the length of the rows and keys, and the key distribution.
+    The optimizer does not include the effects of any type of caching in its estimates;
+    it assumes every read will result in a disk I/O operation.'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个结果意味着优化器估计执行查询需要大约1040个随机数据页读取。它基于统计数据：每个表或索引的页数，索引的*基数*（不同值的数量），行和键的长度，以及键的分布。优化器在其估计中不包括任何类型缓存的影响；它假设每次读取都会导致磁盘I/O操作。
+- en: 'The optimizer might not always choose the best plan, for many reasons:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 优化器可能并不总是选择最佳计划，原因有很多：
+- en: The statistics could be inaccurate. The server relies on storage engines to
+    provide statistics, and they can range from exactly correct to wildly inaccurate.
+    For example, the InnoDB storage engine doesn’t maintain accurate statistics about
+    the number of rows in a table because of its MVCC architecture.
+  id: totrans-148
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 统计数据可能不准确。服务器依赖存储引擎提供统计信息，它们的准确性可能从完全正确到极不准确。例如，InnoDB存储引擎由于其MVCC架构不维护关于表中行数的准确统计信息。
+- en: The cost metric is not exactly equivalent to the true cost of running the query,
+    so even when the statistics are accurate, the query might be more or less expensive
+    than MySQL’s approximation. A plan that reads more pages might actually be cheaper
+    in some cases, such as when the reads are sequential so the disk I/O is faster
+    or when the pages are already cached in memory. MySQL also doesn’t understand
+    which pages are in memory and which pages are on disk, so it doesn’t really know
+    how much I/O the query will cause.
+  id: totrans-149
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 成本度量标准并不完全等同于运行查询的真实成本，因此即使统计数据准确，查询的成本可能比MySQL的近似值更昂贵或更便宜。在某些情况下，读取更多页的计划实际上可能更便宜，例如当读取是顺序的时，磁盘I/O更快，或者当页已缓存在内存中时。MySQL也不了解哪些页在内存中，哪些页在磁盘上，因此它实际上不知道查询会导致多少I/O。
+- en: MySQL’s idea of “optimal” might not match yours. You probably want the fastest
+    execution time, but MySQL doesn’t really try to make queries fast; it tries to
+    minimize their cost, and as we’ve seen, determining cost is not an exact science.
+  id: totrans-150
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL的“最佳”概念可能与您的不同。您可能希望获得最快的执行时间，但MySQL实际上并不试图使查询快速；它试图最小化它们的成本，正如我们所见，确定成本并不是一门确切的科学。
+- en: MySQL doesn’t consider other queries that are running concurrently, which can
+    affect how quickly the query runs.
+  id: totrans-151
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL不考虑同时运行的其他查询，这可能会影响查询运行的速度。
+- en: MySQL doesn’t always do cost-based optimization. Sometimes it just follows the
+    rules, such as “if there’s a full-text `MATCH()` clause, use a `FULLTEXT` index
+    if one exists.” It will do this even when it would be faster to use a different
+    index and a non-`FULLTEXT` query with a `WHERE` clause.
+  id: totrans-152
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL并不总是进行基于成本的优化。有时它只是遵循规则，例如“如果有一个全文 `MATCH()` 子句，如果存在 `FULLTEXT` 索引，则使用它”。即使使用不同的索引和带有
+    `WHERE` 子句的非 `FULLTEXT` 查询更快，它也会这样做。
+- en: The optimizer doesn’t take into account the cost of operations not under its
+    control, such as executing stored functions or user-defined functions.
+  id: totrans-153
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 优化器不考虑不受其控制的操作的成本，例如执行存储函数或用户定义的函数。
+- en: As we’ll see later, the optimizer can’t always estimate every possible execution
+    plan, so it might miss an optimal plan.
+  id: totrans-154
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 正如我们将在后面看到的，优化器并不总是能够估计每种可能的执行计划，因此可能会错过最佳计划。
+- en: MySQL’s query optimizer is a highly complex piece of software, and it uses many
+    optimizations to transform the query into an execution plan. There are two basic
+    types of optimizations, which we call *static* and *dynamic*. *Static optimizations*
+    can be performed simply by inspecting the parse tree. For example, the optimizer
+    can transform the `WHERE` clause into an equivalent form by applying algebraic
+    rules. Static optimizations are independent of values, such as the value of a
+    constant in a `WHERE` clause. They can be performed once and will always be valid,
+    even when the query is reexecuted with different values. You can think of these
+    as “compile-time optimizations.”
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL的查询优化器是一个非常复杂的软件部分，它使用许多优化来将查询转换为执行计划。有两种基本类型的优化，我们称之为*静态*和*动态*。*静态优化*
+    可以通过检查解析树简单地执行。例如，优化器可以通过应用代数规则将 `WHERE` 子句转换为等效形式。静态优化与值无关，例如 `WHERE` 子句中常量的值。它们可以执行一次，并且在使用不同值重新执行查询时始终有效。您可以将其视为“编译时优化”。
+- en: In contrast, *dynamic optimizations* are based on context and can depend on
+    many factors, such as which value is in a `WHERE` clause or how many rows are
+    in an index. They must be reevaluated each time the query is executed. You can
+    think of these as “runtime optimizations.”
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相比之下，*动态优化* 基于上下文，并且可能取决于许多因素，例如 `WHERE` 子句中的值或索引中的行数。它们必须在每次执行查询时重新评估。您可以将其视为“运行时优化”。
+- en: The difference is important when executing prepared statements or stored procedures.
+    MySQL can do static optimizations once, but it must reevaluate dynamic optimizations
+    every time it executes a query. MySQL sometimes even reoptimizes the query as
+    it executes it.^([6](ch08.html#ch01fn52))
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在执行预处理语句或存储过程时，区别很重要。MySQL可以进行静态优化一次，但必须每次执行查询时重新评估动态优化。有时，MySQL甚至在执行过程中重新优化查询。^([6](ch08.html#ch01fn52))
+- en: 'Here are some types of optimizations MySQL knows how to do:'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是MySQL知道如何执行的一些优化类型：
+- en: Reordering joins
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重新排序连接
+- en: Tables don’t always have to be joined in the order you specify in the query.
+    Determining the best join order is an important optimization; we explain it in
+    depth later in this chapter.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表不一定要按照查询中指定的顺序连接。确定最佳连接顺序是一项重要的优化；我们稍后在本章中深入解释。
+- en: Converting `OUTER JOIN`s to `INNER JOIN`
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将 `OUTER JOIN` 转换为 `INNER JOIN`
+- en: An `OUTER JOIN` doesn’t necessarily have to be executed as an `OUTER JOIN`.
+    Some factors, such as the `WHERE` clause and table schema, can actually cause
+    an `OUTER JOIN` to be equivalent to an `INNER JOIN`. MySQL can recognize this
+    and rewrite the join, which makes it eligible for reordering.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`OUTER JOIN` 不一定要作为 `OUTER JOIN` 执行。某些因素，例如 `WHERE` 子句和表模式，实际上可能导致 `OUTER JOIN`
+    等效于 `INNER JOIN`。MySQL可以识别这一点并重写连接，从而使其有资格进行重新排序。'
+- en: Applying algebraic equivalence rules
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 应用代数等价规则
+- en: MySQL applies algebraic transformations to simplify and canonicalize expressions.
+    It can also fold and reduce constants, eliminating impossible constraints and
+    constant conditions. For example, the term `(5=5 AND a>5)` will reduce to just
+    `a>5`. Similarly, `(a<b AND b=c) AND a=5` becomes `b>5 AND b=c AND a=5`. These
+    rules are very useful for writing conditional queries, which we discuss later
+    in this chapter.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL应用代数变换来简化和规范化表达式。它还可以折叠和减少常量，消除不可能的约束和常量条件。例如，术语 `(5=5 AND a>5)` 将简化为 `a>5`。类似地，`(a<b
+    AND b=c) AND a=5` 变为 `b>5 AND b=c AND a=5`。这些规则对于编写条件查询非常有用，我们稍后在本章中讨论。
+- en: '`COUNT()`, `MIN()`, and `MAX()` optimizations'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`COUNT()`、`MIN()` 和 `MAX()` 优化'
+- en: Indexes and column nullability can often help MySQL optimize away these expressions.
+    For example, to find the minimum value of a column that’s leftmost in a B-tree
+    index, MySQL can just request the first row in the index. It can even do this
+    in the query optimization stage and treat the value as a constant for the rest
+    of the query. Similarly, to find the maximum value in a B-tree index, the server
+    reads the last row. If the server uses this optimization, you’ll see “Select tables
+    optimized away” in the `EXPLAIN` plan. This literally means the optimizer has
+    removed the table from the query plan and replaced it with a constant.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引和列的可空性通常可以帮助MySQL优化这些表达式。例如，要找到B树索引中最左边的列的最小值，MySQL可以只请求索引中的第一行。它甚至可以在查询优化阶段执行此操作，并将该值视为常量用于查询的其余部分。类似地，要找到B树索引中的最大值，服务器会读取最后一行。如果服务器使用此优化，您将在
+    `EXPLAIN` 计划中看到“选择表已优化” 。这实际上意味着优化器已将表从查询计划中移除，并用常量替换。
+- en: Evaluating and reducing constant expressions
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 评估和简化常量表达式
+- en: When MySQL detects that an expression can be reduced to a constant, it will
+    do so during optimization. For example, a user-defined variable can be converted
+    to a constant if it’s not changed in the query. Arithmetic expressions are another
+    example.
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当MySQL检测到表达式可以简化为常量时，它会在优化过程中这样做。例如，如果用户定义的变量在查询中没有更改，它可以转换为常量。算术表达式是另一个例子。
+- en: 'Perhaps surprisingly, even something you might consider to be a query can be
+    reduced to a constant during the optimization phase. One example is a `MIN()`
+    on an index. This can even be extended to a constant lookup on a primary key or
+    unique index. If a `WHERE` clause applies a constant condition to such an index,
+    the optimizer knows MySQL can look up the value at the beginning of the query.
+    It will then treat the value as a constant in the rest of the query. Here’s an
+    example:'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 也许令人惊讶的是，即使你可能认为是一个查询的东西也可以在优化阶段被减少为一个常量。一个例子是对索引的`MIN()`。这甚至可以扩展到对主键或唯一索引的常量查找。如果`WHERE`子句对这样的索引应用一个常量条件，优化器知道MySQL可以在查询开始时查找值。然后它将在查询的其余部分将该值视为常量。这里有一个例子：
+- en: '[PRE16]'
+  id: totrans-170
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: MySQL executes this query in two steps, which correspond to the two rows in
+    the output. The first step is to find the desired row in the `film` table. MySQL’s
+    optimizer knows there is only one row because there’s a primary key on the `film_id`
+    column and it has already consulted the index during the query optimization stage
+    to see how many rows it will find. Because the query optimizer has a known quantity
+    (the value in the `WHERE` clause) to use in the lookup, this table’s `ref` type
+    is `const`.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL以两个步骤执行此查询，对应于输出中的两行。第一步是在`film`表中找到所需的行。MySQL的优化器知道只有一行，因为`film_id`列上有一个主键，并且在查询优化阶段已经查询了索引以查看将找到多少行。因为查询优化器有一个已知数量（`WHERE`子句中的值）用于查找，所以这个表的`ref`类型是`const`。
+- en: In the second step, MySQL treats the `film_id` column from the row found in
+    the first step as a known quantity. It can do this because the optimizer knows
+    that by the time the query reaches the second step, it will know all the values
+    from the first step. Notice that the `film_actor` table’s `ref` type is `const`,
+    just as the `film` table’s was.
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在第二步中，MySQL将第一步找到的`film_id`列视为已知数量。它可以这样做，因为优化器知道当查询到达第二步时，它将知道第一步的所有值。请注意，`film_actor`表的`ref`类型是`const`，就像`film`表的一样。
+- en: Another way you’ll see constant conditions applied is by propagating a value’s
+    constantness from one place to another if there is a `WHERE`, `USING`, or `ON`
+    clause that restricts the values to being equal. In this example, the optimizer
+    knows that the `USING` clause forces `film_id` to have the same value everywhere
+    in the query; it must be equal to the constant value given in the `WHERE` clause.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种你会看到常量条件应用的方式是通过从一个地方传播值的常量性到另一个地方，如果有一个`WHERE`、`USING`或`ON`子句将值限制为相等。在这个例子中，优化器知道`USING`子句强制`film_id`在查询中的任何地方具有相同的值；它必须等于`WHERE`子句中给定的常量值。
+- en: Covering indexes
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 覆盖索引
+- en: MySQL can sometimes use an index to avoid reading row data when the index contains
+    all the columns the query needs. We discussed covering indexes at length in the
+    previous chapter.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当索引包含查询所需的所有列时，MySQL有时可以使用索引来避免读取行数据。我们在上一章节中详细讨论了覆盖索引。
+- en: Subquery optimization
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 子查询优化
+- en: MySQL can convert some types of subqueries into more efficient alternative forms,
+    reducing them to index lookups instead of separate queries.
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL可以将某些类型的子查询转换为更高效的替代形式，将它们减少为索引查找而不是单独的查询。
+- en: Early termination
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 早期终止
+- en: 'MySQL can stop processing a query (or a step in a query) as soon as it fulfills
+    the query or step. The obvious case is a `LIMIT` clause, but there are several
+    other kinds of early termination. For instance, if MySQL detects an impossible
+    condition, it can abort the entire query. You can see this in the following example:'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL可以在满足查询或步骤时立即停止处理查询（或查询中的步骤）。明显的情况是`LIMIT`子句，但还有几种其他类型的早期终止。例如，如果MySQL检测到一个不可能的条件，它可以中止整个查询。你可以在以下示例中看到这一点：
+- en: '[PRE17]'
+  id: totrans-180
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: This query stopped during the optimization step, but MySQL can also terminate
+    execution early in some other cases. The server can use this optimization when
+    the query execution engine recognizes the need to retrieve distinct values or
+    to stop when a value doesn’t exist. For example, the following query finds all
+    movies without any actors:^([7](ch08.html#ch01fn53))
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个查询在优化步骤中停止了，但MySQL也可以在其他一些情况下提前终止执行。当查询执行引擎识别到需要检索不同值或在值不存在时停止时，服务器可以使用这种优化。例如，以下查询找到所有没有任何演员的电影:^([7](ch08.html#ch01fn53))
+- en: '[PRE18]'
+  id: totrans-182
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: This query works by eliminating any films that have actors. Each film might
+    have many actors, but as soon as it finds one actor, it stops processing the current
+    film and moves to the next one because it knows the `WHERE` clause prohibits outputting
+    that film. A similar “Distinct/not-exists” optimization can apply to certain kinds
+    of `DISTINCT`, `NOT EXISTS()`, and `LEFT JOIN` queries.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个查询通过消除任何有演员的电影来工作。每部电影可能有很多演员，但一旦找到一个演员，它就会停止处理当前电影并移动到下一个，因为它知道`WHERE`子句禁止输出该电影。类似的“Distinct/not-exists”优化可以应用于某些类型的`DISTINCT`、`NOT
+    EXISTS()`和`LEFT JOIN`查询。
+- en: Equality propagation
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 等式传播
+- en: 'MySQL recognizes when a query holds two columns as equal—for example, in a
+    `JOIN` condition—and propagates `WHERE` clauses across equivalent columns. For
+    instance, in the following query:'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL识别查询将两列视为相等时，例如在`JOIN`条件中，并在等效列之间传播`WHERE`子句。例如，在以下查询中：
+- en: '[PRE19]'
+  id: totrans-186
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: MySQL knows that the `WHERE` clause applies not only to the `film` table but
+    to the `film_actor` table as well because the `USING` clause forces the two columns
+    to match.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL知道`WHERE`子句不仅适用于`film`表，也适用于`film_actor`表，因为`USING`子句强制两列匹配。
+- en: 'If you’re used to another database server that can’t do this, you might have
+    been advised to “help the optimizer” by manually specifying the `WHERE` clause
+    for both tables, like this:'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你习惯于另一个不能做到这一点的数据库服务器，你可能会被建议通过手动指定两个表的`WHERE`子句来“帮助优化器”，就像这样：
+- en: '[PRE20]'
+  id: totrans-189
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: This is unnecessary in MySQL. It just makes your queries harder to maintain.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这在MySQL中是不必要的。它只会使你的查询更难维护。
+- en: '`IN()` list comparisons'
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`IN()`列表比较'
+- en: In many database servers, `IN()` is just a synonym for multiple `OR` clauses
+    because the two are logically equivalent. Not so in MySQL, which sorts the values
+    in the `IN()` list and uses a fast binary search to see whether a value is in
+    the list. This is O(log *n*) in the size of the list, whereas an equivalent series
+    of `OR` clauses is O(*n*) in the size of the list (i.e., much slower for large
+    lists).
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在许多数据库服务器中，`IN()`只是多个`OR`子句的同义词，因为两者在逻辑上是等价的。但在MySQL中不是这样，它对`IN()`列表中的值进行排序，并使用快速二进制搜索来查看值是否在列表中。这在列表大小为O(log
+    *n*)时，而等效的`OR`子句系列在列表大小为O(*n*)时（即对于大型列表来说要慢得多）。
+- en: The preceding list is woefully incomplete because MySQL performs more optimizations
+    than we could fit into this entire chapter, but it should give you an idea of
+    the optimizer’s complexity and intelligence. If there’s one thing you should take
+    away from this discussion, it’s *don’t preemptively try to outsmart the optimizer*.
+    You might end up just defeating it or making your queries more complicated and
+    harder to maintain for zero benefit. In general, you should let the optimizer
+    do its work.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的列表非常不完整，因为MySQL执行的优化比我们在整个章节中能够涵盖的要多，但它应该让您了解优化器的复杂性和智能。如果有一件事情您应该从这个讨论中记住，那就是*不要试图预先聪明地超越优化器*。您可能最终只是击败它或使查询变得更加复杂且难以维护，而没有任何好处。一般来说，您应该让优化器自行处理。
+- en: Of course, as smart as the optimizer is, there are times when it doesn’t give
+    the best result. Sometimes you might know something about the data that the optimizer
+    doesn’t, such as a fact that’s guaranteed to be true because of application logic.
+    Also, sometimes the optimizer doesn’t have the necessary functionality, such as
+    hash indexes; at other times, as mentioned earlier, its cost estimates might prefer
+    a query plan that turns out to be more expensive than an alternative.
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ��然，优化器再聪明，有时候也不会给出最佳结果。有时候您可能了解一些优化器不知道的数据，比如由于应用逻辑保证为真的事实。此外，有时候优化器没有必要的功能，比如哈希索引；在其他时候，正如前面提到的，其成本估算可能更喜欢一个比另一个更昂贵的查询计划。
+- en: If you know the optimizer isn’t giving a good result and you know why, you can
+    help it. Some of the options are to add a hint to the query,^([8](ch08.html#ch01fn54))
+    rewrite the query, redesign your schema, or add indexes.
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您知道优化器没有给出好的结果并且知道原因，您可以帮助它。一些选项包括向查询添加提示，重写查询，重新设计模式或添加索引。
+- en: Table and index statistics
+  id: totrans-196
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 表和索引统计信息
+- en: Recall the various layers in the MySQL server architecture, which we illustrated
+    in [Figure 1-1](ch01.html#a_logical_view_of_the_mysql_server_arch). The server
+    layer, which contains the query optimizer, doesn’t store statistics on data and
+    indexes. That’s a job for the storage engines because each storage engine might
+    keep different kinds of statistics (or keep them in a different way).
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 回想一下MySQL服务器架构中的各个层次，我们在[图1-1](ch01.html#a_logical_view_of_the_mysql_server_arch)中进行了说明。服务器层包含查询优化器，不存储数据和索引的统计信息。这是存储引擎的工作，因为每个存储引擎可能保留不同类型的统计信息（或以不同方式保留）。
+- en: Because the server doesn’t store statistics, the MySQL query optimizer has to
+    ask the engines for statistics on the tables in a query. The engines provide the
+    optimizer with statistics such as the number of pages per table or index, the
+    cardinality of tables and indexes, the length of rows and keys, and key distribution
+    information. The optimizer can use this information to help it decide on the best
+    execution plan. We see how these statistics influence the optimizer’s choices
+    in later sections.
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为服务器不存储统计信息，MySQL查询优化器必须向引擎请求查询中表的统计信息。引擎提供优化器统计信息，例如每个表或索引的页数，表和索引的基数，行和键的长度，以及键分布信息。优化器可以使用这些信息来帮助它决定最佳执行计划。我们将在后面的章节中看到这些统计信息如何影响优化器的选择。
+- en: MySQL’s join execution strategy
+  id: totrans-199
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: MySQL的连接执行策略
+- en: MySQL uses the term *join* more broadly than you might be used to. In sum, it
+    considers every query a join—not just every query that matches rows from two tables,
+    but every query, period (including subqueries and even a `SELECT` against a single
+    table). Consequently, it’s very important to understand how MySQL executes joins.
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL比您可能习惯的更广泛地使用*连接*这个术语。总之，它认为每个查询都是一个连接——不仅仅是从两个表中匹配行的每个查询，而是每个查询，无论是子查询还是甚至针对单个表的`SELECT`。因此，了解MySQL如何执行连接非常重要。
+- en: Consider the example of a `UNION` query. MySQL executes a `UNION` as a series
+    of single queries whose results are spooled into a temporary table, then read
+    out again. Each of the individual queries is a join, in MySQL terminology, and
+    so is the act of reading from the resulting temporary table.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 考虑一个`UNION`查询的示例。MySQL将`UNION`执行为一系列单个查询，其结果被拼接到临时表中，然后再次读取出来。每个单独的查询在MySQL术语中都是一个连接，从结果临时表中读取也是如此。
+- en: 'MySQL’s join execution strategy used to be simple: it treated every join as
+    a nested-loop join. This means MySQL runs a loop to find a row from a table, then
+    runs a nested loop to find a matching row in the next table. It continues until
+    it has found a matching row in each table in the join. It then builds and returns
+    a row from the columns named in the `SELECT` list. It tries to build the next
+    row by looking for more matching rows in the last table. If it doesn’t find any,
+    it backtracks one table and looks for more rows there. It keeps backtracking until
+    it finds another row in some table, at which point it looks for a matching row
+    in the next table, and so on.^([9](ch08.html#ch01fn55))'
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL的连接执行策略曾经很简单：它将每个连接都视为嵌套循环连接。这意味着MySQL运行一个循环来查找表中的一行，然后运行一个嵌套循环来查找下一个表中的匹配行。直到在连接中的每个表中找到匹配行为止。然后根据`SELECT`列表中的列构建并返回一行。它尝试通过在最后一个表中查找更多匹配行来构建下一行。如果找不到任何匹配行，则回溯一个表并在那里查找更多行。它一直回溯，直到在某个表中找到另一行，然后在下一个表中查找匹配行，依此类推。
+- en: As of version 8.0.20, block nested-loop joins are no longer used; instead, a
+    [hash join](https://oreil.ly/WdIQm) has replaced it. This makes the join process
+    perform as fast as, or faster, than before, especially if one of the sets of data
+    can live in memory.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从版本 8.0.20 开始，不再使用块嵌套循环连接；取而代之的是 [哈希连接](https://oreil.ly/WdIQm)。这使得连接过程的执行速度与以前一样快，甚至更快，尤其是如果其中一个数据集可以存储在内存中。
+- en: The execution plan
+  id: totrans-204
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 执行计划
+- en: MySQL doesn’t generate bytecode to execute a query, as many other database products
+    do. Instead, the query execution plan is actually a tree^([10](ch08.html#ch01fn56))
+    of instructions that the query execution engine follows to produce the query results.
+    The final plan contains enough information to reconstruct the original query.
+    If you execute `EXPLAIN EXTENDED` on a query, followed by `SHOW WARNINGS`, you’ll
+    see the reconstructed query.^([11](ch08.html#ch01fn57))
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 不会生成字节码来执行查询，就像许多其他数据库产品那样。相反，查询执行计划实际上是一个指令树^([10](ch08.html#ch01fn56))，查询执行引擎遵循该树以生成查询结果。最终计划包含足够的信息来重建原始查询。如果在查询上执行
+    `EXPLAIN EXTENDED`，然后是 `SHOW WARNINGS`，你将看到重建的查询。^([11](ch08.html#ch01fn57))
+- en: Any multitable query can conceptually be represented as a tree. For example,
+    it might be possible to execute a four-table join as shown in [Figure 8-2](#one_way_to_join_multiple_tables).
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 任何多表查询在概念上都可以表示为一棵树。例如，可能可以像 [图 8-2](#one_way_to_join_multiple_tables) 所示的那样执行一个四表连接。
+- en: '![](assets/hpm4_0802.png)'
+  id: totrans-207
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_0802.png)'
+- en: Figure 8-2\. One way to join multiple tables
+  id: totrans-208
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 8-2\. 多表连接的一种方式
+- en: This is what computer scientists call a *balanced tree*. This is not how MySQL
+    executes the query, though. As we described in the previous section, MySQL always
+    begins with one table and finds matching rows in the next table. Thus, MySQL’s
+    query execution plans always take the form of a *left-deep tree*, as in [Figure 8-3](#how_mysql_joins_multiple_tables).
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是计算机科学家所说的*平衡树*。然而，这不是 MySQL 执行查询的方式。正如我们在前一节中描述的那样，MySQL 总是从一个表开始，并在下一个表中查找匹配的行。因此，MySQL
+    的查询执行计划总是采用*左深树*的形式，如 [图 8-3](#how_mysql_joins_multiple_tables) 所示。
+- en: '![](assets/hpm4_0803.png)'
+  id: totrans-210
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_0803.png)'
+- en: Figure 8-3\. How MySQL joins multiple tables
+  id: totrans-211
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 8-3\. MySQL 如何连接多个表
+- en: The join optimizer
+  id: totrans-212
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 连接优化器
+- en: The most important part of the MySQL query optimizer is the *join optimizer*,
+    which decides the best order of execution for multitable queries. It is often
+    possible to join the tables in several different orders and get the same results.
+    The join optimizer estimates the cost for various plans and tries to choose the
+    least expensive one that gives the same result.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 查询优化器中最重要的部分是*连接优化器*，它决定了多表查询的最佳执行顺序。通常可以以几种不同的顺序连接表并获得相同的结果。连接优化器估计各种计划的成本，并尝试选择成本最低的计划，以获得相同的结果。
+- en: 'Here’s a query whose tables can be joined in different orders without changing
+    the results:'
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个查询，其表可以以不同的顺序连接而不改变结果：
+- en: '[PRE21]'
+  id: totrans-215
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'You can probably think of a few different query plans. For example, MySQL could
+    begin with the `film` table, use the index on `film_id` in the `film_actor` table
+    to find `actor_id` values, and then look up rows in the `actor` table’s primary
+    key. Oracle users might phrase this as “the `film` table is the driver table into
+    the `film_actor` table, which is the driver for the `actor` table.” This should
+    be efficient, right? Now let’s use `EXPLAIN` to see how MySQL wants to execute
+    the query:'
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能会想到几种不同的查询计划。例如，MySQL 可以从 `film` 表开始，使用 `film_actor` 表中的 `film_id` 索引找到 `actor_id`
+    值，然后查找 `actor` 表的主键行。Oracle 用户可能会将其表述为“`film` 表是 `film_actor` 表的驱动表，`film_actor`
+    表是 `actor` 表的驱动表。” 这应该是有效的，对吧？现在让我们使用 `EXPLAIN` 看看 MySQL 想要如何执行查询：
+- en: '[PRE22]'
+  id: totrans-217
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'This is quite a different plan from the one suggested in the previous paragraph.
+    MySQL wants to start with the `actor` table (we know this because it’s listed
+    first in the `EXPLAIN` output) and go in the reverse order. Is this really more
+    efficient? Let’s find out. The `STRAIGHT_JOIN` keyword forces the join to proceed
+    in the order specified in the query. Here’s the `EXPLAIN` output for the revised
+    query:'
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这与前一段中建议的计划完全不同。MySQL 希望从 `actor` 表开始（我们知道这是因为它在 `EXPLAIN` 输出中首先列出），并按相反的顺序进行。这真的更有效吗？让我们看看。`STRAIGHT_JOIN`
+    关键字强制连接按查询中指定的顺序进行。这是修改后查询的 `EXPLAIN` 输出：
+- en: '[PRE23]'
+  id: totrans-219
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'This shows why MySQL wants to reverse the join order: doing so will enable
+    it to examine fewer rows in the first table.^([12](ch08.html#ch01fn58)) In both
+    cases, it will be able to perform fast indexed lookups in the second and third
+    tables. The difference is how many of these indexed lookups it will have to do.
+    Placing `film` first will require about one thousand probes (see the `rows` field)
+    into `film_actor` and `actor`, one for each row in the first table. If the server
+    scans the `actor` table first, it will have to do only two hundred index lookups
+    into later tables. In other words, the reversed join order will require less backtracking
+    and rereading.'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这说明了为什么 MySQL 希望反转连接顺序：这样做将使其能够检查第一个表中的行数更少。^([12](ch08.html#ch01fn58)) 在这两种情况下，它将能够在第二个和第三个表中执行快速的索引查找。不同之处在于它将不得不执行多少这样的索引查找。将
+    `film` 放在第一位将需要大约一千次探测（参见 `rows` 字段）到 `film_actor` 和 `actor`，即第一个表中的每一行都需要一次。如果服务器首先扫描
+    `actor` 表，它只需要对后续表进行两百次索引查找。换句话说，反转的连接顺序将需要更少的回溯和重读。
+- en: This is a simple example of how MySQL’s join optimizer can reorder queries to
+    make them less expensive to execute. Reordering joins is usually a very effective
+    optimization. There are times when it won’t result in an optimal plan, though,
+    and for those times you can use `STRAIGHT_JOIN` and write the query in the order
+    you think is best—but such times are rare. In most cases, the join optimizer will
+    outperform a human.
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是 MySQL 的连接优化器可以重新排列查询以使其执行成本更低的简单示例。重新排序连接通常是一种非常有效的优化。然而，有时不会得到最佳计划，对于这些情况，你可以使用
+    `STRAIGHT_JOIN` 并按照你认为最佳的顺序编写查询，但这样的情况很少见。在大多数情况下，连接优化器将胜过人类。
+- en: The join optimizer tries to produce a query execution plan tree with the lowest
+    achievable cost. When possible, it examines all potential combinations of subtrees,
+    beginning with all one-table plans.
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 连接优化器试图生成具有最低成本的查询执行计划树。在可能的情况下，它检查所有子树的潜在组合，从所有单表计划开始。
+- en: 'Unfortunately, a join over *n* tables will have *n*-factorial combinations
+    of join orders to examine. This is called the *search space* of all possible query
+    plans, and it grows very quickly: a 10-table join can be executed up to 3,628,800
+    different ways! When the search space grows too large, it can take far too long
+    to optimize the query, so the server stops doing a full analysis. Instead, it
+    resorts to shortcuts such as “greedy” searches when the number of tables exceeds
+    the limit specified by the `optimizer_search_depth` variable (which you can change
+    if necessary).'
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，对*n*个表进行连接将有*n*阶乘的连接顺序组合要检查。这被称为所有可能查询计划的*搜索空间*，并且增长非常快：一个包含10个表的连接可以以3,628,800种不同的方式执行！当搜索空间增长过大时，优化查询可能需要花费太长时间，因此服务器停止进行完整分析。相反，它会采用“贪婪”搜索等快捷方式，当表的数量超过`optimizer_search_depth`变量指定的限制时（如果需要，您可以更改该变量）。
+- en: MySQL has many heuristics, accumulated through years of research and experimentation,
+    that it uses to speed up the optimization stage. This can be beneficial, but it
+    can also mean that MySQL might (on rare occasions) miss an optimal plan and choose
+    a less optimal one because it’s trying not to examine every possible query plan.
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL拥有许多启发式方法，通过多年的研究和实验积累而来，用于加速优化阶段。这可能是有益的，但也可能意味着MySQL可能（在极少数情况下）错过一个最佳计划并选择一个不太优化的计划，因为它试图避免检查每个可能的查询计划。
+- en: Sometimes queries can’t be reordered, and the join optimizer can use this fact
+    to reduce the search space by eliminating choices. A `LEFT JOIN` is a good example,
+    as are correlated subqueries (more about subqueries later). This is because the
+    results for one table depend on data retrieved from another table. These dependencies
+    help the join optimizer reduce the search space by eliminating choices.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时查询无法重新排序，连接优化器可以利用这一事实通过消除选择来减少搜索空间。`LEFT JOIN`是一个很好的例子，相关子查询也是（稍后会详细介绍子查询）。这是因为一个表的结果取决于从另一个表检索的数据。这些依赖关系帮助连接优化器通过消除选择来减少搜索空间。
+- en: Sort optimizations
+  id: totrans-226
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 排序优化
+- en: Sorting results can be a costly operation, so you can often improve performance
+    by avoiding sorts or by performing them on fewer rows.
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对结果进行排序可能是一个昂贵的操作，因此您通常可以通过避免排序或在较少行上执行排序来提高性能。
+- en: When MySQL can’t use an index to produce a sorted result, it must sort the rows
+    itself. It can do this in memory or on disk, but it always calls this process
+    a *filesort*, even if it doesn’t actually use a file.
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当MySQL无法使用索引生成排序结果时，它必须自行对行进行排序。它可以在内存中或磁盘上执行此操作，但无论如何，它总是将此过程称为*文件排序*，即使实际上并未使用文件。
+- en: If the values to be sorted will fit into the sort buffer, MySQL can perform
+    the sort entirely in memory with a *quicksort*. If MySQL can’t do the sort in
+    memory, it performs it on disk by sorting the values in chunks. It uses a quicksort
+    to sort each chunk and then merges the sorted chunks into the results.
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果要排序的值将适合排序缓冲区，MySQL可以完全在内存中执行排序，使用*快速排序*。如果MySQL无法在内存中执行排序，则通过对值进行分块排序在磁盘上执行排序。它使用快速排序对每个块进行排序，然后将排序的块合并到结果中。
+- en: 'There are two filesort algorithms:'
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有两种文件排序算法：
+- en: Two passes (old)
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 两次遍历（旧）
+- en: Reads row pointers and `ORDER BY` columns, sorts them, and then scans the sorted
+    list and rereads the rows for output.
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 读取行指针和`ORDER BY`列，对它们进行排序，然后扫描排序列表并重新读取行以输出。
+- en: The two-pass algorithm can be quite expensive because it reads the rows from
+    the table twice and the second read causes a lot of random I/O.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 两次遍历算法���能非常昂贵，因为它从表中读取两次行，第二次读取会导致大量随机I/O。
+- en: Single pass (new)
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 单次遍历（新）
+- en: Reads all the columns needed for the query, sorts them by the `ORDER BY` columns,
+    and then scans the sorted list and outputs the specified columns.
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 读取查询所需的所有列，按`ORDER BY`列对它们进行排序，然后扫描排序列表并输出指定的列。
+- en: It can be much more efficient, especially on large I/O-bound data sets, because
+    it avoids reading the rows from the table twice and trades random I/O for more
+    sequential I/O. However, it has the potential to use a lot more space because
+    it holds all the desired columns from each row, not just the columns needed to
+    sort the rows. This means fewer tuples will fit into the sort buffer, and the
+    filesort will have to perform more sort merge passes.
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它可能更有效率，特别是对于大型I/O受限数据集，因为它避免了从表中两次读取行，并将随机I/O交换为更多的顺序I/O。然而，它有可能使用更多的空间，因为它保存每行的所有所需列，而不仅仅是用于排序行的列。这意味着更少的元组将适合排序缓冲区，文件排序将不得不执行更多的排序合并传递。
+- en: MySQL might use much more temporary storage space for a filesort than you’d
+    expect because it allocates a fixed-size record for each tuple it will sort. These
+    records are large enough to hold the largest possible tuple, including the full
+    length of each `VARCHAR` column. Also, if you’re using utf8mb4, MySQL allocates
+    4 bytes for each character. As a result, we’ve seen cases where poorly optimized
+    schemas caused the temporary space used for sorting to be many times larger than
+    the entire table’s size on disk.
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL可能为文件排序使用比您预期的更多的临时存储空间，因为它为将要排序的每个元组分配了固定大小的记录。这些记录足够大，可以容纳最大可能的元组，包括每个`VARCHAR`列的完整长度。此外，如果您使用utf8mb4，MySQL为每个字符分配4个字节。因此，我们曾看到过，优化不良的模式导致用于排序的临时空间比磁盘上整个表的大小大几倍。
+- en: When sorting a join, MySQL might perform the filesort at two stages during the
+    query execution. If the `ORDER BY` clause refers only to columns from the first
+    table in the join order, MySQL can filesort this table and then proceed with the
+    join. If this happens, `EXPLAIN` shows “Using filesort” in the `Extra` column.
+    In all other circumstances—such as a sort against a table that’s not first in
+    the join order or when the `ORDER BY` clause contains columns from more than one
+    table—MySQL must store the query’s results into a temporary table and then filesort
+    the temporary table after the join finishes. In this case, `EXPLAIN` shows “Using
+    temporary; Using filesort” in the `Extra` column. If there’s a `LIMIT`, it is
+    applied after the filesort, so the temporary table and the filesort can be very
+    large.
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当对连接进行排序时，MySQL可能在查询执行过程中的两个阶段执行文件排序。如果`ORDER BY`子句仅涉及连接顺序中第一个表的列，MySQL可以对该表进行文件排序，然后继续连接。如果发生这种情况，`EXPLAIN`在`Extra`列中显示“Using
+    filesort”。在所有其他情况下，例如对连接顺序中不是第一个表的表进行排序，或者`ORDER BY`子句包含多个表的列时，MySQL必须将查询结果存储到临时表中，然后在连接完成后对临时表进行文件排序。在这种情况下，`EXPLAIN`在`Extra`列中显示“Using
+    temporary; Using filesort”。如果有`LIMIT`，它将在文件排序之后应用，因此临时表和文件排序可能非常大。
+- en: The Query Execution Engine
+  id: totrans-239
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 查询执行引擎
+- en: The parsing and optimizing stage outputs a query execution plan, which MySQL’s
+    query execution engine uses to process the query. The plan is a data structure;
+    it is not executable bytecode, which is how many other databases execute queries.
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 解析和优化阶段输出查询执行计划，MySQL的查询执行引擎使用该计划来处理查询。该计划是一个数据结构；它不是可执行的字节码，这是许多其他数据库执行查询的方式。
+- en: 'In contrast to the optimization stage, the execution stage is usually not all
+    that complex: MySQL simply follows the instructions given in the query execution
+    plan. Many of the operations in the plan invoke methods implemented by the storage
+    engine interface, also known as the *handler API*. Each table in the query is
+    represented by an instance of a handler. If a table appears three times in the
+    query, for example, the server creates three handler instances. Although we glossed
+    over this before, MySQL actually creates the handler instances early in the optimization
+    stage. The optimizer uses them to get information about the tables, such as their
+    column names and index statistics.'
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与优化阶段相比，执行阶段通常并不那么复杂：MySQL只需按照查询执行计划中给出的指令进行操作。计划中的许多操作调用存储引擎接口实现的方法，也称为*处理程序API*。查询中的每个表都由处理程序的实例表示。例如，如果查询中的表出现三次，服务器将创建三个处理程序实例。尽管我们之前略过了这一点，但MySQL实际上在优化阶段早期创建处理程序实例。优化器使用它们获取有关表的信息，例如它们的列名和索引统计信息。
+- en: The storage engine interface has lots of functionality, but it needs only a
+    dozen or so “building-block” operations to execute most queries. For example,
+    there’s an operation to read the first row in an index and one to read the next
+    row in an index. This is enough for a query that does an index scan. This simplistic
+    execution method makes MySQL’s storage engine architecture possible, but it also
+    imposes some of the optimizer limitations we’ve discussed.
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储引擎接口具有许多功能，但只需要十几个“构建块”操作来执行大多数查询。例如，有一个操作用于读取索引中的第一行，另一个操作用于读取索引中的下一行。这对于执行��引扫描的查询已经足够了。这种简单的执行方法使得MySQL的存储引擎架构成为可能，但也带来了我们讨论过的优化器限制之一。
+- en: Note
+  id: totrans-243
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Not everything is a handler operation. For example, the server manages table
+    locks. The handler might implement its own lower-level locking, as InnoDB does
+    with row-level locks, but this does not replace the server’s own locking implementation.
+    As explained in [Chapter 1](ch01.html#mysql_architecture), anything that all storage
+    engines share is implemented in the server, such as date and time functions, views,
+    and triggers.
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并非所有操作都是处理程序操作。例如，服务器管理表锁。处理程序可能实现自己的较低级别锁定，就像InnoDB使用行级锁一样，但这并不取代服务器自己的锁定实现。如[第1章](ch01.html#mysql_architecture)中所述，所有存储引擎共享的内容都在服务器中实现，例如日期和时间函数、视图和触发器。
+- en: To execute the query, the server just repeats the instructions until there are
+    no more rows to examine.
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为执行查询，服务器只需重复指令，直到没有更多行可检查为止。
+- en: Returning Results to the Client
+  id: totrans-246
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 向客户端返回结果
+- en: The final step in executing a query is to reply to the client. Even queries
+    that don’t return a result set still reply to the client connection with information
+    about the query, such as how many rows it affected.
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 执行查询的最后一步是向客户端发送响应。即使查询不返回结果集，也会向客户端连接发送有关查询的信息，例如它影响了多少行。
+- en: 'The server generates and sends results incrementally. As soon as MySQL processes
+    the last table and generates one row successfully, it can and should send that
+    row to the client. This has two benefits: it lets the server avoid holding the
+    row in memory, and it means the client starts getting the results as soon as possible.^([13](ch08.html#ch01fn59))
+    Each row in the result set is sent in a separate packet in the MySQL client/server
+    protocol, although protocol packets can be buffered and sent together at the TCP
+    protocol layer.'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务器逐步生成并发送结果。一旦MySQL处理完最后一个表并成功生成一行，它就可以并且应该将该行发送给客户端。这有两个好处：它让服务器避免在内存中保存行，而且意味着客户端尽快开始获取结果。[^13](ch08.html#ch01fn59)结果集中的每一行在MySQL客户端/服务器协议中以单独的数据包发送，尽管协议数据包可以在TCP协议层缓冲并一起发送。
+- en: Limitations of the MySQL Query Optimizer
+  id: totrans-249
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MySQL查询优化器的限制
+- en: MySQL’s approach to query execution isn’t ideal for optimizing every kind of
+    query. Fortunately, there are only a limited number of cases where the MySQL query
+    optimizer does a poor job, and it’s usually possible to rewrite such queries more
+    efficiently.
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL对查询执行的方法并非对于优化每种类型的查询都是理想的。幸运的是，MySQL查询优化器做得不好的情况有限，通常可以更有效地重写这些查询。
+- en: UNION Limitations
+  id: totrans-251
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: UNION的限制
+- en: MySQL sometimes can’t “push down” conditions from the outside of a `UNION` to
+    the inside, where they could be used to limit results or enable additional optimizations.
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL有时无法将`UNION`外部的条件“推入”到内部，这些条件可以用于限制结果或启用其他优化。
+- en: 'If you think any of the individual queries inside a `UNION` would benefit from
+    a `LIMIT` or if you know they’ll be subject to an `ORDER BY` clause once combined
+    with other queries, you need to put those clauses inside each part of the `UNION`.
+    For example, if you `UNION` together two tables and `LIMIT` the result to the
+    first 20 rows, MySQL will store both tables into a temporary table and then retrieve
+    just 20 rows from it:'
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你认为`UNION`中的任何一个单独查询会受益于`LIMIT`，或者如果你知道它们将与其他查询组合后受到`ORDER BY`子句的影响，那么你需要将这些子句放在每个`UNION`部分中。例如，如果你将两个表`UNION`在一起，并将结果限制为前20行，MySQL将把两个表存储到临时表中，然后从中检索出20行：
+- en: '[PRE24]'
+  id: totrans-254
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'This query will store 200 rows from the `actor` table and 599 from the `customer`
+    table into a temporary table and then fetch the first 20 rows from that temporary
+    table. You can avoid this by adding `LIMIT 20` redundantly to each query inside
+    the `UNION`:'
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此查询将从`actor`表中存储200行，从`customer`表中存储599行到临时表中，然后从该临时表中获取前20行。您可以通过在`UNION`中的每个查询中多余地添加`LIMIT
+    20`来避免这种情况：
+- en: '[PRE25]'
+  id: totrans-256
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'Now the temporary table will contain only 40 rows. In addition to the performance
+    improvement, you’ll probably need to correct the query: the order in which the
+    rows are retrieved from the temporary table is undefined, so there should be an
+    overall `ORDER BY` just before the final `LIMIT`.'
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在临时表将只包含40行。除了性能提升外，您可能需要更正查询：从临时表中检索行的顺序是未定义的，因此在最终`LIMIT`之前应该有一个整体`ORDER
+    BY`。
+- en: Equality Propagation
+  id: totrans-258
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 等式传播
+- en: Equality propagation can have unexpected costs sometimes. For example, consider
+    a huge `IN()` list on a column the optimizer knows will be equal to some columns
+    on other tables, due to a `WHERE`, `ON`, or `USING` clause that sets the columns
+    equal to one another.
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 等式传播有时可能会产生意想不到的成本。例如，考虑一个巨大的`IN()`列表，优化器知道它将等于其他表的某些列，这是由于`WHERE`，`ON`或`USING`子句将列设置为相等。
+- en: The optimizer will “share” the list by copying it to the corresponding columns
+    in all related tables. This is normally helpful because it gives the query optimizer
+    and execution engine more options for where to actually execute the `IN()` check.
+    But when the list is very large, it can result in slower optimization and execution.
+    There’s no built-in workaround for this problem at the time of this writing—you’ll
+    have to change the source code if it’s a problem for you. (It’s not a problem
+    for most people.)
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 优化器将通过将列表复制到所有相关表中的相应列来“共享”列表。这通常是有帮助的，因为它为查询优化器和执行引擎提供了更多实际执行`IN()`检查的选项。但是当列表非常大时，它可能导致优化和执行变慢。在撰写本文时，还没有这个问题的内置解决方法
+    - 如果这对您是个问题，您将不得不更改源代码。 （对大多数人来说这不是问题。）
+- en: Parallel Execution
+  id: totrans-261
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 并行执行
+- en: MySQL can’t execute a single query in parallel on many CPUs. This is a feature
+    offered by some other database servers, but not MySQL. We mention it so that you
+    won’t spend a lot of time trying to figure out how to get parallel query execution
+    on MySQL!
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL无法在多个CPU上并行执行单个查询。这是一些其他数据库服务器提供的功能，但MySQL不支持。我们提到这一点是为了让您不要花费大量时间来尝试如何在MySQL上实现并行查询执行！
+- en: SELECT and UPDATE on the Same Table
+  id: totrans-263
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 在同一表上进行SELECT和UPDATE
+- en: 'MySQL doesn’t let you `SELECT` from a table while simultaneously running an
+    `UPDATE` on it. This isn’t really an optimizer limitation, but knowing how MySQL
+    executes queries can help you work around it. Here’s an example of a query that’s
+    disallowed, even though it is standard SQL. The query updates each row with the
+    number of similar rows in the table:'
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL不允许您在从表中`SELECT`的同时对其运行`UPDATE`。这实际上不是一个优化器的限制，但了解MySQL如何执行查询可以帮助您解决问题。这是一个被禁止的查询示例，即使它是标准SQL。该查询将每一行更新为表中相似行的数量：
+- en: '[PRE26]'
+  id: totrans-265
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'To work around this limitation, you can use a derived table because MySQL materializes
+    it as a temporary table. This effectively executes two queries: one `SELECT` inside
+    the subquery and one multitable `UPDATE` with the joined results of the table
+    and the subquery. The subquery opens and closes the table before the outer `UPDATE`
+    opens the table, so the query will now succeed:'
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要解决这个问题，您可以使用派生表，因为MySQL将其实例化为临时表。这实际上执行了两个查询：一个在子查询中执行`SELECT`，一个在表和子查询的连接结果上执行多表`UPDATE`。子查询在外部`UPDATE`打开表之前打开并关闭表，因此查询现在将成功：
+- en: '[PRE27]'
+  id: totrans-267
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: Optimizing Specific Types of Queries
+  id: totrans-268
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 优化特定类型的查询
+- en: In this section, we give advice on how to optimize certain kinds of queries.
+    We’ve covered most of these topics in detail elsewhere in the book, but we wanted
+    to make a list of common optimization problems that you can refer to easily.
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们提供了如何优化某些类型查询的建议。我们在书中的其他地方已经详细介绍了大部分这些主题，但我们想列出一些常见的优化问题，以便您可以轻松参考。
+- en: Most of the advice in this section is version dependent, and it might not hold
+    for future versions of MySQL. There’s no reason why the server won’t be able to
+    do some or all of these optimizations itself someday.
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节中的大部分建议是与版本相关的，可能在未来的MySQL版本中不适用。服务器未来可能会自动执行这些优化的原因是没有理由的。
+- en: Optimizing COUNT() Queries
+  id: totrans-271
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 优化`COUNT()`���询
+- en: The `COUNT()` aggregate function, and how to optimize queries that use it, is
+    probably one of the top 10 most-misunderstood topics in MySQL. You can do a web
+    search and find more misinformation on this topic than we care to think about.
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`COUNT()`聚合函数以及如何优化使用它的查询，可能是MySQL中前10个最被误解的主题之一。您可以进行网络搜索，找到更多关于这个主题的错误信息，我们不想去想。'
+- en: Before we get into optimization, it’s important that you understand what `COUNT()`
+    really does.
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们深入优化之前，重要的是您了解`COUNT()`的真正作用。
+- en: What COUNT() does
+  id: totrans-274
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: '`COUNT()`的作用'
+- en: '`COUNT()` is a special function that works in two very different ways: it counts
+    *values* and *rows*. A value is a non-`NULL` expression (`NULL` is the absence
+    of a value). If you specify a column name or other expression inside the parentheses,
+    `COUNT()` counts how many times that expression has a value. This is confusing
+    for many people, in part because values and `NULL` are confusing. If you need
+    to learn how this works in SQL, we suggest a good book on SQL fundamentals. (The
+    internet is not necessarily a good source of accurate information on this topic.)'
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`COUNT()`是一个特殊的函数，以两种非常不同的方式工作：它计算*值*和*行*。一个值是一个非`NULL`表达式（`NULL`是值的缺失）。如果你在括号内指定列名或其他表达式，`COUNT()`会计算该表达式具有值的次数。这对许多人来说很令人困惑，部分原因是值和`NULL`很令人困惑。如果你需要了解SQL中的工作原理，我们建议阅读一本关于SQL基础的好书。（互联网在这个主题上并不一定是准确信息的好来源。）'
+- en: The other form of `COUNT()` simply counts the number of rows in the result.
+    This is what MySQL does when it knows the expression inside the parentheses can
+    never be `NULL`. The most obvious example is `COUNT(*)`, which is a special form
+    of `COUNT()` that does not expand the `*` wildcard into the full list of columns
+    in the table, as you might expect; instead, it ignores columns altogether and
+    counts rows.
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`COUNT()`的另一种形式简单地计算结果中的行数。这是MySQL在知道括号内表达式永远不会是`NULL`时所做的。最明显的例子是`COUNT(*)`，这是`COUNT()`的一种特殊形式，不会将`*`通配符扩展为表中的所有列的完整列表，正如你可能期望的那样；相反，它完全忽略列并计算行数。'
+- en: One of the most common mistakes we see is specifying column names inside the
+    parentheses when you want to count rows. When you want to know the number of rows
+    in the result, you should always use `COUNT(*)`. This communicates your intention
+    clearly and avoids poor performance.
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们经常看到的一个最常见的错误是在想要计算行数时在括号内指定列名。当你想知道结果中的行数时，应该始终使用`COUNT(*)`。这清楚地传达了你的意图，并避免了性能不佳。
+- en: Simple optimizations
+  id: totrans-278
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 简单的优化
+- en: A commonly asked question is how to retrieve counts for several different values
+    in the same column with just one query, to reduce the number of queries required.
+    For example, say you want to create a single query that counts how many items
+    have each of several colors. You can’t use an `OR` (e.g., `SELECT COUNT(color
+    = 'blue' OR color = 'red') FROM items;`) because that won’t separate the different
+    counts for the different colors. And you can’t put the colors in the `WHERE` clause
+    (e.g., `SELECT COUNT(*) FROM items WHERE color = 'blue' AND color = 'red';`) because
+    the colors are mutually exclusive. Here is a query that solves this problem:^([14](ch08.html#ch01fn60))
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个常见的问题是如何在同一列中检索多个不同值的计数，只需一个查询，以减少所需的查询数量。例如，假设你想创建一个单一查询，计算每种颜色的物品数量。你不能使用`OR`（例如，`SELECT
+    COUNT(color = 'blue' OR color = 'red') FROM items;`），因为这不会将不同颜色的计数分开。你也不能将颜色放在`WHERE`子句中（例如，`SELECT
+    COUNT(*) FROM items WHERE color = 'blue' AND color = 'red';`），因为颜色是互斥的。以下是解决这个问题的查询：^([14](ch08.html#ch01fn60))
+- en: '[PRE28]'
+  id: totrans-280
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'And here is another that’s equivalent, but instead of using `SUM()`, it uses
+    `COUNT()` and ensures that the expressions won’t have values when the criteria
+    are false:'
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里有另一个等效的例子，但是不使用`SUM()`，而是使用`COUNT()`，并确保表达式在条件为假时没有值：
+- en: '[PRE29]'
+  id: totrans-282
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: Using an approximation
+  id: totrans-283
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用近似值
+- en: Sometimes you don’t need an accurate count, so you can just use an approximation.
+    The optimizer’s estimated rows in `EXPLAIN` often serve well for this. Just execute
+    an `EXPLAIN` query instead of the real query.
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时候你不需要准确的计数，所以可以使用近似值。优化器在`EXPLAIN`中的估计行数通常很好用。只需执行一个`EXPLAIN`查询，而不是真实查询。
+- en: At other times, an exact count is much less efficient than an approximation.
+    One customer asked for help counting the number of active users on his website.
+    The user count was cached and displayed for 30 minutes, after which it was regenerated
+    and cached again. This was inaccurate by nature, so an approximation was acceptable.
+    The query included several `WHERE` conditions to ensure that it didn’t count inactive
+    users or the “default” user, which was a special user ID in the application. Removing
+    these conditions changed the count only slightly but made the query much more
+    efficient. A further optimization was to eliminate an unnecessary `DISTINCT` to
+    remove a filesort. The rewritten query was much faster and returned almost exactly
+    the same results.
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时，准确的计数比近似值要低效得多。一位客户要求帮助计算网站上活跃用户的数量。用户计数被缓存并显示30分钟，之后重新生成并再次缓存。这本质上是不准确的，所以近似值是可以接受的。查询包括几个`WHERE`条件，以确保不计算非活跃用户或“默认”用户，这是应用程序中的特殊用户ID。删除这些条件只会稍微改变计数，但使查询更有效。进一步的优化是消除一个不必要的`DISTINCT`以消除一个文件排序。重写后的查询速度更快，几乎返回完全相同的结果。
+- en: More complex optimizations
+  id: totrans-286
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 更复杂的优化
+- en: 'In general, `COUNT()` queries are hard to optimize because they usually need
+    to count a lot of rows (i.e., access a lot of data). Your only other option for
+    optimizing within MySQL itself is to use a covering index. If that doesn’t help
+    enough, you need to make changes to your application architecture. Consider an
+    external caching system such as *memcached*. You’ll probably find yourself faced
+    with the familiar dilemma, “fast, accurate, and simple: pick any two.”'
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，`COUNT()`查询很难优化，因为它们通常需要计算大量行（即访问大量数据）。在MySQL本身内部进行优化的另一种选择是使用覆盖索引。如果这不够帮助，你需要对应用程序架构进行更改。考虑使用外部缓存系统，如*memcached*。你可能会发现自己面临熟悉的困境，“快速、准确和简单：���择其中两个。”
+- en: Optimizing JOIN Queries
+  id: totrans-288
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 优化连接查询
+- en: 'This topic is actually spread throughout most of the book, but we’ll mention
+    a few highlights:'
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实际上，这个主题在大部分书中都有涉及，但我们将提到一些重点：
+- en: Make sure there are indexes on the columns in the `ON` or `USING` clauses. Consider
+    the join order when adding indexes. If you’re joining tables `A` and `B` on column
+    `c` and the query optimizer decides to join the tables in the order `B`, `A`,
+    you don’t need to index the column on table `B`. Unused indexes are extra overhead.
+    In general, you need to add indexes only on the second table in the join order,
+    unless they’re needed for some other reason.
+  id: totrans-290
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 确保在`ON`或`USING`子句中的列上有索引。在添加索引时考虑连接顺序。如果您在列`c`上将表`A`和`B`连接，并且查询优化器决定以`B`，`A`的顺序连接表，则不需要在表`B`上索引该列。未使用的索引是额外的开销。通常情况下，只需要在连接顺序中的第二个表上添加索引，除非出于其他原因需要。
+- en: Try to ensure that any `GROUP BY` or `ORDER BY` expression refers only to columns
+    from a single table, so MySQL can try to use an index for that operation.
+  id: totrans-291
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 尽量确保任何`GROUP BY`或`ORDER BY`表达式仅引用来自单个表的列，这样 MySQL 可以尝试为该操作使用索引。
+- en: Be careful when upgrading MySQL because the join syntax, operator precedence,
+    and other behaviors have changed at various times. What used to be a normal join
+    can sometimes become a cross product, a different kind of join that returns different
+    results, or even invalid syntax.
+  id: totrans-292
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在升级 MySQL 时要小心，因为连接语法、运算符优先级和其他行为在不同时间发生了变化。曾经是正常连接的东西有时会变成交叉乘积，这是一种返回不同结果甚至无效语法的不同连接类型。
+- en: Optimizing GROUP BY with ROLLUP
+  id: totrans-293
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用 ROLLUP 优化 GROUP BY
+- en: A variation on grouped queries is to ask MySQL to do super aggregation within
+    the results. You can do this with a `WITH ROLLUP` clause, but it might not be
+    as well optimized as you need. Check the execution method with `EXPLAIN`, paying
+    attention to whether the grouping is done via filesort or temporary table; try
+    removing the `WITH ROLLUP` and see if you get the same group method. You might
+    be able to force the grouping method with the hints we mentioned earlier in this
+    section.
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分组查询的变体之一是要求 MySQL 在结果中进行超级聚合。您可以使用`WITH ROLLUP`子句实现这一点，但可能不如您需要的那样优化。使用`EXPLAIN`检查执行方法，注意分组是通过文件排序还是临时表完成的；尝试移除`WITH
+    ROLLUP`，看看是否得到相同的分组方法。您可能可以通过我们在本节前面提到的提示来强制分组方法。
+- en: Sometimes it’s more efficient to do super aggregation in your application, even
+    if it means fetching many more rows from the server. You can also nest a subquery
+    in the `FROM` clause or use a temporary table to hold intermediate results and
+    then query the temporary table with a `UNION`.
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时在应用程序中进行超级聚合更有效，即使这意味着从服务器获取更多行。您还可以在`FROM`子句中嵌套子查询或使用临时表保存中间结果，然后使用`UNION`查询临时表。
+- en: The best approach might be to move the `WITH ROLLUP` functionality into your
+    application code.
+  id: totrans-296
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最好的方法可能是将`WITH ROLLUP`功能移至应用程序代码中。
+- en: Optimizing LIMIT and OFFSET
+  id: totrans-297
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 优化 LIMIT 和 OFFSET
+- en: Queries with `LIMIT`s and `OFFSET`s are common in systems that do pagination,
+    nearly always in conjunction with an `ORDER BY` clause. It’s helpful to have an
+    index that supports the ordering; otherwise, the server has to do a lot of filesorts.
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 具有`LIMIT`和`OFFSET`的查询在进行分页的系统中很常见，几乎总是与`ORDER BY`子句一起使用。拥有支持排序的索引是很有帮助的；否则，服务器就必须进行大量的文件排序。
+- en: A frequent problem is having a high value for the offset. If your query looks
+    like `LIMIT 10000, 20`, it is generating 10,020 rows and throwing away the first
+    10,000 of them, which is very expensive. Assuming all pages are accessed with
+    equal frequency, such queries scan half the table on average. To optimize them,
+    you can either limit how many pages are permitted in a pagination view or try
+    to make the high offsets more efficient.
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个常见的问题是偏移量值很高。如果您的查询看起来像`LIMIT 10000, 20`，那么它将生成 10,020 行并丢弃其中的前 10,000 行，这是非常昂贵的。假设所有页面被均匀访问，这样的查询平均扫描一半的表。为了优化它们，您可以限制分页视图中允许的页面数量，或者尝试使高偏移量更有效。
+- en: 'One simple technique to improve efficiency is to do the offset on a covering
+    index, rather than the full rows. You can then join the result to the full row
+    and retrieve the additional columns you need. This can be much more efficient.
+    Consider the following query:'
+  id: totrans-300
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提高效率的一个简单技巧是在覆盖索引上执行偏移，而不是完整行。然后，您可以将结果与完整行连接并检索所需的其他列。这可能更有效。考虑以下查询：
+- en: '[PRE30]'
+  id: totrans-301
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'If the table is very large, this query is better written as follows:'
+  id: totrans-302
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果表非常大，则最好按以下方式编写此查询：
+- en: '[PRE31]'
+  id: totrans-303
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: This “deferred join” works because it lets the server examine as little data
+    as possible in an index without accessing rows and then, once the desired rows
+    are found, join them against the full table to retrieve the other columns from
+    the row. A similar technique applies to joins with `LIMIT` clauses.
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种“延迟连接”之所以有效，是因为它让服务器在索引中检查尽可能少的数据而不访问行，然后一旦找到所需的行，就将它们与完整表进行连接以检索行中的其他列。类似的技术也适用于带有`LIMIT`子句的连接。
+- en: 'Sometimes you can also convert the limit to a positional query, which the server
+    can execute as an index range scan. For example, if you precalculate and index
+    a position column, you can rewrite the query as follows:'
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时您还可以将限制转换为位置���询，服务器可以将其执行为索引范围扫描。例如，如果您预先计算并索引一个位置列，可以将查询重写为以下形式：
+- en: '[PRE32]'
+  id: totrans-306
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: Ranked data poses a similar problem but usually mixes `GROUP BY` into the fray.
+    You’ll almost certainly need to precompute and store ranks.
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 排名数据提出了类似的问题，但通常将`GROUP BY`混入其中。您几乎肯定需要预先计算和存储排名。
+- en: 'The problem with `LIMIT` and `OFFSET` is really the `OFFSET`, which represents
+    rows the server is generating and throwing away. If you use a sort of cursor to
+    remember the position of the last row you fetched, you can generate the next set
+    of rows by starting from that position instead of using an `OFFSET`. For example,
+    if you want to paginate through rental records starting from the newest rentals
+    and working backward, you can rely on the fact that their primary keys are always
+    increasing. You can fetch the first set of results like this:'
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LIMIT`和`OFFSET`的问题实际上是`OFFSET`，它表示服务器正在生成和丢弃的行。如果使用一种类似游标的方式记住您获取的最后一行的位置，您可以通过从该位置开始而不是使用`OFFSET`来生成下一组行。例如，如果您想从最新的租赁记录开始向后工作进行分页，您可以依赖于它们的主键始终递增。您可以像这样获取第一组结果：'
+- en: '[PRE33]'
+  id: totrans-309
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'This query returns rentals 16049 through 16030\. The next query can continue
+    from that point:'
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此查询返回租赁记录16049到16030。下一个查询可以从那个点继续：
+- en: '[PRE34]'
+  id: totrans-311
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: The nice thing about this technique is that it’s very efficient no matter how
+    far you paginate into the table.
+  id: totrans-312
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种技术的好处是，无论您分页到表的多远，它都非常高效。
+- en: Other alternatives include using precomputed summaries or joining against redundant
+    tables that contain only the primary key and the columns you need for the `ORDER
+    BY`.
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其他替代方法包括使用预先计算的摘要或与仅包含主键和您需要的`ORDER BY`列的冗余表连接。
+- en: Optimizing SQL_CALC_FOUND_ROWS
+  id: totrans-314
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 优化SQL_CALC_FOUND_ROWS
+- en: Another common technique for paginated displays is to add the `SQL_​CALC_​FOUND_ROWS`
+    hint to a query with a `LIMIT`, so you’ll know how many rows would have been returned
+    without the `LIMIT`. It might seem that there’s some kind of “magic” happening
+    here, whereby the server predicts how many rows it would have found. But unfortunately,
+    the server doesn’t really do that; it can’t count rows it doesn’t actually find.
+    This option just tells the server to generate and throw away the rest of the result
+    set instead of stopping when it reaches the desired number of rows. That’s very
+    expensive.
+  id: totrans-315
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种常见的分页显示技术是在带有`LIMIT`的查询中添加`SQL_​CALC_​FOUND_ROWS`提示，这样您就会知道没有`LIMIT`时会返回多少行。这里似乎有一种“魔法”发生，服务器预测它会找到多少行。但不幸的是，服务器并没有真正做到这一点；它无法计算实际未找到的行数。这个选项只是告诉服务器生成并丢弃其余的结果集，而不是在达到所需行数时停止。这是非常昂贵的。
+- en: A better design is to convert the pager to a “next” link. Assuming there are
+    20 results per page, the query should then use a `LIMIT` of 21 rows and display
+    only 20\. If the 21st row exists in the results, there’s a next page, and you
+    can render the “next” link.
+  id: totrans-316
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更好的设计是将分页器转换为“下一页”链接。假设每页有20个结果，那么查询应该使用21行的`LIMIT`，并且只显示20个。如果结果中存在第21行，则有下一页，您可以呈现“下一页”链接。
+- en: Another possibility is to fetch and cache many more rows than you need—say,
+    1,000—and then retrieve them from the cache for successive pages. This strategy
+    lets your application know how large the full result set is. If it’s fewer than
+    1,000 rows, the application knows how many page links to render; if it’s more,
+    the application can just display “more than 1,000 results found.” Both strategies
+    are much more efficient than repeatedly generating an entire result and discarding
+    most of it.
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种可能性是获取并缓存比您需要的更多行，比如1,000行，然后为连续的页面从缓存中检索它们。这种策略让您的应用程序知道完整结果集有多大。如果少于1,000行，应用程序就知道要呈现多少页链接；如果超过1,000行，应用程序只需显示“找到超过1,000个结果”。这两种策略比重复生成整个结果并丢弃大部分结果要高效得多。
+- en: Sometimes you can also just estimate the full size of the result set by running
+    an `EXPLAIN` query and looking at the `rows` column in the result (hey, even Google
+    doesn’t show exact result counts!). If you can’t use these tactics, using a separate
+    `COUNT(*)` query to find the number of rows can be much faster than `SQL_CALC_FOUND_ROWS`,
+    if it can use a covering index.
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时您也可以通过运行`EXPLAIN`查询并查看结果中的`rows`列来估计结果集的完整大小（嘿，即使Google也不显示确切的结果计数！）。如果无法使用这些策略，使用单独的`COUNT(*)`查询来查找行数可能比`SQL_CALC_FOUND_ROWS`快得多，如果它可以使用覆盖索引。
+- en: Optimizing UNION
+  id: totrans-319
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 优化UNION
+- en: MySQL always executes `UNION` queries by creating a temporary table and filling
+    it with the `UNION` results. MySQL can’t apply as many optimizations to `UNION`
+    queries as you might be used to. You might have to help the optimizer by manually
+    “pushing down” `WHERE`, `LIMIT`, `ORDER BY`, and other conditions (i.e., copying
+    them, as appropriate, from the outer query into each `SELECT` in the `UNION`).
+  id: totrans-320
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL总是通过创建临时表并填充`UNION`结果来执行`UNION`查询。MySQL无法对`UNION`查询应用您可能习惯的许多优化。您可能需要通过手动“推送”`WHERE`、`LIMIT`、`ORDER
+    BY`和其他条件（即从外部查询复制到`UNION`中的每个`SELECT`中）来帮助优化器。
+- en: It’s important to always use `UNION ALL`, unless you need the server to eliminate
+    duplicate rows. If you omit the `ALL` keyword, MySQL adds the distinct option
+    to the temporary table, which uses the full row to determine uniqueness. This
+    is quite expensive. Be aware that the `ALL` keyword doesn’t eliminate the temporary
+    table, though. MySQL always places results into a temporary table and then reads
+    them out again, even when it’s not really necessary (for example, when the results
+    could be returned directly to the client).
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 始终使用`UNION ALL`很重要，除非您需要服务器消除重复行。如果省略`ALL`关键字，MySQL会向临时表添加distinct选项，该选项使用完整行来确定唯一性。这是非常昂贵的。请注意，`ALL`关键字并不消除临时表。即使不是真正必要的情况下（例如，结果可以直接返回给客户端时），MySQL也总是将结果放入临时表，然后再次读取它们。
+- en: Summary
+  id: totrans-322
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: Query optimization is the final piece in the interlocking puzzle of schema,
+    index, and query design to create high-performance applications. To write good
+    queries, you need to understand schemas and indexing, and vice versa.
+  id: totrans-323
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询优化是模式、索引和查询设计相互交织的拼图中的最后一块，以创建高性能应用程序。要编写良好的查询，您需要了解模式和索引，反之亦然。
+- en: Ultimately, it is still about response time and understanding how queries execute
+    so that you can reason about where the time is consumed. With the addition of
+    a few things such as the parsing and optimization process, this is just the next
+    step in understanding how MySQL accesses tables and indexes, which we discussed
+    in the previous chapter. The extra dimension that emerges when you start studying
+    the interplay between queries and indexes is how MySQL accesses one table or index
+    based on the data that it finds in another one.
+  id: totrans-324
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最终，这仍然是关于响应时间和理解查询执行的方式，以便你可以推断时间消耗的位置。通过添加一些东西，比如解析和优化过程，这只是理解MySQL如何访问表和索引的下一步，我们在上一章中讨论过。当你开始研究查询和索引之间的相互作用时，出现的额外维度是MySQL如何基于在另一个表中找到的数据访问一个表或索引。
+- en: 'Optimization always requires a three-pronged approach: stop doing things, do
+    them fewer times, and do them more quickly.'
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 优化始终需要三管齐下的方法：停止做某些事情，减少做的次数，以及更快地完成。
+- en: ^([1](ch08.html#ch01fn47-marker)) Network overhead is worst if the application
+    is on a different host from the server, but transferring data between MySQL and
+    the application isn’t free even if they’re on the same server.
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch08.html#ch01fn47-marker)) 如果应用程序与服务器不在同一主机上，网络开销最严重，但即使它们在同一台服务器上，MySQL和应用程序之间的数据传输也不是免费的。
+- en: ^([2](ch08.html#ch01fn48-marker)) See [“Optimizing COUNT() Queries”](#optimizing_countleft_parenthesisright_p)
+    later in this chapter for more on this topic.
+  id: totrans-327
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch08.html#ch01fn48-marker)) 请参阅本章后面的[“优化COUNT()查询”](#optimizing_countleft_parenthesisright_p)了解更多相关内容。
+- en: ^([3](ch08.html#ch01fn49-marker)) Percona Toolkit’s *pt-archiver* tool makes
+    these types of jobs easy and safe.
+  id: totrans-328
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([3](ch08.html#ch01fn49-marker)) Percona Toolkit的*pt-archiver*工具使这类工作变得简单且安全。
+- en: ^([4](ch08.html#ch01fn50-marker)) If the query is too large, the server will
+    refuse to receive any more data and throw an error.
+  id: totrans-329
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([4](ch08.html#ch01fn50-marker)) 如果查询太大，服务器将拒绝接收更多数据并抛出错误。
+- en: ^([5](ch08.html#ch01fn51-marker)) You can work around this with `SQL_BUFFER_RESULT`,
+    which we’ll see a bit later.
+  id: totrans-330
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([5](ch08.html#ch01fn51-marker)) 你可以通过`SQL_BUFFER_RESULT`来解决这个问题，稍后我们会看到。
+- en: ^([6](ch08.html#ch01fn52-marker)) For example, the range check query plan reevaluates
+    indexes for each row in a `JOIN`. You can see this query plan by looking for “range
+    checked for each record” in the `Extra` column in `EXPLAIN`. This query plan also
+    increments the `Select_full_range_join` server variable.
+  id: totrans-331
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([6](ch08.html#ch01fn52-marker)) 例如，范围检查查询计划会为`JOIN`中的每一行重新评估索引。你可以通过在`EXPLAIN`中的`Extra`列中查找“range
+    checked for each record”来查看这个查询计划。这个查询计划还会增加`Select_full_range_join`服务器变量。
+- en: ^([7](ch08.html#ch01fn53-marker)) We agree, a movie without actors is strange,
+    but the Sakila Sample Database lists no actors for *Slacker Liaisons*, which it
+    describes as “A Fast-Paced Tale of a Shark and a Student Who Must Meet a Crocodile
+    in Ancient China.”
+  id: totrans-332
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([7](ch08.html#ch01fn53-marker)) 我们同意，一部没有演员的电影很奇怪，但Sakila示例数据库中没有列出*Slacker
+    Liaisons*的演员，它描述为“一部关于鲨鱼和一名学生在古代中国必须与鳄鱼见面的快节奏故事。”
+- en: ^([8](ch08.html#ch01fn54-marker)) See both “Index Hints” and “Optimizer Hints”
+    in the MySQL manual for version-specific details on what hints are available and
+    how to use them.
+  id: totrans-333
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([8](ch08.html#ch01fn54-marker)) 请参阅MySQL手册中关于版本特定提示的“索引提示”和“优化器提示”以了解可用的提示以及如何使用它们。
+- en: ^([9](ch08.html#ch01fn55-marker)) As we show later, MySQL’s query execution
+    isn’t quite this simple; there are many optimizations that complicate it.
+  id: totrans-334
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([9](ch08.html#ch01fn55-marker)) 正如我们后面所展示的，MySQL的查询执行并不是那么简单；有许多优化措施使其变得复杂。
+- en: ^([10](ch08.html#ch01fn56-marker)) You can see this by using `EXPLAIN FORMAT=TREE
+    …` before your statement.
+  id: totrans-335
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([10](ch08.html#ch01fn56-marker)) 你可以在语句之前使用`EXPLAIN FORMAT=TREE …`来查看这一点。
+- en: ^([11](ch08.html#ch01fn57-marker)) The server generates the output from the
+    execution plan. It thus has the same semantics as the original query but not necessarily
+    the same text.
+  id: totrans-336
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([11](ch08.html#ch01fn57-marker)) 服务器从执行计划生成输出。因此，它具有与原始查询相同的语义，但不一定具有相同的文本。
+- en: ^([12](ch08.html#ch01fn58-marker)) Strictly speaking, MySQL doesn’t try to reduce
+    the number of rows it reads. Instead, it tries to optimize for fewer page reads.
+    But a row count can often give you a rough idea of the query cost.
+  id: totrans-337
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([12](ch08.html#ch01fn58-marker)) 严格来说，MySQL并不试图减少它读取的行数。相反，它试图优化更少的页面读取。但是行数通常可以让你大致了解查询的成本。
+- en: ^([13](ch08.html#ch01fn59-marker)) You can influence this behavior if needed—for
+    example, with the `SQL_BUFFER_RESULT` hint. See “Optimizer Hints” in the official
+    MySQL manual for more information.
+  id: totrans-338
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([13](ch08.html#ch01fn59-marker)) 如果需要，你可以通过`SQL_BUFFER_RESULT`提示来��响这种行为。请参阅官方MySQL手册中的“优化器提示”了解更多信息。
+- en: ^([14](ch08.html#ch01fn60-marker)) You can also write the `SUM()` expressions
+    as `SUM(color = 'blue'), SUM(color ='red')`.
+  id: totrans-339
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([14](ch08.html#ch01fn60-marker)) 你也可以将`SUM()`表达式写成`SUM(color = 'blue'), SUM(color
+    ='red')`。

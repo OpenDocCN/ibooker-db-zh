@@ -1,0 +1,909 @@
+- en: Chapter 12\. MySQL in the Cloud
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第 12 章. 云中的 MySQL
+- en: 'In all likelihood, you won’t have much control over whether you move to a cloud
+    provider or even which one your organization ultimately adopts. What you can control
+    is how you build your database environment. There are two directions you can take:
+    managed MySQL or building on VMs. Managed MySQL tends to be more hands-off, but
+    it’s usually more expensive and gives you less control. Building on a VM means
+    you get a lot more flexibility in how you build and how to observe your platform,
+    but it requires more time and operational overhead.'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 很可能，你对于是否迁移到云服务提供商，甚至你的组织最终选择哪一个云服务提供商都没有太多控制权。你可以控制的是如何构建你的数据库环境。你可以选择两个方向：托管的
+    MySQL 或者在虚拟机上构建。托管的 MySQL 往往更加无需过多干预，但通常更昂贵且控制权更少。在虚拟机上构建意味着你可以更加灵活地构建和观察你的平台，但需要更多的时间和运营开销。
+- en: In this chapter, we’ll outline the major options for managed MySQL and how they
+    can be useful to you. We’ll also explain how to get started building a VM option,
+    including selecting the right specs and disk types, and we will cover the operational
+    complexities (like host reboots) you have to prepare for when running MySQL on
+    VMs in a cloud.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将概述托管 MySQL 的主要选项以及它们对你有何用处。我们还将解释如何开始构建一个虚拟机选项，包括选择正确的规格和磁盘类型，以及在云中运行
+    MySQL 时需要准备的操作复杂性（如主机重启）。
+- en: Warning
+  id: totrans-3
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: We will not cover bugs in cloud-provider offerings. These offerings are ever-evolving
+    products, so we recommend you keep up-to-date with dynamic sources like newsletters
+    or bug boards rather than a point-in-time reference such as this book.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们不会涵盖云服务提供商提供的 bug。这些提供的产品在不断发展，因此我们建议你保持与动态来源（如新闻通讯或 bug 论坛）的同步，而不是依赖像本书这样的静态参考。
+- en: Managed MySQL
+  id: totrans-5
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 托管的 MySQL
+- en: Offerings for managed MySQL among cloud providers bring a lot of convenience
+    to teams looking to reduce the cognitive load of operating MySQL as their product
+    grows and their feature set expands. Every public cloud has its own interpretation
+    of what a managed SQL database should look like and how it should work. Amazon
+    Web Services (AWS) offers a few flavors of Aurora MySQL (we discuss these in detail
+    shortly), Google Cloud Platform (GCP) has Cloud SQL, and so on, with almost all
+    public cloud providers offering something similar.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 云服务提供商中的托管 MySQL 提供了许多便利，帮助团队在产品增长和功能集���展时减少操作 MySQL 的认知负担。每个公共云都有自己对于托管 SQL
+    数据库应该是什么样子以及如何工作的理解。亚马逊网络服务（AWS）提供了几种 Aurora MySQL 的版本（我们很快会详细讨论这些），谷歌云平台（GCP）有
+    Cloud SQL，几乎所有公共云提供商都提供类似的服务。
+- en: The key appeal of managed solutions is that they provide an accessible database
+    setup without needing to get deep into MySQL specifics. With a few clicks or a
+    `terraform apply`, you can have a database online with a replica and scheduled
+    backups, and you’re all ready to go. This can be a very attractive option for
+    companies or teams that want to get started quickly.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 托管解决方案的主要吸引力在于它们提供了一个可访问的数据库设置，无需深入了解 MySQL 的具体细节。通过几次点击或`terraform apply`，你就可以在线创建一个带有副本和定期备份的数据库，然后就可以开始了。对于想要快速入门的公司或团队来说，这可能是一个非常吸引人的选择。
+- en: On the other hand, with managed MySQL you lack a lot of visibility and control.
+    You do not have access to the operating system or the filesystem, and you are
+    restricted in how much you can do within the process itself. You can’t inspect
+    anything else about the system other than what the cloud provider gives you. In
+    most cases, if you experience an issue, you’re relegated to opening a support
+    ticket and waiting for a response. You can’t set up any advanced topologies, and
+    your backup and restore methods are limited to what the cloud provider offers.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一方面，使用托管的 MySQL 会缺乏很多可见性和控制权。你无法访问操作系统或文件系统，并且在进程本身内部的操作受到限制。除了云服务提供商提供的内容，你无法检查系统的其他任何内容。在大多数情况下，如果遇到问题，你只能提交支持工单并等待回复。你无法设置任何高级拓扑结构，备份和恢复方法也受限于云服务提供商提供的内容。
+- en: It is worth noting that many of these cloud offerings give you a *MySQL-compatible*
+    data store. This is a data store that has a SQL interface but with internal workings
+    that may be entirely different from the Oracle MySQL that this book focuses on.
+    We will cover general trade-offs and how each managed solution is different to
+    help you choose the option that fits your team and business needs best.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 值得注意的是，许多云服务提供商提供的是*与 MySQL 兼容*的数据存储。这是一个具有 SQL 接口但内部工作方式可能与本书关注的 Oracle MySQL
+    完全不同的数据存储。我们将介绍一般的权衡和每个托管解决方案的不同之处，以帮助你选择最适合你的团队和业务需求的选项。
+- en: Amazon Aurora for MySQL
+  id: totrans-10
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 亚马逊 Aurora for MySQL
+- en: Aurora MySQL is a MySQL-compatible hosted database. Aurora’s most appealing
+    selling point is that it separates compute from storage, which allows them to
+    scale separately and more flexibly. Aurora manages a number of operational tasks
+    that you would normally take care of, such as performing snapshot backups, managing
+    fast schema changes, audit logging, and managing replication within a single region.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Aurora MySQL 是一个与 MySQL 兼容的托管数据库。Aurora 最吸引人的卖点是它将计算与存储分离，这使得它们可以分别和更灵活地扩展。Aurora
+    管理了许多你通常需要处理的运营任务，比如执行快照备份、管理快速模式更改、审计日志和管理单一区域内的复制。
+- en: There are also different offerings of Aurora MySQL. We’ll briefly cover the
+    differences between these offerings.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Aurora MySQL 还有不同的提供方式。我们将简要介绍这些提供方式之间的区别。
+- en: The standard Aurora offering is long-running compute instances where you choose
+    an instance class (just like when running your own MySQL), and you get attached
+    storage that internally replicates to six copies.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 标准的 Aurora 提供的是长时间运行的计算实例，你可以选择一个实例类别（就像在运行自己的 MySQL 时一样），并且你会获得内部复制到六个副本的附加存储。
+- en: Warning
+  id: totrans-14
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: As of this writing, Aurora fast DDL is considered by AWS a “lab mode” feature.
+    If you are reading this and that is still the case, we recommend you refer to
+    [Chapter 6](ch06.html#schema_design_and_management) to learn more about online
+    schema-change options with tools external to your database.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在撰写本文时，AWS认为Aurora快速DDL是一个“实验模式”功能。如果您正在阅读本文，情况仍然如此，我们建议您参考[第6章](ch06.html#schema_design_and_management)以了解有关使用数据库外部工具进行在线模式更改的更多信息。
+- en: It is important to note that replication within an Aurora cluster is entirely
+    proprietary to Amazon and is not the replication we know and use in Oracle MySQL.
+    Since all Aurora instances in a cluster share the same storage layer to access
+    data, replication within a cluster is done using block storage.^([1](ch12.html#ch01fn81))
+    Aurora, however, does support writing binary logs in the format we are familiar
+    with in a community server for teams who wish to replicate data from an Aurora
+    cluster to another cluster or for any other purpose of binary logs, such as change
+    data captures.^([2](ch12.html#ch01fn82))
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 需要注意的是，在Aurora集群内部的复制完全是亚马逊专有的，不是我们在Oracle MySQL中所知道和使用的复制。由于集群中所有的Aurora实例共享相同的存储层来访问数据，集群内部的复制是使用块存储来完成的。^([1](ch12.html#ch01fn81))
+    然而，Aurora确实支持以我们在社区服务器中熟悉的格式写入二进制日志，以便团队希望将数据从一个Aurora集群复制到另一个集群或者出于其他二进制日志的目的，比如变更数据捕获。^([2](ch12.html#ch01fn82))
+- en: Tip
+  id: totrans-17
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: If you are looking to put any mission-critical databases on Aurora, we strongly
+    recommend you also consider using Amazon’s RDS Proxy to manage how your application
+    will communicate with Aurora. In situations where you know there is potential
+    for new connection storms from the application side, RDS Proxy can come in very
+    handy in not letting that new connection volume affect the database.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您打算将任何关键数据库放在Aurora上，我们强烈建议您考虑使用亚马逊的RDS代理来管理应用程序与Aurora的通信方式。在您知道应用程序端可能会出现新连接风暴的情况下，RDS代理可以非常方便地防止新连接量影响数据库。
+- en: 'Since Aurora MySQL’s appearance on the scene in 2015, AWS has expanded the
+    options of Aurora MySQL that you can leverage to meet a larger swath of use cases
+    and business needs:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自2015年Aurora MySQL出现以来，AWS已经扩展了Aurora MySQL的选项，以满足更广泛的用例和业务需求：
+- en: Aurora Serverless
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Aurora无服务器
+- en: The serverless offering of Aurora MySQL removes the long-running compute and
+    leverages Amazon’s serverless platform to serve the compute layer of your database.
+    This gives you a lot of cost flexibility if your workload does not need to run
+    constantly.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Aurora MySQL的无服务器产品消除了长时间运行的计算，并利用亚马逊的无服务器平台来提供数据库的计算层。如果您的工作负载不需要持续运行，这将为您提供很大的成本灵活性。
+- en: Aurora Global Database
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Aurora全局数据库
+- en: This is Aurora’s solution for those who need their data available in multiple
+    geographic regions but don’t want to use binary log replication to manually manage
+    getting data changes from a primary cluster to clusters in other regions. Note
+    that this comes with trade-offs, and you should always refer back to Amazon’s
+    documentation to make sure you are accepting the right ones.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是Aurora为那些需要在多个地理区域中可用数据但不想使用二进制日志复制手动管理从主要集群到其他区域集群获取数据更改的解决方案。请注意，这会带来一些权衡，您应始终参考亚马逊的文档，以确保您接受正确的权衡。
+- en: Aurora Multi-Master
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Aurora多主
+- en: Multi-Master is a special flavor of Aurora clusters that can accept writes on
+    more than one compute node at the same time. It is intended as a highly available
+    solution where write availability in a single region is the highest priority.
+    Note that Aurora Multi-Master comes with its own set of limitations. For starters,
+    as of this writing it runs a MySQL 5.6 server core, which precludes you from using
+    a number of features. There is a maximum number of nodes allowed in a cluster,
+    and you cannot mix Multi-Master and Global Database in the same deployment. We
+    consider Aurora Multi-Master a very opinionated solution for the availability
+    and consistency choices you have at every data store and application interaction,
+    and we recommend you think carefully about your stated constraints and trade-offs
+    before choosing it.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 多主是Aurora集群的一种特殊类型，可以同时在多个计算节点上接受写入。它旨在作为一个高可用解决方案，其中单个区域中的写入可用性是最高优先级。请注意，Aurora多主带有自己的一套限制。首先，在撰写本文时，它运行的是MySQL
+    5.6服务器核心，这将阻止您使用许多功能。集群中允许的节点数量有一个最大限制，并且您不能在同一部署中混合多主和全局数据库。我们认为Aurora多主是一个非常主观的解决方案，适用于您在每个数据存储和应用程序交互中拥有的可用性和一致性选择，并建议您在选择之前仔细考虑您所陈述的约束和权衡。
+- en: AWS continues to make updates and improvements to its managed relational database
+    offerings, so we will avoid going into the deep details of feature differences
+    between the Aurora flavors. [Figure 12-1](#a_flowchart_to_help_you_choose_which_fl),
+    however, does provide a flowchart to help you see generically which type of Aurora
+    might be best suited for your needs and at what trade-offs.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: AWS继续对其托管的关系型数据库产品进行更新和改进，因此我们将避免深入讨论Aurora各种版本之间的功能差异。然而，[图12-1](#a_flowchart_to_help_you_choose_which_fl)提供了一个流程图，帮助您了解哪种类型的Aurora可能最适合您的需求以及在什么权衡下。
+- en: '[Figure 12-1](#a_flowchart_to_help_you_choose_which_fl) gives you a basic decision
+    tree to help you decide among Aurora options. The important takeaway is that,
+    although Aurora has a number of options, there are always trade-offs. For example,
+    you cannot achieve both multiwriter high availability and cross-regional subsecond
+    replication. But you *can* use the offerings to present these trade-offs and drive
+    difficult product discussions about which is the most important: write availability
+    or regional replication.'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图12-1](#a_flowchart_to_help_you_choose_which_fl)为您提供了一个基本的决策树，帮助您在Aurora选项之间做出选择。重要的是，尽管Aurora有许多选项，但总会有权衡。例如，您无法同时实现多写高可用性和跨区域亚秒级复制。但您*可以*利用这些产品来展示这些权衡，并推动关于哪个更重要：写入���用性还是区域复制的困难产品讨论。'
+- en: Aurora is not the only managed MySQL offering by a cloud provider. GCP has its
+    own offering.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Aurora并不是唯一由云提供商提供的托管MySQL产品。GCP有自己的产品。
+- en: '![](assets/hpm4_1201.png)'
+  id: totrans-29
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_1201.png)'
+- en: Figure 12-1\. A flowchart to help you choose which flavor of Aurora is suitable
+    for your needs
+  id: totrans-30
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 12-1\. 一个流程图，帮助您选择适合您需求的 Aurora 版本
+- en: GCP Cloud SQL
+  id: totrans-31
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: GCP Cloud SQL
+- en: 'Cloud SQL is GCP’s managed MySQL offering. A core difference between this offering
+    and AWS’s is that it runs the community server but with certain features disabled
+    specifically to allow for the multitenancy and managed aspect of the product.
+    Here are some of the things you cannot use with Cloud SQL even though it runs
+    the community server:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Cloud SQL 是 GCP 的托管 MySQL 产品。这种产品与 AWS 的主要区别在于它运行社区服务器，但特定功能被禁用，以便实现产品的多租户性和托管性。以下是一些���不能在
+    Cloud SQL 中使用的功能，尽管它运行社区服务器：
+- en: '`SUPER` privilege is disabled.'
+  id: totrans-33
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SUPER` 权限被禁用。'
+- en: Loading plug-ins are disabled.^([3](ch12.html#ch01fn83))
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 禁用加载插件。^([3](ch12.html#ch01fn83))
+- en: Some clients are also disabled, such as *mysqldump* and *mysqlimport*.
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一些客户端也被禁用，比如 *mysqldump* 和 *mysqlimport*。
+- en: Similar to AWS’s offering, you cannot get SSH access to the instances.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与 AWS 的产品类似，您无法访问实例的 SSH。
+- en: 'On the other hand, there are a number of operational tasks that Cloud SQL manages
+    for you:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一方面，Cloud SQL 为您管理了许多运营任务：
+- en: Native high-availability support. Failovers are automated using a configuration
+    option.
+  id: totrans-38
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 本地高可用性支持。故障转移通过配置选项自动化。
+- en: Native encryption of the data at rest.
+  id: totrans-39
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据静态加密。
+- en: Flexibly managed upgrades using multiple methods. Note that ultimately these
+    maintenance windows involve some downtime (similarly to AWS Aurora), and it is
+    your responsibility to balance that with application SLOs.^([4](ch12.html#ch01fn84))
+  id: totrans-40
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 灵活管理升级，使用多种方法。请注意，最终这些维护窗口会涉及一些停机时间（类似于 AWS Aurora），您需要平衡这一点与应用程序 SLOs 的责任。^([4](ch12.html#ch01fn84))
+- en: As we mentioned at the beginning of this chapter, you are probably not going
+    to have a choice of which cloud provider to build these databases in, so you are
+    more likely going to need to know what the managed option from the cloud provider
+    chosen for you offers and how to work with it—or to make the case for moving to
+    using VMs directly instead of managed MySQL.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在本章开头提到的，您可能没有选择在哪个云提供商中构建这些数据库的选择，因此您更可能需要了解所选云提供商提供的托管选项以及如何使用它，或者提出直接使用虚拟机而不是托管
+    MySQL 的理由。
+- en: 'Now that we have covered managed relational database options and the intricacies
+    of those choices, let’s talk about the slightly more complex path: running MySQL
+    on cloud-hosted VMs.'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经介绍了托管关系型数据库选项以及这些选择的复杂性，让我们谈谈稍微更复杂的路径：在云托管的虚拟机上运行 MySQL。
+- en: MySQL on Virtual Machines
+  id: totrans-43
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 虚拟机上的 MySQL
+- en: The features of managed MySQL can be very attractive for those who want to get
+    up and going quickly, so why would someone choose to run their own? Running MySQL
+    on a VM is just like running it on bare metal. You get complete and total control
+    over all operational aspects. You can run your primary MySQL in a single region
+    but set up replicas in other regions for disaster-recovery purposes—or run a time-delayed
+    replica. You can also tailor your backup method to be the most optimal for your
+    workload. If performance degrades or you experience issues, you have full control
+    over the operating system and filesystem, allowing you to do any introspection
+    you want.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 托管 MySQL 的特性对于那些想快速上手的人可能非常吸引人，那么为什么有人选择自己运行呢？在虚拟机上运行 MySQL 就像在裸机上运行一样。您可以完全控制所有操作方面。您可以在单个区域运行主
+    MySQL，但在其他区域设置副本以用于灾难恢复，或者运行一个延迟副本。您还可以根据工作负载最优化地定制备份方法。如果性能下降或遇到问题，您可以完全控制操作系统和文件系统，允许您进行任何自查。
+- en: Machine Types in Cloud
+  id: totrans-45
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 云中的机器类型
+- en: As discussed in [Chapter 4](ch04.html#operating_system_and_hardware_optimizat),
+    the number of CPU cores and available RAM for MySQL have a direct impact on the
+    performance of MySQL. The downside of choosing specific hardware specs for a data
+    center is that they cannot be changed very easily. If you have a 56-core, 512
+    GB RAM machine racked, you certainly can reduce the installed RAM—but you already
+    paid for it, so unless you can reuse the RAM elsewhere, you may have overspent
+    on hardware.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如 [第 4 章](ch04.html#operating_system_and_hardware_optimizat) 中讨论的，MySQL 的 CPU
+    核心数量和可用 RAM 对 MySQL 的性能有直接影响。为数据中心选择特定硬件规格的缺点是它们不能很容易地更改。如果您有一个 56 核、512 GB RAM
+    的机器架设，您当然可以减少安装的 RAM，但您已经为此付费了，所以除非您可以在其他地方重复使用 RAM，否则您可能在硬件上花费过多。
+- en: Optimizing the machine specs for your workload is much easier when you use a
+    cloud provider. The major cloud providers allow you to choose a machine spec that
+    sets ranges of virtual CPUs (vCPUs), the amount of RAM available, and networking
+    and disk limitations. With this comes the ability to resize the VMs as your workload
+    changes. This could mean that if you experience peak traffic over a specific time
+    of year—like a holiday season—you can temporarily increase your machine specs
+    to account for that. Once traffic patterns dip back down, you can resize them
+    smaller again. This flexibility is why many people move to the cloud.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您使用云提供商时，为您的工作负载优化机器规格要容易得多。主要的云提供商允许您选择设置虚拟 CPU（vCPU）范围、可用的 RAM 量、网络和磁盘限制的机器规格。随之而来的是，您可以根据工作负载的变化调整
+    VM 的大小。这意味着，如果您在一年中的特定时间经历高峰流量，比如假期季节，您可以临时增加机器规格以应对这种情况。一旦流量模式回落，您可以再次将它们调整为更小。这种灵活性是许多人转向云的原因。
+- en: Choosing the Right Machine Type
+  id: totrans-48
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 选择正确的机器类型
+- en: If you’re already on a cloud provider, choosing a machine is fairly trivial.
+    If you’re running into a vCPU, memory, or network bottleneck, you can find the
+    appropriate machine type to overcome it and resize. If you’re making a move from
+    a data center, though, it can be tricky to determine the right configuration up
+    front.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您已经在云提供商上，选择一台机器相当简单。如果遇到 vCPU、内存或网络瓶颈，您可以找到适当的机器类型来克服，并调整大小。但如果您从数据中心搬迁，确定正确的配置可能会有些棘手。
+- en: CPU
+  id: totrans-50
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: CPU
+- en: In [Chapter 4](ch04.html#operating_system_and_hardware_optimizat), we talked
+    about how to select the right CPUs for your workload. When you transition to the
+    cloud, most of that guidance still holds true. Remember that with cloud providers,
+    you’re getting *virtual* CPUs, not physical CPUs. This means that the CPU is not
+    exclusively yours. It may be shared with other tenants on the same physical host.
+    In all likelihood, you’ll see more variation on latency and utilization than you
+    would on your own exclusive server.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[第 4 章](ch04.html#operating_system_and_hardware_optimizat)中，我们讨论了如何为你的工作负载选择正确的
+    CPU。当你转移到云时，大部分指导仍然适用。请记住，与云提供商一起，你得到的是*虚拟* CPU，而不是物理 CPU。这意味着 CPU 不是专门属于你的。它可能与同一物理主机上的其他租户共享。很可能，你会看到比在你自己的独立服务器上更多的延迟和利用率变化。
+- en: 'If you’re migrating from physical machines to a cloud provider, it can also
+    be tricky to estimate your CPU usage. We have had success using the following
+    formula for vCPU count: (Core Count × 95% Total CPU Usage) × 2.'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你从物理机器迁移到云提供商，估算你的 CPU 使用量也可能会有些棘手。我们成功地使用以下公式来计算 vCPU 数量：（核心数 × 95% 总 CPU
+    使用量）× 2。
+- en: For example, suppose you have a 40-core server in a data center. Over the last
+    30 days, the peak CPU usage was 30%. How many cores do you need to run this in
+    a cloud provider at 50% utilization? Using the preceding formula, we would estimate
+    24 cores. If your chosen cloud provider does not offer a 24-core machine type,
+    consider rounding up to the nearest type or determining whether your provider
+    offers custom machine types.^([5](ch12.html#ch01fn85))
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设你在数据中心有一台 40 核服务器。在过去的 30 天里，CPU 使用率的峰值为 30%。在云提供商中以 50% 利用率运行这个需要多少核心？使用上述公式，我们会估算出
+    24 个核心。如果你选择的云提供商没有提供 24 核的机型，考虑四舍五入到最近的类型或确定你的提供商是否提供自定义机型。^([5](ch12.html#ch01fn85))
+- en: Warning
+  id: totrans-54
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: 'As CPU usage or core count increases, so does context switching: the act of
+    switching tasks on the CPU. Because of this, you do not want to run at 100% CPU
+    capacity because you will waste a lot of time switching between threads. This
+    will manifest itself as latency for your queries. We recommend a target of 50%
+    typical utilization, with peaks up to 65%–70%. If you sustain 70% CPU or greater,
+    you will likely see latency increase, and you should consider adding more CPUs.'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着 CPU 使用率或核心数的增加，上下文切换也会增加：在 CPU 上切换任务的行为。因此，你不希望运行在 100% 的 CPU 容量，因为你会浪费大量时间在线程之间切换。这将表现为查询的延迟。我们建议目标是
+    50% 的典型利用率，峰值可达到 65%–70%。如果你维持在 70% 的 CPU 或更高，你可能会看到延迟增加，你应该考虑添加更多的 CPU。
+- en: Also pay attention to the CPU chip family, if that’s an option. If you’re running
+    a high-traffic web application, you may want to ensure that you have a much later
+    generation of chip available. Likewise, if you are looking at backend data processing
+    where older, slightly slower CPU chip families could be fine, that could possibly
+    be a cost savings.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 也要注意 CPU 芯片系列，如果有这个选项的话。如果你正在运行一个高流量的网络应用程序，你可能希望确保你有一个更晚一代的芯片可用。同样，如果你正在考虑后端数据处理，在那里旧的、稍慢一些的
+    CPU 芯片系列可能是可以的，这可能会节省成本。
+- en: Memory
+  id: totrans-57
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 内存
+- en: As discussed in Chapters [1](ch01.html#mysql_architecture) and [4](ch04.html#operating_system_and_hardware_optimizat),
+    RAM can greatly influence MySQL performance.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如[第 1 章](ch01.html#mysql_architecture)和[第 4 章](ch04.html#operating_system_and_hardware_optimizat)所讨论的，RAM
+    可以极大地影响 MySQL 的性能。
+- en: Choose whatever machine spec best fits your needs for your working set of data,
+    while erring on the side of too much RAM instead of not enough.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择最适合你数据工作集需求的机型规格，更倾向于过多的 RAM 而不是不足。
+- en: Network performance
+  id: totrans-60
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 网络性能
+- en: While CPU and memory sizing are the most important parts of choosing a machine
+    type, make sure you also review the available network performance limitations
+    to ensure that you don’t starve your applications. For example, if you have a
+    batch process that will read large amounts of data, you may find that you exhaust
+    your bandwidth on a smaller machine type.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然 CPU 和内存大小是选择机型最重要的部分，但确保你也审查了可用的网络性能限制，以确保你不会让你的应用程序挨饿。例如，如果你有一个将读取大量数据的批处理过程，你可能会发现在较小的机型上耗尽带宽。
+- en: Tip
+  id: totrans-62
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: It’s worth noting that network egress between cloud zones and regions usually
+    has a cost associated with it. This can come as a surprise when setting up replicas,
+    but we still think it’s important to place replicas in separate zones for redundancy
+    purposes.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 值得注意的是，云区域和区域之间的网络出口通常是有成本的。当设置副本时，这可能会让人感到惊讶，但我们仍然认为将副本放在不同的区域是很重要的，以实现冗余。
+- en: Choosing the Right Disk Type
+  id: totrans-64
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 选择正确的磁盘类型
+- en: Although machine types are generally dynamic, the selection you make for data
+    storage will likely be your most complicated decision. Once you’ve chosen a disk
+    type and started to use it for data, moving to another disk type becomes difficult.
+    Typically, you’d need to mount a second disk and copy the data over. It’s not
+    impossible to correct, but it certainly is more involved than just a quick reboot
+    to add more CPUs.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管机型通常是动态的，但���为数据存储做出的选择可能是你最复杂的决定。一旦你选择了一个磁盘类型并开始用它来存储数据，转移到另一种磁盘类型就会变得困难。通常情况下，你需要挂载第二个磁盘并复制数据。纠正这个问题并不是不可能的，但肯定比只需快速重启来添加更多
+    CPU 要复杂。
+- en: Picking the correct disk type is also highly context sensitive to what workload
+    you expect to run. Highly read-intensive workloads will benefit from more memory
+    over disk performance because memory access is orders of magnitude faster. If
+    your working set is larger than your InnoDB buffer pool, you will always end up
+    going to disk to read some data. Write-intensive workloads will always go to disk,
+    and that’s where most people will start to see their first disk bottlenecks.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择正确的磁盘类型也高度依赖于你期望运行的工作负载。高度读密集型的工作负载将受益于更多的内存而不是磁盘性能，因为内存访问速度快得多。如果你的工作集大于你的
+    InnoDB 缓冲池，你将总是需要去磁盘读取一些数据。写密集型的工作负载将总是需要去磁盘，这是大多数人开始看到他们的第一个磁盘瓶颈的地方。
+- en: Attachment types
+  id: totrans-67
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 附件类型
+- en: The first decision to make is whether you go with locally attached disks or
+    network-attached disks. Locally attached disks have the benefit of offering incredibly
+    high performance and consistent throughput but are also vulnerable to data loss.
+    This is because they are treated as disks for ephemeral data only. If the hardware
+    running your VM with locally attached data crashes, you could lose all your data
+    on the local disk. Likewise, in some circumstances, even shutting down the instance
+    can mean that when you start it up again, you’re on a different host machine and
+    empty disks. Locally attached disks typically do not have any replication or RAID
+    behind them. A host-level disk failure could cause you to lose your data. If you
+    go this route, we recommend strongly considering using software RAID to at least
+    minimize the chances of data loss. See our discussion on RAID in [Chapter 4](ch04.html#operating_system_and_hardware_optimizat)
+    for more information.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先要做出的决定是选择本地连接的磁盘还是网络连接的磁盘。本地连接的磁盘具有提供极高性能和一致吞吐量的优点，但也容易丢失数据。这是因为它们被视为临时数据的磁盘。如果运行本地连接数据的虚拟机的硬件崩溃，你可能会丢失本地磁盘上的所有数据。同样，在某些情况下，即使关闭实例，再次启动时可能会在不同的主机机器上且磁盘为空。本地连接的磁盘通常没有任何复制或RAID支持。主机级磁盘故障可能导致数据丢失。如果选择这条路线，我们强烈建议考虑使用软件RAID，以至少减少数据丢失的可能性。有关RAID的讨论，请参见[第4章](ch04.html#operating_system_and_hardware_optimizat)了解更多信息。
+- en: By contrast, network-attached disks go the other way, offering redundancy and
+    reliability over performance. That’s not to say that the performance on a network-attached
+    disk is bad—it’s just not as performant as local. Your network-attached disk may
+    experience stalls where a locally attached disk may not. You can also typically
+    achieve much higher throughput and IOPS numbers locally.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相比之下，网络连接的磁盘提供冗余性和可靠性而不是性能。这并不是说网络连接的磁盘性能不好，只是不如本地连接的性能好。你的网络连接磁盘可能会出现停顿，而本地连接的磁盘可能不会。你还可以在本地实现更高的吞吐量和IOPS数字。
+- en: Cloud providers provide convenient backup or snapshot tooling when using network-attached
+    disks. These work fine for MySQL use, assuming you have ACID-compliant settings^([6](ch12.html#ch01fn86))
+    configured and your backup solution is properly designed. You can take a disk
+    snapshot at any point and recover it through normal crash recovery with no issues.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当使用网络连接的磁盘时，云服务提供商提供方便的备份或快照工具。这些对于MySQL使用效果很好，假设你已经配置了符合ACID标准的设置^([6](ch12.html#ch01fn86))并且你的备份解决方案设计得当。你可以在任何时候进行磁盘快照，并通过正常的崩溃恢复无问题地恢复它。
+- en: You can also use disk snapshotting to make replicas *extremely* fast, even on
+    disk sizes in the many terabytes. By doing this, you minimize the amount of replication
+    lag that needs to catch up before the replica can be usable.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你还可以使用磁盘快照来快速制作副本，即使磁盘大小达到数TB。通过这样做，你可以最大程度地减少需要追赶的复制延迟量，以便副本可以使用。
+- en: Note that if you use a locally attached disk instead of a network-attached one,
+    you’ll need to solve how to back up your data yourself with LVM or a third-party
+    tool like XtraBackup. See [Chapter 10](ch10.html#backup_and_recovery) for a more
+    thorough discussion of backups.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，如果使用本地连接的磁盘而不是网络连接的磁盘，你需要自己解决如何使用LVM或第三方工具如XtraBackup备份数据的问题。有关备份的更详细讨论，请参见[第10章](ch10.html#backup_and_recovery)。
+- en: The last note on attachment types is that cloud providers do not offer something
+    like a write cache (battery or flash backed) as one might see from a RAID card
+    on hardware.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于附件类型的最后一点是，云服务提供商不像硬件上的RAID卡那样提供写缓存（电池或闪存支持）。
+- en: SSD versus HDD
+  id: totrans-74
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: SSD与HDD
+- en: By and large, you’ll want to use SSDs for everything—especially your MySQL data
+    volume. If you find yourself particularly tight on budget, you can explore HDDs
+    as a cheaper option for the boot disk. In our experimentation, we found that an
+    SSD booted two to three times faster than an HDD. If the boot time matters, particularly
+    in an outage or reboot scenario, stick with SSD all the way.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总的来说，你应该为所有东西使用SSD，尤其是你的MySQL数据卷。如果预算特别紧张，你可以探索HDD作为启动磁盘的更便宜选项。在我们的实验中，我们发现SSD的启动速度比HDD快两到三倍。如果启动时间很重要，尤其是在停机或重新启动情况下，请坚持使用SSD。
+- en: IOPS and throughput
+  id: totrans-76
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: IOPS和吞吐量
+- en: Another complicated factor is determining your IOPS and throughput requirements.
+    You should have a good understanding, both historical and forward looking, for
+    what each of these requirements looks like before choosing what kind of disk you
+    need.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个复杂的因素是确定你的IOPS和吞吐量需求。在选择需要的磁盘类型之前，你应该对这些需求有一个良好的了解，无论是历史还是未来的。
+- en: If you are migrating from an existing workload, ideally you already have historical
+    disk-use metrics for these that will allow you to best choose your disk. If not,
+    you can use [*pt-diskstats*](https://oreil.ly/GRdGx), from the Percona Toolkit
+    package, to collect metrics for a day to measure peaks.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你正在迁移现有工作负载，理想情况下你已��有了这些的历史磁盘使用度量标准，这将帮助你最好地选择你的磁盘。如果没有，你可以使用[*pt-diskstats*](https://oreil.ly/GRdGx)，来自Percona
+    Toolkit软件包，收集一天的度量标准以测量峰值。
+- en: For new databases, invest some time to see how intensive the application will
+    be. Even something as basic as understanding your read-to-write ratio can help.
+    If all else fails, find a good middle ground between performance and cost, and
+    set an expectation that you may need to adjust later.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于新数据库，投入一些时间来了解应用程序的强度。即使了解读写比这样基本的事情也有所帮助。如果其他方法都失败了，找到性能和成本之间的一个良好折中点，并设定可能需要稍后调整的期望。
+- en: Additional Tips
+  id: totrans-80
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 附加提示
+- en: If you choose to run your own MySQL on VM, you will be responsible for a lot
+    more than a managed service. You’ll need to do things like disk sizing, backups,
+    and so forth on your own. Here are a few tips to consider if you go this route.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果选择在VM上运行自己的MySQL，你将需要负责比托管服务更多的事情。你需要自己做磁盘大小调整、备份等工作。如果选择这条路线，以下是一些建议要考虑的。
+- en: Dealing with host reboots
+  id: totrans-82
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 处理主机重新启动
+- en: Your VM is really just running on someone else’s hardware. As much as we don’t
+    like it, hardware can and does fail, and when that happens, your VM will immediately
+    terminate. If configured, your VM will then begin booting back up on another host.
+    If this happens while you are serving production traffic, especially on a source
+    node taking writes, it can be a disruption to your users.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您的虚拟机实际上只是在别人的硬件上运行。尽管我们不喜欢，硬件可能会出现故障，当这种情况发生时，您的虚拟机将立即终止。如果配置了，您的虚拟机将开始在另一台主机上重新启动。如果这发生在您正在提供生产流量的情况下，尤其是在接受写入的源节点上，可能会对用户造成中断。
+- en: 'There are no magic solutions that will let you avoid this—you just have to
+    deal with it. You tend to have two options if this happens: initiate a failover
+    process to a replica (covered in [“Replication Failover”](ch09.html#replication_failover)
+    in [Chapter 9](ch09.html#replication-id000008)), or wait for the source to come
+    back online. Dealing with an unplanned promotion can be very tricky. Our advice
+    is to just allow the server to come back online and replication to reattach itself
+    naturally.'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 没有什么魔法解决方案可以让您避免这个问题 - 您只能处理它。如果发生这种情况，您往往有两个选择：启动到一个副本的故障转移过程（在[“复制故障转移”](ch09.html#replication_failover)中有介绍），或等待源重新上线。处理未经计划的晋升可能非常棘手。我们的建议是允许服务器重新上线并让复制自然重新连接。
+- en: 'You can make this process easier to cope with by following these suggestions:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过遵循以下建议使这个过程更容易应对：
+- en: Use an SSD boot disk to allow rebooting as fast as possible. Often systems are
+    back online in less than five minutes.
+  id: totrans-86
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用SSD引导磁盘以实现尽快重新启动。通常系统在不到五分钟内恢复在线。
+- en: Suppress any host down on-call notifications you have for up to five minutes
+    to allow the system to reboot fully and become healthy.
+  id: totrans-87
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在最多五分钟内抑制您对主机宕机的即时通知，以允许系统完全重新启动并恢复健康。
+- en: If a source server was rebooted, you may be able to code an option to turn off
+    the `read_only` flag dynamically, allowing writes to continue without human intervention.
+    This works well when coupled with the *crond* `@reboot` option, which will run
+    a script at system startup. The only caveat is that you need to be able to query
+    a system to determine if the system should be taking writes.
+  id: totrans-88
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果源服务器重新启动，您可以编写一个选项动态关闭`read_only`标志，允许写入继续进行而无需人工干预。当与*crond* `@reboot`选项配合使用时效果很好，该选项将在系统启动时运行脚本。唯一的注意事项是您需要能够查询系统以确定系统是否应该接受写入。
+- en: Maximize communication by automatically sending emails or chat messages to teams
+    or channels that may need to be aware of the disruption. “The host FQDN has gone
+    down unexpectedly and should be back online in five minutes” may be enough to
+    stop people from messaging you or even paging you.
+  id: totrans-89
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过自动向可能需要了解中断的团队或频道发送电子邮件或聊天消息来最大程度地沟通。“主机FQDN意外宕机，预计将在五分钟内恢复在线”可能足以阻止人们给您发消息甚至呼叫您。
+- en: Separate operating system and MySQL data
+  id: totrans-90
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 分离操作系统和MySQL数据
+- en: 'Regardless of whether you choose locally attached or network-attached, we recommend
+    keeping your operating system and MySQL data separate for these reasons:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论您选择本地附加还是网络附加，出于以下原因，我们建议将操作系统和MySQL数据分开：
+- en: Disk snapshots will be limited to just MySQL data and won’t contain any operating
+    system information.
+  id: totrans-92
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 磁盘快照将仅限于MySQL数据，不包含任何操作系统信息。
+- en: In the case of a network-attached disk, you can disconnect and reconnect a disk
+    to another machine easily.
+  id: totrans-93
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于网络附加磁盘，您可以轻松地将磁盘断开并重新连接到另一台机器。
+- en: Also for network-attached disks, you can upgrade or replace your operating system
+    without having to recopy data onto the filesystem.
+  id: totrans-94
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于网络附加磁盘，您可以升级或替换操作��统而无需重新复制数据到文件系统。
+- en: Also consider where you put specific files, like the MySQL process ID file,
+    any logfiles, and the socket file. We recommend these stay with the operating
+    system, although the logs could possibly stay on the data disk.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 也要考虑放置特定文件的位置，比如MySQL进程ID文件、任何日志文件和套接字文件。我们建议这些文件与操作系统保持在一起，尽管日志可能可以留在数据磁盘上。
+- en: Backing up binary logs
+  id: totrans-96
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 备份二进制日志
+- en: Send your binary logs to a bucket. Set life-cycle controls on the bucket to
+    purge old files automatically after a certain time period elapses. Likewise, prevent
+    deletion of files before a certain time period or disallow deletion altogether.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将您的二进制日志发送到一个存储桶。在存储桶上设置生命周期控制，在一定时间段后自动清除旧文件。同样，防止在一定时间段之前删除文件或完全禁止删除。
+- en: Don’t forget to think about security here. Leaving this bucket open for the
+    world to read can be a nightmare waiting to happen. Controlling who can read or
+    delete this data is essential to maintaining a secure backup strategy. Consider
+    allowing all database machines to write but none of them to read or delete. Control
+    reads and deletes separately from a restricted account, machine, or both.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不要忘记考虑安全性。让全世界都能读取这个存储桶可能是一场等待发生的噩梦。控制谁可以读取或删除这些数据对于维护安全的备份策略至关重要。考虑允许所有数据库机器写入，但没有一个可以读取或删除。从受限制的帐户、机器或两者分别控制读取和删除。
+- en: Auto-extend your disks
+  id: totrans-99
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 自动扩展您的磁盘
+- en: With network-attached disks, you pay for the amount of space *provisioned*,
+    not used. This can mean that it is wasteful to leave a large amount of provisioned
+    but unused space on your MySQL data disks. One way you can optimize this would
+    be to target a much higher percentage of disk space usage, like 90%, but how do
+    you mitigate the risk of running out of disk space?
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于网络附加磁盘，您支付的是*预留*的空间量，而不是使用的空间量。这意味着在MySQL数据磁盘上留下大量预留但未使用的空间可能是浪费的。您可以优化的一种方式是将磁盘空间使用率目标定为更高的百分比，比如90%，但如何减轻磁盘空间耗尽的风险呢？
+- en: Cloud providers typically have an API call available to extend your disk size.
+    With a little bit of code, you can determine if your servers are going over the
+    90% disk-full mark and call that API to extend the disks. This can also reduce
+    the likelihood of getting paged for a server that is close to running out of disk
+    space. Overall, this process can make a sizable difference in how much you spend
+    on provisioned disk space.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 云服务提供商通常有一个可用的 API 调用来扩展你的磁盘大小。通过一点点代码，你可以确定你的服务器是否超过了 90% 的磁盘已满标记，并调用该 API
+    来扩展磁盘。这也可以减少接近磁盘空间耗尽而被呼叫的可能性。总的来说，这个过程可以在你花费在预留磁盘空间上产生显著差异。
+- en: 'We’ll share a few warnings about this, however:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将分享一些关于此的警告，然而：
+- en: Think about how frequently you should run the code that looks for used disk
+    space percentage. You need to figure out, based on the disk’s throughput, how
+    long a process would take to fill the remaining disk completely. Your code should
+    run more frequently than that.
+  id: totrans-103
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 考虑一下应该多频繁运行查找已用磁盘空间百分比的代码。你需要根据磁盘的吞吐量来确定，一个进程需要多长时间才能完全填满剩余的磁盘。你的代码应该比这更频繁地运行。
+- en: If your process runs away and keeps extending the disk without limits, you could
+    wake up to a 64 TB volume. This might be a costly surprise when it comes time
+    to pay the provider’s bill.
+  id: totrans-104
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果你的进程失控并不断扩展磁盘而没有限制，你可能会在付费提供商账单��期时惊讶地发现一个 64 TB 的卷。
+- en: This disk extension API call can cause the disk to stall briefly. Be sure you
+    test this under load to ensure it doesn’t adversely affect your users.
+  id: totrans-105
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 这个磁盘扩展 API 调用可能会导致磁盘短暂停滞。请确保在负载下进行测试，以确保不会对用户产生不利影响。
+- en: Summary
+  id: totrans-106
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: If you work in one of the thousands of companies that run in public clouds,
+    you have many options when it comes to how to run your databases. As a database
+    engineer, you will be asked which managed solution to use, whether to use managed
+    relational database solutions at all, and what the trade-offs are for each choice.
+    The most important thing to keep in mind when giving your input in these discussions
+    is that there is no free lunch. Every one of your options comes with a set of
+    trade-offs. The most useful thing you can do is to frame these trade-offs in the
+    context of how your business operates and what maturity stage it is in to help
+    guide your organization toward the best fit. We hope this chapter has helped you
+    come to these conversations with an ability to compare the trade-offs at hand
+    with the needs of your company.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你在成千上万家在公共云中运行的公司之一工作，当涉及如何运行你的数据库时，你有很多选择。作为数据库工程师，你将被问及要使用哪种托管解决方案，是否要完全使用托管关系数据库解决方案，以及每种选择的权衡是什么。在这些讨论中最重要的是要记住，没有免费的午餐。你的每个选择都伴随着一系列的权衡。你可以做的最有用的事情是将这些权衡框定在你的业务运营方式和成熟阶段的背景下，以帮助指导你的组织朝着最合适的方向发展。我们希望这一章能帮助你在这些讨论中具备比较手中权衡和公司需求的能力。
+- en: ^([1](ch12.html#ch01fn81-marker)) If you really want to know the details of
+    that architecture, we highly recommend the [SIGMOD paper](https://oreil.ly/hhFhU)
+    the Aurora team published in 2017.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch12.html#ch01fn81-marker)) 如果你真的想了解那个架构的细节，我们强烈推荐阅读 2017 年 Aurora 团队发表的[《SIGMOD
+    论文》](https://oreil.ly/hhFhU)。
+- en: ^([2](ch12.html#ch01fn82-marker)) Change data capture is a design pattern in
+    data architecture that is used to determine when data has changed and transfer
+    that change across domains and systems. For more reading on this, we highly recommend
+    [Chapter 11](ch11.html#scaling_mysql) of [*Designing Data-Intensive Applications*](https://oreil.ly/SuleO)
+    by Martin Kleppman (O’Reilly).
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch12.html#ch01fn82-marker)) 变更数据捕获是数据架构中用于确定数据何时发生变化并在域和系统之间传输该变化的设计模式。关于这方面的更多阅读，我们强烈推荐马丁·克莱普曼（O'Reilly）的《数据密集型应用设计》[第
+    11 章](ch11.html#scaling_mysql)。
+- en: ^([3](ch12.html#ch01fn83-marker)) Cloud SQL does offer its own solution for
+    [audit logging](https://oreil.ly/RM7MW) to support compliance needs.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([3](ch12.html#ch01fn83-marker)) Cloud SQL 确实提供了自己的解决方案用于支持合规需求的[审计日志记录](https://oreil.ly/RM7MW)。
+- en: ^([4](ch12.html#ch01fn84-marker)) For more information, see [“Minimizing the
+    Impact of Maintenance”](https://oreil.ly/3kNIh) in the Cloud SQL documentation.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([4](ch12.html#ch01fn84-marker)) 欲了解更多信息，请参阅 Cloud SQL 文档中的[“最小化维护影响”](https://oreil.ly/3kNIh)。
+- en: ^([5](ch12.html#ch01fn85-marker)) Be mindful that custom machine types may cost
+    more than predetermined machine types. When working at large numbers of instances,
+    it’s always important to consider cost when choosing your sizing.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([5](ch12.html#ch01fn85-marker)) 请注意，自定义机器类型可能比预定机器类型更昂贵。当在大量实例上工作时，选择大小时考虑成本是非常重要的。
+- en: ^([6](ch12.html#ch01fn86-marker)) As a reminder, these are `innodb_flush_log_at_trx_commit=1`
+    and `sync_binlog=1`.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([6](ch12.html#ch01fn86-marker)) 提醒一下，这些是`innodb_flush_log_at_trx_commit=1`和`sync_binlog=1`。

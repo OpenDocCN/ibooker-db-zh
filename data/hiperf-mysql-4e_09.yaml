@@ -1,0 +1,2086 @@
+- en: Chapter 9\. Replication
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第9章 复制
+- en: MySQL’s built-in replication is the foundation for building large, high-performance
+    applications on top of MySQL, using the so-called “scale-out” architecture. Replication
+    lets you configure one or more servers as replicas of another server, keeping
+    their data synchronized with the source copy. This is not just useful for high-performance
+    applications—it is also the cornerstone of many strategies for high availability,
+    scalability, disaster recovery, backups, analysis, data warehousing, and numerous
+    other tasks.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL内置的复制是在MySQL之上构建大型、高性能应用程序的基础，使用所谓的“横向扩展”架构。复制允许您将一个或多个服务器配置为另一个服务器的副本，使它们的数据与源副本同步。这不仅对高性能应用程序有用——它也是许多高可用性、可扩展性、灾难恢复、备份、分析、数据仓库等任务策略的基石。
+- en: In this chapter, our focus is less on what each feature is and more on when
+    to use it. The [official MySQL documentation](https://dev.mysql.com/doc) is exceptionally
+    detailed at explaining what features like semisynchronous replication, multisource
+    replication, and so on are, and you should refer to this documentation when setting
+    up these features.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们的重点不在于每个功能是什么，而在于何时使用它。[官方MySQL文档](https://dev.mysql.com/doc)在解释诸如半同步复制、多源复制等功能方面非常详细，您在设置这些功能时应参考此文档。
+- en: Replication Overview
+  id: totrans-3
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 复制概述
+- en: The basic problem replication solves is keeping data synchronized among database
+    instances within the same topology. It does this by writing events that modify
+    data or data structure to a log on a source server. Replica servers can then read
+    the events from the log on the source and replay them. This creates an asynchronous
+    process, one where the replica’s copy of data is not guaranteed to be up-to-date
+    at any given instant. Replica lag—the delay between real time and what is represented
+    on the replica—has no upper bound. Large queries can make the replica fall seconds,
+    minutes, or even hours behind the source.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制解决的基本问题是在同一拓扑结构内保持数据库实例之间的数据同步。它通过将修改数据或数据结构的事件写入源服务器上的日志来实现这一点。副本服务器可以从源上的日志中读取事件并重放它们。这创建了一个异步过程，其中副本的数据副本在任何给定时刻都不能保证是最新的。副本延迟——实时和副本所代表的内容之间的延迟——没有上限。大型查询可能导致副本落后源几秒、几分钟，甚至几小时。
+- en: 'MySQL’s replication is mostly backward compatible—that is, a newer server can
+    usually be a replica of an older server without trouble. However, older versions
+    of the server are often unable to act as replicas of newer versions: they might
+    not understand new features or SQL syntax the newer server uses, and there might
+    be differences in the file formats replication uses. For example, you can’t replicate
+    from a MySQL 5.6 source to a MySQL 5.5 replica. It’s a good idea to test your
+    replication setup before upgrading from one major or minor version to another,
+    such as from 5.6 to 5.7 or 5.7 to 8.0\. Upgrades within a minor version, such
+    as from 5.7.34 to 5.7.35, are expected to be compatible; read the release notes
+    to find out exactly what changed from version to version.'
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL的复制大多是向后兼容的——也就是说，新版本的服务器通常可以成为旧版本服务器的副本而无需麻烦。但是，旧版本的服务器通常无法作为新版本的副本：它们可能不理解新版本服务器使用的新功能或SQL语法，复制使用的文件格式可能存在差异。例如，您无法从MySQL
+    5.6源复制到MySQL 5.5副本。在从一个主要或次要版本升级到另一个主要或次要版本（例如从5.6到5.7或从5.7到8.0）之前，最好测试您的复制设置。在次要版本内的升级，例如从5.7.34到5.7.35，预计是兼容的；阅读发布��明以了解从一个版本到另一个版本的确切变化。
+- en: Replication is relatively good for scaling reads, which you can direct to a
+    replica, but it’s not a good way to scale writes unless you design it right. Attaching
+    many replicas to a source simply causes the writes to be done many times, once
+    on each replica. The entire system is limited to the number of writes the weakest
+    part can perform.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制相对于扩展读取而言效果较好，您可以将读取定向到副本，但除非设计正确，否则它不是扩展写入的好方法。将许多副本连接到源只会导致写入在每个副本上执行多次。整个系统受限于最弱部分可以执行的写入数量。
+- en: 'Here are some of the more common uses for replication:'
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是复制的一些常见用途：
+- en: Data distribution
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据分发
+- en: MySQL’s replication is usually not very bandwidth intensive, although, as you’ll
+    see later, the row-based replication can use much more bandwidth than the more
+    traditional statement-based replication. You can also stop and start replication
+    at will. Thus, it’s useful for maintaining a copy of your data in a geographically
+    distant location, such as a different data center or cloud region. The distant
+    replica can even work with a connection that’s intermittent (intentionally or
+    otherwise). However, if you want your replicas to have very low replication lag,
+    you’ll need a stable, low-latency link.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL的复制通常不会占用太多带宽，尽管后面会看到，基于行的复制可能比传统的基于语句的复制使用更多带宽。您还可以随时停止和启动复制。因此，它对于在地理上较远的位置（如不同的数据中心或云区域）维护数据副本非常有用。远程副本甚至可以与间歇性（有意或无意地）的连接一起工作。但是，如果您希望副本具有非常低的复制延迟，您将需要一个稳定的、低延迟的链接。
+- en: Scaling read traffic
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 扩展读取流量
+- en: MySQL replication can help you distribute read queries across several servers,
+    which works very well for read-intensive applications. You can do basic load balancing
+    with a few simple code changes. On a small scale, you can use simplistic approaches
+    such as hardcoded hostnames or round-robin DNS (which points a single hostname
+    to multiple IP addresses). You can also take more sophisticated approaches. Standard
+    load-balancing solutions, such as network load-balancing products, can work well
+    for distributing reads among MySQL servers.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL复制可以帮助您在多个服务器之间分发读取查询，这对于读取密集型应用程序非常有效。您可以通过简单的代码更改进行基本的负载平衡。在小规模上，您可以使用简单的方法，如硬编码主机名或轮询
+    DNS（将单个主机名指向多个IP地址）。您还可以采取更复杂的方法。标准的负载平衡解决方案，如网络负载平衡产品，可以很好地在MySQL服务器之间分发读取。
+- en: Backups
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 备份
+- en: Replication is a valuable technique for helping with backups. However, a replica
+    is neither a backup nor a substitute for backups.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制是一种有助于备份的有价值的技术。然而，副本既不是备份，也不是备份的替代品。
+- en: Analytics and reporting
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分析和报告
+- en: Using a dedicated replica for reporting/analytics (online analytical processing,
+    or OLAP) queries is a good strategy for isolating that load away from what your
+    business needs to serve external customer requests. Replication is a way to power
+    that isolation.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为报告/分析（在线分析处理，或OLAP）查询使用专用副本是一个很好的策略，可以将该负载与您的业务需要为外部客户请求提供的服务隔离开来。复制是实现这种隔离的一种方式。
+- en: High availability and failover
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 高可用性和故障转移
+- en: Replication can help avoid making MySQL a single point of failure in your application.
+    A good failover system involving replication can help reduce downtime significantly.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制可以帮助避免使MySQL成为应用程序的单点故障。涉及复制的良好故障转移系统可以显著减少停机时间。
+- en: Testing MySQL upgrades
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 测试MySQL升级
+- en: It’s common practice to set up a replica with an upgraded MySQL version and
+    use it to ensure that your queries work as expected before upgrading every instance.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 常见做法是使用升级后的MySQL版本设置一个副本，并在升级每个实例之前使用它来确保您的查询按预期工作。
+- en: How Replication Works
+  id: totrans-20
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 复制的工作原理
+- en: Before we get into the details of setting up replication, let’s quickly look
+    at how MySQL actually replicates data. In this explanation, we’re covering the
+    simplest replication topology, a single source and a single replica.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在深入了解设置复制的细节之前，让我们快速看一下MySQL实际如何复制数据。在这个解释中，我们涵盖了最简单的复制拓扑结构，一个源和一个副本。
+- en: 'At a high level, replication is a simple three-part process:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从高层次上看，复制是一个简单的三部分过程：
+- en: The source records changes to its data in its binary log as “binary log events.”
+  id: totrans-23
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 源在其二进制日志中记录其数据的更改为“二进制日志事件”。
+- en: The replica copies the source’s binary log events to its own local relay log.
+  id: totrans-24
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 副本将源的二进制日志事件复制到自己的本地中继日志。
+- en: The replica replays the events in the relay log, applying the changes to its
+    own data.
+  id: totrans-25
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 副本通过在中继日志中重放事件，将更改应用于自己的数据。
+- en: '[Figure 9-1](#how_mysql_replication_works) illustrates the most basic form
+    of replication in more detail.'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图9-1](#how_mysql_replication_works)更详细地说明了复制的最基本形式。'
+- en: This replication architecture decouples the processes of fetching and replaying
+    events on the replica, which allows them to be asynchronous—that is, the I/O thread
+    can work independently of the SQL thread.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种复制架构将在副本上获取和重放事件的过程解耦，这使它们可以是异步的，即I/O线程可以独立于SQL线程工作。
+- en: '![](assets/hpm4_0901.png)'
+  id: totrans-28
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_0901.png)'
+- en: Figure 9-1\. How MySQL replication works
+  id: totrans-29
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图9-1\. MySQL复制的工作原理
+- en: Replication Under the Hood
+  id: totrans-30
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 复制内部机制
+- en: Now that we’ve refreshed you on the replication basics, let’s dive deeper into
+    it. Let’s take a look at how replication really works, see what strengths and
+    weaknesses it has as a result, and examine some more advanced options for replication
+    configuration.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经为您复习了复制的基础知识，让我们深入了解它。让我们看看复制实际如何工作，看看它的优点和缺点，以及检查一些更高级的复制配置选项。
+- en: Choosing Replication Format
+  id: totrans-32
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 选择复制格式
+- en: 'MySQL offers three different binary log formats for replication: statement-based,
+    row-based, and mixed. These are controlled with the `binlog_format` configuration
+    parameter, which controls how the data is written to the binary log.'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL为复制提供了三种不同的二进制日志格式：基于语句的、基于行的和混合的。这些是通过`binlog_format`配置参数控制的，该参数控制数据如何写入二进制日志。
+- en: Statement-based replication works by recording the query that changed the data
+    on the source. When the replica reads the event from the relay log and executes
+    it, it is reexecuting the actual SQL query that the source executed. The main
+    draw for this format is that it is simple and compact. A query that updates large
+    amounts of data can be a few dozen bytes in the binary log. The largest downside
+    to statement-based is that it generally has problems with nondeterministic queries.
+    Consider a statement that deletes one hundred rows of a one-thousand-row table
+    with no `ORDER BY` clause. If the rows are ordered differently between source
+    and replica, you may delete a different one hundred rows on each, leading to inconsistencies.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于语句的复制通过记录更改源数据的查询来工作。当副本从中继日志中读取事件并执行它时，它重新执行源执行的实际SQL查询。这种格式的主要优点是简单和紧凑。更新大量数据的查询可以在二进制日志中只有几十个字节。基于语句的最大缺点通常是它在非确定性查询方面存在问题。考虑一个删除一千行表中的一百行的语句，没有`ORDER
+    BY`子句。如果行在源和副本之间以不同的方式排序，您可能在每个副本上删除不同的一百行，导致不一致性。
+- en: Row-based replication writes events to the binary log that indicate how the
+    row has changed. This sounds very simplistic, but it’s a big change from statement-based
+    because it’s deterministic. With row-based, you can look at the binary log and
+    see exactly what rows changed and what the values became. With statement-based,
+    the SQL is interpreted at execution time, and whatever rows the server found at
+    execution time are what get changed. The drawback to row-based is that writing
+    the events for row data changes for every row affected can increase the size of
+    the binary log dramatically.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于行的复制将事件写入二进制日志，指示行如何更改。这听起来非常简单，但与基于语句的复制相比，这是一个很大的改变，因为它是确定性的。使用基于行的复制，您可以查看二进制日志，看到确切哪些行发生了变化以及值变成了什么。使用基于语句的复制，SQL在执行时被解释，服务器在执行时找到的任何行都会发生变化。基于行的缺点是为每个受影响的行写入事件可能会显��增加二进制日志的大小。
+- en: The mixed method attempts to combine the best of both worlds, using statement-based
+    format as the default and only switching to row-based when it needs to. We say
+    “attempts” because while it tries really hard, it has a lot of conditions^([1](ch09.html#ch01fn61))
+    to meet for when to write each, and this leads to unpredictable events in the
+    binary log. We take the opinion that binary log data should be one or the other,
+    not a mix of both.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 混合方法试图结合两种方法的优点，使用基于语句的格式作为默认，并在需要时切换到基于行的格式。我们说“试图”是因为虽然它非常努力，但它有很多条件^([1](ch09.html#ch01fn61))
+    需要满足何时写入每种格式，这会导致二进制日志中发生不可预测的事件。我们认为二进制日志数据应该是其中一种，而不是混合使用两种格式。
+- en: Our recommendation is to stick with row-based replication unless you have an
+    express need to use statement-based temporarily. Row-based provides the safest
+    method of replicating your data.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们建议除非您有使用基于语句的临时需求，否则坚持使用基于行的复制。基于行提供了最安全的数据复制方法。
+- en: Global Transaction Identifiers
+  id: totrans-38
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 全局事务标识符
+- en: 'Until MySQL 5.6, a replica had to keep track of what binary logfile and log
+    position it was reading from when connecting to a source. For example, a replica
+    connected to an upstream source and read data from `binlog.000002` at position
+    `2749`. As the replica read in events from that binary log, it advanced the position
+    each time. Then, disaster struck! The source has crashed and you had to rebuild
+    the data from a backup. The question became: how could you reattach your replica
+    if the binary logs started over again? This was a fairly complicated process of
+    reading events and determining where to attach to. If you made a mistake and went
+    too early, you might duplicate events, and if too late, you skipped events. Either
+    way, it was very easy to attach a replica incorrectly.'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 直到 MySQL 5.6，副本必须跟踪连接到源时正在读取的二进制日志文件和日志位置。例如，一个副本连接到上游源并从 `binlog.000002` 的位置
+    `2749` 读取数据。当副本从该二进制日志中读取事件时，每次都会推进位置。然后，灾难发生了！源崩溃了，您不得不从备份中重建数据。问题是：如果二进制日志重新开始，您如何重新连接您的副本？这是一个相当复杂的过程，需要读取事件并确定何时连接。如果您��了错误并连接得太早，您可能会重复事件，如果太晚，您会跳过事件。无论哪种方式，都很容易错误地连接副本。
+- en: 'To solve this, MySQL added an alternate method for tracking replication positions:
+    global transaction identifiers (GTIDs). With GTIDs, every transaction that a source
+    server commits is assigned a unique identifier. This identifier is a combination
+    of the `server_uuid`^([2](ch09.html#ch01fn62)) and an incrementing transaction
+    number. When the transaction is written to the binary log, the GTID is also written
+    with it. From our refresher earlier in the chapter, you’ll remember that a replica
+    copies the binary log event into its local relay log and uses the SQL thread to
+    apply changes to the local copy. When the SQL thread commits a transaction, it
+    records the GTID as being completed as well.'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了解决这个问题，MySQL 添加了一种替代方法来跟踪复制位置：全局事务标识符（GTID）。使用 GTID，源服务器提交的每个事务都被分配一个唯一标识符。这个标识符是
+    `server_uuid`^([2](ch09.html#ch01fn62)) 和递增的事务编号的组合。当事务写入二进制日志时，GTID 也会随之写入。在本章前面的复习中，您会记得副本将二进制日志事件复制到本地中继日志，并使用
+    SQL 线程将更改应用到本地副本。当 SQL 线程提交一个事务时，它也记录了 GTID 已经完成。
+- en: To better illustrate this, let’s use an example. Suppose our source server has
+    just been set up and has no data in it—not even a database created. On this source
+    server, our `server_uuid` was also generated to be `b9acac5a-7bbe-11eb-a043-42010af8001a`.
+    We’ve done the same to our replica, and used the appropriate commands to instruct
+    our replica to use the source server for replication.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了更好地说明这一点，让我们举个例子。假设我们的源服务器刚刚设置好，里面没有任何数据，甚至没有创建数据库。在这个源服务器上，我们的 `server_uuid`
+    也生成为 `b9acac5a-7bbe-11eb-a043-42010af8001a`。我们已经在我们的副本上做了同样的事情，并使用适当的命令指示我们的副本使用源服务器进行复制。
+- en: 'On our source server, we would need to create a new database:'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的源服务器上，我们需要创建一个新的数据库：
+- en: '`CREATE DATABASE misc;`'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`CREATE DATABASE misc;`'
+- en: 'This event will be written to the binary log so that our replica can also create
+    the database. In the binary log, we would see a single event identified by the
+    GTID:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此事件将被写入二进制日志，以便我们的副本也可以创建数据库。在二进制日志中，我们会看到一个由 GTID 标识的单个事件：
+- en: '[PRE0]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: As the replica server applies this event, it remembers that it has completed
+    transaction `b9acac5a-7bbe-11eb-a043-42010af8001a:1`.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当副本服务器应用此事件时，它会记住已经完成了事务 `b9acac5a-7bbe-11eb-a043-42010af8001a:1`。
+- en: 'In our contrived example, let’s say that we stop MySQL on our replica at this
+    point. It has committed a single transaction. If our source continues to take
+    writes, our transaction list will continue to grow: 2, 3, 4, 5, and so on. When
+    we start our replica back up,^([3](ch09.html#ch01fn63)) it knows that it has already
+    seen transaction 1, and can begin with processing transaction 2.'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们编造的例子中，假设我们在副本上停止了 MySQL。它已经提交了一个事务。如果我们的源继续接收写入，我们的事务列表将继续增长：2、3、4、5等等。当我们重新启动我们的副本时，^([3](ch09.html#ch01fn63))
+    它知道它已经看到了事务 1，并且可以开始处理事务 2。
+- en: 'GTIDs solve one of the more painful parts of running MySQL replication: dealing
+    with logfiles and positions. We strongly recommend that you always enable GTIDs
+    for your databases following the guide in the official MySQL documentation.'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GTID 解决了运行 MySQL 复制时的一个更痛苦的部分：处理日志文件和位置。我们强烈建议您始终按照官方 MySQL 文档中的指南启用 GTID 用于您的数据库。
+- en: Making Replication Crash Safe
+  id: totrans-49
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使复制具有崩溃安全性
+- en: Although GTIDs solved the logfile and position problem, a number of other problems
+    also plagued administrators of MySQL. Later in this chapter, we’ll touch on the
+    common failure modes; however, before that, there are a few configuration settings
+    that can greatly improve your experience using replication.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管 GTID 解决了日志文件和位置问题，但还有许多其他问题困扰着 MySQL 的管理员。在本章后面，我们将讨论常见的故障模式；然而，在此之前，有一些配置设置可以极大地改善您使用复制的体验。
+- en: 'To minimize the chances for replication to break, we recommend setting the
+    following:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了最大程度地减少复制中断的机会，我们建议设置以下内容：
+- en: '`innodb_flush_log_at_trx_commit = 1`'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`innodb_flush_log_at_trx_commit = 1`'
+- en: Although not strictly a replication setting, this ensures that logs are written
+    and synchronized to disk at each transaction. This is the full ACID-compliant
+    setting and will go the furthest toward protecting your data—even with replication.
+    This is because binary log events are committed first and then the transaction
+    will be committed and flushed to disk. Setting this to `1` will increase disk
+    write operations while ensuring your data is durable.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然不严格属于复制设置，但这确保了每个事务的日志都被写入并同步到磁盘。这是完全符合ACID的设置，将最大程度地保护您的数据，即使有复制。这是因为二进制日志事件首先被提交，然后事务将被提交并刷新到磁盘。将此设置为`1`将增加磁盘写入操作，同时确保您的数据是持久的。
+- en: '`sync_binlog = 1`'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`sync_binlog = 1`'
+- en: This variable controls how often MySQL synchronizes the binary log data to disk.
+    Setting this value to `1` means before every transaction. This protects against
+    losing transactions in the event of a server crash. Just like the previous setting,
+    this will increase disk writes.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此变量控制MySQL将二进制日志数据同步到磁盘的频率。将此值设置为`1`意味着在每个事务之前。这可以防止在服务器崩溃时丢失事务。与前面的设置一样，这将增加磁盘写入。
+- en: '`relay_log_info_repository = TABLE`'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`relay_log_info_repository = TABLE`'
+- en: MySQL replication used to rely on files on disk to track replication position.
+    This meant that transactions completed by replication had to synchronize to disk
+    as a second step. If a crash happened between a transaction commit and the synchronization,
+    the file on disk would have the incorrect file and position in it. That information
+    has moved into InnoDB tables within MySQL itself, allowing replication to update
+    both the transaction and the relay log information within the same transaction.
+    This creates an atomic action and aids in crash recovery.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL复制过去依赖于磁盘上的文件来跟踪复制位置。这意味着由复制完成的事务必须作为第二步同步到磁盘。如果在事务提交和同步之间发生崩溃，磁盘上的文件将具有不正确的文件和位置。该信息已经移动到MySQL内部的InnoDB表中，允许复制在同一事务中更新事务和中继日志信息。这创建了一个原子操作，并有助于崩溃恢复。
+- en: '`relay_log_recovery = ON`'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`relay_log_recovery = ON`'
+- en: Simply put, `relay_log_recovery` throws away all local relay logs when a crash
+    is detected and fetches the missing data from the source. This ensures that any
+    corruption or incomplete relay logs on disk that may have happened in a crash
+    are recoverable. This setting also eliminates the need for using `sync_relay_log`
+    as, in the event of a crash, the relay logs are deleted. There’s no need to spend
+    extra operations synchronizing them to disk.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 简单来说，`relay_log_recovery`在检测到崩溃时丢弃所有本地中继日志，并从源获取丢失的数据。这确保了在崩溃中可能发生的任何损坏或不完整的中继日志在磁盘上是可恢复的。此设置还消除了使用`sync_relay_log`的需要，因为在崩溃事件中，中继日志将被删除。没有必要进行额外的操作将它们同步到磁盘。
+- en: Delayed Replication
+  id: totrans-60
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 延迟复制
+- en: In some scenarios, it can be advantageous to have a delayed replica in your
+    topology. This strategy can be used to keep data online and running but keep it
+    consistently behind real time by many hours or days. This is configured with the
+    `CHANGE REPLICATION SOURCE TO` statement and the `SOURCE_DELAY` option.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某些情况下，在您的拓扑中拥有一个延迟副本可能是有利的。这种策略可以用来保持数据在线和运行，但保持其在实时之后许多小时或几天。这是通过`CHANGE REPLICATION
+    SOURCE TO`语句和`SOURCE_DELAY`选项进行配置的。
+- en: 'Imagine you’re working with a large amount of data and there was an accidental
+    change: a table was dropped. it might take you several hours to restore that from
+    backup. With a time-delayed replica, you can find the GTID of the `DROP TABLE`
+    statement and catch replication up to the point just prior to that table being
+    dropped. This often can lead to much faster remediation times.'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 想象一下，您正在处理大量数据，发生了意外更改：一个表被删除了。您可能需要几个小时才能从备份中恢复。通过延迟副本，您可以找到`DROP TABLE`语句的GTID，并将复制追赶到该表被删除之前的点。这通常可以导致更快的补救时间。
+- en: Nothing comes without trade-offs, though. While delayed replication can be tremendously
+    useful in mitigating certain data-loss scenarios, it also brings complexity to
+    many other operational aspects. If you decide you need to use delayed replication,
+    you should also consider how to properly exclude this delayed replica from being
+    a source node candidate (if your write failover is automated, this is even more
+    important), how you monitor replication, and how that handles this special replica.
+    These are just a few of the added complexities you should address when introducing
+    delayed replicas.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，没有什么是没有取舍的。虽然延迟复制在减轻某些数据丢失场景方面非常有用，但它也给许多其他运营方面带来了复杂性。如果您决定需要使用延迟复制，您还应考虑如何正确排除这个延迟副本不成为源节点候选人（如果您的写故障转移是自动化的，这更加重要），如何监视复制以及如何处理这个特殊副本。这些只是引入延迟副本时您应该解决的一些额外复杂性。
+- en: Multithreaded Replication
+  id: totrans-64
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 多线程复制
+- en: One of the historical challenges with replication was that, while you could
+    take parallel writes on your source, your replicas were single threaded. Modern
+    MySQL versions offer multithreaded replication (see [Figure 9-2](#multithreaded_replication_setup))
+    where you can run multiple SQL applier threads to apply changes from the relay
+    log locally.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制的一个历史性挑战是，虽然您可以在源上进行并行写入，但您的副本是单线程的。现代MySQL版本提供了多线程复制（参见[图9-2](#multithreaded_replication_setup)），您可以运行多个SQL应用程序线程来在本地应用中继日志的更改。
+- en: '![](assets/hpm4_0902.png)'
+  id: totrans-66
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_0902.png)'
+- en: Figure 9-2\. Multithreaded replication setup
+  id: totrans-67
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图9-2。多线程复制设置
+- en: 'There are two modes for multithreaded replication: `DATABASE` and `LOGICAL_CLOCK`.
+    The `DATABASE` option uses multiple threads to update different databases; no
+    two threads will update the same database at the same time. This method works
+    well if you spread your data across multiple databases in MySQL and update them
+    consistently and concurrently. The other option, `LOGICAL_CLOCK`, allows parallel
+    updates against the same database as long as they are part of the same binary
+    log group commit.'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 多线程复制有两种模式：`DATABASE`和`LOGICAL_CLOCK`。`DATABASE`选项使用多个线程更新不同的数据库；没有两个线程会同时更新同一个数据库。如果您在MySQL中将数据分布在多个数据库中并且一致并发地更新它们，这种方法效果很好。另一个选项`LOGICAL_CLOCK`允许对同一个数据库进行并行更新，只要它们是同一个二进制日志组提交的一部分。
+- en: In most cases, you can simply turn this feature on and see immediate benefit
+    by setting `replica_parallel_workers` to a nonzero value. If you are operating
+    on a single database, you will also need to change `replica_parallel_type` to
+    `LOGICAL_CLOCK`. Since multithreaded replication uses a coordinator thread, there
+    will be some overhead for that thread managing the states of all other threads.
+    In addition, ensure that your replicas run with `replica_preserve_commit_order`
+    so that committing out of order won’t cause issues. See the [“Gaps” section of
+    the official documentation](https://oreil.ly/Tjb28) for a detailed explanation
+    of why this is important.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在大多数情况下，您可以简单地打开这个功能，并通过将`replica_parallel_workers`设置为非零值立即看到好处。如果您只操作一个数据库，还需要将`replica_parallel_type`更改为`LOGICAL_CLOCK`。由于多线程复制使用一个协调线程，该线程会有一些开销来管理所有其他线程的状态。此外，请确保您的副本以`replica_preserve_commit_order`运行，以防止乱序提交导致问题。查看官方文档中的[“Gaps”部分](https://oreil.ly/Tjb28)以获取为什么这一点很重要的详细解释。
+- en: There are two ways you can determine the optimal `replica_parallel_workers`
+    value. The imprecise method would be to stop replication and then measure how
+    long it takes to catch up using differing amounts of threads until you find the
+    optimal setting. This is flawed because it assumes a consistent number of data
+    manipulation language (DML) statements are being sent over replication and that
+    they all perform relatively the same. In practice, this is hardly true.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有两种方法可以确定最佳的`replica_parallel_workers`值。不精确的方法是停止复制，然后测量使用不同数量的线程追赶的时间��直到找到最佳设置。这种方法存在缺陷，因为它假设一致数量的数据操作语言（DML）语句被发送到复制，并且它们的执行几乎相同。实际上，这几乎不可能。
+- en: The more precise method would be to look at how busy each of the applier threads
+    are for your workload to determine how much parallelism you are getting. To do
+    this, we need to enable performance schema consumers and instruments, allow it
+    to collect some information, and then review the results.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更精确的方法是查看每个应用线程在您的工作负载中有多忙，以确定您获得了多少并行性。为此，我们需要启用性能模式的消费者和工具，允许其收集一些信息，然后查看结果。
+- en: To start, we need to enable the following:^([4](ch09.html#ch01fn64))
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们需要启用以下内容：^([4](ch09.html#ch01fn64))
+- en: '[PRE1]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Allow replication to process events for a time period. Ideally, you would look
+    at this during your heaviest write workloads or any time you see replication lag
+    increasing:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 允许复制处理一段时间内的事件。理想情况下，您应该在最繁忙的写入工作负载期间或任何看到复制延迟增加的时候查看这一点：
+- en: '[PRE2]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: This query will help you identify how many transactions are processed by each
+    thread. As we can see from the results on this sample workload, our optimal usage
+    is somewhere between three and four threads, and anything over that is used very
+    little.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个查询将帮助您确定每个线程处理了多少个事务。从这个样本工作负载的结果中可以看出，我们的最佳使用情况在三到四个线程之间，超过这个数量的线程几乎没有被使用。
+- en: Semisynchronous Replication
+  id: totrans-77
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 半同步复制
+- en: When you enable semisynchronous replication, every transaction that your source
+    commits must be acknowledged as received by at least one replica.^([5](ch09.html#ch01fn65))
+    The acknowledgment confirms that the replica received it and successfully wrote
+    it to its own relay log (but not necessarily applied it to the local data).
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您启用半同步复制时，源数据库提交的每个事务必须得到至少一个副本的确认已接收。^([5](ch09.html#ch01fn65)) 这个确认表示副本已接收并成功写入到自己的中继日志（但不一定应用到本地数据）。
+- en: Since each transaction must wait on the response from other nodes, this feature
+    adds additional latency to every transaction that your server does. This means
+    you need to consider the trade-off involved.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于每个事务必须等待其他节点的响应，这个特性会给服务器的每个事务增加额外的延迟。这意味着您需要考虑所涉及的权衡。
+- en: One very important thing to note here is that if no replicas acknowledge the
+    transaction during the time frame, MySQL reverts to its standard asynchronous
+    replication. It will not fail the transaction. This really helps illustrate that
+    semisynchronous replication is not a tool to prevent data loss but rather a building
+    block for a larger set of tooling that allows you to have more resilient failover.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里非常重要的一点是，如果在时间范围内没有副本确认事务，MySQL将恢复到其标准的异步复制。它不会使事务失败。这真的有助于说明半同步复制不是用来防止数据丢失的工具，而是一个更大工具集的基础，使您能够拥有更具弹性的故障转移。
+- en: Given the fallback to asynchronous, we struggled to find a good use case for
+    why you would enable this. The logical use case would be to confirm that, in the
+    event of a network partition, an isolated source isn’t still writing data while
+    partitioned from its replicas. Unfortunately, that source will just revert back
+    to asynchronous and keep accepting writes. For that reason, we’d recommend not
+    relying on this for any data integrity.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 鉴于回退到异步复制，我们很难找到一个好的使用案例来解释为什么要启用这个功能。逻辑上的使用案例是确认，在网络分区的情况下，孤立的源数据库是否仍在写入数据而与其副本分隔。不幸的是，该源数据库将会回退到异步并继续接受写入。因此，我们建议不依赖于这一点来保证任何数据完整性。
+- en: Replication Filters
+  id: totrans-82
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 复制过滤器
+- en: 'Replication-filtering options let you replicate just part of a server’s data,
+    which is much less of a good thing than you might think. There are two kinds of
+    replication filters: those that filter events out of the binary log on the source
+    and those that filter events coming from the relay log on the replica. [Figure 9-3](#replication_filtering_options)
+    illustrates the two types.'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制过滤选项让你只复制服务器数据的一部分，这并不像你想象的那么好。有两种复制过滤器：一种是从源二进制日志中过滤事件，另一种是从副本中继日志中过滤事件。[图 9-3](#replication_filtering_options)
+    展示了这两种类型。
+- en: The options that control binary log filtering are `binlog_do_db` and `binlog_ignore_db`.
+    You should not enable these, as we’ll explain in a moment, unless you think you’ll
+    enjoy explaining to your boss why the data is gone permanently and can’t be recovered.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 控制二进制日志过滤的选项是 `binlog_do_db` 和 `binlog_ignore_db`。除非你认为你会喜欢向老板解释为什么数据永久丢失且无法恢复，否则不应启用这些选项。
+- en: On the replica, the `replicate_*` options filter events as the replication SQL
+    thread reads them from the relay log. You can replicate or ignore one or more
+    databases, rewrite one database to another database, and replicate or ignore tables
+    based on `LIKE` pattern-matching syntax.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在副本上，`replicate_*` 选项在复制 SQL 线程从中继日志读取事件时过滤事件。你可以复制或忽略一个或多个数据库，将一个数据库重写为另一个数据库，并根据
+    `LIKE` 模式匹配语法复制或忽略表。
+- en: '![](assets/hpm4_0903.png)'
+  id: totrans-86
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_0903.png)'
+- en: Figure 9-3\. Replication-filtering options
+  id: totrans-87
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 9-3\. 复制过滤选项
+- en: 'The most important thing to understand about these options is that the `*_do_db`
+    and `*_ignore_db` options, both on the source and on the replica, do not work
+    as you might expect. You might think they filter on the object’s database name,
+    but they actually filter on the current default database—that is, if you execute
+    the following statements on the source:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于这些选项最重要的理解是，`*_do_db` 和 `*_ignore_db` 选项，在源和副本上，不像你期望的那样工作。你可能认为它们是根据对象的数据库名称进行过滤，但实际上它们是根据当前默认数据库进行过滤——也就是说，如果你在源上执行以下语句：
+- en: '[PRE3]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: The `*_do_db` and `*_ignore_db` parameters will filter the `DELETE` statement
+    on `test`, not on `sakila`. This is not usually what you want, and it can cause
+    the wrong statements to be replicated or ignored. The `*_do_db` and `*_ignore_db`
+    parameters have uses, but they’re limited and rare, and you should be very careful
+    with them. If you use these parameters, it’s very easy for replication to get
+    out of sync or fail.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*_do_db` 和 `*_ignore_db` 参数将在 `test` 上过滤 `DELETE` 语句，而不是在 `sakila` 上。这通常不是你想要的，它可能导致错误的语句被复制或忽略。`*_do_db`
+    和 `*_ignore_db` 参数有用处，但它们是有限的和罕见的，你应该非常小心使用它们��如果你使用这些参数，复制很容易出现不同步或失败。'
+- en: The `binlog_do_db` and `binlog_ignore_db` options don’t just have the potential
+    to break replication; they also make it impossible to do point-in-time recovery
+    from a backup. For most situations, you should never use them.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`binlog_do_db` 和 `binlog_ignore_db` 选项不仅有可能破坏复制；它们还会使从备份进行时点恢复变得不可能。在大多数情况下，你应该永远不要使用它们。'
+- en: In general, replication filters are a problem waiting to happen. For example,
+    suppose you want to prevent privilege changes from propagating to replicas, a
+    fairly common goal. (The desire to do this should probably tip you off that you’re
+    doing something wrong; there are probably other ways to accomplish your real goal.)
+    Replication filters on the system tables will certainly prevent `GRANT` statements
+    from replicating, but they will prevent events and routines from replicating,
+    too. Such unforeseen consequences are a reason to be careful with filters. It
+    may be a better idea to prevent specific statements from being replicated, usually
+    with `SET SQL_LOG_BIN=0`, although that practice has its own hazards. In general,
+    you should use replication filters very carefully and only if you really need
+    them because they make it so easy to break replication and cause problems that
+    will manifest when least convenient, such as during disaster recovery.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，复制过滤器是一个等待发生问题的问题。例如，假设你想阻止权限更改传播到副本，这是一个相当常见的目标。（希望这种愿望可能会让你意识到你正在做错事；可能有其他方法来实现你真正的目标。）系统表上的复制过滤器肯定会阻止
+    `GRANT` 语句的复制，但它们也会阻止事件和例程的复制。这种意想不到的后果是需要小心处理过滤器的原因。也许更好的主意是阻止特定语句被复制，通常使用 `SET
+    SQL_LOG_BIN=0`，尽管这种做法也有其自身的危险。总的来说，你应该非常谨慎地使用复制过滤器，只有在真正需要它们的情况下才使用，因为它们很容易破坏复制并在最不方便的时候出现问题，比如在灾难恢复期间。
+- en: That being said, there can be specific situations where replication filters
+    are beneficial. Perhaps you created multiple databases `users_1`, `users_2`, `users_3`,
+    and `users_4`, and now performance on your server is too impacted. By restoring
+    a backup and attaching replication, you can prepare to move the queries for `users_3`
+    and `users_4` to another server. This works perfectly fine, except that you still
+    have `users_1` and `users_2` on your new database. At some point, you’ll have
+    to drop the data that may be affecting performance. Consider this alternative.
+    You restore your backup and then drop `users_1` and `users_2`. Then you configure
+    a replication rule to ignore `users_1` and `users_2` and complete replication
+    setup. Now you’re only processing events for `users_3` and `users_4` on your new
+    server. Once you’re caught up on replication, you’re good to take production traffic.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 话虽如此，也可能存在特定情况下复制过滤器是有益的。也许你创建了多个数据库 `users_1`、`users_2`、`users_3` 和 `users_4`，现在服务器的性能受到了太大的影响。通过恢复备份并附加复制，你可以准备将
+    `users_3` 和 `users_4` 的查询移动到另一台服务器。这个过程完全正常，只是你在新数据库上仍然有 `users_1` 和 `users_2`。在某个时候，你将不得不删除可能影响性能的数据。考虑这种替代方案。你恢复备份然后删除
+    `users_1` 和 `users_2`。然后配置一个复制规则来忽略 `users_1` 和 `users_2` 并完成复制设置。现在你的新服务器上只处理
+    `users_3` 和 `users_4` 的事件。一旦复制追上，你就可以开始接收生产流量了。
+- en: The filtering options are well documented in the MySQL manual, so we won’t repeat
+    the details here.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 手册中已经对过滤选项进行了详细说明，所以我们不会在这里重复细节。
+- en: Replication Failover
+  id: totrans-95
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 复制故障转移
+- en: At the beginning of the chapter, we mentioned that replication is the cornerstone
+    of high availability, among other things. Having a copy of your data continuously
+    updated in another location makes it much easier to recover from catastrophe than
+    going to backup. More than that, there will be times you simply need to do some
+    maintenance that involves restarting MySQL.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章的开头，我们提到复制是高可用性的基石，还有其他方面。在另一个位置持续更新的数据副本，比起备份更容易从灾难中恢复。更重要的是，有时你只需进行一些需要重新启动MySQL的维护工作。
+- en: In this section, we want to talk about the right ways to promote a replica to
+    become the source node. It’s easy to get wrong, and getting it wrong can lead
+    to data issues and extended downtime. We want to clarify that “promoting a replica”
+    and “failing over” are synonymous. They both mean the act of demoting a source
+    from taking writes and promoting a replica to the source role.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一部分，我们想谈谈正确的方式将副本晋升为源节点。很容易出错，出错可能导致数据问题和延长的停机时间。我们想澄清“晋升副本”和“故障切换”是同义词。它们都意味着将源降级为不再接受写入，并将副本晋升为源的行为。
+- en: A much more detailed explanation of how to handle this is in the official MySQL
+    documentation, under the “Switching Sources During Failover” section, but given
+    how important this is to get right, we wanted to touch on it at least at some
+    level.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如何处理这个问题的更详细解释在官方的MySQL文档中，位于“故障切换期间切换源”部分，但考虑到这个问题的重要性，我们至少想在某个层面上提及它。
+- en: Planned Promotions
+  id: totrans-99
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 计划晋升
+- en: The most common reason for a promotion is some kind of maintenance event, including
+    security patching, kernel updates, and even just restarting MySQL, as there are
+    a few configuration options that require a restart. This type of promotion is
+    referred to as a *controlled* or *planned promotion*.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 晋升的最常见原因是某种维护事件，包括安全补丁、内核更新，甚至只是重新启动MySQL，因为有一些配置选项需要重新启动。这种类型的晋升被称为*受控*或*计划晋升*。
+- en: 'To perform this promotion successfully, you want to accomplish the following
+    steps:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要成功执行此晋升，你需要完成以下步骤：
+- en: Determine which replica you are going to promote. This is often the replica
+    you are sure has all the data. That is your target.
+  id: totrans-102
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 确定要晋升的副本。通常情况下，这是你确信拥有所有数据的副本。这就是你的目标。
+- en: Check the lag to make sure that you are within a few seconds.
+  id: totrans-103
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 检查延迟，确保你的时间在几秒钟之内。
+- en: Stop taking writes on your source by setting `super_read_only`.^([6](ch09.html#ch01fn66))
+  id: totrans-104
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过设置`super_read_only`停止在源上进行写入。^([6](ch09.html#ch01fn66))
+- en: Wait until replication is in sync with your target. Compare GTIDs to be sure.
+  id: totrans-105
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 等待复制与目标同步。比较GTIDs以确保一致。
+- en: Unset `read_only` on target.
+  id: totrans-106
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在目标上取消`read_only`。
+- en: Switch application traffic to the target.
+  id: totrans-107
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将应用程序流量切换到目标。
+- en: Repoint all replicas to the new source, including the demoted one. This is trivial
+    with GTIDs and `AUTO_POSITION=1`.
+  id: totrans-108
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将所有副本重新指向新源，包括降级的副本。这在GTIDs和`AUTO_POSITION=1`中是微不足道的。
+- en: Unplanned Promotions
+  id: totrans-109
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 非计划晋升
+- en: On a long enough timeline, every system fails, either as a result of software
+    or hardware. When this happens on a source server where writes are happening,
+    it can have a big impact on the user experience. Most applications will simply
+    return an error, leaving the user to retry themselves. This is a case where an
+    *unplanned promotion* is needed.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在足够长的时间轴上，每个系统都会失败，无论是软件还是硬件的结果。当这种情况发生在正在写入的源服务器上时，会对用户体验产生很大影响。大多数应用程序将简单地返回一个错误，让用户自行重试。这是需要*非计划晋升*的情况。
+- en: 'Since you do not have a live source to check, this is an abbreviated planned
+    promotion, where you choose which replica based on data that was already replicated:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于你没有一个实时源来检查，这是一个简化的计划晋升，你根据已经复制的数据选择要晋升的副本：
+- en: Determine which replica you are going to promote. This is often the replica
+    you are sure has all the data. This is your target.
+  id: totrans-112
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 确定要晋升的副本。通常情况下，这是你确信拥有所有数据的副本。这就是你的目标。
+- en: Unset `read_only` on target.
+  id: totrans-113
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在目标上取消`read_only`。
+- en: Switch application traffic to the target.
+  id: totrans-114
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将应用程序流量切换到目标。
+- en: Repoint all replicas to the new source, including the demoted one when it returns
+    to service. This is trivial with GTIDs.
+  id: totrans-115
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将所有副本重新指向新源，包括降级的副本当它恢复服务时。这在GTIDs中是微不足道的。
+- en: You should also ensure that when your former source comes back online, it defaults
+    to `super_read_only` enabled. This will help prevent any accidental writes.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你还应该确保当你以前的源重新上线时，默认启用`super_read_only`。这将有助于防止任何意外写入。
+- en: Trade-Offs of Promotion
+  id: totrans-117
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 晋升的权衡
+- en: We are compelled to point out that sometimes your first reaction to downtime
+    is to failover. Because it is more difficult to know how much data may be missing
+    from the target, it can sometimes be a better strategy to *not* failover.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们不得不指出，有时候你对停机的第一反应是故障切换。因为很难知道目标可能缺少多少数据，有时候*不*故障切换可能是一个更好的策略。
+- en: An unplanned promotion is not a very practiced event—that is, you don’t do it
+    very often. When you are called upon to do it, you may need to look up documentation
+    to make sure you don’t miss a step. You also have to inspect other replicas to
+    verify which is the likely candidate. All of this takes time. In some cases, it
+    may simply be faster for you to wait for your server or MySQL process to come
+    back online. The advantage of this is that if you followed the steps for ACID
+    compliance in [Chapter 5](ch05.html#optimizing_server_settings), you didn’t lose
+    any data, and your replicas will pick up where things left off.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 非计划晋升并不是一个经常发生的事件，也就是说，你不经常这样做。当你被要求这样做时，你可能需要查阅文档，以确保不会漏掉任何步骤。你还需要检查其他副本，以验证哪一个是可能的候选。所有这些都需要时间。在某些情况下，等待服务器或MySQL进程重新上线可能更快。这样做的好处是，如果你在[第5章](ch05.html#optimizing_server_settings)中遵循了ACID合规性的步骤，你不会丢失任何数据，你的副本将从中断的地方继续。
+- en: Replication Topologies
+  id: totrans-120
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 复制拓扑
+- en: You can set up MySQL replication for almost any configuration of sources and
+    replicas. Many complex topologies are possible, but even the simple ones can be
+    very flexible. A single topology can have many different uses. The variety of
+    ways you can use replication could easily fill its own book.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以为几乎任何源和副本配置设置MySQL复制。许多复杂的拓扑结构是可能的，但即使简单的拓扑结构也可以非常灵活。单个拓扑结构可以有许多不同的用途。您可以使用复制的各种方式很容易地填满一本书。
+- en: All of this flexibility means you can easily design a topology that is unmaintainable.
+    We highly recommend you keep your replication topology as simple as possible while
+    still meeting your needs. With that said, we recommend two possible strategies
+    that should cover nearly every use case. You may have valid reasons for deviating
+    from these, but make sure you ask yourself if you’re still solving the right problems
+    when you go more complex.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有这些灵活性意味着您可以轻松设计一个难以维护的拓扑结构。我们强烈建议您尽可能简化您的复制拓扑结构，同时仍满足您的需求。话虽如此，我们推荐两种几乎可以涵盖所有用例的策略。您可能有理由偏离这些策略，但请确保在变得更复杂时问问自己是否仍在解决正确的问题。
+- en: Active/Passive
+  id: totrans-123
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 主/被动
+- en: In an active/passive topology, you direct all reads and writes to a single source
+    server. Additionally, you maintain a small number of passive replicas that do
+    not actively serve any application traffic. The primary reason for choosing this
+    model is when you don’t want to worry about replication lag. Since all reads go
+    to the source, you prevent any read-after-write problems that an application may
+    not tolerate.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在主/被动拓扑中，您将所有读写指向单个源服务器。此外，您保留一小部分不主动提供任何应用程序流量的被动副本。选择此模型的主要原因是您不想担心复制延迟。由于所有读取都发送到源，您可以防止应用程序可能无法容忍的写后读问题。
+- en: '[Figure 9-4](#a_source_with_multiple_replicas) shows this arrangement with
+    multiple replicas.'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图9-4](#a_source_with_multiple_replicas)显示了具有多个副本的这种安排。'
+- en: '![](assets/hpm4_0904.png)'
+  id: totrans-126
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_0904.png)'
+- en: Figure 9-4\. A source with multiple replicas
+  id: totrans-127
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图9-4。具有多个副本的源
+- en: Configuration
+  id: totrans-128
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 配置
+- en: In this topology, we expect that the source and replicas are identical configurations
+    in terms of CPU, memory, and so forth. Over a long enough period, you will need
+    to fail over from the current running source to one of the replicas, either for
+    maintenance, software upgrade or patching, or even a hardware failure. By having
+    the same hardware and software configuration on replicas, you ensure that you
+    can sustain the traffic capacity and throughput as before you failed over.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种拓扑结构中，我们期望源和副本在CPU、内存等方面具有相同的配置。在足够长的时间内，您将需要从当前运行的源故障切换到其中一个副本，无论是为了维护、软件升级或打补丁，甚至是硬件故障。通过在副本上具有相同的硬件和软件配置，您确保可以像之前进行故障切换前一样维持流量容量和吞吐量。
+- en: Redundancy
+  id: totrans-130
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 冗余
+- en: In a physical hardware environment, you really want *n*+2 redundancy for at
+    least three total servers. In the event of a hardware failure, you still have
+    one additional server for failover. You can also use one of the replicas as a
+    backup server if you are uncomfortable or unable to take backups on your source.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在物理硬件环境中，至少需要三台总服务器的*n*+2冗余。在硬件故障的情况下，您仍然有一台额外的服务器用于故障切换。如果您不放心或无法在源上进行备份，您还可以使用其中一个副本作为备用服务器。
+- en: In a cloud environment, you can get away with *n*+1 redundancy for two total
+    servers if your data is small enough or you can copy the data easily. Otherwise,
+    *n*+2 is needed. If you go the *n*+1 route, the dynamic provisioning nature of
+    cloud providers can make this easier to manage. For maintenance events like patching,
+    it’s easier to provision a third replica on demand, perform any necessary actions
+    on it (like upgrading the kernel or applying a security update), and then replace
+    the other replica. Then you fail over and repeat the process on the former source.
+    The goal is to keep a replica ready to be the target of a failover at all times.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在云环境中，如果你的数据足够小或者可以轻松复制数据，你可以通过*n*+1的冗余来实现两台总服务器。否则，需要*n*+2。如果选择*n*+1的方式，云服务提供商的动态配置特性可以使管理变得更容易。对于像打补丁这样的维护事件，更容易在需求时提供第三个副本，执行任何必要的操作（如升级内核或应用安全更新），然后替换其他副本。然后进行故障切换并在原始源上重复该过程。目标是始终保持一个准备好成为故障切换目标的副本。
+- en: In either case, you can place one of these replicas in a geographically distant
+    location, although you will have to pay attention to replication lag and ensure
+    that it is usable. Replicas should be recoverable and any data loss within guidelines
+    that you establish. We talk about this in [“Defining Recovery Requirements”](ch10.html#defining_recovery_requirements)
+    in [Chapter 10](ch10.html#backup_and_recovery).
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在任一情况下，您可以将其中一个副本放置在地理位置较远的位置，尽管您需要注意复制延迟并确保其可用。副本应该是可恢复的，并且在您建立的指导方针内遭受任何数据丢失。我们在[“定义恢复要求”](ch10.html#defining_recovery_requirements)中讨论了这一点，在[第10章](ch10.html#backup_and_recovery)中。
+- en: Caveats
+  id: totrans-134
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 注意事项
+- en: By choosing this model, you are explicitly binding your read scaling to the
+    capacity of a single server. If you hit a read scaling limit, you will have to
+    evolve beyond this topology—likely into the active/read pool configuration—or
+    you will have to leverage sharding to reduce reads on the source.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过选择这种模型，您明确将您的读扩展绑定到单个服务器的容量。如果达到读扩展限制，您将不得不进化到活动/读池配置，或者利用分片来减少源上的读取。
+- en: Active/Read Pool
+  id: totrans-136
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 主/读池
+- en: In an active/read pool configuration, you direct all writes to the source. Reads
+    can be sent to either the source server or the read pool, depending upon application
+    needs. A read pool allows you to scale reads horizontally for read-intensive applications.
+    At some point, the horizontal scaling will fall off due to the demand of replication
+    on the source.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在主/读池配置中，您将所有写入指向源。读取可以发送到源服务器或读池，具体取决于应用程序需求。读池允许您为读密集型应用程序水平扩展读取。在某个时刻，由于源上的复制需求，水平扩展将会减少。
+- en: '[Figure 9-5](#a_source_with_a_read_pooldot) shows this arrangement with a single
+    source and a replica pool.'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 9-5](#a_source_with_a_read_pooldot) 显示了这种安排，其中有一个单一源和一个副本池。'
+- en: '![](assets/hpm4_0905.png)'
+  id: totrans-139
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_0905.png)'
+- en: Figure 9-5\. A source with a read pool
+  id: totrans-140
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 9-5\. 带有读取池的源
+- en: Configuration
+  id: totrans-141
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 配置
+- en: Ideally, you want an identical configuration between the source and at least
+    one, preferably two, of the replicas in the read pool. Again, you will at some
+    point need to fail over to one of those replicas, and it should have enough capacity
+    to keep up with your traffic.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理想情况下，您希望源和至少一个副本之间的配置相同，最好是两个副本。再次强调，您最终将需要切换到这些副本之一，并且它应具有足够的容量来跟上您的流量。
+- en: If you see this pool growing over time, you may optimize for cost and use a
+    different configuration for some of the members. If that’s the case, try to look
+    at traffic weighting as a way to balance traffic across them. If you have 32 cores
+    for the failover targets and 8 cores for other replicas, try to send four times
+    more traffic to the 32-core node to ensure you get utilization.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您看到这个池随着时间增长，您可以优化成本，并为一些成员使用不同的配置。如果是这种情况，请尝试将流量加权作为一种平衡流量的方法。如果您有 32 个核心用于故障转移目标和
+    8 个核心用于其他副本，尝试将流量发送到 32 核心节点的流量增加四倍，以确保您获得利用率。
+- en: Redundancy
+  id: totrans-144
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 冗余
+- en: The number of servers you have in this pool should meet the requirements previously
+    given, meaning at least one server can act as a failover target. Beyond that,
+    you need enough nodes to accommodate your read traffic, plus a small buffer for
+    node failures. With reads, your most likely indicator of utilization will be CPU,
+    and as such, target somewhere between 50%–60% utilization per node in the pool.
+    As CPU increases, it spends more time context switching between work and latency
+    increases. Try to find the right balance between latency and utilization that
+    meets your application expectations.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个池中，您拥有的服务器数量应满足先前给定的要求，至少有一台服务器可以充当故障转移目标。此外，您需要足够的节点来容纳您的读取流量，再加上一小部分用于节点故障的缓冲区。在读取方面，您最有可能的利用率指标将是
+    CPU，因此，在池中的每个节点上的利用率应在 50%–60% 之间。随着 CPU 的增加，它在工作和延迟之间的上下文切换时间增加。尝试找到满足应用程序期望的延迟和利用率之间的正确平衡点。
+- en: Caveats
+  id: totrans-146
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 注意事项
+- en: When you use a read pool, your application must have some tolerance for stale
+    reads. You will never be able to guarantee that a write you complete on the source
+    has already been replicated to a replica. You may also need a way to depool nodes
+    that fall too far behind on replication.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您使用读取池时，您的应用程序必须对旧的读取具有一定的容忍度。您永远无法保证您在源上完成的写入已经被复制到副本。您可能还需要一种方法来使落后于复制的节点退出池。
+- en: The size of the read pool also has an impact on how much administration you
+    have to do and when you should look at automation. A 16-node pool will mean that
+    you have to do kernel updates or security patching 16 times. Automating this task
+    to gracefully depool a node, perform patching, reboot, and repool will reduce
+    the amount of work you do by hand in the future.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 读取池的大小也会影响您需要做多少管理工作以及何时应该考虑自动化。一个 16 节点的池意味着您必须进行 16 次内核更新或安全补丁。自动化此任务以优雅地使节点退出池，执行补丁，重新启动，然后重新加入池，将减少您将来手动完成的工作量。
+- en: Discouraged Topologies
+  id: totrans-149
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 不推荐的拓扑结构
+- en: By using either of the two recommendations we’ve given in this chapter, you
+    keep your topology simple and easy to understand. There are a number of other
+    suggestions from earlier editions of this book, or perhaps you anecdotally heard
+    about how another company’s topology is set up. We call out some of these here
+    as discouraged because they come with more risk and complexity than we like to
+    see.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过使用本章中提供的两个建议中的任何一个，您可以保持拓扑结构简单且易于理解。本书早期版本中还有许多其他建议，或者您可能从其他公司的拓扑结构设置中听说过���我们在这里指出一些不推荐的原因是因为它们带来的风险和复杂性超出了我们愿意看到的范围。
+- en: Dual source in active-active mode
+  id: totrans-151
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: Active-active 模式下的双源
+- en: '*Dual source replication* (also known as *bidirectional replication*) involves
+    two servers, each configured as both a source and a replica of the other—in other
+    words, a pair of cosources. [Figure 9-6](#dual_source_in_active_active_mode) shows
+    the setup.'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*双源复制*（也称为*双向复制*）涉及两台服务器，每台服务器都配置为对方的源和副本，换句话说，是一对共同源。[图 9-6](#dual_source_in_active_active_mode)
+    展示了这种设置。'
+- en: '![](assets/hpm4_0906.png)'
+  id: totrans-153
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_0906.png)'
+- en: Figure 9-6\. Dual source in active-active mode
+  id: totrans-154
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 9-6\. Active-active 模式下的双源
+- en: At first glance, this doesn’t look any different than active/passive with two
+    servers, except that replication is already configured in the opposite direction.
+    The real danger is when you explicitly send write traffic to both sides, hence
+    the active/active part.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 乍一看，这与具有两台服务器的主备模式没有任何不同，只是复制已经以相反方向配置。真正的危险在于当您明确将写入流量发送到两侧时，因此是活动/活动部分。
+- en: Active/active is *very* difficult to do correctly. Some strategies involve choosing
+    which side to send to based on even/odd hashing. This ensures that reads-after-write
+    are consistent for the same row, but queries that include rows that are canonical
+    on the other side may not be consistent. Said more plainly, reading rows with
+    ID 1, 3, and 5 from one side will always be consistent. What about a query that
+    reads ID 1–6? Where do you send that query? What if an update exists on the other
+    side that is not reflected on this one due to replication lag?
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Active/active 模式非常难以正确实现。一些策略涉及根据奇偶哈希选择发送到哪一侧。这确保了写入后的读取对于相同行是一致的，但包含在另一侧上的规范行的查询可能不一致。更直白地说，从一侧读取
+    ID 1、3 和 5 的行将始终保持一致。那么对于读取 ID 1–6 的查询怎么办？您将该查询发送到哪里？如果另一侧存在更新，但由于复制延迟在这一侧没有反映出来，会怎样？
+- en: You also need to carefully balance capacity. In a cosource scenario, each server
+    is the other server’s replica and the most likely target of the failover. You
+    have to plan your capacity in a way that ensures that when you shift traffic from
+    one side to the other, you do not run out of CPU. You’re also failing over and
+    introducing an entirely different working set of data. The InnoDB buffer pool
+    now churns, removing entries to make room for the new hot set of data.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还需要仔细平衡容量。在共源场景中，每台服务器都是另一台服务器的副本，也是最有可能的故障切换目标。您必须以确保在将流量从一侧转移到另一侧时不会耗尽CPU的方式规划容量。您还在进行故障切换，并引入一个完全不同的工作数据集。InnoDB缓冲池现在会翻转，删除条目以为新的热数据集腾出空间。
+- en: Take our advice and stay away from this one. It may feel like you’re getting
+    “use” out of a passive server by having it handle traffic instead of sitting idle.
+    You’ll end up introducing data inconsistencies into the application and always
+    be on edge that you don’t have enough capacity to failover. Once you lose your
+    failover strategy, you’ve lost resilience.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请听从我们的建议，远离这种设置。也许让一个被动服务器处理流量而不是闲置会让您感觉像在“使用”它。您最终会在应用程序中引入数据不一致，并且总是担心没有足够的容量进行故障切换。一旦失去故障切换策略，您就失去了弹性。
+- en: Dual source in active-passive mode
+  id: totrans-159
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 双源主动-被动模式
+- en: There’s a variation on dual source in active-active mode that avoids the pitfalls
+    we just discussed. The main difference is that one of the servers is a read-only
+    “passive” server, as shown in [Figure 9-7](#dual_source_in_active_passive_mode).
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在避免我们刚刚讨论的问题的双源主动-主动模式中有一种变体。主要区别在于其中一台服务器是只读的“被动”服务器，如[图9-7](#dual_source_in_active_passive_mode)所示。
+- en: '![](assets/hpm4_0907.png)'
+  id: totrans-161
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_0907.png)'
+- en: Figure 9-7\. Dual source in active-passive mode
+  id: totrans-162
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图9-7\. 双源主动-被动模式
+- en: There’s really nothing wrong with this setup on the surface. The only way it
+    differs from our recommendation for active/passive is that replication has been
+    preconfigured back to the other server. This only works in a two-server configuration.
+    If you run more than two servers, you’ll need to decide which node is the best
+    target for a failover. Preconfiguring replication only ties you directly to one
+    and doesn’t give you flexibility in an outage situation.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表面上这种设置并没有什么问题。它与我们对主/备份的建议唯一的不同之处在于，复制已经预先配置回到另一个服务器。这只适用于两台服务器的配置。如果运行的服务器超过两台，您需要决定哪个节点是最适合故障切换的目标。预先配置复制只会直接将您与一个节点绑定在一起，在故障情况下不会给您灵活性。
+- en: We maintain that setting up replication is an easy, automatable step as part
+    of the replication-failover process we talked about before. This is an unnecessary
+    configuration that only invites confusion.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们坚持认为设置复制是作为我们之前讨论的复制-故障切换过程的一个简单、可自动化的步骤。这是一个不必要的配置，只会引起混乱。
+- en: Dual sources with replicas
+  id: totrans-165
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 具有副本的双源
+- en: Mashing up things even more, we can add one or more replicas to each cosource,
+    as shown in [Figure 9-8](#dual_source_topology_with_replicas).
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更进一步混合，我们可以为每个共源添加一个或多个副本，如[图9-8](#dual_source_topology_with_replicas)所示。
+- en: '![](assets/hpm4_0908.png)'
+  id: totrans-167
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_0908.png)'
+- en: Figure 9-8\. Dual source topology with replicas
+  id: totrans-168
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图9-8\. 具有副本的双源拓扑
+- en: This maintains most of the problems with dual source in active-active, the most
+    important being how you route traffic. It resolves the concerns about capacity
+    planning and buffer pool churn in a failover. You have additional steps in a failover
+    to point one of the sources to a newly promoted replica on top of it.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这保留了双源主动-主动中的大部分问题，最重要的是如何路由流量。它解决了关于容量规划和故障切换中缓冲池翻转的问题。在故障切换中，您需要额外的步骤将其中一个源指向其上新晋升的副本。
+- en: We’re definitely against this as well, largely for the data access concerns.
+    Cosources only lead to trouble.
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们绝对反对这种拓扑，主要是出于数据访问方面的考虑。共源只会带来麻烦。
+- en: Ring replication
+  id: totrans-171
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 环形复制
+- en: '*Ring replication* has three or more sources where each server is a replica
+    of the server before it in the ring and a source of the server after it, as shown
+    in [Figure 9-9](#a_replication_ring_topology). This topology is also called *circular
+    replication*.'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*环形复制*有三个或更多源，其中每个服务器都是环中前一个服务器的副本，也是后一个服务器的源，如[图9-9](#a_replication_ring_topology)所示。这种拓扑结构也被称为*循环复制*。'
+- en: '![](assets/hpm4_0909.png)'
+  id: totrans-173
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_0909.png)'
+- en: Figure 9-9\. A replication ring topology
+  id: totrans-174
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图9-9\. 复制环拓扑
+- en: If any server in this topology goes offline, your topology is broken and updates
+    stop flowing around the ring. There are attached replica variations of this, where
+    each source in [Figure 9-9](#a_replication_ring_topology) has a dedicated replica
+    to swap in. That still means the ring is broken until you promote a replica into
+    the former position.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果此拓扑中的任何服务器下线，您的拓扑将中断，更新将停止在环中传播。这种情况下还有附加的副本变体，其中[图9-9](#a_replication_ring_topology)中的每个源都有一个专用的副本可用于替换。这仍然意味着环被中断，直到您将一个副本提升到原来的位置。
+- en: This topology is the opposite of simple and has no advantages.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种拓扑结构与简单相反，没有任何优势。
+- en: Multisource replication
+  id: totrans-177
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 多源复制
+- en: While keeping your replication topology simple is important, there may be situations
+    where you need to use more advanced features to handle one-off functions. Suppose
+    you built a brand-new video upload and viewing site, which is now becoming popular.
+    One of your early design decisions was to separate data about videos and data
+    about users into two separate database clusters. As you’ve grown, you find yourself
+    wanting to merge them back together in queries. You can accomplish this with multisource
+    replication to bring back both data sets together in a replica, as shown in [Figure 9-10](#multisource_replication).
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管保持复制拓扑简单很重要，但可能会出现需要使用更高级功能来处理一次性功能的情况。假设您建立了一个全新的视频上传和观看网站，现在变得很受欢迎。您早期的设计决策之一是将视频数据和用户数据分开存储在两个不同的数据库集群中。随着您的发展，您发现自己希望在查询中将它们合并在一起。您可以通过多源复制实现这一点，将两个数据集合再次合并到一个副本中，如[图9-10](#multisource_replication)所示。
+- en: '![](assets/hpm4_0910.png)'
+  id: totrans-179
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_0910.png)'
+- en: Figure 9-10\. Multisource replication
+  id: totrans-180
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图9-10\. 多源复制
+- en: 'This functionality is built off a concept called *replication channels*. In
+    the preceding example, you would need a third cluster for MySQL. This new third
+    cluster would have two replication channels created: one for the video data and
+    one for the user data. Once you’ve loaded and replicated data, you could take
+    a very brief downtime where you freeze writes to the two sources and push your
+    code to switch reading and writing to the new combined database. Voila, you’ve
+    now merged two databases into one.'
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个功能是建立在一个称为*复制通道*的概念之上。在前面的示例中，您需要为MySQL创建第三个集群。这个新的第三个集群将创建两个复制通道：一个用于视频数据，一个用于用户数据。一旦加载和复制数据，您可以进行非常短暂的停机，在这段时间内，您冻结对两个源的写入，并推送您的代码以切换读写到新的合并数据库。哇，您现在已经将两个数据库合并为一个。
+- en: 'Before we move on, there’s one important limitation to know about: you cannot
+    configure a replica to use multisource replication multiple times against the
+    same source.'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们继续之前，有一个重要的限制需要知道：您不能配置一个副本多次使用多源复制来自同一源。
+- en: This topology is very much intended for special-use circumstances. We cite it
+    as discouraged only in the case where you build a permanent topology around this
+    concept. Using it temporarily to merge data is still an acceptable use case with
+    the end goal to go back to one of our two recommendations.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种拓扑结构非常适用于特殊情况。我们只在您围绕这个概念构建永久拓扑结构的情况下不鼓励使用。暂时使用它来合并数据仍然是一个可以接受的用例，最终目标是回到我们的两个建议之一。
+- en: Replication Administration and Maintenance
+  id: totrans-184
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 复制管理和维护
+- en: With a small amount of data and a consistent write workload, it’s unlikely that
+    you’ll be called upon to look at replication lag or worse, replication breaking,
+    very often. Most databases tend to grow in size over time, and with that growth
+    will come maintenance.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于少量数据和一致的写入工作负载，您不太可能经常需要查看复制延迟，更糟糕的是，复制中断。大多数数据库随着时间的推移而增长，随着增长将会进行维护。
+- en: Monitoring Replication
+  id: totrans-186
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 监控复制
+- en: Replication increases the complexity of MySQL monitoring. Although replication
+    actually happens on both the source and the replica, most of the work is done
+    on the replica, and that is where the most common problems occur. Are all the
+    replicas working? Has any replica had errors? How far behind is the slowest replica?
+    Out of the box, MySQL provides most of the information you need to answer these
+    questions, but automating the monitoring process and making replication robust
+    is left up to you.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制增加了MySQL监控的复杂性。尽管复制实际上发生在源和副本上，但大部分工作是在副本上完成的，这也是最常见的问题发生的地方。所有副本都在工作吗？是否有任何副本出现错误？最慢的副本落后多少？MySQL提供了大部分您需要回答这些问题的信息，但自动化监控过程和使复制稳健留给您自己。
+- en: 'When setting up replication monitoring, there are a few items that we consider
+    most important to observe:'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在设置复制监控时，有几个我们认为最重要的观察项目：
+- en: Replication requires disk space on both source and replica
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制需要源和副本上的磁盘空间
+- en: As seen earlier in [Figure 9-1](#how_mysql_replication_works), replication uses
+    both binary logs on the source and relay logs on the replicas. If there is no
+    free disk space on the source, transactions will be unable to complete and will
+    begin timing out. If the same condition happens on a replica, MySQL behaves a
+    little more gracefully by pausing replication and waiting for free disk space.
+    You’ll want to monitor both for available disk space to ensure continued operation.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前文所述，在[图 9-1](#how_mysql_replication_works)中可见，复制使用源上的二进制日志和副本上的中继日志。如果源上没有空闲磁盘空间，事务将无法完成并开始超时。如果在副本上发生相同的情况，MySQL会更加优雅地暂停复制并等待空闲磁盘空间。您需要监视可用磁盘空间，以确保持续运行。
+- en: Replication should be monitored for state and for errors
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 应该监视复制的状态和错误
+- en: Although replication has been a long-standing feature and is very robust, external
+    factors like network issues, data inconsistencies, and data corruption can cause
+    it to break. Because of this, it’s ideal to monitor for whether replication threads
+    are running and if not, look into what the latest error is to determine what your
+    next step should be. We cover more about how to troubleshoot specific problems
+    in [“Replication Problems and Solutions”](#replication_problems_and_solutions).
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管复制是一个长期存在的功能且非常稳健，但像网络问题、数据不一致和数据损坏等外部因素可能导致其中断。因此，最好监视复制线程是否正在运行，如果没有，查看最新的错误以确定下一步应该采取什么措施。我们在[“复制问题和解决方案”](#replication_problems_and_solutions)中更详细地介绍了如何解决特定问题。
+- en: Delayed replication should be delayed as expected
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 延迟复制应该按预期延迟
+- en: Since we mentioned delayed replication earlier, it’s advisable to set up monitoring
+    to ensure that delayed replicas are in fact delayed by the correct amount of time.
+    Too long of a delay might make it much more time consuming to use. If the delay
+    is too little—or even worse, not delayed at all—the delayed copy may be of no
+    use to you if you need it.
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 既然我们之前提到了延迟复制，建议设置监控以确保延迟副本确实延迟了正确的时间。太长的延迟可能会使使用变得更加耗时。如果延迟太少，甚至更糟糕的是根本没有延迟，那��如果您需要，延迟副本可能对您毫无用处。
+- en: Measuring Replication Lag
+  id: totrans-195
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 测量复制延迟
+- en: 'One of the most common things you’ll need to monitor is how far behind the
+    source a replica is running. Although the `Seconds_behind_source` column in `SHOW
+    REPLICA STATUS` theoretically shows the replica’s lag, in fact it’s not always
+    accurate, for a variety of reasons:'
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你需要监控的最常见事项之一是副本落后源的距离。尽管`SHOW REPLICA STATUS`中的`Seconds_behind_source`列理论上显示了副本的延迟，但实际上由于各种原因，它并不总是准确的：
+- en: The replica calculates `Seconds_behind_source` by comparing the server’s current
+    timestamp to the timestamp recorded in the binary log event, so the replica can’t
+    even report its lag unless it is processing a query.
+  id: totrans-197
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 副本通过比较服务器当前时间戳和二进制日志事件中记录的时间戳来计算`Seconds_behind_source`，因此，除非处理查询，否则副本无法报告其延迟。
+- en: The replica will usually report `NULL` if the replication threads aren’t running.
+  id: totrans-198
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果复制线程未运行，副本通常会报告`NULL`。
+- en: Some errors (for example, mismatched `max_allowed_packet` settings between the
+    source and replica or an unstable network) can break replication and/or stop the
+    replication threads, but `Seconds_behind_source` will report `0` rather than indicating
+    an error.
+  id: totrans-199
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一些错误（例如，源端和副本之间`max_allowed_packet`设置不匹配或网络不稳定）可能会中断复制和/或停止复制线程，但`Seconds_behind_source`将报告`0`而不是指示错误。
+- en: The replica sometimes can’t calculate the lag even if the replication processes
+    are running. If this happens, the replica might report either `0` or `NULL`.
+  id: totrans-200
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 即使复制进程正在运行，副本有时也无法计算滞后。如果发生这种情况，副本可能报告`0`或`NULL`。
+- en: A very long transaction can cause the reported lag to fluctuate. For example,
+    if you have a transaction that updates data, stays open for an hour, and then
+    commits, the update will go into the binary log an hour after it actually happened.
+    When the replica processes the statement, it will temporarily report that it is
+    an hour behind the source, and then it will jump back to zero seconds behind.
+  id: totrans-201
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 非常长的事务可能导致报告的滞后波动。例如，如果您有一个更新数据的事务，保持打开一个小时，然后提交，更新将在实际发生后一个小时进入二进制日志。当副本处理该语句时，它将暂时报告自己比源端滞后一个小时，然后会跳回到零秒滞后。
+- en: The solution to these problems is to ignore `Seconds_behind_source` and monitor
+    replica lag with something you can observe and measure directly. The best solution
+    is a heartbeat record, which is a timestamp that you update once per second on
+    the source. To calculate the lag, you can simply subtract the heartbeat from the
+    current timestamp on the replica. This method is immune to all the problems we
+    just mentioned, and it has the added benefit of creating a handy timestamp that
+    shows at what point in time the replica’s data is current. The `pt-heartbeat`
+    script, included in Percona Toolkit, is the most popular implementation of a replication
+    heartbeat.
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 解决这些问题的方法是忽略`Seconds_behind_source`，并使用您可以直接观察和测量的内容监视副本滞后。最佳解决方案是心跳记录，这是一个时间戳，您可以在源端每秒更新一次。要计算滞后，您只需从副本上的当前时间戳减去心跳。这种方法不受我们刚提到的所有问题的影响，并且还有一个额外的好处，即创建一个方便的时间戳，显示副本数据的当前时间点。Percona
+    Toolkit 中包含的`pt-heartbeat`脚本是复制心跳的最受欢迎的实现。
+- en: A heartbeat has other benefits, too. The replication heartbeat records in the
+    binary log are useful for many purposes, such as disaster recovery in otherwise
+    hard-to-solve scenarios.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 心跳还有其他好处。二进制日志中的复制心跳记录对许多目的都很有用，比如在其他情况下难以解决的灾难恢复场景。
+- en: None of the lag metrics we just mentioned gives a sense of how long it will
+    take for a replica to actually catch up to the source. This depends on many factors,
+    such as how powerful the replica is and how many write queries the source continues
+    to process. See the subsection “Excessive Replication Lag” in the “Replication
+    Problems and Solutions” section for more on that topic.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们刚提到的任何滞后指标都无法让您了解副本实际追赶源端需要多长时间。这取决于许多因素，例如副本的性能如何以及源端继续处理多少写入查询���有关更多信息，请参阅“复制问题和解决方案”部分中的“过多的复制滞后”子节。
+- en: Determining Whether Replicas Are Consistent with the Source
+  id: totrans-205
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 确定副本是否与源端一致
+- en: 'In a perfect world, a replica would always be an exact copy of its source,
+    minus any replication delay. But in the real world, discrepancies can be introduced
+    into replicas. Some possible causes are:'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在理想情况下，副本始终应该是源的精确副本，减去任何复制延迟。但在现实世界中，副本可能会引入不一致性。一些可能的原因包括：
+- en: Accidental writes to the replica
+  id: totrans-207
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对副本的意外写入
+- en: Using dual source replication with both sides taking writes
+  id: totrans-208
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用双源复制，两侧都进行写入
+- en: Nondeterministic queries and statement-based replication
+  id: totrans-209
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 非确定性查询和基于语句的复制
+- en: MySQL crashes while you run in a less-than-durable mode (see [Chapter 5](ch05.html#optimizing_server_settings)
+    for durability configurations)
+  id: totrans-210
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL 在以低耐久性模式运行时崩溃（请参阅[第5章](ch05.html#optimizing_server_settings)中的耐久性配置）
+- en: Bugs in MySQL
+  id: totrans-211
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL 中的错误
+- en: 'We suggest the following rules:'
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们建议遵循以下规则：
+- en: Always run your replicas with `super_read_only` enabled
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 始终使用启用`super_read_only`的副本
+- en: Using `read_only` prevents users without the `SUPER` privilege from being able
+    to write, but this won’t prevent your DBAs from running a `DELETE` or `ALTER`
+    without realizing they’re on the replica. The `super_read_only` setting only allows
+    replication to write and is the safest way to run replicas.
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`read_only`可以防止没有`SUPER`特权的用户进行写入，但这不会阻止您的 DBA 在不知情的情况下在副本上运行`DELETE`或`ALTER`。`super_read_only`设置仅允许复制写入，是运行副本的最安全方式。
+- en: Use row-based replication or deterministic statements
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用基于行的复制或确定性语句
+- en: Despite having situations where it will use a much larger amount of disk space,
+    row-based replication is the most consistent way to replicate data. This is because
+    it includes the exact row data changing for every entry.
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管在某些情况下会使用更多的磁盘空间，基于行的复制是复制数据最一致的方式。这是因为它包含了每个条目的确切行数据更改。
+- en: 'Consider the following with statement-based replication:'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在基于语句的复制中考虑以下内容：
+- en: '[PRE4]'
+  id: totrans-218
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: What happens when there are one thousand users in this table that match the
+    `WHERE` clause? MySQL will use the natural order in the table to only delete the
+    first 10 rows. The natural order of the table may be different on replicas, so
+    a different set of 10 rows may be affected. Statements run in the future that
+    modify or delete the rows based on `last_login_date` may or may not exist. This
+    can cause an inconsistency with the data.
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当表中有一千个与`WHERE`子句匹配的用户时会发生什么？MySQL 将使用表中的自然顺序仅删除前 10 行。表的自然顺序在副本上可能不同，因此可能会影响不同的
+    10 行。未来运行的基于`last_login_date`修改或删除行的语句可能存在或不存在。这可能导致数据不一致。
+- en: 'The best way to write this would be to use an `ORDER BY` to make the row order
+    deterministic:'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 编写此内容的最佳方法是使用`ORDER BY`使行顺序确定：
+- en: '[PRE5]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: With this statement, as long as the data is consistent between source and replica,
+    the same 10 rows will be deleted.
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用此语句，只要源端和副本之间的数据一致，将删除相同的 10 行。
+- en: Do not try to write to multiple servers in a replication topology at the same
+    time
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不要尝试同时向复制拓扑中的多个服务器写入
+- en: This includes using cosources with writes on both sides or ring replication.
+    The most practical replication topology is to use one source, taking all your
+    writes, and one or more replicas, optionally taking reads.
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这包括在两侧都有写入的共源或环形复制。最实用的��制拓扑是使用一个源，接收所有写入，并且一个或多个副本，可选地接收读取。
+- en: Last, we highly recommend that if you encounter any replication errors, you
+    use the [strategies](https://oreil.ly/DlYzR) in the official MySQL documentation
+    for rebuilding the replica.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们强烈建议，如果你遇到任何复制错误，你使用[策略](https://oreil.ly/DlYzR)在官方MySQL文档中重建副本。
+- en: Replication Problems and Solutions
+  id: totrans-226
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 复制问题和解决方案
+- en: The simple implementation of MySQL replication makes it easy to set up yet also
+    means there are many ways to stop, confuse, and otherwise disrupt it. Earlier
+    in this chapter, we talked about crash-safe replication and rules to help keep
+    your source and replicas in sync. This section discusses common problems, how
+    they manifest themselves, and how you can solve or even prevent them.
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL复制的简单实现使其易于设置，但也意味着有许多方法可以停止、混淆和破坏它。在本章的前面，我们讨论了崩溃安全的复制和规则，以帮助保持源和副本同步。本节讨论常见问题，它们如何表现，以及你如何解决或甚至预防它们。
+- en: Binary Logs Corrupted on the Source
+  id: totrans-228
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 源上的二进制日志损坏
+- en: If the binary log is corrupted on the source, you’ll have no choice but to rebuild
+    your replicas. Skipping over the corrupted entry will skip some transactions,
+    which would no longer be processed by your replicas.
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果源上的二进制日志损坏，你别无选择，只能重建你的副本。跳过损坏的条目将跳过一些事务，这些事务将不再被你的副本处理。
+- en: Nonunique Server IDs
+  id: totrans-230
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 非唯一的服务器ID
+- en: This is one of the more elusive problems you might encounter with replication.
+    If you accidentally configure two replicas with the same server ID, they might
+    seem to work just fine if you’re not watching closely. But if you watch their
+    error logs or watch the source with a tool like *innotop*, you’ll notice something
+    very odd.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是你可能在复制中遇到的更难以捉摸的问题之一。如果你意外地配置了两个具有相同服务器ID的副本，它们可能看起来工作正常，如果你没有仔细观察的话。但如果你观察它们的错误日志或用*innotop*这样的工具观察源，你会注意到一些非常奇怪的事情。
+- en: On the source, you’ll see only one of the two replicas connected at any time.
+    (Usually, all replicas are connected and replicating all the time.) On the replica,
+    you’ll see frequent disconnect and reconnect error messages in the error log but
+    no mention of a misconfigured server ID.
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在源上，你只会看到两个副本中的一个连接。 （通常，所有副本都是连接并一直复制的。）在副本上，你会在错误日志中看到频繁的断开和重新连接错误消息，但没有提到配置错误的服务器ID。
+- en: Depending on the MySQL version, the replicas might replicate correctly but slowly,
+    or they might not actually replicate correctly—any given replica might miss binary
+    log events or even repeat them, causing duplicate key errors (or silent data corruption).
+    You can also cause problems on the source because of the increased load from the
+    replicas fighting among themselves. And if replicas are fighting one another badly
+    enough, the error logs can become enormous in a very short time.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据MySQL版本的不同，副本可能会正确但缓慢地复制，或者它们实际上可能不会正确地复制——任何给定的副本可能会错过二进制日志事件，甚至重复它们，导致重复键错误（或静默数据损坏）。你还可能因为副本之间的增加负载而在源上引起问题。如果副本之间的争斗足够激烈，错误日志可能在很短的时间内变得庞大。
+- en: The only solution to this problem is to be careful when setting up your replicas.
+    You might find it helpful to create a canonical list of replica-to-server ID mappings
+    so that you don’t lose track of which ID belongs to each replica. If your replicas
+    live entirely within one network subnet, you can choose unique IDs by using the
+    last octet of each machine’s IP address.
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个问题的唯一解决方案是在设置副本时要小心。你可能会发现创建一个副本到服���器ID映射的规范列表很有帮助，这样你就不会忘记每个副本属于哪个ID。如果你的副本完全位于一个网络子网中，你可以通过使用每台机器IP地址的最后一个八位来选择唯一的ID。
+- en: Undefined Server IDs
+  id: totrans-235
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 未定义的服务器ID
+- en: 'If you don’t define the server ID, MySQL will appear to set up replication
+    with `CHANGE REPLICATION SOURCE TO` but will not let you start the replica:'
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你不定义服务器ID，MySQL会似乎使用`CHANGE REPLICATION SOURCE TO`设置复制，但不会让你启动副本：
+- en: '[PRE6]'
+  id: totrans-237
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: This error is especially confusing if you’ve just used `CHANGE REPLICATION SOURCE
+    TO` and verified your settings with `SHOW REPLICA STATUS`. You might get a value
+    from `SELECT @@server_id`, but it’s just a default. You have to set the value
+    explicitly.
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个错误尤其令人困惑，如果你刚刚使用了`CHANGE REPLICATION SOURCE TO`并用`SHOW REPLICA STATUS`验证了你的设置。你可能会从`SELECT
+    @@server_id`得到一个值，但那只是一个默认值。你必须显式设置该值。
+- en: Missing Temporary Tables
+  id: totrans-239
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 临时表丢失
+- en: Temporary tables are handy for some uses, but unfortunately, they’re incompatible
+    with statement-based replication. If a replica crashes or if you shut it down,
+    any temporary tables the replica thread was using disappear. When you restart
+    the replica, any further statements that refer to the missing temporary tables
+    will fail.
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 临时表对某些用途很方便，但不幸的是，它们与基于语句的复制不兼容。如果一个副本崩溃或者你关闭它，副本线程正在使用的任何临时表都会消失。当你重新启动副本时，任何进一步引用缺失临时表的语句将失败。
+- en: The best approach here is to use row-based replication. The second-best approach
+    is to name your temporary tables consistently (prefix with `temporary_`, for example)
+    and use replication rules to skip replicating them entirely.
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里最好的方法是使用基于行的复制。第二好的方法是一致命名你的临时表（例如以`temporary_`为前缀）并使用复制规则完全跳过复制它们。
+- en: Not Replicating All Updates
+  id: totrans-242
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 不复制所有更新
+- en: If you misuse `SET SQL_LOG_BIN=0` or don’t understand the replication filtering
+    rules, your replica might not execute some updates that have taken place on the
+    source. Sometimes you want this for archiving purposes, but it’s usually accidental
+    and has bad consequences.
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你错误使用`SET SQL_LOG_BIN=0`或不理解复制过滤规则，你的副本可能不会执行一些在源上发生的更新。有时你可能希望这样做以进行归档，但通常是意外的，后果很糟糕。
+- en: 'For example, suppose you have a `replicate_do_db` rule to replicate only the
+    `sakila` database to one of your replicas. If you execute the following commands
+    on the source, the replica’s data will become different from the data on the source:'
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设您有一个`replicate_do_db`规则，只将`sakila`数据库复制到您的一个副本。如果您在源头上执行以下命令，则副本的数据将与源头上的数据不同：
+- en: '[PRE7]'
+  id: totrans-245
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Other types of statements can even cause replication to fail with an error because
+    of nonreplicated dependencies.
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其他类型的语句甚至可能因为非复制依赖关系而导致复制失败。
+- en: Excessive Replication Lag
+  id: totrans-247
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 过多的复制延迟
+- en: 'Replication lag is a frequent problem. No matter what, it’s a good idea to
+    design your applications to tolerate some lag on the replicas. Here are some common
+    approaches to reducing replication lag:'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制延迟是一个常见问题。无论如何，设计您的应用程序以容忍副本上的一些延迟都是一个好主意。以下是一些减少复制延迟的常见方法：
+- en: Multithreaded replication
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 多线程复制
+- en: Ensure you’re using multithreaded replication and you’ve looked at tuning the
+    various options as per the manual for how to get the most efficiency from it.
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确保您正在使用多线程复制，并根据手册调整各种选项以获得最高效率。
+- en: Use sharding
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用分片
+- en: 'While it seems like a cop-out answer, using sharding techniques to spread writes
+    across multiple sources is a very effective strategy. The long-standing rule of
+    thumb for MySQL has been: scale reads with replicas, scale writes with sharding.'
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管这似乎是一个逃避的答案，但使用分片技术将写操作分散到多个源头是一种非常有效的策略。MySQL 的长期经验法则是：使用副本扩展读操作，使用分片扩展写操作。
+- en: Temporarily lower durability
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 暂时降低耐久性
+- en: Purists will disagree, but there may be times when you’ve exhausted all tuning
+    and tweaking and sharding is not a viable option because of either effort or design
+    issues. If your replication lag is largely due to write operation limitations,
+    you can temporarily set `sync_binlog=0` and `innodb_flush_log_at_trx_commit=0`
+    to boost replication speed.
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 纯粹主义者会不同意，但也许有时候当您已经尝试了所有调整和优化，而分片由于工作量或设计问题而不可行时。如果您的复制延迟主要是由于写操作限制造成的，您可以暂时将`sync_binlog=0`和`innodb_flush_log_at_trx_commit=0`设置为提高复制速度。
+- en: If you go this last route, you should be very, very careful. You should only
+    do this on your replica, and if your replica is also where you take backups, changing
+    these settings may make it impossible for you to recover from a backup.^([7](ch09.html#ch01fn67))
+    Also, if your replica crashes during this reduced durability, you will likely
+    have to rebuild from your source. Lastly, if you do this manually, it’s terribly
+    easy to forget to set the durability back. Ensure you have good monitoring or
+    have scripted some way to set durability again.
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您选择这种最后的方式，您应该非常非常小心。您应该只在您的副本上这样做，如果您的副本也是您进行备份的地方，更改这些设置可能会使您无法从备份中恢复。此外，如果您的副本在此降低耐久性期间崩溃，您可能需要从源头重建。最后，如果您手动执行此操作，很容易忘记将耐久性设置回来。确保您有良好的监控或已编写某种方式来重新设置耐久性。
+- en: 'One possible strategy would be to watch the `Seconds_behind_source` value from
+    the `SHOW REPLICA STATUS` command, and when it exceeds a certain value, trigger
+    an action that does the following:'
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个可能的策略是观察`SHOW REPLICA STATUS`命令中的`Seconds_behind_source`值，当它超过某个值时，触发以下操作：
+- en: Ensure that the server is a nonwritable replica, likely by verifying that `super_read_only`
+    is enabled.
+  id: totrans-257
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 确保服务器是一个不可写的副本，可能通过验证`super_read_only`是否已启用来实现。
+- en: Change the settings for `sync_binlog` and `innodb_flush_log_at_trx_commit` to
+    reduce write operations.
+  id: totrans-258
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 更改`sync_binlog`和`innodb_flush_log_at_trx_commit`的设置以减少写操作。
+- en: Periodically check `SHOW REPLICA STATUS` for the value of `Seconds_​behind_​source`.
+  id: totrans-259
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 定期检查`SHOW REPLICA STATUS`以获取`Seconds_​behind_​source`的值。
+- en: When below an acceptable threshold, revert the settings back to their durable
+    nature.
+  id: totrans-260
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 当低于可接受的阈值时，将设置恢复为其耐久性特性。
+- en: Oversized Packets from the Source
+  id: totrans-261
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 源头传来的超大数据包
+- en: Another hard-to-trace problem in replication can occur when the source’s `max_allowed_packet`
+    size doesn’t match the replica’s. In this case, the source can log a packet the
+    replica considers oversized, and when the replica retrieves that binary log event,
+    it might suffer from a variety of problems. These include an endless loop of errors
+    and retries or corruption in the relay log.
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制中另一个难以追踪的问题可能发生在源头的`max_allowed_packet`大小与副本的不匹配时。在这种情况下，源头可能记录一个副本认为过大的数据包，当副本检索到该二进制日志事件时，可能会遇到各种问题。这些问题包括错误和重试的无限循环，或者在中继日志中出现损坏。
+- en: No Disk Space
+  id: totrans-263
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 没有磁盘空间
+- en: Replication can indeed fill up your disks with binary logs, relay logs, or temporary
+    files, especially if you do a lot of `LOAD DATA INFILE` queries on the source
+    and have `log_replica_updates` enabled on the replica. The more a replica falls
+    behind, the more disk space it is likely to use for relay logs that have been
+    retrieved from the source but not yet executed. You can prevent these errors by
+    monitoring disk usage and setting the `relay_log_space` configuration variable.
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制确实可能会用二进制日志、中继日志或临时文件填满您的磁盘，尤其是如果您在源头上执行了大量的`LOAD DATA INFILE`查询，并且在副本上启用了`log_replica_updates`。副本落后越多，它可能使用的磁盘空间就越多，用于从源头检索但尚未执行的中继日志。您可以通过监控磁盘使用情况并设置`relay_log_space`配置变量来防止这些错误。
+- en: Replication Limitations
+  id: totrans-265
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 复制限制
+- en: MySQL replication can fail or get out of sync, with or without errors, just
+    because of its inherent limitations. A fairly large list of SQL functions and
+    programming practices simply won’t replicate reliably (we’ve mentioned many of
+    them in this chapter). It’s hard to ensure that none of these finds a way into
+    your production code, especially if your application or team is large.
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 复制可能会因其固有限制而失败或失去同步，有时即使没有错误。相当多的 SQL 函数和编程实践简单地无法可靠地复制（我们在本章中提到了许多）。要确保这些内容中没有一个进入您的生产代码，尤其是如果您的应用程序或团队规模较大。
+- en: Another issue is bugs in the server. We don’t want to sound negative, but many
+    major versions of the MySQL server have historically had bugs in replication,
+    especially in the first releases of the major version. New features, such as stored
+    procedures, have usually caused more problems.
+  id: totrans-267
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个问题是服务器中的错误。我们不想听起来消极，但许多MySQL服务器的主要版本在历史上在复制方面存在错误，特别是在主要版本的首次发布中。新功能，比如存储过程，通常会引起更多问题。
+- en: For most users, this is not a reason to avoid new features. It’s just a reason
+    to test carefully, especially when you upgrade your application or MySQL. Monitoring
+    is also important; you need to know when something causes a problem.
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于大多数用户来说，这并不是避免新功能的理由。这只是一个需要仔细测试的理由，特别是当您升级应用程序或MySQL时。监控也很重要；您需要知道什么时候出现问题。
+- en: MySQL replication is complicated, and the more complicated your application
+    is, the more careful you need to be. However, if you learn how to work with it,
+    it works quite well.
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL复制很复杂，您的应用程序越复杂，您就需要越小心。然而，如果您学会如何使用它，它的效果相当不错。
+- en: Summary
+  id: totrans-270
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: MySQL replication is the Swiss Army knife of MySQL’s built-in capabilities,
+    and it increases MySQL’s range of functionality and usefulness dramatically. It
+    is probably one of the key reasons why MySQL became so popular so quickly, in
+    fact.
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL复制是MySQL内置功能的瑞士军刀，它极大地增加了MySQL的功能和实用性范围。事实上，这可能是MySQL迅速变得如此受欢迎的关键原因之一。
+- en: Although replication has many limitations and caveats, it turns out that most
+    of them are relatively unimportant or easy for most users to avoid. Many of the
+    drawbacks are simply special-case behaviors of advanced features that most people
+    won’t use but are very helpful for the minority of users who need them.
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管复制有许多限制和注意事项，但事实证明，其中大多数对大多数用户来说相对不重要或容易避免。许多缺点只是高级功能的特殊行为，大多数人不会使用，但对需要它们的少数用户非常有帮助。
+- en: When it comes to replication, your motto should be to keep it simple. Don’t
+    do anything fancy, such as using replication rings or replication filters, unless
+    you really need to. Use replication simply to mirror an entire copy of your data,
+    including all privileges. Keeping your replicas identical to the source in every
+    way will help you avoid many problems.
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在复制方面，你的座右铭应该是保持简单。除非你真的需要，不要做任何花哨的事情，比如使用复制环或复制过滤器。简单地使用复制来镜像整个数据副本，包括所有权限。保持副本与源相同的方式将帮助你避免许多问题。
+- en: ^([1](ch09.html#ch01fn61-marker)) As expected, we refer you to the manual to
+    make sure you see the latest in how `MIXED` mode works with different types of
+    SQL statements.
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch09.html#ch01fn61-marker)) 如预期的那样，我们建议您查阅手册，以确保您了解`MIXED`模式如何与不同类型的SQL语句一起工作。
+- en: ^([2](ch09.html#ch01fn62-marker)) Note that `server_uuid` is different from
+    the similarly named `server_id`. The `server_id` parameter is a user-defined value
+    that you designate for your server whereas `server_uuid` is generated the first
+    time MySQL starts if it does not detect the file *auto.cnf*.
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch09.html#ch01fn62-marker)) 请注意，`server_uuid`与同名的`server_id`是不同的。`server_id`参数是您为服务器指定的用户定义值，而`server_uuid`是在MySQL首次启动时生成的，如果它没有检测到文件*auto.cnf*。
+- en: ^([3](ch09.html#ch01fn63-marker)) This assumes you used the `SOURCE_AUTO_POSITION
+    = 1` option when issuing the `CHANGE REPLICATION SOURCE TO` command, which you
+    should typically always do.
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([3](ch09.html#ch01fn63-marker)) 这假设您在发出`CHANGE REPLICATION SOURCE TO`命令时使用了`SOURCE_AUTO_POSITION
+    = 1`选项，这通常是您应该始终这样做的。
+- en: ^([4](ch09.html#ch01fn64-marker)) Performance Schema consumers and instruments
+    cause MySQL to collect additional data about its internals, which can use additional
+    CPU. As a reminder, you should always test how changes like this will affect production
+    workloads in a safe environment beforehand.
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([4](ch09.html#ch01fn64-marker)) 性能模式的消费者和仪器使MySQL收集有关其内部的额外数据，这可能会使用额外的CPU。作为提醒，您应该始终在安全环��中测试这些更改如何影响生产工作负载。
+- en: ^([5](ch09.html#ch01fn65-marker)) The number of replicas required is a configurable
+    option `(rpl_semi_sync_source_wait_for_replica_count)`. With wider topologies,
+    you may consider requiring two or even three acknowledgments before completing
+    the original transaction.
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([5](ch09.html#ch01fn65-marker)) 所需的副本数量是可配置选项`(rpl_semi_sync_source_wait_for_replica_count)`。在更广泛的拓扑结构中，您可能考虑要求在完成原始事务之前需要两甚至三个确认。
+- en: ^([6](ch09.html#ch01fn66-marker)) Setting `super_read_only` implicitly enables
+    `read_only`. Conversely, disabling `read_only` implicitly disables `super_read_only`.
+    There’s no reason for you to enable or disable both variables at the same time
+    during this process.
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([6](ch09.html#ch01fn66-marker)) 设置`super_read_only`会隐式启用`read_only`。相反，禁用`read_only`会隐式禁用`super_read_only`。在此过程中，没有理由同时启用或禁用这两个变量。
+- en: ^([7](ch09.html#ch01fn67-marker)) This is typically true in cases where you
+    may use LVM snapshots or a cloud-based disk snapshot approach to backups.
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([7](ch09.html#ch01fn67-marker)) 这通常适用于您可能使用LVM快照或基于云的磁盘快照方法进行备份的情况。

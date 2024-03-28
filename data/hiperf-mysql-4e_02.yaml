@@ -1,0 +1,1474 @@
+- en: Chapter 2\. Monitoring in a Reliability Engineering World
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第2章。在可靠性工程世界中进行监控
+- en: 'Monitoring systems is an extensive topic that has been heavily shaped in the
+    past few years by the seminal work in [*Site Reliability Engineering: How Google
+    Runs Production Systems*](https://oreil.ly/ozRZV) (O’Reilly) and its followup,
+    [*The Site Reliability Workbook: Practical Ways to Implement SRE*](https://oreil.ly/LexH6)
+    (O’Reilly). Since these two books came out, site reliability engineering (SRE)
+    has become a popular trend in open job listings. Some companies have gone as far
+    as retitling existing staff as some flavor of “reliability engineering.”'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 监控系统是一个广泛的主题，在过去几年中受到了[*《站点可靠性工程：谷歌如何运行生产系统》*](https://oreil.ly/ozRZV)（O'Reilly）及其后续作品*《站点可靠性工作手册：实施SRE的实用方法》*（O'Reilly）的重要工作的��响。自这两本书出版以来，站点可靠性工程（SRE）已成为开放职位招聘中的热门趋势。一些公司甚至已经将现有员工的职称更改为某种“可靠性工程”。
+- en: 'Site reliability engineering has changed how teams think about operational
+    work. This is because it consists of a set of principles that allow us to more
+    easily answer questions like:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 站点可靠性工程改变了团队对运营工作的看法。这是因为它包含一组原则，使我们更容易回答诸如以下问题：
+- en: Are we providing an acceptable customer experience?
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们是否提供了可接受的客户体验？
+- en: Should we focus on reliability and resilience work?
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们应该专注于可靠性和弹性工作吗？
+- en: How do we balance new features against toil?
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们如何在新功能和琐事之间取得平衡？
+- en: 'This chapter expects the reader to have an understanding of what these principles
+    are. If you have not read either of the aforementioned books, we recommend these
+    chapters from *The Site Reliability Workbook* as a crash course:'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章希望读者了解这些原则是什么。如果您没有阅读上述任何一本书，我们建议从*《站点可靠性工作手册》*中的这些章节作为速成课程：
+- en: Chapter 1 offers a deeper understanding of the philosophy behind moving toward
+    service-level performance management in production.
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第1章提供了更深入理解如何朝着在生产中实现服务水平性能管理的哲学的方向发展。
+- en: Chapter 2 covers how to implement service level objectives (SLOs).
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第2章涵盖了如何实施服务水平目标（SLO）。
+- en: Chapter 5 covers alerting on SLOs.
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第5章涵盖了对SLO的警报。
+- en: Some may argue that SRE implementation isn’t strictly a part of high performance
+    MySQL, but we disagree. In her book, *Accelerate,*^([1](ch02.html#ch01fn14)) Dr.
+    Nicole Forsgren says, “Our measure should focus on outcomes, not outputs.” A key
+    aspect of effective MySQL management is good monitoring of the health of your
+    databases. Traditional monitoring is a relatively well-paved path. As SRE is a
+    new space, it’s less understood how to implement SRE principles against MySQL.
+    As SRE principles continue to gain acceptance, the traditional role of a DBA will
+    evolve, and that includes how DBAs think about monitoring their systems.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有人可能会认为SRE实施并不严格属于高性能MySQL的一部分，但我们不同意。在她的书*《加速》*中，尼古拉·福斯格伦博士说：“我们的衡量应该关注结果，而不是产出。”有效MySQL管理的一个关键方面是对数据库健康状况进行良好的监控。传统监控是一条相对铺好的道路。由于SRE是一个新领域，如何实施SRE原则来应对MySQL还不太清楚。随着SRE原则的不断获得认可，DBA的传统角色将发生变化，包括DBA如何考虑监控他们的系统。
+- en: The Impact of Reliability Engineering on DBA Teams
+  id: totrans-11
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 可靠性工程对DBA团队的影响
+- en: For many years, monitoring database performance relied on deep dives into single-server
+    performance. That still has a lot of value but tends to be more about reactive
+    measurements, like profiling a server that is performing poorly. This was the
+    standard operating procedure in the days of the gatekeeping DBA teams when no
+    one else was allowed to know how the database operated.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 多年来，监控数据库性能依赖于对单个服务器性能的深入研究。这仍然具有很大的价值，但更多地倾向于是关于反应性测量，比如对性能不佳的服务器进行分析。在门户守卫DBA团队的时代，这是标准操作程序，当时其他人不被允许知道数据库的运行方式。
+- en: Enter Google’s introduction of reliability engineering. The role of a DBA became
+    more complex and turned into more of a site reliability engineer (SRE) or database
+    reliability engineer (DBRE). Teams had to optimize for their time. Service levels
+    help you define when customers are unhappy and allow you to better balance your
+    time between addressing things like performance issues and scaling challenges
+    against working on internal tooling. Let’s discuss the different ways you need
+    to monitor MySQL to ensure a successful customer experience.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 进入谷歌对可靠性工程的介绍。DBA的角色变得更加复杂，演变成了更多的站点可靠性工程师（SRE）或数据库可靠性工程师（DBRE）。团队必须优化他们的时间。服务水平帮助您定义客户何时感到不满意，并允许您更好地平衡您的时间，解决性能问题和扩展挑战，以及处理内部工具的工作。让我们讨论您需要监视MySQL的不同方式，以确保成功的客户体验。
+- en: Defining Service Level Goals
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 定义服务水平目标
+- en: 'Before going into how to measure whether customers are happy with the performance
+    of your database clusters, we must first know what our goals are and align on
+    a common language to describe these goals. Here are some questions that can serve
+    as conversation starters in your organization to define these goals:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在进入如何衡量客户对数据库集群性能是否满意之前，我们必须首先了解我们的目标是什么，并就描述这些目标的共同语言达成一致。以下是一些问题，可以作为组织中的对话开端，以定义这些目标：
+- en: What are the metrics appropriate for measuring success?
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 什么是适合衡量成功的指标？
+- en: What values for these metrics are acceptable to the customers and our business
+    needs?
+  id: totrans-17
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 这些指标的哪些值对客户和我们的业务需求是可接受的？
+- en: At what point are we considered in a degraded state?
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在何时我们被认为处于降级状态？
+- en: When are we in an altogether failed state and need to remediate as soon as possible?
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 何时我们完全处于失败状态并需要尽快进行补救？
+- en: There are scenarios with obvious answers to these questions (e.g., the source
+    database is down, we are not taking any writes, and therefore, business is halted).
+    Some are less obvious, such as a periodic task is sometimes hogging all the database
+    disk I/O and suddenly everything else is slower. Having a shared understanding
+    across the organization of what we are measuring and why can help guide prioritization
+    conversations. Reaching that shared understanding through ongoing conversations
+    across the organization helps guide whether you can spend engineering effort on
+    new features or if there needs to be more investment in performance improvement
+    or stability.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有些问题有明显的答案（例如，源数据库宕机，我们不接受任何写入，因此业务停滞）。有些问题则不那么明显，比如定期任务有时会占用所有数据库磁盘I/O，突然其他所有操作变慢。在整个组织中对我们正在衡量的内容和原因有共享理解，可以帮助指导优先级对话。通过组织内持续对话达成共识，有助于指导您是否可以将工程工作投入新功能，或者是否需要更多投入于性能改进或稳定性。
+- en: 'In SRE practices, these discussions about customer satisfaction will align
+    the team on what is healthy for the business in terms of service level indicators
+    (SLIs), SLOs, and service level agreements (SLAs). Let’s start by defining what
+    these terms mean:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在SRE实践中，关于客户满意度的讨论将使团队对于服务水平指标（SLIs）、SLOs和服务水平协议（SLAs）在业务方面的健康状况达成一致。让我们首先定义这些术语的含义：
+- en: Service level indicator (SLI)
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务水平指标（SLI）
+- en: In very simple terms, an SLI answers the question, “How do I measure whether
+    my customers are happy?” The answer represents a healthy system from the users’
+    perspective. SLIs can be business-level indicators, such as “response time for
+    a customer-facing API,” or a more fundamental “service is up.” You may find you
+    need different indicators or metrics depending on the data’s context and how it
+    relates to the product.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用非常简单的术语来说，SLI回答了这个问题，“我如何衡量我的客户是否满意？”答案代表了用户角度的健康系统。SLIs可以是业务级别的指标，比如“面向客户的API的响应时间”，或者更基本的“服务是否正常”。您可能会发现，根据数据的上下文以及与产品的关系，您需要不同的指标或度量标准。
+- en: Service level objective (SLO)
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务水平目标（SLO）
+- en: An SLO answers the question, “What is the minimum I can allow my SLI to be to
+    ensure that my customers are happy?” SLO is the objective range we want to be
+    in for a given SLI to be considered a healthy service. If you think uptime is
+    the SLI, then the number of nines you want to be up for a given time span is the
+    SLO. SLOs have to be defined as a value *over a given time frame* to ensure that
+    everyone is aligned on what the SLO means. An SLI plus an SLO forms the basic
+    equation for knowing if your customers are happy.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SLO回答了这个问题，“为了确保我的客户满意，我可以允许我的SLI的最低值是多少？” SLO是我们希望在给定SLI下达到的目标范围，以被视为健康服务。如果您认为正常运行时间是SLI，那么您希望在给定时间段内正常运行的次数就是SLO。必须将SLO定义为*在给定时间范围内的值*，以确保每个人对SLO的含义达成一致。
+    SLI加上SLO形成了了解客户是否满意的基本方程。
+- en: Service level agreement (SLA)
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务水平协议（SLA）
+- en: SLAs provide the answer to the question, “What SLO am I willing to agree to
+    that has consequences?” An SLA is an SLO that has been included in an agreement
+    with one or more customers of the business (paying customers, not internal stakeholders),
+    with financial or other penalties if that SLA is not met. It is important to note
+    that SLAs are optional.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SLA提供了这个问题的答案，“我愿意同意什么样的SLO并承担后果？” SLA是一个SLO，已包含在与业务的一个或多个客户（付费客户，而不是内部利益相关者）的协议中，如果未达到该SLA则会有财务或其他惩罚。重要的是要注意，SLA是可选的。
+- en: We will not cover SLAs much in this chapter as they tend to require more of
+    a business discussion than an engineering one. This sort of decision hinges mostly
+    on what sales the business expects to get if they promise an SLA in contracts
+    and if that is worth the risk to revenue if the SLA were to be broken. Hopefully,
+    such a decision is informed by what we do cover here around choosing both SLIs
+    and matching SLOs.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在本章中不会过多涉及SLAs，因为它们往往需要更多的业务讨论而不是工程讨论。这种决定主要取决于业务期望如果在合同中承诺SLA会得到什么销售额，以及如果SLA被违反是否值得冒险损失收入。希望这样的决定是基于我们在这里涵盖的关于选择SLIs和匹配SLOs的内容。
+- en: Defining these SLIs, SLOs, and SLAs guide not only the business’s health but
+    also planning within engineering teams. If a team is not hitting its agreed-upon
+    SLOs, it should not proceed with new feature work. The same is true for database-engineering
+    teams. If one of the potential SLOs we discuss in this chapter is not being met,
+    that should spur the conversation of why not. When you come armed with the data
+    to explain why customer experience is suboptimal, you can have more meaningful
+    conversations about team priorities.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 定义这些SLI、SLO和SLA不仅指导业务的健康状况，还指导工程团队内的规划。如果一个团队没有达到其约定的SLO，那么就不应继续进行新功能的工作。对于数据库工程团队也是如此。如果我们在本章讨论的潜在SLO之一没有达到，那就应该引发为什么没有达到的讨论。当您拥有数据来解释为什么客户体验不佳时，您可以就团队优先事项进行更有意义的对话。
+- en: What Does It Take to Make Customers Happy?
+  id: totrans-30
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使客户满意需要什么？
+- en: After choosing a set of metrics as your SLIs, it may be tempting to set the
+    goals to 100%. You must fight that urge, though. Remember that the goal of picking
+    indicators and objectives is to evaluate at any time, with an objective metric,
+    whether your team can innovate with new features or if stability is at risk of
+    dropping below acceptable levels for customers and therefore needs more attention
+    and resources. The goal is to define what is the *absolute minimum* you need to
+    do to make customers happy. If a customer is happy with your pages loading in
+    two seconds, there’s no need to set a target for pages to load in 750 milliseconds.
+    This can create an unreasonable burden for engineering teams.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在选择一组指标作为您的SLIs后，可能会有诱惑将目标设定为100%。然而，您必须抵制这种冲动。请记住，选择指标和目标的目的是随时通过客观指标评估您的团队是否可以通过新功能进行创新，或者稳定性是否有可能降至客户可接受水平以下，因此需要更多关注和资源。目标是定义使客户满意的*绝对最低要求*。如果客户对您的页面在两秒内加载感到满意，那么没有必要设定页面在750毫秒内加载的目标。这可能会给工程团队带来不合理的负担。
+- en: Taking an example of uptime as an indicator and objective values for it, we
+    can declare that “we will not have any downtime,” but what does that mean when
+    implementing and tracking if we are meeting goals? Reaching three nines of availability
+    is no small feat. Three nines over a whole year amount to just over eight hours,
+    translating to only 10 minutes in a given week. The more nines you promise, the
+    harder this gets, and the more expensive engineering hours the team will have
+    to spend to deliver on such a promise. [Table 2-1](#availability_time_by_nines)
+    is a helpful chart from Amazon Web Services showing the challenge in raw numbers.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以正常运行时间作为指标和目标值的例子，我们可以宣称“我们不会有任何停机时间”，但在实施和跟踪是否达到目标时，这意味着什么？达到三个九的可用性并不是一件小事。一整年的三个九仅相当于八个多小时，换算成每周仅为
+    10 分钟。你承诺的九越多，这就越困难，团队将不得不花费更多昂贵的工程时间来实现这样的承诺。[表 2-1](#availability_time_by_nines)
+    是亚马逊网络服务展示挑战的有用数据表。
+- en: Table 2-1\. Availability time by nines
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 2-1\. 各种可用时间
+- en: '| Availability | Downtime per year | Downtime per month | Downtime per week
+    | Downtime per day |'
+  id: totrans-34
+  prefs: []
+  type: TYPE_TB
+  zh: '| 可用性 | 每年停机时间 | 每月停机时间 | 每周停机时间 | 每日停机时间 |'
+- en: '| --- | --- | --- | --- | --- |'
+  id: totrans-35
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- | --- | --- | --- |'
+- en: '| 99.999% | 5 mins, 15.36 secs | 26.28 secs | 6.06 secs | 0.14 secs |'
+  id: totrans-36
+  prefs: []
+  type: TYPE_TB
+  zh: '| 99.999% | 5 分钟，15.36 秒 | 26.28 秒 | 6.06 秒 | 0.14 秒 |'
+- en: '| 99.995% | 26 mins, 16.8 secs | 2 mins, 11.4 secs | 30.3 secs | 4.32 secs
+    |'
+  id: totrans-37
+  prefs: []
+  type: TYPE_TB
+  zh: '| 99.995% | 26 分钟，16.8 秒 | 2 分钟，11.4 秒 | 30.3 秒 | 4.32 秒 |'
+- en: '| 99.990% | 52 mins, 33.6 secs | 4 mins, 22.8 secs | 1 mins, 0.66 secs | 8.64
+    secs |'
+  id: totrans-38
+  prefs: []
+  type: TYPE_TB
+  zh: '| 99.990% | 52 分钟，33.6 秒 | 4 分钟，22.8 秒 | 1 分钟，0.66 秒 | 8.64 秒 |'
+- en: '| 99.950% | 4 hrs, 22 mins, 48 secs | 31 mins, 54 secs | 5 mins, 3 secs | 43
+    secs |'
+  id: totrans-39
+  prefs: []
+  type: TYPE_TB
+  zh: '| 99.950% | 4 小时，22 分钟，48 秒 | 31 分钟，54 秒 | 5 分钟，3 秒 | 43 秒 |'
+- en: '| 99.900% | 8 hrs, 45 mins, 36 secs | 43 mins, 53 secs | 10 mins, 6 secs |
+    1 min, 26 secs |'
+  id: totrans-40
+  prefs: []
+  type: TYPE_TB
+  zh: '| 99.900% | 8 小时，45 分钟，36 秒 | 43 分钟，53 秒 | 10 分钟，6 秒 | 1 分钟，26 秒 |'
+- en: '| 99.500% | 43 hrs, 48 mins, 36 secs | 3 hrs, 39 mins | 50 hrs, 32 mins, 17
+    secs | 7 mins, 12 secs |'
+  id: totrans-41
+  prefs: []
+  type: TYPE_TB
+  zh: '| 99.500% | 43 小时，48 分钟，36 秒 | 3 小时，39 分钟 | 50 小时，32 分钟，17 秒 | 7 分钟，12 秒 |'
+- en: '| 99.250% | 65 hrs, 42 mins | 5 hrs, 34 mins, 30 secs | 1 hr, 15 mins, 48 secs
+    | 10 mins, 48 secs |'
+  id: totrans-42
+  prefs: []
+  type: TYPE_TB
+  zh: '| 99.250% | 65 小时，42 分钟 | 5 小时，34 分钟，30 秒 | 1 小时，15 分钟，48 秒 | 10 分钟，48 秒 |'
+- en: '| 99.000% | 3 days, 15 hrs, 54 mins | 7 hrs, 18 mins | 1 hr, 41 mins, 5 secs
+    | 14 mins, 24 secs |'
+  id: totrans-43
+  prefs: []
+  type: TYPE_TB
+  zh: '| 99.000% | 3 天，15 小时，54 分钟 | 7 小时，18 分钟 | 1 小时，41 分钟，5 秒 | 14 分钟，24 秒 |'
+- en: 'Because engineering time is a finite resource, you must be careful not to strive
+    for perfection when choosing SLOs. Not all the features in your product require
+    all these nines to keep customers satisfied, so you will find that as your product’s
+    feature set grows, you will have varying SLIs and SLOs depending on the specific
+    feature impact or the revenue being driven by it. That is to be expected and is
+    a sign of a thoughtful process. You have a critical task here: detecting when
+    a data set becomes a bottleneck for very different query profiles by different
+    stakeholders, jeopardizing performance. This also means finding a way to separate
+    those different stakeholder needs so that you can provide them reasonable SLIs
+    and SLOs.'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为工程时间是有限资源，选择服务水平目标时不要追求完美。产品中并非所有功能都需要这些九来满足客户，因此随着产品功能集的增长，你会发现根据特定功能影响或其带来的收入，你将有不同的服务水平指标和目标。这是可以预期的，也是一个深思熟虑过程的标志。你在这里有一个关键任务：检测数据集何时成为不同利益相关者的瓶颈，危及性能。这也意味着找到一种方法来区分这些不同利益相关者的需求，以便为他们提供合理的服务水平指标和目标。
+- en: These indicators and objectives are also an effective way to have a uniform
+    language between product and engineering that guides making decisions between
+    “spend engineering time on new features” versus “spend time on resilience and
+    fixing issues.” It is also a way to decide, from the list of things we would like
+    to accomplish, which is the most important based on customer experience. You can
+    use SLIs and SLOs to guide work-prioritization conversations that are otherwise
+    hard to align on.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些指标和目标也��产品和工程之间具有统一语言的有效方式，指导在“将工程时间花在新功能上”与“将时间花在弹性和解决问题上”之间做出决策。这也是一种决定，从我们想要实现的事情清单中，基于客户体验来确定哪个最重要的方式。你可以使用服务水平指标和目标来指导工作优先级的对话，否则很难达成一致。
+- en: What to Measure
+  id: totrans-46
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 应该衡量什么
+- en: Let’s imagine a company whose product is an online store. The company is seeing
+    a lot more traffic due to increased online shopping, and there is demand on the
+    infrastructure group to ensure that the database layer can handle the increased
+    demand. Throughout this section we will talk about what to measure as if we are
+    that fictional infrastructure team.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设有一家公司，其产品是一个在线商店。由于增加了在线购物，公司看到了更多的流量，基础设施团队需要确保数据库层能够处理增加的需求。在本节中，我们将讨论作为虚构基础设施团队时应该如何衡量的内容。
+- en: Defining SLIs and SLOs
+  id: totrans-48
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 定义服务水平指标和目标
+- en: 'Defining a good SLI and a matching SLO is centered around explaining succinctly
+    how to provide a delightful user experience for your customers. We will not spend
+    a ton of time explaining in the abstract how to create meaningful SLIs and SLOs.^([2](ch02.html#ch01fn15))
+    In the context of MySQL, it needs to be a representation that defines three major
+    themes: availability, latency, and lack of critical errors.'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 定义一个良好的服务水平指标和相匹配的服务水平目标的核心在于简洁地解释如何为客户提供愉快的用户体验。我们不会花费大量时间在抽象层面上解释如何创建有意义的服务水平指标和目标。^([2](ch02.html#ch01fn15))
+    在 MySQL 的背景下，它需要是一个定义了三个主要主题的表示：可用性、延迟和关键错误缺失。
+- en: For our online store example, this means pages that load quickly, faster than
+    a few hundred milliseconds at least 99.5% of the time, measured across a month.
+    It also means a reliable checkout process where intermittent failures are allowed
+    only 1% of the time in a given calendar month. Note how these indicators and objectives
+    are defined. We don’t define 100% as a requirement because we operate in a world
+    where failure is inevitable. We do use a time span so that the team can accurately
+    balance its work between new features and resilience.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于我们的在线商店示例，这意味着页面加载速度要快，至少在一个月内 99.5% 的时间内快于几百毫秒。这还意味着一个可靠的结账流程，在给定日历月内只允许
+    1% 的时间发生间歇性故障。请注意这些指标和目标的定义。我们没有将 100% 定义为要求，因为我们生活在一个失败不可避免的世界中。我们使用时间跨度，以便团队可以准确平衡其在新功能和弹性之间的工作。
+- en: “I expect 99.5% of my database requests to be served in less than two milliseconds
+    with no errors” is both a sufficient SLI with a clear SLO and not simple. You
+    can’t confirm all of this in one metric. It’s a single-sentence representation
+    of how you expect the database layer to behave in order to provide an acceptable
+    customer experience.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: “我期望我的数据库请求中有 99.5% 在两毫秒内无错误地提供服务”既是一个具有明确 SLO 的充分 SLI，又不简单。您无法通过一个指标来确认所有这些。这是对数据库层行为的单句表述，以提供可接受的客户体验。
+- en: So what is a good example in our online store for metrics that can build this
+    customer experience picture? Start with synthetic tests such as page loads in
+    production that sample load rate. This is useful as a consistent signal that “things
+    are OK.” But it’s just the beginning. Let’s discuss different facets of signals
+    to track to build a picture. As we move through these examples, we will tie it
+    with our online store to help you visualize how these different metrics create
+    a picture of a good customer experience. First, let’s talk about tracking query
+    response time.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那么在我们的在线商店中，可以构建这种客户体验画面的度量标准是什么？从在生产环境中对页面加载进行采样负载率的合成测试开始。这对于作为一个一致的信号表明“一切正常”是有用的。但这只是一个开始。让我们讨论跟踪不同信号的各个方面以构建画面。随着我们通过这些示例，我们将把它与我们的在线商店联系起来，帮助您可视化这些不同的度量标准如何创建一个良好的客户体验画面。首先，让我们谈谈跟踪查询响应时间。
+- en: Monitoring Solutions
+  id: totrans-53
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 监控解决方案
+- en: Query analysis and monitoring query latency in the context of SLIs and SLOs
+    need to focus on customer experience. This means relying on tooling that can alert
+    you as soon as possible when query response times are growing longer than an agreed-upon
+    threshold. Let’s discuss a few paths you can take to achieve that level of monitoring.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 SLIs 和 SLOs 的背景下进行查询分析和监控查询延迟需要关注客户体验。这意味着依赖可以在查询响应时间超过约定阈值时尽快向您发出警报的工具。让我们讨论一下您可以采取的几种路径来实现这种监控水平。
+- en: Commercial options
+  id: totrans-55
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 商业选项
+- en: This is one of the examples where paying a vendor whose competitive advantage
+    is this specific task of profiling MySQL performance can pay your organization
+    back in dividends. Tools like [SolarWinds Database Performance Management](https://oreil.ly/v5wSR)
+    can go a long way toward making profiling query performance both automated and
+    accessible to a large cohort of your engineering organization.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个例子，支付一个竞争优势在于 MySQL 性能分析的供应商可以让您的组织获得丰厚回报。像[SolarWinds 数据库性能管理](https://oreil.ly/v5wSR)这样的工具可以大大简化查询性能分析的自动化，并让您的工程团队中的大部分人都能够访问。
+- en: Open source options
+  id: totrans-57
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 开源选项
+- en: A well-established open source option is [Percona Monitoring and Management](https://oreil.ly/e4l9A),
+    known as PMM. It operates as a client/server pair. You install a client on your
+    database instances, which collects and sends metrics to the server portion. The
+    server side also has a set of dashboards that allow you to view graphs relating
+    to performance. One of the major benefits of PMM is that the organization of the
+    dashboards is guided by long-time experience in the Percona community around monitoring
+    MySQL performance. This makes it an excellent resource to get engineers new to
+    MySQL familiar with how to monitor MySQL performance.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个成熟的开源选项是[Percona 监控与管理](https://oreil.ly/e4l9A)，简称 PMM。它作为一个客户端/服务器对运行。您在数据库实例上安装客户端，它收集并发送指标到服务器部分。服务器端还有一组仪表板，允许您查看与性能相关的图表。PMM
+    的一个主要优点是，仪表板的组织受到 Percona 社区长期监控 MySQL 性能经验的指导。这��其成为一个极好的资源，让新手工程师熟悉如何监控 MySQL
+    性能。
+- en: Another route you can take is shipping your database slow logs and MySQL Performance
+    Schema outputs to a centralized location where you can use well-known tools like
+    *pt-query-digest*, part of the Percona Toolkit package, to analyze the logs and
+    gain more insight into what your database instances are spending their time on.
+    While effective, this process can be slow and possibly affect customers if not
+    properly used. You ideally want to discover issues before customers notice them.
+    By reactively checking logs after that happens, you run the risk of eroding customer
+    trust because of how long it takes to discover performance regressions and the
+    process of digging into all sorts of postfact artifacts to determine what happened.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以采取的另一种方法是将数据库慢日志和 MySQL 性能模式输出发送到一个集中位置，您可以使用像*pt-query-digest*这样的知名工具，它是
+    Percona Toolkit 包的一部分，来分析日志并更深入地了解数据库实例花费时间的情况。虽然有效，但这个过程可能会很慢，并且如果使用不当可能会影响客户。理想情况下，您希望在客户注意到问题之前发现问题。在发生问题后被动地检查日志，您会面临因为发现性能退化需要花费很长时间以及挖掘各种事后证据的风险，从而磨损客户信任。
+- en: Lastly, using Performance Schema to profile MySQL performance can be very helpful
+    as you will see in more detail in [Chapter 3](ch03.html#performance_schema). You
+    can use it to find bottlenecks to make your instances do more with the same specification,
+    save in infrastructure costs, or answer the question, “Why is this taking this
+    long?” This is not a tool to determine solely if you are meeting your service
+    reliability promises, as it is far deep in the internals of MySQL. For service
+    level performance evaluation, we need a new way of thinking about performance.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，使用性能模式来分析MySQL性能可能非常有帮助，正如您将在[第三章](ch03.html#performance_schema)中看到的那样。您可以使用它来找出瓶颈，使您的实例在相同规格下做更多事情，节省基础设施成本，或回答“为什么这个操作花费这么长时间？”这不是一个确定您是否符合服务可靠性承诺的工具，因为它深入到MySQL的内部。对于服务水平性能评估，我们需要一种新的关于性能的思考方式。
+- en: Now let’s dive into additional metrics that help you further understand the
+    experience of the customers of your online store. You should think about the metrics
+    you can get from MySQL in the frame of outcomes, not outputs. We will also cover
+    examples of things you cannot measure through MySQL metrics alone.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们深入了解一些额外的指标，帮助您进一步了解您在线商店的客户体验。您应该考虑从MySQL中获取的指标，而不是输出。我们还将涵盖一些单凭MySQL指标无法衡量的事例。
+- en: Monitoring Availability
+  id: totrans-62
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 监控可用性
+- en: An online store that is intermittently offline risks eroding shopper confidence.
+    This is why availability as a standalone metric, and as part of your view of the
+    customer experience, is so important.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个间歇性下线的在线商店会冒着侵蚀购物者信心的风险。这就是为什么可用性作为一个独立的指标，以及作为您对客户体验的看法的一部分，是如此重要。
+- en: '*Availability* is being able to respond to customer requests without an error.
+    To frame this in standard HTTP terms, it may be a response that is a clear-cut
+    success, like a 200 response code, or a successful acceptance of a request with
+    a promise to finish the related work asynchronously, like a 202 accepted. Availability
+    used to be a simple metric in the days of monolithic single-host systems. Nowadays,
+    most architectures are a lot more complicated. The concept of availability has
+    also evolved into a more nuanced reflection of how distributed systems fail. When
+    attempting to turn availability into an SLI and SLO for your database architecture,
+    consider discussing further details (along with examples from our online store),
+    such as the following:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*可用性*是能够在没有错误的情况下响应客户请求。用标准的HTTP术语来表述，这可能是一个明确成功的响应，比如200响应代码，或者是成功接受请求并承诺异步完成相关工作的响应，比如202
+    accepted。在单体主机系统时代，可用性曾经是一个简单的指标。如今，大多数架构要复杂得多。可用性的概念也演变成对分布式系统故障的更微妙的反映。在尝试将可用性转化为数据库架构的SLI和SLO时，考虑进一步讨论更多细节（以及我们在线商店的示例），例如以下内容：'
+- en: When dealing with inevitable catastrophic failures, what features are nonnegotiable
+    and what features are “nice to have” (e.g., can customers continue with existing
+    shopping carts and check those out but maybe not add new items during this failure)?
+  id: totrans-65
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在处理不可避免的灾难性故障时，哪些功能是不可妥协的，哪些功能是“nice to have”（例如，客户是否可以继续使用现有的购物车并结账，但在此故障期间可能无法添加新商品）？
+- en: What types of failures do we define as “catastrophic” (e.g., failure of listing
+    search might not be catastrophic, but failure of checkout operations would be)?
+  id: totrans-66
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们将哪些类型的故障定义为“灾难性”（例如，列表搜索失败可能不是灾难性，但结账操作失败就是）？
+- en: What does “degraded functionality” look like (e.g., can we load generic recommendations
+    instead of customized ones based on past purchase history when needed)?
+  id: totrans-67
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: “降级功能”是什么样子的（例如，我们是否可以在需要时加载通用推荐而不是基于过去购买历史的定制推荐）？
+- en: What is the shortest possible mean time to recovery (MTTR) we can promise for
+    our core features given a set of probable failure scenarios (e.g., if the database
+    powering a shopping cart checkout system is failing writes, how fast can we safely
+    pivot to a new source node)?
+  id: totrans-68
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在一组可能的故障场景中，我们可以为核心功能承诺的最短平均恢复时间（MTTR）是多少（例如，如果支持购物车结账系统的数据库写入失败，我们可以安全地多快地切换到新的源节点）？
+- en: When choosing a set of metrics to represent availability, you want to set expectations
+    with your customer support team that “100% uptime” is not reasonable and that
+    the focus here is to provide the best customer experience possible in a world
+    *understanding and accepting* that component failures are inevitable.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在选择一组代表可用性的指标时，您希望与客户支持团队设定期望，“100%的正常运行时间”是不合理的，重点是在一个*理解和接受*组件故障不可避免的世界中提供尽可能最佳的客户体验。
+- en: The preferred method to verify availability is from a client or remote endpoint.
+    This can be done passively if you have access to a client’s logs for database
+    access. Explicitly, this means that if your application is PHP and you run under
+    Apache, you need access to the Apache logs to determine if PHP is emitting any
+    errors for connecting to your database. You can also verify availability actively.
+    If your environment is segregated and you cannot get access to client logs, consider
+    setting up remote code that performs an action on your database to ensure it is
+    available. This could be something simple, like a `SELECT 1` query, which verifies
+    that MySQL is receiving and parsing your query but does not access the storage
+    layer. Or this could be more complex, like reading actual data from a table or
+    executing a write and subsequent read to verify the write was successful. This
+    kind of synthetic transaction from elsewhere in the network can give you perspective
+    into whether your application is available.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 验证可用性的首选方法是来自客户端或远程端点。如果您可以访问客户端的数据库访问日志，这可以被动地完成。明确地说，这意味着如果您的应用程序是PHP并且在Apache下运行，您需要访问Apache日志以确定PHP是否发出任何连接到数据库的错误。您也可以主动验证可用性。如果您的环境被隔离并且无法访问客户端日志，考虑设置远程代码来执行对数据库的操作以确保其可用性。这可以是一些简单的操作，比如一个`SELECT
+    1`查询，用于验证MySQL是否接收并解析您的查询，但不访问存储层。或者这可以更复杂，比如从表中读取实际数据或执行写入和随后读取以验证写入是否成功。来自网络中其他位置的这种合成事务可以让您了解您的应用程序是否可用。
+- en: Remote validation of availability is useful for tracking an availability objective.
+    It does not help you gain insight *before* a problem arises. One MySQL metric
+    that can be used as a leading indicator for availability issues is the MySQL status
+    counter `Threads_running`. It tracks how many queries are currently in flight
+    on a given database host. When threads running are growing at a fast rate and
+    not showing any signs of decline, that indicates queries are not finishing fast
+    enough and are therefore stacking and consuming resources. Allowing this metric
+    to grow usually results in a database host causing either a full CPU lockup or
+    intense memory load that can lead to the entire MySQL process being shut down
+    by the operating system. This is obviously a major outage if it happens on a source
+    node and something you should strive to have leading indicators for. A starting
+    point to monitor this is to inspect how many CPU cores you have and, if `Threads_running`
+    is exceeding that, that can be a sign that your server is hitting that precarious
+    state. In conjunction with that, you can monitor how close you get to `max_connections`
+    as another data point to check for an overload of work in progress.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 远程验证可用性对于跟踪可用性目标非常有用。它无法帮助您在问题出现*之前*获得洞察。用作可用性问题的领先指标的一个MySQL指标是`Threads_running`。它跟踪当前在给定数据库主机上正在运行的查询数量。当运行的线程数量快速增长且没有显示任何下降迹象时，这表明查询完成速度不够快，因此正在堆积并消耗资源。允许这个指标增长通常会导致数据库主机在源节点上��起完全的CPU锁定或强烈的内存负载，这可能导致操作系统关闭整个MySQL进程。如果这种情况发生在源节点上，显然会导致重大故障，因此您应该努力获得领先指标。监视的起点是检查您有多少CPU核心，如果`Threads_running`超过了这个值，这可能表明您的服务器正处于危险状态。除此之外，您还可以监视接近`max_connections`时的情况，这是另一个检查工作进度过载的数据点。
+- en: The section [“Safety Settings”](ch05.html#safety_settings) in [Chapter 5](ch05.html#optimizing_server_settings)
+    gives insight into how you can set the brakes on runaway MySQL threads.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[“安全设置”](ch05.html#safety_settings)部分在[第5章](ch05.html#optimizing_server_settings)中提供了关于如何设置MySQL线程的制动器的见解。'
+- en: Monitoring Query Latency
+  id: totrans-73
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 监控查询延迟
+- en: MySQL has introduced a number of [long-needed enhancements to track how long
+    queries take to run](https://oreil.ly/h9cDB), and you should definitely use your
+    monitoring stack to track these trends as your application code changes. However,
+    this is still not a full picture of the customer experience, especially given
+    how modern software architecture is designed. In addition to internally tracked
+    latency, you also need a view on how latency is perceived by your applications
+    and what happens when that perceived latency increases. This means that besides
+    tracking query latency from the database server directly, you would also be well
+    served by tooling the clients to report on time to query completion, so you can
+    get as close to the customer experience as possible. Digesting all of these sample
+    metrics from clients (especially when your infrastructure footprint grows) can
+    be done with paid tools like Datadog or SolarWinds Database Performance Monitor,
+    or even by using open source tools like PMM. This is an area where close collaboration
+    with your organization’s application developers is paramount. You need to be aware
+    of how the application team measures this from the application perspective and
+    add more insight to the outliers using tracing tools like Honeycomb or Lightstep.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL引入了许多[长期需要的增强功能来跟踪查询运行时间](https://oreil.ly/h9cDB)，随着应用代码的变化，您应该绝对使用监控堆栈来跟踪这些趋势。然而，这仍然不能完全反映客户体验，特别是考虑到现代软件架构的设计方式。除了内部跟踪的延迟之外，您还需要了解应用程序如何感知延迟以及当感知延迟增加时会发生什么。这意味着除了直接跟踪数据库服务器的查询延迟之外，您还应该通过工具让客户端报告查询完成时间，以便尽可能接近客户体验。从客户端摄取所有这些样本指标（特别是当您的基础设施规模扩大时）可以使用付费工具如Datadog或SolarWinds
+    Database Performance Monitor，甚至使用开源工具如PMM。这是一个需要与组织的应用开发人员密切合作的领域。您需要了解应用团队如何从应用程序角度衡量这一点，并使用跟踪工具如Honeycomb或Lightstep来增加对异常值的洞察力。
+- en: Monitoring for Errors
+  id: totrans-75
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 监控错误
+- en: Do you need to track and alert on every error that ever happens? It depends.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您是否需要跟踪并警报每次发生的错误？这取决于情况。
+- en: 'The sheer existence of errors for a MySQL client in a running service is not
+    an indication of something being definitely broken. In a world of distributed
+    systems, there are many scenarios where clients can encounter errors that are
+    intermittent and, in many cases, resolved with a simple retry of the failed query.
+    The *rate* of errors happening, though, across the fleet of services handling
+    database queries in your infrastructure can be a crucial indicator of brewing
+    trouble. Here are some examples of client-side errors that might normally be just
+    noise but are a sign of trouble if their rate accelerates:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在运行服务中的MySQL客户端存在错误并不意味着一定有什么东西出了问题。在分布式系统的世界中，有许多情况下客户端可能遇到间歇性错误，并且在许多情况下，通过简单重试失败的查询可以解决。然而，发生错误的*速率*，跨越处理基础设施中数据库查询的服务群体，可能是潜在问题的关键指标。以下是一些客户端错误的例子，通常可能只是噪音，但如果它们的速率加快，则可能是问题的迹象：
+- en: Lock wait timeout
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 锁等待超时
+- en: Your clients reporting a sharp increase of this error can be a sign of an escalating
+    row-lock contention on your source node that transactions keep retrying and still
+    failing. It can be a precursor for write downtime.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你的客户报告这种错误急剧增加可能是源节点上的行锁争用升级的迹象，事务不断重试仍然失败。这可能是写入停机的前兆。
+- en: Aborted connections
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 中止连接
+- en: Clients reporting a sudden surge of aborted connections can be an indicator
+    of issues in any access layer you have between the clients and the database instances.
+    Not tracking that down can lead to a lot of client-side retries, which consumes
+    resources.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 客户报告突然出现大量中止连接可能是你在客户端和数据库实例之间的任何访问层存在问题的指标。不追踪这些问题可能导致大量客户端重试，消耗资源。
+- en: One thing MySQL server tracks that can help you is the set of server variables
+    named [Connection_errors_xxx](https://oreil.ly/F4VUw) where *xxx* is different
+    kinds of connection errors. A sudden increase of any of these counters can be
+    a strong indicator telling you that something new and unusual is currently broken.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL服务器跟踪的一个可以帮助你的东西是名为[Connection_errors_xxx](https://oreil.ly/F4VUw)的服务器变量集，其中*xxx*是不同类型的连接错误。任何这些计数器的突然增加都可能是一个强烈的指示，告诉你当前有一些新的异常情况。
+- en: Are there errors where a single instance means there is trouble and needs to
+    be handled? Yes.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 是否有错误，一个单个实例意味着有问题需要处理？是的。
+- en: For example, getting errors that the MySQL instance is running in read-only
+    mode is a sign of issues even if these errors do not happen very often. This can
+    mean that you just had a replica promoted to source, but it is still running in
+    read-only mode (you run replicas in read-only mode, don’t you?), which is downtime
+    of writes for your cluster. Or it can mean there is some issue in your access
+    layer sending write traffic to a replica. In either of those cases, it is not
+    a sign of an intermittent issue solved with a retry.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，收到MySQL实例正在以只读模式运行的错误是一个问题的迹象，即使这些错误并不经常发生。这可能意味着你刚刚将一个复制实例提升为源，但它仍在只读模式下运行（你确实在只读模式下运行复制实例，对吧？），这意味着对于你的集群来说写入的停机时间。或者这可能意味着在发送写流量到复制实例的访问层中存在一些问题。在这两种情况下，这不是一个通过重试解决的间歇性问题的迹象。
+- en: Another server-side error that is a flag for a major problem is either “too
+    many connections” or an OS-level “cannot create new thread.” These are signs that
+    your application layer has created and left open more connections than your database
+    server is configured to allow, either in the server `max_connections` variable
+    or the number of threads the MySQL process is allowed to open. These errors translate
+    immediately as 5xx errors to your application and, depending on your application
+    design, can also be impactful to your customers.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个服务器端错误，表明存在重大问题的标志是“连接过多”或操作系统级别的“无法创建新线程”。这些是你的应用层创建并保留的连接数超过了数据库服务器配置允许的数量的迹象，无论是在服务器`max_connections`变量还是MySQL进程允许打开的线程数方面。这些错误会立即转换为5xx错误传递给你的应用程序，并且根据你的应用程序设计，也可能对你的客户产生影响。
+- en: As you can see, measuring performance and choosing which errors to frame your
+    SLIs around is as much a communication and social problem as it is a technical
+    one, so you should be prepared for that.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你所看到的，衡量性能并选择围绕SLIs构建哪些错误，这既是一个技术问题，也是一个沟通和社交问题，所以你应该做好准备。
+- en: Proactive Monitoring
+  id: totrans-87
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 主动监控
+- en: 'As we’ve said, SLO monitoring is focused on whether or not your customers are
+    happy. This helps keep you focused on improving their experience when they are
+    not happy and on other tasks, like toil reduction, when they are. This misses
+    out on a key area: proactive monitoring.'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们所说，SLO监控侧重于你的客户是否满意。这有助于让你专注于在客户不满意时改善他们的体验，以及在其他任务上，比如减少重复劳动时。这忽略了一个关键领域：主动监控。
+- en: If we return to our online store example and how we envision monitoring our
+    customers’ experience, we can elaborate further. Imagine you aren’t experiencing
+    any major failures of any components, but you note that there is a rising tide
+    of customer support tickets reporting “slowness” or occasional errors that seem
+    to disappear on their own. How do you track down behavior like this? This can
+    be a very difficult task if you do not already have a good idea what the baseline
+    performance of a number of signals is. The dashboards and scripts that you use
+    to trigger on-call alerts can be referred to as *steady state monitoring*. These
+    let you know something unexpected is happening with a given system whether or
+    not there was a change. They are an important tool for giving you leading indicators
+    *before* your customers experience failure.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们回到我们的在线商店示例以及我们如何设想监控客户体验，我们可以进一步阐述。想象一下，你没有遇到任何组件的重大故障，但你注意到有越来越多的客户支持票证报告“缓慢”或偶尔出现的错误，似乎会自行消失。你如何追踪这样的行为？如果你不已经对多个信号的基准性能有一个很好的想法，这可能是一项非常困难的任务。你用来触发值班警报的仪表板和脚本可以称为*稳态监控*。这让你知道在给定系统中是否发生了意外情况，无论是否有变化。它们是在客户经历故障*之前*为你提供领先指标的重要工具。
+- en: The balance you need to strike with monitoring is that it always needs to be
+    actionable while also being a true leading indicator. Alerting on disk space for
+    a database at 100% full is too late as the service is already down, but alerting
+    on 80% might be too slow or not as actionable if the growth rate is not that fast.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在监控中需要取得平衡的一点是，它始终需要是可操作的，同时也需要是真正的领先指标。对于数据库磁盘空间已满时发出警报已经太晚了，因为服务已经停止了，但是在80%时发出警报可能太慢，或者如果增长速率不那么快，则可能不够可操作。
+- en: Let’s talk about useful signals you can monitor that are not directly tied to
+    actual customer impact.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们谈谈你可以监控的有用信号，这些信号与实际客户影响没有直接关联。
+- en: Disk growth
+  id: totrans-92
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 磁盘增长
+- en: Tracking disk growth is the sort of metric that you might not think about until
+    it becomes a problem. When it does become a problem, solving the issue can be
+    time consuming and affect your business. It is definitely better to understand
+    how you track it, have a plan to mitigate it, and know what alerting thresholds
+    are appropriate.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 跟踪磁盘增长是一种你可能不会考虑直到它成为问题的指标。一旦它成为问题，解决问题可能会耗费时间并影响你的业务。了解如何跟踪它，制定缓解计划，并知道适当的警报阈值肯定是更好的选择。
+- en: There are a number of strategies you can use to monitor disk growth. Let’s break
+    them down from most ideal to bare minimum.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有许多策略可以用来监控磁盘增长。让我们从最理想到最低限来分解它们。
+- en: If your monitoring tooling can allow it, tracking the rate of growth of disk
+    space usage can be remarkably useful. There are always scenarios where available
+    disk space can burn down relatively quickly, putting your availability at risk.
+    Operations like long-running transactions with large undo logs or alter tables
+    are examples of why you might approach full disk too fast. There are many incident
+    stories out there where excessive logging or a change in insert pattern for a
+    given data set went undetected until “the database” ran out of disk space. Only
+    then did all sorts of alerts fire.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你的监控工具允许的话，跟踪磁盘空间使用量的增长速率可能非常有用。总会有一些情况，可用磁盘空间会相对迅速减少，使你的可用性受到威胁。长时间运行的具有大型撤消日志或更改表的事务是为什么你可能会迅速接近磁盘满的例子。有许多事故故事表明，过多的日志记录或给定数据集的插入模式的更改直到“数据库”耗尽磁盘空间才被发现。然后才会触发各种警报。
+- en: If tracking the rate of growth is not feasible (not all monitoring tools provide
+    this ability), you can set multiple thresholds with lower warnings that only fire
+    during business hours and a higher, more critical value as an alert to off-hours
+    on call. This allows the team to have a heads-up warning during business hours
+    before things get dire enough to wake someone up.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果跟踪增长速率不可行（并非所有监控工具都提供此功能），你可以设置多个阈值，较低的警告只在工作时间触发，较高的更关键值作为非工作时间值班的警报。这使团队在工作时间之前有一个预警，以避免事情变得严重到需要叫醒某人。
+- en: If you can neither monitor the rate of growth nor define multiple thresholds
+    for the same metric, then you have to at least determine a single-value threshold
+    for disk space used at which you page your on-call engineers. This threshold needs
+    to be low enough to allow some action and free disk space as the team assesses
+    the reasons it fired and consider longer-term mitigation. Consider evaluating
+    the maximum throughput your disk can write (MB/s) and using that to help calculate
+    how long at max traffic throughput it would take to fill the disk. You need that
+    much lead time to avoid an event.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你既不能监控增长速率，也不能为同一指标定义多个阈值，那么你至少需要确定一个磁盘空间使用量的单一阈值，在达到该阈值时向你的值班工程师发出警报。这个阈值需要足够低，以便在团队评估触发原因并考虑长期缓解措施时采取一些行动并释放磁盘空间。考虑评估磁盘的最大吞吐量（MB/s），并利用这一点来帮助计算在最大流量吞吐量下填满磁盘需要多长时间。你需要这么长的前期时间来避免事件发生。
+- en: We discuss in [Chapter 4](ch04.html#operating_system_and_hardware_optimizat)
+    operating system and hardware configurations that relate to how MySQL uses disk
+    space and what trade-offs to consider in those decisions in relation to disk space
+    growth. It should be expected that at some point, hopefully, your business will
+    have grown so that you cannot store all of your data in one cluster of servers.
+    Even if you run in a cloud environment that can expand volumes for you, you still
+    need to do planning around this, so you always want to have a threshold for free
+    disk space that allows you the time to plan and do the needed expansion without
+    a panic.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在[第4章](ch04.html#operating_system_and_hardware_optimizat)中讨论了与MySQL如何使用磁盘空间以及在这些决策中考虑磁盘空间增长相关的操作系统和硬件配置。应该预期，希望你的业务会发展到某个程度，以至于你无法将所有数据存储在一组服务器集群中。即使你在一个可以为你扩展卷的云环境中运行，你仍然需要对此进行规划，因此你总是希望有一个空闲磁盘空间的阈值，以便你有时间进行规划并进行所需的扩展而不会惊慌。
+- en: The takeaway here is to make sure you have some monitor for disk space growth,
+    even if you think it is early days and too soon to need one. This is one of the
+    growth axes that catches almost everyone unprepared.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里的要点是确保你对磁盘空间增长有一些监控，即使你认为现在还为时过早，还不需要。这是几乎每个人都准备不足的增长轴之一。
+- en: Connection growth
+  id: totrans-100
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 连接增长
+- en: As your business grows, a common layer that grows linearly is your application
+    layer. You will need more instances to support login, shopping carts, processing
+    requests, or whatever the context of the product may be. All of these added instances
+    start opening more and more connections to your database hosts. You may mitigate
+    that growth for some time by adding replicas, using replication as a scale-out
+    measure, or even using middleware layers like ProxySQL to decouple the growth
+    of your frontend from connection load directly on the database.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着业务的增长，一个常见的线性增长层是你的应用层。你将需要更多的实例来支持登录、购物车、处理请求，或者产品背景可能是什么。所有这些添加的实例开始向数据库主机打开越来越多的连接。你可以通过添加副本、使用复制作为扩展措施，甚至使用中间件层如ProxySQL来将前端的���长与直接在数据库上的连接负载分离来缓解这种增长。
+- en: While your traffic is growing, the database server can support a finite pool
+    of connections, which is configured as the server setting `max_connections`. Once
+    the total number of connections to the server reaches that maximum, your database
+    will not allow any new ones, which is a common contributing cause to incidents
+    where you can no longer open new connections to the database, leading to increased
+    errors for your users.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在流量增长的同时，数据库服务器可以支持有限数量的连接池，这是通过服务器设置`max_connections`配置的。一旦连接到服务器的总数达到最大值，你的数据库将不允许任何新连接，这是导致无法再向数据库打开新连接的常见原因之一，从而增加用户的错误。
+- en: 'Monitoring connection growth is about making sure your resources are not exhausted
+    to the point of risking your database availability. This risk can come in two
+    different ways:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 监控连接增长是为了确保资源不会耗尽，从而危及数据库的可用性。这种风险可能以两种不同的方式出现：
+- en: The application layer is opening lots of connections it’s not using and creating
+    the risk of maxing out connections for no good reason. A clear sign of this is
+    seeing connections count (`threads_connected`) as high but `threads_running` is
+    still low.
+  id: totrans-104
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 应用层打开了很多未使用的连接，无故增加连接风险。这种情况的明显迹象是看到连接计数(`threads_connected`)很高，但`threads_running`仍然很低。
+- en: The application layer is actively using lots of connections and risking overloading
+    the database. You can distinguish this state by seeing that both `threads_connected`
+    *and* `threads_running` are at high values (hundreds? thousands?) and increasing.
+  id: totrans-105
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 应用层正在积极使用大量连接，有可能过载数据库。你可以通过看到`threads_connected`和`threads_running`都很高（数百？数千？）且不断增加来区分这种状态。
+- en: A useful thing to consider when setting up monitoring for connection count is
+    relying on percentages and not absolute numbers. A percentage of `threads_connected/max_connections`
+    shows you how close the growth of your application node count is taking you to
+    the maximum connection pool the database can allow. This helps you monitor for
+    the first state of connection growth trouble.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在设置连接计数监控时需要考虑的一个有用的事情是依赖于百分比而不是绝对数字。`threads_connected/max_connections`的百分比显示了你的应用节点数量增长将带你接近数据库允许的最大连接池。这有助于监控连接增长问题的第一个阶段。
+- en: Separately, you should be tracking and alerting on how busy a database host
+    is, which, as we explained earlier, is seen in the value of `threads_running`.
+    Typically, if this value is growing north of one hundred threads, you start to
+    see elevated CPU usage and increased memory use, which is a general sign of high
+    load on the database host. This is an immediate concern for your database availability,
+    as it can escalate to the MySQL process getting killed by the operating system.
+    A common quick solution is to use the kill process command or a tool that automates
+    using it, such as *pt-kill*, tactically to relieve load, then look into why the
+    database got into this state using query analysis, which we described earlier.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另外，你应该跟踪和警报数据库主机的繁忙程度，正如我们之前解释的，可以通过`threads_running`的值来看到。通常，如果这个值增长到一百以上的线程，你会开始看到增加的CPU使用率和内存使用率，这是���据库主机负载高的一般迹象。这对于数据库的可用性是一个直接的关注点，因为它可能升级到MySQL进程被操作系统杀死。一个常见的快速解决方案是使用kill进程命令或自动化使用它的工具，比如*pt-kill*，战术性地减轻负载，然后通过查询分析来查明数据库陷入这种状态的原因，这是我们之前描述过的。
+- en: Warning
+  id: totrans-108
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Connection storms are situations in production systems where the application
+    layer perceives increases in query latency and responds with opening more connections
+    to the database layer. This can result in adding significant load on the database
+    as it handles the large influx of new connections, which takes away resources
+    from fulfilling query requests. Connection storms can cause a sudden decrease
+    in available connections in `max_connections` and increase the risk of your database
+    availability.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 连接风暴是生产系统中的情况，应用层感知到查询延迟增加，并响应地向数据库层打开更多连接。这可能会给数据库增加大量负载，因为它处理大量新连接的涌入，这会消耗资源，无法满足查询请求。连接风暴可能导致`max_connections`中可用连接数量突然减少，增加数据库可用性风险。
+- en: Replication lag
+  id: totrans-110
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 复制延迟
+- en: MySQL has a native replication feature that sends data from one server, the
+    *source*, to one or more additional servers, referred to as *replicas*. The delay
+    between data being written on the source and being available on the replicas is
+    referred to as *replication lag*. If your application reads data from the replicas,
+    lag can make it seem as if your data has inconsistencies as you send reads to
+    replicas not yet caught up on all the changes. In a social media example, a user
+    may comment on something someone else has posted. This data is written to the
+    source and then replicated out to the replicas. When the user attempts to view
+    their reply, if the application sends the request to a server that is lagged,
+    the replica may not have the data yet. This can create confusion for the user,
+    thinking their comment was not saved. We cover strategies to fight replication
+    lag in more detail in [Chapter 9](ch09.html#replication-id000008).
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL具有一种本地复制功能，可以将数据从一个服务器（源）发送到一个或多个额外的服务器，称为副本。数据在源上写入和在副本上可用之间的延迟称为*复制延迟*。如果你的应用从副本读取数据，延迟可能会导致数据看起来不一致，因为你向尚未赶上所有更改的副本发送读取请求。在社交媒体的例子中，用户可能会评论其他人发布的内容。这些数据被写入源，然后复制到副本。当用户尝试查看他们的回复时，如果应用发送请求到一个滞后的服务器，副本可能尚未有数据。这可能会让用户感到困惑，认为他们的评论没有保存。我们在[第9章](ch09.html#replication-id000008)中更详细地介绍了对抗复制延迟的策略。
+- en: Lag is one of those metrics that can be an acute SLI that can trigger incidents.
+    It is also a longer-term trend indicating the need for more architectural change.
+    In the longer-term context, even if you never hit replication lag that is affecting
+    the customer experience, it is still a sign that, at least intermittently, the
+    volume of writes from source nodes is surpassing what replicas can write at current
+    configuration. It can be a canary in the coal mine for your write capacity. If
+    listened to, it can prevent future full-blown incidents.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 延迟是那些可能触发事件的急性 SLI 指标之一。它也是需要更多架构变化的长期趋势指示。在长期情况下，即使你从未遇到影响客户体验的复制延迟，它仍然表明，至少间歇性地，源节点的写入量超过了副本在当前配置下的写入量。它可以成为你写入容量的煤矿中的警报。如果听取建议，它可以防止未来发生全面事件。
+- en: Warning
+  id: totrans-113
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Be wary of alerting someone to replication lag. Immediate actionable remediation
+    may not always be possible. Likewise, if you don’t read from replicas, consider
+    how aggressively your monitoring system alerts someone to this condition. Alerts
+    that someone receives, especially off hours, should always be actionable.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 警惕将有关复制延迟的信息告知他人。立即可行的纠正措施并不总是可能的。同样，如果你不从副本中读取数据，请考虑监控系统对此情况如何积极地提醒他人。尤其是在非工作时间接收到的警报应始终是可操作的。
+- en: Replication lag is one of those metrics that can affect both immediate and tactical
+    decisions, but also keeping an eye on its trends long term can help save you the
+    hassle of larger business impact and keep you ahead of the growth curve.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制延迟是那些既影响即时又战术决策的指标之一，但长期关注其趋势可以帮助你避免更大的业务影响，并使你走在增长曲线的前面。
+- en: I/O utilization
+  id: totrans-116
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: I/O 利用率
+- en: One of the never-ending endeavors of a database engineer is “do as much of the
+    work as possible in memory because it is faster.” While that is certainly accurate,
+    we also know that we cannot possibly accomplish that 100% of the time because
+    that would mean our data entirely fits in memory, in which case “scale” is not
+    yet a thing we need to expend energy on.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库工程师永无止境的努力之一是“尽可能多地在内存中完成工作，因为这样更快。”虽然这确实是准确的，但我们也知道我们不可能100%地做到这一点，因为那意味着我们的数据完全适合内存，而在这种情况下，“规模”还不是我们需要花费精力的事情。
+- en: As your database infrastructure scales and your data does not fit in memory
+    anymore, you come to realize that the next best thing is to not read so much data
+    from disk that queries are stuck waiting their turn for those precious I/O cycles.
+    This remains true even in this era of almost everything running on solid-state
+    drives. As the size of your data grows and your queries need to scan more of it
+    to fulfill requests, you will find that I/O wait can become a bottleneck for your
+    traffic growth.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着数据库基础设施的扩展和数据不再适合内存，你会意识���下一个最好的方法是不要从磁盘中读取太多数据，以至于查询被卡在那些宝贵的 I/O 周期中等待它们的轮次。即使在几乎所有东西都运行在固态驱动器上的这个时代，这仍然是真实的。随着数据规模的增长和查询需要扫描更多数据来满足请求，你会发现
+    I/O 等待可能会成为你的流量增长的瓶颈。
+- en: Monitoring your disk I/O activity helps you get ahead of performance degradation
+    before it becomes customer facing. There are a few things you can monitor to achieve
+    this goal. Tools like *iostat* can help you monitor for I/O wait. You want to
+    monitor and alert if your database server has a lot of threads sitting in `IOwait`,
+    an indication that they are in queue waiting on some disk resources to be available.
+    You find this by tracking `IOutil` as a running graph for a meaningful period
+    of time, such as a day or two, or even a week. `IOutil` is reported as a percentage
+    of the overall system’s disk access capacity. Having that be close to 100% for
+    sustained periods on a host that is not running backups can be an indication of
+    full table scans and inefficient queries. You also want to monitor the overall
+    utilization of your disk I/O capacity as a percentage since that can forewarn
+    you of disk access becoming a future bottleneck for your database performance.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 监控磁盘 I/O 活动有助于在影响客户之前提前了解性能下降。有一些事项可以监控以实现这一目标。像 *iostat* 这样的工具可以帮助你监控 I/O 等待。你希望监控并提醒如果你的数据库服务器有很多线程处于
+    `IOwait` 中，这表明它们在排队等待某些磁盘资源可用。你可以通过跟踪 `IOutil` 作为一个有意义的时间段的运行图，比如一天或两天，甚至一周。`IOutil`
+    报告为整个系统磁盘访问容量的百分比。在一个不运行备份的主机上，如果持续时间接近 100%，这可能表明存在全表扫描和低效查询。你还想监控你的磁盘 I/O 容量的整体利用率作为一个百分比，因为这可以预警你的磁盘访问成为未来数据库性能的瓶颈。
+- en: Auto-increment space
+  id: totrans-120
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 自增空间
+- en: One of the less well-known landmines in using MySQL is that auto-increment primary
+    keys are by default created as signed integers and can run out of key space. This
+    happens when you have done enough inserts that the auto-increment key has reached
+    the maximum possible value for its data type. When planning what metrics you should
+    monitor on a long-term basis, monitoring remaining integer space for any tables
+    that use auto increments as the primary key is a simple action that will almost
+    certainly save you some major incident pain in the future because you can predict
+    the need for a larger key space in advance.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用 MySQL 时较少为人知的一个雷区是，自增主键默认创建为有符号整数，并且可能会用尽键空间。当你进行了足够多的插入操作时，自增键达到了其数据类型的最大可能值。在长期基础上计划应该监控哪些指标时，监控使用自增作为主键的任何表的剩余整数空间是一个简单的操作，几乎肯定会在未来为你节省一些重大事件的痛苦，因为你可以提前预测到需要更大的键空间。
+- en: 'How do you monitor this key space? You have a few options. If you already use
+    PMM and its Prometheus exporter, this comes baked in and all you need to do is
+    turn on the flag `-collect.auto_increment.columns`. If your team does not use
+    Prometheus, you can use the following query, which can be modified either as a
+    metrics producer or an alert to tell you when any of your tables are approaching
+    the [maximum key space possible](https://oreil.ly/xfypm). This query relies on
+    `information_schema`, which has all the metadata about the tables in your database
+    instance:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如何监控这个关键空间？您有几个选项。如果您已经使用PMM及其Prometheus导出器，这是内置的，您只需要打开标志`-collect.auto_increment.columns`。如果您的团队不使用Prometheus，您可以使用以下查询，可以将其修改为度量生产者或警报，告诉您何时任何表接近[可能的最大关键空间](https://oreil.ly/xfypm)。此查询依赖于`information_schema`，其中包含有关数据库实例中表的所有元数据：
+- en: '[PRE0]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: There is a lot of nuance and context that you have to think about when picking
+    a primary key in general and for managing auto increments specifically, and we
+    will cover that in [Chapter 6](ch06.html#schema_design_and_management).
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在一般情况下以及专门管理自动增量时，选择主键时需要考虑很多微妙和上下文，我们将在[第6章](ch06.html#schema_design_and_management)中进行讨论。
+- en: Backup creation/restore time
+  id: totrans-125
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 备份创建/恢复时间
+- en: Long-term planning is not only about growth while the business is running as
+    usual but also recovery in an acceptable time frame. We will discuss how to think
+    about disaster recovery in more depth in [Chapter 10](ch10.html#backup_and_recovery),
+    and how it is part of your compliance control duties in [Chapter 13](ch13.html#compliance_with_mysql),
+    but we bring it up here to note that a good disaster recovery plan only works
+    when you revisit it and adjust its goals.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 长期规划不仅涉及业务正常运行时的增长，还涉及在可接受的时间范围内进行恢复。我们将在[第10章](ch10.html#backup_and_recovery)中更深入地讨论如何考虑灾难恢复，以及在[第13章](ch13.html#compliance_with_mysql)中讨论它如何成为您的合规控制职责的一部分，但我们在这里提到它是为了指出一个好的灾难恢复计划只有在您重新审视并调整其目标时才能起作用。
+- en: 'If your databases are reaching a size where restoring from a backup will take
+    longer than what is acceptable for restoring critical functionality of the business,
+    then even if everything else is running fine, you need to examine adjusting that
+    MTTR target, changing the definition of “critical functionality,” or finding a
+    way to make the backup-restore time shorter. Here are some things to think about
+    when planning for disaster recovery:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '如果您的数据库达到一个恢复备份所需时间超过可接受时间以恢复业务的关键功能的大小，即使其他一切都正常运行，您也需要考虑调整MTTR目标，更改“关键功能”的定义，或找到缩短备份恢复时间的方法。在制定灾难恢复计划时需要考虑的一些事项： '
+- en: Be *very specific* what functionality falls into this recovery target, and if
+    needed, look into whether the data that powers that functionality subset needs
+    to be in a separate cluster to actually make that expectation realistic.
+  id: totrans-128
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于这个恢复目标，要非常具体，并且如果需要的话，要查看支持该功能子集的数据是否需要在一个单独的集群中，以实现这一期望的现实性。
+- en: If functionally partitioning that data into multiple and smaller instances is
+    not feasible, the entire data set is now under that target for recovering via
+    backups. The data set that takes the longest to restore from backups will be what
+    drives this recovery process completion time.
+  id: totrans-129
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果将数据在多个较小的实例中进行功能分区不可行，则整个数据集现在都处于通过备份恢复的目标下。从备份中恢复所需时间最长的数据集将驱动此恢复过程完成时间。
+- en: Make sure to have automated methods for testing (we will cover some examples
+    in [Chapter 10](ch10.html#backup_and_recovery)). Monitor how long it takes to
+    restore a backup from a file to a running database that has also caught up on
+    replicating all changes since the backup was created, and store that metric somewhere
+    with enough retention to see long-term (at least a year) trends. This is one of
+    those indicators that can slip by and become surprisingly long if monitoring it
+    is not automated.
+  id: totrans-130
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 确保有自动化的测试方法（我们将在[第10章](ch10.html#backup_and_recovery)中涵盖一些示例）。监视从文件恢复备份到已经赶上自备份创建以来的所有更改的运行数据库所需的时间，并将该指标存储在一个足够长的保留期内，以查看长期（至少一年）的趋势。如果不自动化监控，这是一个可能被忽视并且变得令人惊讶地长的指标之一。
+- en: You will see that in many of the example long-term metrics we describe shortly,
+    we almost always point out the need for either functional sharding or horizontal
+    sharding of your data. The goal here is to point explicitly to the fact that if
+    you consider sharding when you have incidents where capacity issues are a major
+    contributing cause, then you likely have considered it too late. The work of breaking
+    down your data into manageable pieces doesn’t start when your data is too large
+    for one cluster but well before that, when you are still determining what your
+    goals for providing a successful customer experience are.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们即将描述的许多示例长期指标中，您会发现我们几乎总是指出需要对数据进行功能分片或水平分片。这里的目标是明确指出，如果在容量问题是主要贡献原因的情况下考虑分片，那么您很可能考虑得太晚了。将数据分解为可管理的部分的工作并不是在您的数据对一个集群来说太大时才开始，而是在您仍在确定为提供成功的客户体验而设定目标时。
+- en: Understanding how long it takes you to recover your data can help set expectations
+    for what to do in a real disaster. It can also make you aware of when it might
+    take longer than the business wants it to. This is a precursor to needing to shard.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 了解恢复数据所需的时间可以帮助设定在真正灾难发生时该做什么的期望。它还可以让您意识到可能需要比业务希望的时间更长。这是需要分片的前兆。
+- en: Measuring Long-Term Performance
+  id: totrans-133
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 测量长期性能
+- en: Choosing SLIs and SLOs for day-to-day operations is only the beginning. You
+    need to make sure you are not mistaking the forest for the trees and focusing
+    on specific host metrics instead of inspecting the overall system performance
+    and the customer-experience outcomes. In this section, we cover strategies you
+    can use to think about overall long-term health of the system.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择日常运营的服务水平指标（SLIs）和服务水平目标（SLOs）只是一个开始。你需要确保自己没有把森林误认为是树木，而是专注于具体的主机指标而不是检查整体系统性能和客户体验结果。在这一部分，我们将介绍您可以使用的策略来思考系统的整体长期健康状况。
+- en: Learning Your Business Cadence
+  id: totrans-135
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 了解您的业务节奏
+- en: 'It is important to be aware of the traffic cadence of your business, as that
+    will always be the time when all your SLOs are both the most tested and receiving
+    the most scrutiny from your most important customers. The business cadence can
+    mean peak traffic times are orders of magnitude larger than “average,” and that
+    has plenty of consequences if your database infrastructure is not prepared. In
+    the context of the database infrastructure, this can translate to orders of magnitude
+    more requests per second to fulfill, a lot more connection load from your application
+    servers, or larger revenue impact if you were to have an intermittent failure
+    of write operations. Here are some examples of business cadence that should help
+    you understand what business cycle your company operates within:'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 了解您的业务流量节奏非常重要，因为这将始终是您的所有SLOs都经受最严格测试并受到最重要客户最严格审查的时候。业务节奏可能意味着高峰流量时间比“平均”高出数倍，如果您的数据库基础设施没有准备好，这将产生许多后果。在数据库基础设施的背景下，这可能意味着每秒要处理数倍的请求，应用服务器的连接负载更大，或者如果写操作间歇性失败，收入影响更大。以下是一些业务节奏的示例，这些示例应该帮助您了解您的公司所处的业务周期：
+- en: Ecommerce site
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 电子商务网站
+- en: Late November through the end of the year is the busiest time for many countries,
+    and online stores can see orders of magnitude more sales. This means a lot more
+    shopping carts, a lot more concurrent sales, and a lot more revenue impact for
+    the same failures any other time of the year.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 11月底至年底是许多国家最繁忙的时期，在线商店可能会看到销售额增加数倍。这意味着更多的购物车，更多的同时销售，以及同一年的任何其他时间相比更多的收入影响。
+- en: Human resources software
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 人力资源软件
+- en: In the United States, November is typically when a lot of employees are making
+    benefits elections during a time known as “open enrollment,” which will create
+    a lot more traffic.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在美国，11月通常是许多员工在被称为“开放选项”的时间内进行福利选举的时候，这将带来更多的流量。
+- en: Online fresh-flowers vendor
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在线鲜花供应商
+- en: Valentine’s Day will be the busiest time of the year, with a lot more folks
+    ordering deliveries of bouquets.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 情人节将是一年中最忙碌的时候，会有更多人订购花束送货。
+- en: As you can see, these business cycles can vary widely depending on the customer
+    needs that the business is filling. It is crucial for you to be aware of the cycle
+    for your business and the implications that has on the business’s revenue, its
+    reputation, and therefore how much preparation you should make to meet the demand
+    without affecting the stability of the systems you are tasked to run.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如您所看到的，这些业务周期可以根据业务填充的客户需求而有很大的变化。对于您的业务周期和其对业务收入、声誉以及您应该做出多少准备以满足需求而不影响您负责运行的系统的稳定性的影响，您必须意识到这一点至关重要。
+- en: When it comes to measuring the performance of the database infrastructure underpinning
+    the business, it is important not to measure performance in a bubble separate
+    from the other important metrics that your engineering organization is tracking.
+    Database performance should be part of the larger conversation about tech-stack
+    performance and not handled as a special case. Start by using the same tools as
+    the rest of your engineering organization as much as possible. You want the metrics
+    and dashboard you rely on to determine how the database layer is performing to
+    be equally as accessible as the application-layer metrics or even in the same
+    dashboards. This mindset, regardless of what tech or vendor you use, will go a
+    long way toward creating an environment where everyone is invested in the performance
+    of the full stack and reducing the proverbial wall engineers can feel between
+    the features they write and the databases that support them.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当衡量支撑业务的数据库基础设施的性能时，重要的是不要将性能测量与工程组织正在跟踪的其他重要指标分开。数据库性能应该是关于技术堆栈性能的更大对话的一部分，而不应被视为特例。尽可能使用与您的工程组织其余部分相同的工具。您希望依赖于确定数据库层性能的指标和仪表板与应用层指标一样易于访问，甚至在同一仪表板上。无论您使用什么技术或供应商，这种思维方式都将在创造一个每个人都投入到整个堆栈性能并减少工程师可能感受到的功能编写和支持它们的数据库之间的隔阂的环境中发挥作用。
+- en: Tracking Your Metrics Effectively
+  id: totrans-145
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 有效跟踪您的指标
+- en: 'There are a number of things to be concerned with when it comes to long-term
+    planning for a business, which includes but is not limited to:'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在进行业务的长期规划时，有许多事情需要考虑，其中包括但不限于：
+- en: Planning for future capacity
+  id: totrans-147
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 规划未来的容量
+- en: Foreseeing when major improvements are needed and when incremental changes are
+    enough
+  id: totrans-148
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 预见何时需要进行重大改进以及何时足够进行渐进式变化
+- en: Planning for the increased costs of running your infrastructure
+  id: totrans-149
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 规划运行基础设施的成本增加
+- en: You need to be able to not just measure the health of the data-store infrastructure
+    at a certain point in time but also trend performance improvement or degradation
+    on a long-term basis. This means not just identifying SLIs and SLOs but also finding
+    which SLIs and SLOs remain valuable, high-signal metrics for long-term trends
+    as well. You will likely find that not all metrics that can be used in short-term
+    on-call decision making are also appropriate for long-term business planning.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要能够不仅在某一特定时间点测量数据存储基础设施的健康状况，还要在长期基础上趋势性能的改善或恶化。这意味着不仅要确定SLIs和SLOs，还要找出哪些SLIs和SLOs在长期趋势中仍然是有价值的、高信号的指标。您可能会发现，并非所有可用于短期值班决策的指标也适用于长期业务规划。
+- en: Before we dive into which metrics are important for long-term planning, let’s
+    talk about some tools that empower that long-term trend monitoring.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在深入讨论哪些指标对长期规划至关重要之前，让我们谈谈一些能够支持长期趋势监控的工具。
+- en: Using Monitoring Tools to Inspect the Performance
+  id: totrans-152
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用监控工具检查性能
+- en: Measuring performance is important in both the immediate “are we currently in
+    an incident” sense and the long-term tracking and trending sense. The tool that
+    holds the metrics you care about is as important a decision as what the metrics
+    themselves are. What is the use of choosing a good SLI if you then cannot properly
+    see its trend over time in a manner that is relatable to the rest of the organization
+    metrics?
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在即时“我们当前是否处于事故”意义上和长期跟踪和趋势意义上，衡量性能都很重要。保存您关心的指标的工具与指标本身一样重要。如果选择了一个好的SLI，但随后无法适当地查看其随时间的趋势，以一种与组织其他指标相关的方式，那又有什么用呢？
+- en: The field of monitoring tools is rapidly growing, and there are lots of strong
+    opinions on how it should be done. The goal here is increased transparency and
+    a focus on tracking outcomes rather than outputs. In the field of making an infrastructure
+    stack successful, tracking success is a team sport.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 监控工具领域正在迅速发展，对于如何进行监控有很多不同的看法。这里的目标是增加透明度，关注跟踪结果而不是产出。在确保基础架构成功的领域中，追踪成功是一个团队运动。
+- en: Instead of talking about specific tools here, we will instead list some important
+    features and aspects to think about when considering if a tool is good for this
+    kind of long-term trending.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里不讨论具体的工具，而是列出一些在考虑一个工具是否适合这种长期趋势时需要考虑的重要特性和方面。
+- en: Say no to averages
+  id: totrans-156
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 拒绝平均值
+- en: Whether you are self-managing your metrics solution as an engineering organization
+    or using a software as a service (SaaS), be careful how your metrics solution
+    normalizes data for long-term storage. A lot of solutions aggregate long-term
+    data into averages by default (Graphite is one of the first to do that), and that
+    is a big problem. If you need to look at the trend of a metric over a period longer
+    than a few weeks, the average will smooth *down* peaks, which means if you are
+    looking to see if your disk I/O utilization can double for the next year, a graph
+    of average data points will very likely give you a false sense of security. Always
+    look at peaks when trending months’ data, so you can keep the fidelity of occasional
+    spikes in your view.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论您是作为工程组织自行管理指标解决方案，还是使用软件即服务（SaaS），都要注意您的指标解决方案如何对长期存储的数据进行归一化处理。许多解决方案默认将长期数据聚合为平均值（Graphite是最早这样做的之一），这是一个大问题。如果您需要查看一个指标在几周以上时间段内的趋势，平均值将会平滑*下降*峰值，这意味着如果您想知道您的磁盘I/O利用率是否会在接下来的一年内翻倍，平均数据点的图表很可能会给您一种虚假的安全感。在趋势化几个月的数据时，始终查看峰值，这样您就可以保持偶发性峰值在视图中的准确性。
+- en: Percentiles are your friend
+  id: totrans-158
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 百分位数是您的朋友
+- en: Percentiles rely on ordering the data points in a given time span and removing
+    the highest value ones depending on the target percentile (i.e., if you are looking
+    for 95th, remove the top 5%). This is an excellent way to make the data you are
+    looking at get visually more similar to how we look at SLIs and SLOs. If you can
+    make the graph showing your query response time show the 95th percentile, you
+    can far more easily match that to the SLO you want to achieve for application-request
+    completion and make the database metrics make sense to folks like your customer
+    support team and your engineers, not just your database-engineering team.
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 百分位数依赖于对给定时间跨度内的数据点进行排序，并根据目标百分位数（即，如果您寻找第95个百分位数，则删除前5%）来删除最高值。这是使您查看的数据在视��上更类似于我们查看SLIs和SLOs的一种绝佳方式。如果您可以使显示您的查询响应时间的图表显示第95个百分位数，那么您可以更容易地将其与您希望实现的应用请求完成的SLO相匹配，并使数据库指标对您的客户支持团队和工程师团队等人员有意义，而不仅仅是对数据库工程团队有意义。
+- en: Long retention period and performance
+  id: totrans-160
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 长期保留期和性能
+- en: This may seem obvious, but the performance of a monitoring tool when trying
+    to display long time spans is important. If you are evaluating solutions for business-metric
+    trending, you need to make sure to test out how the user experience changes when
+    asking for longer and longer time spans of data. A metrics solution is only as
+    good as it can be at making that data available, not just the speed of ingestion
+    or how long it keeps it.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这似乎是显而易见的，但是当尝试显示长时间跨度时，监控工具的性能很重要。如果您正在评估用于业务指标趋势的解决方案，您需要确保在要求越来越长时间跨度的数据时，用户体验如何变化。一个指标解决方案只有在能够提供数据的可用性方面才算好，而不仅仅是摄入速度或数据保留时间。
+- en: Now that we have described what a long-term monitoring tool should look like,
+    let’s discuss how all we’ve covered so far in choosing SLIs and SLOs can guide
+    your data architecture.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经描述了长期监控工具应该是什么样子，让我们讨论一下到目前为止我们所涵盖的所有内容如何指导您的数据架构选择SLIs和SLOs。
+- en: Using SLOs to Guide Your Overall Architecture
+  id: totrans-163
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用SLOs指导您的整体架构
+- en: 'Keeping a consistent and good customer experience while your business is also
+    growing is no small feat. As the size of the business grows, keeping even the
+    same SLOs, much less setting more ambitious ones, becomes harder and harder. Take
+    something like availability, for example: everyone wants as many nines as possible
+    of uptime for both reads and writes for all their data. But the more stringent
+    the SLOs you want to achieve, the more expensive the work becomes, as your peak
+    database transactions per second or its size also grows by orders of magnitude.'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在您的业务不断增长的同时保持一致且良好的客户体验绝非易事。随着业务规模的增长，即使保持相同的SLOs，更不用说设定更雄心勃勃的目标，也变得越来越困难。以可用性为例：每个人都希望数据的读写都能保持尽可能多的连续运行时间。但是，您想要实现的SLOs越严格，工作就会变得越昂贵，因为您的数据库每秒事务数或其规模也会成倍增长。
+- en: Using the SLIs and SLOs we already discussed, you can find the points in growth
+    where it makes sense to start splitting your data into either functional shards
+    or data partitions. We will discuss scaling MySQL using sharding in [Chapter 11](ch11.html#scaling_mysql)
+    in more detail, but the important point to make here is that the same SLIs and
+    SLOs that tell you how the system is performing now can also guide you to knowing
+    when it is time to invest in scaling MySQL so that the individual clusters remain
+    manageable within the boundaries of the SLOs that preserve your customers’ experience.
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用我们已经讨论过的SLIs和SLOs，您可以找到增长点，从而有意义地开始将数据分割为功能性分片或数据分区。我们将在[第11章](ch11.html#scaling_mysql)中更详细地讨论使用分片来扩展MySQL，但这里要强调的重要一点是，告诉您系统当前表现如何的相同SLIs和SLOs也可以指导您知道何时是投资扩展MySQL的时机，以便个别集群在保持维护客户体验的SLOs范围内仍然可管理。
+- en: Having a metrics solution that can handle both short- and long-term metrics
+    and can trend changes for you in a useful manner is a very important part of tracking
+    tactical performance metrics along with the longer-term, business-impacting trends
+    of how your database infrastructure is doing.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 拥有一个可以处理短期和长期指标，并能以有用的方式趋势变化的度量解决方案是跟踪战术绩效指标以及数据库基础设施长期影响趋势的一个非常重要的部分。
+- en: Summary
+  id: totrans-167
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: It is important during your journey of applying reliability engineering concepts
+    to monitoring your database infrastructure that you constantly improve and revisit
+    your indicators and objectives. They are not meant to be set in stone after the
+    first time you define some SLIs and SLOs. As the business grows, you will gain
+    a deeper understanding of the customers’ experience, and that should drive improvements
+    to your SLIs and SLOs.
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在将可靠性工程概念应用于监控数据库基础设施的过程中，不断改进和重新审视您的指标和目标非常重要。它们并不是在您第一次定义一些SLIs和SLOs后就一成不变的。随着业务的增长，您将更深入地了解客户的体验，这应该推动您改进SLIs和SLOs。
+- en: Be conscious as you choose metrics and assign goals to them that you are always
+    focused on representing customer experience. Also, do not focus all your effort
+    on metrics that show you when an incident is happening, but spend some time on
+    monitoring things that can help you *prevent* incidents. This is all about proactive
+    activity to protect the customer experience.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在选择指标并为其分配目标时，请意识到您始终专注于代表客户体验。此外，不要将所有精力都集中在显示事故发生时的指标上，而是花一些时间监控可以帮助您*预防*事故的事项。这一切都是为了积极主动地保护客户体验。
+- en: 'We recommend setting goals up front on three key areas: latency, availability,
+    and errors. These three areas can provide a great signal as to whether your customers
+    are happy. Beyond that, make sure you’re also doing proactive monitoring in the
+    areas of connection growth, disk space, and disk I/O and latency.'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们建议在三个关键领域提前设定目标：延迟、可用性和错误。这三个领域可以很好地表明您的客户是否满意。此外，请确保您还在连接增长、磁盘空间、磁盘I/O和延迟方面进行积极监控。
+- en: We hope this chapter helps frame for you how to apply reliability engineering
+    to monitoring MySQL successfully as your company scales.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们希望本章能帮助您成功地将可靠性工程应用于监控MySQL，随着公司规模的扩大。
+- en: '^([1](ch02.html#ch01fn14-marker)) Nicole Forsgren, *Accelerate: The Science
+    of Lean Software and DevOps* (IT Revolution Press, 2018). *https://oreil.ly/Bfvda*'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch02.html#ch01fn14-marker)) Nicole Forsgren，*加速：精益软件和DevOps的科学*（IT Revolution
+    Press，2018）。*https://oreil.ly/Bfvda*
+- en: ^([2](ch02.html#ch01fn15-marker)) We highly recommend [*Implementing Service
+    Level Objectives*](https://oreil.ly/wzEPu) by Alex Hidalgo (O’Reilly).
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch02.html#ch01fn15-marker)) 我们强烈推荐阅读[*实施服务水平目标*](https://oreil.ly/wzEPu)
+    by Alex Hidalgo（O’Reilly）。

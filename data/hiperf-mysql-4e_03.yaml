@@ -1,0 +1,2309 @@
+- en: Chapter 3\. Performance Schema
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第3章\. 性能模式
+- en: Contributed by Sveta Smirnova
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由Sveta Smirnova贡献
+- en: Tuning the performance of databases under high load is an iterative cycle. Every
+    time you make a change to tune the performance of the database, you need to understand
+    if the change had any effect. Are your queries running faster than before? Are
+    locks slowing down the application, or are they entirely gone? Did memory usage
+    change? Did the time spent waiting on disk change? Once you understand how to
+    answer these questions, you’ll be able to evaluate and respond to day-to-day situations
+    faster and with more confidence.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在高负载下调整数据库性能是一个迭代循环。每次您进行更改以调整数据库性能时，您需要了解更改是否产生了影响。您的查询是否比以前运行得更快？锁是否减慢了应用程序，或者它们完全消失了？内存使用量是否改变？等待磁盘的时间是否改变？一旦您了解如何回答这些问题，您将能够更快速、更自信地评估和应对日常情况。
+- en: Performance Schema is a database that stores the data required to answer these
+    questions. This chapter will help you understand how Performance Schema works,
+    what its limitations are, and how to best go about using it—along with its companion
+    `sys` schema—to uncover common information about what is going on inside MySQL.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能模式是一个存储回答这些问题所需数据的数据库。本章将帮助您了解性能模式的工作原理、其局限性以及如何最好地使用它——以及其伴随的`sys`模式——来揭示MySQL内部发生的常见信息。
+- en: Introduction to Performance Schema
+  id: totrans-4
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 性能模式简介
+- en: Performance Schema provides low-level metrics on operations running inside MySQL
+    server. To explain how Performance Schema works, there are two concepts I need
+    to introduce early.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能模式提供了MySQL服务器内部运行操作的低级度量标准。为了解释性能模式的工作原理，我需要提前介绍两个概念。
+- en: The first is an *instrument*. An instrument refers to any portion of the MySQL
+    code that we want to capture information about. For example, if we want to collect
+    information about metadata locks, we would need to enable the `wait/lock/meta​data/sql/mdl`
+    instrument.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一个是*工具*。工具指的是我们想要捕获信息的MySQL代码的任何部分。例如，如果我们想要收集关于元数据锁的信息，我们需要启用`wait/lock/meta​data/sql/mdl`工具。
+- en: The second concept is a *consumer*, which is simply a table that stores the
+    information about what code was instrumented. If we instrument queries, the consumer
+    will record information like the total number of executions, how many times no
+    index was used, the time spent, and so forth. The consumer is what most people
+    closely associate with Performance Schema.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二个概念是*消费者*，它只是一个存储有关哪些代码被检测的信息的表。如果我们检测查询，消费者将记录关于执行次数、未使用索引次数、花费的时间等信息。消费者是大多数人与性能模式紧密相关的内容。
+- en: The general function of Performance Schema is shown in [Figure 3-1](#the_flow_of_queries_running_on_a_databa).
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能模式的一般功能如[图3-1](#the_flow_of_queries_running_on_a_databa)所示。
+- en: '![](assets/hpm4_0301.png)'
+  id: totrans-9
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_0301.png)'
+- en: Figure 3-1\. The flow of queries running on a database, showing how `performance_schema`
+    collects and aggregates the data and then presents it to the DBA
+  id: totrans-10
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图3-1\. 数据库中运行查询的流程，展示了`performance_schema`如何收集和聚合数据，然后呈现给数据库管理员
+- en: When application users connect to MySQL and execute an instrumented instruction,
+    `performance_schema` encapsulates each examined call into two macros, then records
+    the results in the corresponding consumer table. The takeaway here is that enabling
+    instruments calls additional code, which in turn means instruments consume CPU.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当应用用户连接到MySQL并执行一个被检测的指令时，`performance_schema`将每个检查的调用封装成两个宏，然后将结果记录在相应的消费者表中。这里的要点是启用工具会调用额外的代码，这意味着工具会消耗CPU。
+- en: Instrument Elements
+  id: totrans-12
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 工具元素
+- en: 'In `performance_schema`, the `setup_instruments` table contains a list of all
+    supported instruments. All instruments’ names consist of parts separated by a
+    slash. I’ll use the following examples to help you understand how these are named:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`performance_schema`中，`setup_instruments`表包含所有支持的工具列表。所有工具的名称都由斜杠分隔的部分组成。我将使用以下示例来帮助您理解这些名称是如何命名的：
+- en: '`statement/sql/select`'
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`statement/sql/select`'
+- en: '`wait/synch/mutex/innodb/autoinc_mutex`'
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`wait/synch/mutex/innodb/autoinc_mutex`'
+- en: The leftmost part of the instrument name indicates the type of the instrument.
+    Thus, `statement` indicates that the instrument is a statement, `wait` indicates
+    it is a wait, and so on.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 工具名称的最左边部分表示工具的类型。因此，`statement`表示该工具是一个语句，`wait`表示它是一个等待，依此类推。
+- en: The rest of the elements in the name field, from left to right, indicate the
+    subsystem from general to specific. In the preceding example, `select` is a part
+    of the `sql` subsystem, which is of type `statement`. Or `autoinc_mutex` belongs
+    to `innodb`, which is part of the more generic instrument class `mutex`, which,
+    in turn, is part of the more generic instrument `sync` of instrument type `wait`.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 名称字段中的其余元素从左到右表示从一般到具体的子系统。在上面的示例中，`select`是`sql`子系统的一部分，属于`statement`类型。或者`autoinc_mutex`属于`innodb`，是更通用的`mutex`类的一部分，而`mutex`又是`wait`类型的更通用的`sync`工具的一部分。
+- en: 'Most of the instrument names are self-descriptive. As in the examples, `statement/sql/select`
+    is a `SELECT` query, and `wait/synch/mutex/innodb/autoinc_mutex` is a mutex that
+    InnoDB sets on the auto-increment column. There is also a `DOCUMENTATION` column
+    in the `setup_instruments` table that may contain more details:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数工具名称都是自描述的。如示例中所示，`statement/sql/select`是一个`SELECT`查询，而`wait/synch/mutex/innodb/autoinc_mutex`是InnoDB在自增列上设置的互斥体。`setup_instruments`表中还有一个`DOCUMENTATION`列，其中可能包含更多细节：
+- en: '[PRE0]'
+  id: totrans-19
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Unfortunately, the `DOCUMENTATION` column may be `NULL` for many instruments,
+    so you need to use the instrument name, your intuition, and knowledge of the MySQL
+    source code to understand what the particular instrument examines.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，对于许多工具，`DOCUMENTATION`列可能为`NULL`，因此您需要使用工具名称、直觉和对MySQL源代码的了解来理解特定工具检查的内容。
+- en: Consumer Organization
+  id: totrans-21
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 消费者组织
+- en: As I mentioned before, a consumer is the destination where an instrument sends
+    its information. Performance Schema stores instrument results in many tables;
+    in fact, MySQL Community 8.0.25 contains 110 tables in `performance_schema`. To
+    understand what they are intended for, it is easier to put them into groups.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我之前提到的，消费者是仪器发送信息的目的地。性能模式将仪器结果存储在许多表中；事实上，MySQL Community 8.0.25中包含了110个`performance_schema`表。要理解它们的用途，最好将它们分组。
+- en: Current and historical data
+  id: totrans-23
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 当前和历史数据
+- en: 'Events are put into tables whose names end as follows:'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事件被放入以以下方式结尾的表中：
+- en: '`*_current`'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*_current`'
+- en: Events that are occurring on the server at present
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 目前在服务器上发生的事件
+- en: '`*_history`'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*_history`'
+- en: Last 10 completed events per thread
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个线程的最后10个已完成事件
+- en: '`*_history_long`'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*_history_long`'
+- en: Last 10,000 completed events per thread, globally
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个线程全局最后10,000个已完成事件
+- en: The sizes of the `*_history` and `*_history_long` tables are configurable.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*_history`和`*_history_long`表的大小是可配置的。'
+- en: 'Current and historical data are available for the following:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可用的当前和历史数据包括：
+- en: '`events_waits`'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`events_waits`'
+- en: Low-level server waits, such as acquiring mutexes
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 低级服务器等待，例如获取互斥锁
+- en: '`events_statements`'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`events_statements`'
+- en: SQL statements
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQL语句
+- en: '`events_stages`'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`events_stages`'
+- en: Profile information, such as creating temporary tables or sending data
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 概要信息，例如创建临时表或发送数据
+- en: '`events_transactions`'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`events_transactions`'
+- en: Transactions
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务
+- en: Summary tables and digests
+  id: totrans-41
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 摘要表和摘要
+- en: A summary table holds aggregated information about whatever the table suggests.
+    For example, the `memory_summary_by_thread_by_event_name` table holds aggregated
+    memory usage per MySQL thread for user connections or any background thread.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 摘要表包含有关表建议的聚合信息。例如，`memory_summary_by_thread_by_event_name`表包含每个MySQL线程的用户连接或任何后台线程的聚合内存使用情况。
+- en: 'Digests are a way to aggregate queries by removing the variations in them.
+    Take the following query examples:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 摘要是通过消除查询中的变体来聚合查询的一种方式。看以下查询示例：
+- en: '[PRE1]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'The digest for this query would be:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此查询的摘要将是：
+- en: '[PRE2]'
+  id: totrans-46
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: This allows Performance Schema to keep track of metrics like latency for the
+    digest without needing to retain each variation of the query separately.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这使得性能模式能够跟踪摘要的延迟等指标，而无需保留每个查询的各种变体。
+- en: Instances
+  id: totrans-48
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 实例
+- en: Instances refer to object instances, available for the MySQL installation. For
+    example, the `file_instances` table contains filenames and the number of threads
+    that access these files.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实例指的是MySQL安装中可用的对象实例。例如，`file_instances`表包含文件名以及访问这些文件的线程数。
+- en: Setup
+  id: totrans-50
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 设置
+- en: Setup tables are used for runtime setup of `performance_schema`.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 设置表用于运行时设置`performance_schema`。
+- en: Other tables
+  id: totrans-52
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 其他表
+- en: There are other tables whose names do not follow a strict pattern. For example,
+    the `metadata_locks` table holds data about metadata locks. I will introduce a
+    few of them later in the chapter when discussing issues that `performance_schema`
+    can help solve.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还有其他表的名称不遵循严格的模式。例如，`metadata_locks`表保存有关元数据锁的数据。在讨论`performance_schema`可以帮助解决的问题时，我将在本章稍后介绍其中的一些。
+- en: Resource Consumption
+  id: totrans-54
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 资源消耗
+- en: The data collected by Performance Schema is kept in memory. You can limit the
+    amount of memory it uses by setting the maximum size of the consumers. Some tables
+    in `performance_schema` support autoscaling. This means that they allocate a minimal
+    amount of memory at startup and adjust their size as needed. However, this memory
+    is never freed once allocated, even if you disabled specific instrumentation and
+    truncated the table.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能模式收集的数据保存在内存中。您可以通过设置消费者的最大大小来限制其使用的内存量。`performance_schema`中的一些表支持自动缩放。这意味着它们在启动时分配最小内存量，并根据需要调整其大小。但是，一旦分配了内存，即使禁用了特定仪器并截断了表，也永远不会释放这些内存。
+- en: As I mentioned earlier, every instrumented call adds two more macro calls to
+    store data in `perform​ance_​schema`. This means that the more you instrument,
+    the higher the CPU usage will be. The actual impact on CPU utilization depends
+    on the specific instrument. For example, a statement-related instrument could
+    be called only once during the query while a wait instrument could be called much
+    more often. To scan an InnoDB table with one million rows, for instance, the engine
+    will need to set and release one million row locks. If you instrument locks, CPU
+    usage may increase significantly. However, the same query will require a single
+    call to figure out if it is a `statement/sql/select`. Therefore, you would not
+    notice any increase in CPU load if you enable statement instrumentation. The same
+    is true for memory or metadata lock instrumentation.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我之前提到的，每个仪器调用都会添加两个宏调用来存储数据��`perform​ance_​schema`中。这意味着您仪器化越多，CPU使用率就会越高。对CPU利用率的实际影响取决于具体的仪器。例如，与查询期间仅调用一次的与语句相关的仪器不同，等待仪器可能会更频繁地调用。例如，要扫描具有一百万行的InnoDB表，引擎将需要设置并释放一百万行锁。如果您仪器化锁定，CPU使用率可能会显著增加。但是，如果启用语句仪器，同一查询将需要一个调用来确定它是`statement/sql/select`。因此，如果启用语句仪器，您不会注意到CPU负载的增加。内存或元数据锁仪器也是如此。
+- en: Limitations
+  id: totrans-57
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 限制
+- en: 'Before discussing how to set up and use `performance_schema`, it is important
+    to understand its limitations:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在讨论如何设置和使用`performance_schema`之前，了解其局限性是很重要的：
+- en: It must be supported by a MySQL component.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它必须由MySQL组件支持。
+- en: For example, let’s say you are using memory instrumentation to calculate which
+    MySQL component or thread uses most of the memory. You discover that the component
+    that uses the most memory is a storage engine, which does not support memory instrumentation.
+    In this case, you would not be able to find where the memory has gone.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设您正在使用内存仪器来计算哪个MySQL组件或线程使用了大部分内存。您发现使用最多内存的组件是一个不支持内存仪器的存储引擎。在这种情况下，您将无法找到内存去向。
+- en: It collects data only after the specific instrument and consumer are enabled.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 仅在特定仪器和消费者启用后才收集数据。
+- en: For example, if you started a server with all instrumentation disabled then
+    decided to instrument memory usage, you would not be able to know the exact amount
+    allocated by a global buffer such as an InnoDB buffer pool because it was already
+    allocated before you enabled memory instrumentation.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，如果您启动了一个禁用了所有仪器的服务器，然后决定对内存使用进行仪器化，您将无法知道由全局缓冲区（例如InnoDB缓冲池）分配的确切数量，因为在启用内存仪器化之前它已经被分配。
+- en: It is difficult to free memory.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 释放内存很困难。
+- en: You can limit the size of consumers at startup or leave them autosized. In the
+    latter case, they do not allocate memory at the startup but only when enabled
+    data is collected. However, even if you disable specific instruments or consumers
+    later, memory would not be freed unless you restart the server.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以在启动时限制消费者的大小，或者让它们自动调整大小。在后一种情况下，它们在启动时不分配内存，而只有在启用数据收集时才分配内存。然而，即使您稍后禁用特定的工具或消费者，除非重新启动服务器，否则内存不会被释放。
+- en: In the rest of the chapter, I will assume you are aware of these limitations,
+    so I will not specifically focus on them.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章的其余部分，我将假设您已经了解这些限制，因此我不会特别关注它们。
+- en: sys Schema
+  id: totrans-66
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 系统模式
+- en: Since version 5.7, standard MySQL distribution includes a companion schema for
+    `performance_schema` data called `sys` schema. This schema consists only of views
+    and stored routines over `performance_schema`. While it is designed to make your
+    experience with `performance_schema` smoother, it does not store any data by itself.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自MySQL 5.7版本以来，标准MySQL发行版包括一个名为`sys`模式的`performance_schema`数据的伴随模式。该模式仅由`performance_schema`上的视图和存储过程组成。虽然它旨在使您与`performance_schema`的体验更加顺畅，但它本身不存储任何数据。
+- en: Note
+  id: totrans-68
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The `sys` schema is very convenient, but you need to remember that it only accesses
+    data stored in the `performance_schema` tables. If you need data not available
+    in the `sys` schema, check if it exists in the underlying table in `performance_schema`.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`sys`模式非常方便，但您需要记住它只访问存储在`performance_schema`表中的数据。如果您需要`sys`模式中不可用的数据，请检查它是否存在于`performance_schema`中的基础表中。'
+- en: Understanding Threads
+  id: totrans-70
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 理解线程
+- en: 'MySQL server is multithreaded software. Each of its components uses threads.
+    It could be a background thread created, for example, by a main thread or a storage
+    engine, or a foreground thread created for a user connection. Each of the threads
+    has at least two unique identifiers: an operating system thread ID that is visible,
+    for example, in the output of the Linux ``ps -eLf`` command, and an internal MySQL
+    thread ID. This internal MySQL thread ID is called `THREAD_ID` in most of the
+    `performance_schema` tables. Additionally, each foreground thread has an assigned
+    `PROCESSLIST_ID`: connection identifier, visible in the `SHOW PROCESSLIST` command
+    output or in the `“Your MySQL connection id is”` string when you connect with
+    the MySQL command-line client.'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL服务器是多线程软件。它的每个组件都使用线程。例如，可能��由主线程或存储引擎创建的后台线程，也可能是为用户连接创建的前台线程。每个线程至少有两个唯一标识符：一个操作系统线程ID，例如，在Linux的``ps
+    -eLf``命令的输出中可见，以及一个内部MySQL线程ID。在`performance_schema`的大多数表中，这个内部MySQL线程ID称为`THREAD_ID`。此外，每个前台线程都有一个分配的`PROCESSLIST_ID`：连接标识符，在`SHOW
+    PROCESSLIST`命令输出中可见，或者在使用MySQL命令行客户端连接时的`“Your MySQL connection id is”`字符串中可见。
+- en: Warning
+  id: totrans-72
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: '`THREAD_ID` is not equal to `PROCESSLIST_ID`!'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`THREAD_ID`不等于`PROCESSLIST_ID`！'
+- en: 'The `threads` table in `performance_schema` contains all the threads existing
+    in the server:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`performance_schema`中的`threads`表包含服务器中存在的所有线程：'
+- en: '[PRE3]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Besides thread number information, the `threads` table contains the same data
+    as the `SHOW PROCESSLIST` output and a few additional columns, such as `RESOURCE_GROUP`
+    or `PARENT_THREAD_ID`.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了线程编号信息外，`threads`表包含与`SHOW PROCESSLIST`输出相同的数据以及一些附加列，例如`RESOURCE_GROUP`或`PARENT_THREAD_ID`。
+- en: Warning
+  id: totrans-77
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Performance Schema uses `THREAD_ID` everywhere while `PROCESSLIST_ID` is available
+    only in the `threads` table. If you need to get `PROCESSLIST_ID`—for example,
+    to kill a connection holding the lock—you need to query the `threads` table to
+    obtain its value.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能模式在各处使用`THREAD_ID`，而`PROCESSLIST_ID`仅在`threads`表中可用。如果您需要获取`PROCESSLIST_ID`，例如为了终止持有锁的连接，您需要查询`threads`表以获取其值。
+- en: The `threads` table could be joined to the many other tables to provide additional
+    information about the running query (e.g., query data, locks, mutexes, or table
+    instances open).
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`threads`表可以与许多其他表连接，以提供有关正在运行的查询的附加信息（例如，查询数据，锁定，互斥锁或打开的表实例）。'
+- en: In the rest of the chapter, I expect you to be familiar with this table and
+    the meaning of `THREAD_ID`.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章的其余部分，我希望您熟悉这个表以及`THREAD_ID`的含义。
+- en: Configuration
+  id: totrans-81
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 配置
+- en: 'A few portions of Performance Schema can only be changed at server startup:
+    enabling or disabling of Performance Schema itself and variables relating to memory
+    usage and limits for data collected. The Performance Schema instruments and consumers
+    can be enabled or disabled dynamically.'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能模式的一些部分只能在服务器启动时更改：启用或禁用性能模式本身以及与收集数据的内存使用和限制相关的变量。性能模式仪器和消费者可以动态启用或禁用。
+- en: Tip
+  id: totrans-83
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: You can start Performance Schema with all consumers and instruments disabled
+    and enable only those that are needed to resolve specific issues right before
+    you expect the issue to happen. This way, you will not spend any resources on
+    Performance Schema where you do not need to or run the risk of starving your system
+    because of overinstrumentation.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以启动性能模式，所有消费者和仪器都被禁用，并且只在您期望问题发生之前启用那些需要解决特定问题的仪器。这样，您将不会在不需要的地方花费任何资源在性能模式上，也不会因为过度仪器化而使系统陷入困境。
+- en: Enabling and Disabling Performance Schema
+  id: totrans-85
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 启用和禁用性能模式
+- en: To enable or disable Performance Schema, set the variable `performance_schema`
+    to `ON` or `OFF` correspondingly. This is a read-only variable that can be changed
+    only in the configuration file or via a command-line parameter when MySQL server
+    starts.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要启用或禁用性能模式，请将变量`performance_schema`相应地设置为`ON`或`OFF`。这是一个只读变量，只能在配置文件中或在MySQL服务器启动时通过命令行参数更改。
+- en: Enabling and Disabling Instruments
+  id: totrans-87
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 启用和禁用仪器
+- en: 'Instruments can be either enabled or disabled. To see the state of an instrument,
+    you can query the `setup_instruments` table:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 仪器可以启用或禁用。要查看仪器的状态，可以查询`setup_instruments`表：
+- en: '[PRE4]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: As we see, `ENABLED` is `NO`; this tells us that we are not currently instrumenting
+    `SELECT` queries.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们所见，`ENABLED`是`NO`；这告诉我们我们目前没有对`SELECT`查询进行仪器化。
+- en: 'There are three options for enabling or disabling `performance_schema` instruments:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有三种选项可以启用或禁用`performance_schema`仪器：
+- en: Use the `setup_instruments` table.
+  id: totrans-92
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用`setup_instruments`表。
+- en: Call the `ps_setup_enable_instrument` stored procedure in the `sys` schema.
+  id: totrans-93
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 调用`sys`模式中的`ps_setup_enable_instrument`存储过程。
+- en: Use the startup parameter `performance-schema-instrument`.
+  id: totrans-94
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用启动参数`performance-schema-instrument`。
+- en: UPDATE statement
+  id: totrans-95
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 更新语句
+- en: 'The first method is to use an `UPDATE` statement to change the column value:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一种方法是使用`UPDATE`语句更改列值：
+- en: '[PRE5]'
+  id: totrans-97
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Since this is standard SQL, you can also use wildcards to enable all SQL statement
+    instruments:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于这是标准SQL，您也可以使用通配符来启用所有SQL语句的仪器：
+- en: '[PRE6]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: This method does not persist between restarts.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此方法在重新启动之间不会持久化。
+- en: sys stored procedure
+  id: totrans-101
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 存储过程sys
+- en: 'The `sys` schema provides two stored procedures—`ps_setup_enable_instrument`
+    and `ps_setup_disable_instrument`—that enable and disable instruments, passed
+    as their parameters. Both routines support wildcards. If you want to enable or
+    disable all supported instruments, use wildcard `''%''`:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`sys`模式提供了两个存储过程—`ps_setup_enable_instrument`和`ps_setup_disable_instrument`—它们通过参数传递启用和禁用仪器。这两个例程都支持通配符。如果要启用或禁用所有支持的仪器，请使用通配符`''%''`：'
+- en: '[PRE7]'
+  id: totrans-103
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: This method is effectively the exact same as the previous one, including that
+    it does not persist between restarts.
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此方法实际上与前一种方法完全相同，包括在重新启动之间不会持久化。
+- en: Startup options
+  id: totrans-105
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 启动选项
+- en: As mentioned before, both methods allow you to change the `performance_schema`
+    configuration online but do not store that change between server restarts. If
+    you want to save options for particular instruments between restarts, use the
+    configuration parameter `performance-schema-instrument`.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，这两种方法都允许您在线更改`performance_schema`配置，但不会在服务器重新启动之间存储该更改。如果要在重新启动之间保存特定仪器的选项，请使用配置参数`performance-schema-instrument`。
+- en: 'This variable supports the `performance-schema-instrument=​''instrument_​name=​value''`
+    syntax, where `instrument_name` is the name of the instrument and `value` is either
+    `ON`, `TRUE`, or `1` for enabled instruments; `OFF`, `FALSE`, or `0` for disabled;
+    and `COUNTED` for those that are counted instead of `TIMED`. You can specify this
+    option several times to enable or disable different instruments. The option also
+    supports wildcards:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此变量支持`performance-schema-instrument=​'instrument_​name=​value'`语法，其中`instrument_name`是仪器名称，`value`为启用仪器的`ON`、`TRUE`或`1`；禁用的为`OFF`、`FALSE`或`0`；对于计数而不是`TIMED`的为`COUNTED`。您可以多次指定此选项以启用或禁用不同的仪器。该选项还支持通配符：
+- en: '[PRE8]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Warning
+  id: totrans-109
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: If multiple options are specified, the longer instrument string has precedence
+    over the shorter regardless of the order.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果指定了多个选项，则较长的仪器字符串优先于较短的，无论顺序如何。
+- en: Enabling and Disabling Consumers
+  id: totrans-111
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 启用和禁用消费者
+- en: 'Like instruments, consumers can be enabled or disabled by:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与仪器一样，消费者可以通过以下方式启用或禁用：
+- en: Updating the `setup_consumers` table in Performance Schema
+  id: totrans-113
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 更新性能模式中的`setup_consumers`表
+- en: Using the stored procedures `ps_setup_enable_consumer` and `ps_setup_​dis⁠able_consumer`
+    in `sys` schema
+  id: totrans-114
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在`sys`模式中使用存储过程`ps_setup_enable_consumer`和`ps_setup_disable_consumer`
+- en: Setting the `performance-schema-consumer` configuration parameter
+  id: totrans-115
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 设置`performance-schema-consumer`配置参数
+- en: There are 15 possible consumers. Some of them have rather self-explanatory names,
+    but there are a few consumers whose names need more explanation, listed in [Table 3-1](#consumers_and_their_purposes).
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有15个可能的消费者。其中一些具有相当自明的名称，但有一些消费者的名称需要更多解释，列在[表3-1](#consumers_and_their_purposes)中。
+- en: Table 3-1\. Consumers and their purposes
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表3-1\. 消费者及其目的
+- en: '| Consumer | Description |'
+  id: totrans-118
+  prefs: []
+  type: TYPE_TB
+  zh: '| 消费者 | 描述 |'
+- en: '| --- | --- |'
+  id: totrans-119
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `events_stages_[current&#124;history&#124;history_long]` | Profiling details,
+    such as `"Creating tmp table`“, `"statistics"`, or `"buffer pool load"` |'
+  id: totrans-120
+  prefs: []
+  type: TYPE_TB
+  zh: '| `events_stages_[current&#124;history&#124;history_long]` | 分析详细信息，如“创建临时表”，“统计”或“缓冲池加载”
+    |'
+- en: '| `events_statements_[current&#124;history&#124;history_long]` | Statements
+    statistics |'
+  id: totrans-121
+  prefs: []
+  type: TYPE_TB
+  zh: '| `events_statements_[current&#124;history&#124;history_long]` | 语句统计 |'
+- en: '| `events_transactions_[current&#124;history&#124;history_long]` | Transactions
+    |'
+  id: totrans-122
+  prefs: []
+  type: TYPE_TB
+  zh: '| `events_transactions_[current&#124;history&#124;history_long]` | 事务 |'
+- en: '| `events_waits_[current&#124;history&#124;history_long]` | Waits |'
+  id: totrans-123
+  prefs: []
+  type: TYPE_TB
+  zh: '| `events_waits_[current&#124;history&#124;history_long]` | 等待 |'
+- en: '| `global_instrumentation` | Enables or disables global instrumentation. If
+    disabled, no individual parameters are checked and no global or per-thread data
+    is maintained. No individual event is collected. |'
+  id: totrans-124
+  prefs: []
+  type: TYPE_TB
+  zh: '| `global_instrumentation` | 启用或禁用全局仪器化。如果禁用，则不会检查任何单独的参数，也不会维护全局或每个线程的数据。不会收集任何单独的事件。'
+- en: '| `thread_instrumentation` | Per-thread instrumentation. Only checked if global
+    instrumentation is enabled. If disabled, no per-thread or individual event data
+    is collected. |'
+  id: totrans-125
+  prefs: []
+  type: TYPE_TB
+  zh: '| `thread_instrumentation` | 每个线程的仪器化。仅在全局仪器化已启用时才会检查。如果禁用，则不会收集每个线程或单个事件数据。'
+- en: '| `statements_digest` | Statement digests |'
+  id: totrans-126
+  prefs: []
+  type: TYPE_TB
+  zh: '| `statements_digest` | 语句摘要 |'
+- en: The examples given for instruments are repeatable for consumers, using the methods
+    noted.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为仪器给出的示例对于消费者是可重复的，使用所述方法。
+- en: Tuning Monitoring for Specific Objects
+  id: totrans-128
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 为特定对象调整监控
+- en: Performance Schema allows you to enable and disable monitoring for specific
+    object types, schemas, and names. This is done in the `setup_objects` table.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能模式允许您为特定对象类型、模式和名称启用和禁用监控。这是在`setup_objects`表中完成的。
+- en: 'The `OBJECT_TYPE` column may have one of five values: `EVENT`, `FUNCTION`,
+    `PROCEDURE`, `TABLE`, and `TRIGGER`. Additionally, you can specify `OBJECT_SCHEMA`
+    and `OBJECT_NAME`. Wildcards are supported.'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`OBJECT_TYPE`列可能具有五个值之一：`EVENT`、`FUNCTION`、`PROCEDURE`、`TABLE`和`TRIGGER`。此外，您可以指定`OBJECT_SCHEMA`和`OBJECT_NAME`。支持通配符。'
+- en: 'For example, to disable `performance_schema` for triggers in the `test` database,
+    use the following statement:'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，要禁用`test`数据库中触发器的`performance_schema`，请使用以下语句：
+- en: '[PRE9]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'If you want to make an exception for a trigger called `my_trigger`, add it
+    with the statement:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果要为名为`my_trigger`的触发器添加异常，请使用以下语句：
+- en: '[PRE10]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: When `performance_schema` decides if a specific object needs to be instrumented,
+    it first searches for the more specific rule, then falls back to the less specific.
+    For example, if a user runs a query on a table that fires `test.my_trigger`, it
+    will examine the statements fired by the trigger. But if a user runs a query on
+    a table that fires a trigger called `test.some_other_trigger`, the trigger will
+    not be examined.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当`performance_schema`决定是否需要对特定对象进行仪器化时，首先搜索更具体的规则，然后退而求其次。例如，如果用户在触发`test.my_trigger`的表上运行查询，它将检查触发器触发的语句。但如果用户在触发名为`test.some_other_trigger`的触发器的表上运行查询，则不会检查触发器。
+- en: There is no configuration file option for the objects. If you need to persist
+    changes in this table during restarts, you will need to write these `INSERT` statements
+    in a SQL file and use the `init_file` option to load the SQL file on startup.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于对象没有配置文件选项。如果需要在重新启动期间保留对此表的更改，您需要编写这些`INSERT`语句到一个SQL文件中，并使用`init_file`选项在启动时加载SQL文件。
+- en: Tuning Threads Monitoring
+  id: totrans-137
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 调整线程监视
+- en: The `setup_threads` table contains a list of background threads that could be
+    monitored. The `ENABLED` column specifies if the instrumentation for the specific
+    thread is enabled. The `HISTORY` column specifies if the instrumented events for
+    the specific thread should also be stored in the `_history` and `_history_long`
+    tables.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`setup_threads`表包含一个可以监视的后台线程列表。`ENABLED`列指定特定线程的仪器化是否已启用。`HISTORY`列指定特定线程的仪器化事件是否也应存储在`_history`和`_history_long`表中。'
+- en: 'For example, to disable history logging for the event scheduler (`thread/sql/event_scheduler`),
+    run:'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，要禁用事件调度程序（`thread/sql/event_scheduler`）的历史记录，请运行：
+- en: '[PRE11]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: The `setup_threads` table does not store settings for the user threads. For
+    this purpose, the `setup_actors` table exists, which contains the columns described
+    in [Table 3-2](#columns_contained_in_table_setup_actors).
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`setup_threads`表不存储用户线程的设置。为此，存在`setup_actors`表，其中包含[表3-2](#columns_contained_in_table_setup_actors)中描述的列。'
+- en: Table 3-2\. Columns contained in table `setup_actors`
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表3-2。`setup_actors`表中包含的列
+- en: '| Column name | Description |'
+  id: totrans-143
+  prefs: []
+  type: TYPE_TB
+  zh: '| 列名 | 描述 |'
+- en: '| --- | --- |'
+  id: totrans-144
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `HOST` | Host, such as localhost, %, my.domain.com, or 199.27.145.65 |'
+  id: totrans-145
+  prefs: []
+  type: TYPE_TB
+  zh: '| `HOST` | 主机，例如localhost，％，my.domain.com或199.27.145.65 |'
+- en: '| `USER` | Username, such as `sveta` or `%` |'
+  id: totrans-146
+  prefs: []
+  type: TYPE_TB
+  zh: '| `USER` | 用户名，例如`sveta`或`％` |'
+- en: '| `ROLE` | Not used |'
+  id: totrans-147
+  prefs: []
+  type: TYPE_TB
+  zh: '| `ROLE` | 未使用 |'
+- en: '| `ENABLED` | If the thread is enabled |'
+  id: totrans-148
+  prefs: []
+  type: TYPE_TB
+  zh: '| `ENABLED` | 如果线程已启用 |'
+- en: '| `HISTORY` | If storing data in the `_history` and `_history_long` tables
+    is enabled |'
+  id: totrans-149
+  prefs: []
+  type: TYPE_TB
+  zh: '| `HISTORY` | 如果启用在`_history`和`_history_long`表中存储数据 |'
+- en: 'To specify rules for specific accounts, use a command like this:'
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要为特定帐户指定规则，请使用以下命令：
+- en: '[PRE12]'
+  id: totrans-151
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: This statement enables instrumentation for `sveta@localhost` and `sveta@example.com`,
+    disables history for `sveta@localhost`, and disables both instrumentation and
+    history for all other users connected from the `localhost`.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此语句启用了`sveta@localhost`和`sveta@example.com`的仪器化，禁用了`sveta@localhost`的历史记录，并禁用了所有其他从`localhost`连接的用户的仪器化和历史记录。
+- en: Like the object monitoring, there is no configuration file option for the threads
+    and actors. If you need to persist changes in this table during restarts, you
+    will need to write these `INSERT` statements in a SQL file and use the `init_file`
+    option to load the SQL file on startup.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与对象监视一样，线程和参与者没有配置文件选项。如果需要在重新启动期间保留对此表的更改，您需要将这些`INSERT`语句写入SQL文件，并使用`init_file`选项在启动时加载SQL文件。
+- en: Adjusting Memory Size for Performance Schema
+  id: totrans-154
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 调整Performance Schema的内存大小
+- en: Performance Schema stores data in tables that use the `PERFORMANCE_SCHEMA` engine.
+    This engine stores data in memory. Some of the `performance_schema` tables are
+    auto-sized by default; others have a fixed number of rows. You can adjust these
+    options by changing startup variables. The names of the variables follow the pattern
+    `perform​ance_schema_object_[size|instances|classes|length|handles]`, where the
+    `object` is either a consumer, a setup table, or an instrumented instance of the
+    specific event. For example, the configuration variable `perform​ance_​schema_​events_​stages_history_size`
+    defines the number of stages per thread that the `perform​ance_​schema_events_stages_history`
+    table will store. The variable `perform​ance_​schema_max_memory_classes` defines
+    the maximum number of memory instruments that could be used.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Performance Schema将数据存储在使用`PERFORMANCE_SCHEMA`引擎的表中。此引擎将数据存储在内存中。默认情况下，`performance_schema`表中的一些表是自动调整大小的；其他表具有固定数量的行。您可以通过更改启动变量来调整这些选项。变量的名称遵循模式`perform​ance_schema_object_[size|instances|classes|length|handles]`，其中`object`可以是消费者、设置表或特定事件的仪器化实例。例如，配置变量`perform​ance_​schema_��events_​stages_history_size`定义了`perform​ance_​schema_events_stages_history`表将存储的每个线程的阶段数。变量`perform​ance_​schema_max_memory_classes`定义了可以使用的内存仪器的最大数量。
+- en: Defaults
+  id: totrans-156
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 默认值
+- en: Default values for different parts of MySQL change from version to version;
+    therefore, it is better to consult the user reference manual prior to relying
+    on values described here. However, for Performance Schema, they affect overall
+    performance of the server, so I want to cover the important ones.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL不同部分的默认值随版本而变化；因此，在依赖于此处描述的值之前，最好先查阅用户参考手册。但是，对于Performance Schema，它们会影响服务器的整体性能，因此我想涵盖重要的部分。
+- en: Since version 5.7, Performance Schema is enabled by default with most of the
+    instruments disabled. Only global, thread, statements, and transaction instrumentation
+    is enabled. Since version 8.0, metadata lock and memory instrumentation are additionally
+    enabled by default.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自版本5.7以来，默认情况下启用了Performance Schema，大多数仪器被禁用。只有全局、线程、语句和事务仪器被启用。自版本8.0以来，默认还额外启用了元数据锁和内存仪器。
+- en: The `mysql`, `information_schema`, and `performance_schema` databases are not
+    instrumented. All other objects, threads, and actors are instrumented.
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`mysql`、`information_schema`和`performance_schema`数据库未被仪器化。所有其他对象、线程和执行者都被仪器化。'
+- en: Most of the instances, handles, and setup tables are autosized. For the `_history`
+    tables, the last 10 events per thread are stored. For the `_history_long` tables,
+    the latest 10,000 events per thread are stored. The maximum stored SQL text length
+    is 1,024 bytes. The maximum SQL digest length is also 1,024 bytes. Everything
+    that is larger is right-trimmed.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数实例、句柄和设置表都是自动调整大小的。对于`_history`表，每个线程存储最后的10个事件。对于`_history_long`表，每个线程存储最新的10,000个事件。最大存储的SQL文本长度为1,024字节。最大的SQL摘要长度也是1,024字节。超出长度的部分会被右侧修剪。
+- en: Using Performance Schema
+  id: totrans-161
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用性能模式
+- en: Now that I’ve covered how Performance Schema is configured, I want to provide
+    examples to help you solve common troubleshooting cases.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我已经介绍了性能模式的配置方式，我想提供一些示例来帮助您解决常见的故障排除情况。
+- en: Examining SQL Statements
+  id: totrans-163
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 检查SQL语句
+- en: As I mentioned in [“Instrument Elements”](#instrument_elements), Performance
+    Schema supports a rich set of instruments to examine performance of SQL statements.
+    You will find tools for the standard prepared statements and stored routines.
+    With `performance_schema` you can easily find which query causes performance issues
+    and for what reason.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我在[“仪器元素”](#instrument_elements)中提到的，性能模式支持一套丰富的仪器，用于检查SQL语句的性能。您将找到用于标准准备语句和存储例程的工具。通过`performance_schema`，您可以轻松找到哪个查询导致性能问��以及原因。
+- en: To enable statements instrumentation, you need to enable instruments of type
+    `statement`, as described in [Table 3-3](#statement_instruments_and_their_descrip).
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要启用语句仪表化，您需要启用类型为`statement`的仪器，如[表3-3](#statement_instruments_and_their_descrip)中所述。
+- en: Table 3-3\. `Statement` instruments and their descriptions
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表3-3。`Statement`工具及其描述
+- en: '| Instrument class | Description |'
+  id: totrans-167
+  prefs: []
+  type: TYPE_TB
+  zh: '| 仪器类 | 描述 |'
+- en: '| --- | --- |'
+  id: totrans-168
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `statement/sql` | SQL statements, such as `SELECT` or `CREATE TABLE` |'
+  id: totrans-169
+  prefs: []
+  type: TYPE_TB
+  zh: '| `statement/sql` | SQL语句，如`SELECT`或`CREATE TABLE` |'
+- en: '| `statement/sp` | Stored procedures control |'
+  id: totrans-170
+  prefs: []
+  type: TYPE_TB
+  zh: '| `statement/sp` | 存储过程控制 |'
+- en: '| `statement/scheduler` | Event scheduler |'
+  id: totrans-171
+  prefs: []
+  type: TYPE_TB
+  zh: '| `statement/scheduler` | 事件调度器 |'
+- en: '| `statement/com` | Commands, such as `quit`, `KILL`, `DROP DATABASE`, or `Binlog
+    Dump`. Some are not available for users and are called by the *mysqld* process
+    itself. |'
+  id: totrans-172
+  prefs: []
+  type: TYPE_TB
+  zh: '| `statement/com` | 命令，如`quit`、`KILL`、`DROP DATABASE`或`Binlog Dump`。有些命令对用户不可用，由*mysqld*进程自身调用。
+    |'
+- en: '| `statement/abstract` | Class of four commands: `clone`, `Query`, `new_packet`,
+    and `relay_log` |'
+  id: totrans-173
+  prefs: []
+  type: TYPE_TB
+  zh: '| `statement/abstract` | 四个命令的类：`clone`、`Query`、`new_packet`和`relay_log` |'
+- en: Regular SQL statements
+  id: totrans-174
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 常规SQL语句
+- en: Performance Schema stores statement metrics in the `events_statements_current`,
+    `events_statements_history`, and `events_statements_history_long` tables. All
+    three tables have the same structure.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能模式将语句指标存储在`events_statements_current`、`events_statements_history`和`events_statements_history_long`表中。这三个表具有相同的结构。
+- en: Using performance_schema directly
+  id: totrans-176
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 直接使用performance_schema
+- en: 'Here’s an example of an `event_statement_​hist⁠ory` entry:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个`event_statement_​hist⁠ory`条目的示例：
+- en: '[PRE13]'
+  id: totrans-178
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: These columns are explained in the [official documentation](https://oreil.ly/FROLv),
+    so I won’t cover each and every one of them. [Table 3-4](#columns_in_event_statement_history_that)
+    lists the columns that could be used as indicators for identifying queries that
+    require optimization. Not all such columns are equal. For example, `CREATED_TMP_DISK_TABLES`
+    in most cases is a sign of a badly optimized query, while four sort-related columns
+    may just indicate that query results require sorting. Column importance indicates
+    how severe the indicator is.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些列在[官方文档](https://oreil.ly/FROLv)中有解释，所以我不会逐一介绍它们。[表3-4](#columns_in_event_statement_history_that)列出了可用作识别需要优化查询的指标的列。并非所有这些列都是相等的。例如，大多数情况下`CREATED_TMP_DISK_TABLES`是一个糟糕优化查询的迹象，而四个与排序相关的列可能只是表明查询结果需要排序。列的重要性表示指标的严重程度。
+- en: Table 3-4\. Columns in `event_statement_history` that can be used as indicators
+    for optimization
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表3-4。`event_statement_history`中可用作优化指标的列
+- en: '| Column | Description | Importance |'
+  id: totrans-181
+  prefs: []
+  type: TYPE_TB
+  zh: '| 列 | 描述 | 重要性 |'
+- en: '| --- | --- | --- |'
+  id: totrans-182
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- | --- |'
+- en: '| `CREATED_TMP_DISK_TABLES` | The query created this number of disk-based temporary
+    tables. You have two options to resolve this issue: optimize the query or increase
+    maximum size for in-memory temporary tables. | High |'
+  id: totrans-183
+  prefs: []
+  type: TYPE_TB
+  zh: '| `CREATED_TMP_DISK_TABLES` | 查询创建了这么多基于磁盘的临时表。您有两种解决此问题的选择：优化查询或增加内存临时表的最大大小。
+    | 高 |'
+- en: '| `CREATED_TMP_TABLES` | The query created this number of memory-based temporary
+    tables. Use of in-memory temporary tables is not bad per se. However, if the underlying
+    table grows, they may be converted into disk-based tables. It is good to be prepared
+    for such situations in advance. | Medium |'
+  id: totrans-184
+  prefs: []
+  type: TYPE_TB
+  zh: '| `CREATED_TMP_TABLES` | 查询创建了这么多基于内存的临时表。使用内存临时表本身并不是坏事。但是，如果底层表增长，它们可能会转换为基于磁盘的表。最好提前为这种情况做好准备。
+    | 中 |'
+- en: '| `SELECT_FULL_JOIN` | The `JOIN` performed a full table scan because there
+    is no good index to resolve the query otherwise. You need to reconsider your indexes
+    unless the table is very small. | High |'
+  id: totrans-185
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SELECT_FULL_JOIN` | 如果`JOIN`执行了全表扫描，因为没有好的索引来解决查询。除非表很小，否则您需要重新考虑您的索引。 |
+    高 |'
+- en: '| `SELECT_FULL_RANGE_JOIN` | If the `JOIN` used a range search of the referenced
+    table. | Medium |'
+  id: totrans-186
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SELECT_FULL_RANGE_JOIN` | 如果`JOIN`使用了引用表的范围搜索。 | 中 |'
+- en: '| `SELECT_RANGE` | If the `JOIN` used a range search to resolve rows in the
+    first table. This is usually not a big issue. | Low |'
+  id: totrans-187
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SELECT_RANGE` | 如果`JOIN`使用范围搜索来解决第一个表中的行。这通常不是一个大问题。 | 低 |'
+- en: '| `SELECT_RANGE_CHECK` | If the `JOIN` is without indexes, which checks for
+    keys after each row. This is a very bad symptom, and you need to reconsider your
+    table indexes if this value is greater than zero. | High |'
+  id: totrans-188
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SELECT_RANGE_CHECK` | 如果`JOIN`没有索引，每行后都会检查键。这是一个非常糟糕的症状，如果这个值大于零，您需要重新考虑表索引。
+    | 高 |'
+- en: '| `SELECT_SCAN` | If the `JOIN` did a full scan of the first table. This is
+    an issue if the table is large. | Medium |'
+  id: totrans-189
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SELECT_SCAN` | 如果 `JOIN` 对第一个表进行了全扫描。如果表很大，这是一个问题。 | 中等 |'
+- en: '| `SORT_MERGE_PASSES` | The number of merge passes that the sort has to perform.
+    If the value is greater than zero and the query performance is slow, you may need
+    to increase `sort_buffer_size`. | Low |'
+  id: totrans-190
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SORT_MERGE_PASSES` | 排序执行的合并次数。如果值大于零且查询性能较慢，可能需要增加 `sort_buffer_size`。
+    | 低 |'
+- en: '| `SORT_RANGE` | If the sort was done using ranges. | Low |'
+  id: totrans-191
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SORT_RANGE` | 如果排序是通过范围完成的。 | 低 |'
+- en: '| `SORT_ROWS` | The number of sorted rows. Compare with the value of the returned
+    rows. If the number of sorted rows is higher, you may need to optimize your query.
+    | Medium (see Description) |'
+  id: totrans-192
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SORT_ROWS` | 排序行数。与返回行数的值进行比较。如果排序行数较高，可能需要优化查询。 | 中等（见描述） |'
+- en: '| `SORT_SCAN` | If the sort was done by scanning a table. This is a very bad
+    sign unless you purposely select all rows from the table without using an index.
+    | High |'
+  id: totrans-193
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SORT_SCAN` | 如果排序是通过扫描表来完成的。这是一个非常糟糕的迹象，除非您��意选择表中的所有行而不使用索引。 | 高 |'
+- en: '| `NO_INDEX_USED` | No index was used to resolve the query. | High, unless
+    tables are small |'
+  id: totrans-194
+  prefs: []
+  type: TYPE_TB
+  zh: '| `NO_INDEX_USED` | 未使用索引解析查询。 | 高，除非表很小 |'
+- en: '| `NO_GOOD_INDEX_USED` | Index used to resolve the query is not the best. You
+    need to reconsider your indexes if this value is greater than zero. | High |'
+  id: totrans-195
+  prefs: []
+  type: TYPE_TB
+  zh: '| `NO_GOOD_INDEX_USED` | 用于解析查询的索引不是最佳的。如果此值大于零，则需要重新考虑索引。 | 高 |'
+- en: 'To find out which statements require optimization, you can choose any of said
+    columns and compare it with zero. For example, to find all the queries that do
+    not use a good index, run the following:'
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要找出哪些语句需要优化，您可以选择任何列并将其与零进行比较。例如，要查找所有不使用良好索引的查询，请运行以下操作：
+- en: '[PRE14]'
+  id: totrans-197
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'To find all the queries that created temporary tables, run:'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查找所有创建临时表的查询，请运行：
+- en: '[PRE15]'
+  id: totrans-199
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: You can use values in these columns to show potential problems individually.
+    For example, to find all queries that returned errors, use the condition `WHERE
+    ERRORS > 0`; to find all queries executed for more than five seconds, use the
+    condition `WHERE TIMER_WAIT > 5000000000`; and so on.
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用这些列中的值来单独显示潜在问题。例如，要查找所有返回错误的查询，使用条件 `WHERE ERRORS > 0`；要查找执行时间超过五秒的所有查询，使用条件
+    `WHERE TIMER_WAIT > 5000000000`；等等。
+- en: 'Alternatively, you can create a query that will find all the statements with
+    problems using long conditions, as follows:'
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，您可以创建一个查询，通过长条件查找所有存在问题的语句，如下所示：
+- en: '[PRE16]'
+  id: totrans-202
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: Using sys schema
+  id: totrans-203
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 使用 sys schema
+- en: 'The `sys` schema provides views that could be used to find problematic statements.
+    For example, `statements_with_errors_or_warnings` lists all statements with errors
+    and warnings, and `statements_with_full_table_scans` lists all statements that
+    required a full table scan. The `sys` schema uses digest text instead of query
+    text, so you will get the digest query text instead of either SQL or digest text
+    like you do when accessing the raw `performance_schema` tables:'
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`sys` schema 提供了可用于查找存在问题的语句的视图。例如，`statements_with_errors_or_warnings` 列出了所有带有错误和警告的语句，而
+    `statements_with_full_table_scans` 列出了所有需要执行全表扫描的语句。`sys` schema 使用摘要文本而不是查询文本，因此您将获得摘要查询文本，而不是在访问原始
+    `performance_schema` 表时获得的 SQL 或摘要文本：'
+- en: '[PRE17]'
+  id: totrans-205
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: Other views that could be used to find statements that require optimizations
+    are described in [Table 3-5](#views_that_can_be_used_to_find_statemen).
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其他可用于找到需要优化的语句的视图在 [Table 3-5](#views_that_can_be_used_to_find_statemen) 中有描述。
+- en: Table 3-5\. Views that can be used to find statements requiring optimization
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Table 3-5\. 可用于找到需要优化的语句的视图
+- en: '| View | Description |'
+  id: totrans-208
+  prefs: []
+  type: TYPE_TB
+  zh: '| 视图 | 描述 |'
+- en: '| --- | --- |'
+  id: totrans-209
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `statement_analysis` | A normalized statement view with aggregated statistics,
+    ordered by the total execution time per the normalized statement. Similar to the
+    `events_statements_summary_by_digest` table but less detailed. |'
+  id: totrans-210
+  prefs: []
+  type: TYPE_TB
+  zh: '| `statement_analysis` | 一个带有聚合统计信息的标准化语句视图，按照标准化语句的总执行时间排序。类似于 `events_statements_summary_by_digest`
+    表，但更简略。'
+- en: '| `statements_with_errors_or_warnings` | All normalized statements that raised
+    errors or warnings. |'
+  id: totrans-211
+  prefs: []
+  type: TYPE_TB
+  zh: '| `statements_with_errors_or_warnings` | 所有引发错误或警告的标准化语句。 |'
+- en: '| `statements_with_full_table_scans.` | All normalized statements that have
+    done a full table scan. |'
+  id: totrans-212
+  prefs: []
+  type: TYPE_TB
+  zh: '| `statements_with_full_table_scans.` | 所有执行全表扫描的标准化语句。 |'
+- en: '| `statements_with_runtimes_in_95th_percentile` | All normalized statements
+    whose average execution time is in the top 95th percentile. |'
+  id: totrans-213
+  prefs: []
+  type: TYPE_TB
+  zh: '| `statements_with_runtimes_in_95th_percentile` | 所有平均执行时间位于前 95% 的标准化语句。 |'
+- en: '| `statements_with_sorting` | All normalized statements that have done sorts.
+    The view includes all kinds of sorts. |'
+  id: totrans-214
+  prefs: []
+  type: TYPE_TB
+  zh: '| `statements_with_sorting` | 所有执行排序的标准化语句。该视图包括所有类型的排序。 |'
+- en: '| `statements_with_temp_tables` | All normalized statements that used temporary
+    tables. |'
+  id: totrans-215
+  prefs: []
+  type: TYPE_TB
+  zh: '| `statements_with_temp_tables` | 所有使用临时表的标准化语句。 |'
+- en: Prepared statements
+  id: totrans-216
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 预处理语句
+- en: The `prepared_statements_instances` table contains all prepared statements existing
+    in the server. It has the same statistics as in the `events_statements_[current|history|history_long]`
+    tables and, additionally, information about the thread that owns the prepared
+    statement and how many times the statement was executed. Unlike in the `events_statements_[current|history|history_long]`
+    tables, statistics data is summed, and the table contains the total amount of
+    all statement executions.
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`prepared_statements_instances` 表包含服务器中存在的所有预处理语句。它具有与 `events_statements_[current|history|history_long]`
+    表相同的统计信息，此外还包含拥有预处理语句的线程信息以及语句执行次数。与 `events_statements_[current|history|history_long]`
+    表不同，统计数据是累加的，表中包含所有语句执行的总次数。'
+- en: Warning
+  id: totrans-218
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: The `COUNT_EXECUTE` column contains the number of times the statement was executed,
+    so you can get average statistics per statement by dividing the total value by
+    the number in this column. Note, however, that any average statistics could be
+    inaccurate. For example, if you executed a statement 10 times and the value in
+    the column `SUM_SELECT_FULL_JOIN` is 10, the average would be one full join per
+    statement. If you then add an index and execute the statement one more time, `SUM_SELECT_FULL_JOIN`
+    will remain 10, so the average will be 10/11 = 0.9\. This does not show that the
+    issue is now resolved.
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`COUNT_EXECUTE`列包含语句执行的次数，因此您可以通过将总值除以此列中的数字来获得每个语句的平均统计信息。但请注意，任何平均统计信息可能是不准确的。例如，如果您执行了10次语句，而列`SUM_SELECT_FULL_JOIN`中的值为10，则平均值将是每个语句一个完全连接。如果您然后添加一个索引并再次执行该语句，`SUM_SELECT_FULL_JOIN`将保持为10，因此平均值将为10/11
+    = 0.9。这并不表明问题现在已解决。'
+- en: To enable prepared statements instrumentation, you need to enable the instruments
+    described in [Table 3-6](#instruments_to_enable_for_prepared_stat).
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要启用准备语句的仪器，您需要启用[表3-6](#instruments_to_enable_for_prepared_stat)中描述的仪器。
+- en: Table 3-6\. Instruments to enable for prepared statements instrumentation
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表3-6\. 用于准备语句仪器的启用
+- en: '| Instrument class | Description |'
+  id: totrans-222
+  prefs: []
+  type: TYPE_TB
+  zh: '| 仪器类别 | 描述 |'
+- en: '| --- | --- |'
+  id: totrans-223
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `statement/sql/prepare_sql` | `PREPARE` statement in the text protocol (when
+    run via MySQL CLI) |'
+  id: totrans-224
+  prefs: []
+  type: TYPE_TB
+  zh: '| `statement/sql/prepare_sql` | 在文本协议中的`PREPARE`语句（通过MySQL CLI运行时） |'
+- en: '| `statement/sql/execute_sql` | `EXECUTE` statement in the text protocol (when
+    run via MySQL CLI) |'
+  id: totrans-225
+  prefs: []
+  type: TYPE_TB
+  zh: '| `statement/sql/execute_sql` | 在文本协议中的`EXECUTE`语句（通过MySQL CLI运行时） |'
+- en: '| `statement/com/Prepare` | `PREPARE` statement in the binary protocol (if
+    accessed via MySQL C API) |'
+  id: totrans-226
+  prefs: []
+  type: TYPE_TB
+  zh: '| `statement/com/Prepare` | 在二进制协议中的`PREPARE`语句（如果通过MySQL C API访问） |'
+- en: '| `statement/com/Execute` | `EXECUTE` statement in the binary protocol (if
+    accessed via MySQL C API) |'
+  id: totrans-227
+  prefs: []
+  type: TYPE_TB
+  zh: '| `statement/com/Execute` | 在二进制协议中的`EXECUTE`语句（如果通过MySQL C API访问） |'
+- en: 'Once enabled, you can prepare a statement and execute it a few times:'
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦启用，您可以准备一个语句并执行几次：
+- en: '[PRE18]'
+  id: totrans-229
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Then you can check the diagnostics:'
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后您可以检查诊断信息：
+- en: '[PRE19]'
+  id: totrans-231
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'Note that you will see the statements in the `prepared_statements_instances`
+    table only when they exist in the server. Once they are dropped, you cannot access
+    their statistics anymore:'
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，只有在服务器中存在时，您才会在`prepared_statements_instances`表中看到语句。一旦它们被删除，您将无法再访问它们的统计信息：
+- en: '[PRE20]'
+  id: totrans-233
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: Stored routines
+  id: totrans-234
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 存储过程
+- en: 'With `performance_schema` you can retrieve information about how your stored
+    routines were executed: for example, which of the branches of the `IF … ELSE`
+    flow control statement has been chosen or if an error handler was called.'
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`performance_schema`，您可以检索有关存储过程执行情况的信息：例如，`IF … ELSE`流程控制语句的哪个分支被选择，或者是否调用了错误处理程序。
+- en: To enable stored routines instrumentation, you need to enable instruments that
+    follow the pattern `'statement/sp/%'`. The instrument `statement/sp/stmt` is responsible
+    for the statements, called inside the routine, while other instruments are responsible
+    for tracking events, such as entering or leaving the procedure, loop, or any other
+    control instruction.
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要启用存储过程仪器，您需要启用遵循模式`'statement/sp/%'`的仪器。`statement/sp/stmt`仪器负责例程内调用的语句，而其他仪器负责跟踪事件，例如进入或离开过程、循环或任何其他控制指令。
+- en: 'To demonstrate how stored routines instrumentation works, use the stored procedure:'
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了演示存储过程仪器的工作原理，使用存储过程：
+- en: '[PRE21]'
+  id: totrans-238
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'Then call it with different values:'
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后用不同的值调用它：
+- en: '[PRE22]'
+  id: totrans-240
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'In this case, the error handler was not called, and the procedure inserted
+    the argument value `(1)` into the table:'
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，错误处理程序没有被调用，而存储过程将参数值`(1)`插入到表中：
+- en: '[PRE23]'
+  id: totrans-242
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'In the second call, however, the content of the `events_statements_history`
+    table is different: it contains calls from the error handler and the SQL statement
+    that replaced the erroneous one.'
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，在第二次调用中，`events_statements_history`表的内容不同：它包含了来自错误处理程序的调用以及替换错误语句的SQL语句。
+- en: While the return value of the procedure itself did not change, we clearly see
+    that it has been executed differently. Understanding such differences in the routine
+    execution flow can help to understand why the same routine can finish almost immediately
+    if called once and can take much longer when called another time.
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然存储过程本身的返回值没有改变，但我们清楚地看到它已经以不同的方式执行。了解例程执行流程中的这些差异可以帮助理解为什么同一个例程如果被调用一次几乎立即完成，而另一次调用时可能需要更长的时间。
+- en: Statements profiling
+  id: totrans-245
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 语句分析
+- en: 'The `events_stages_[current|history|history_long]` table contains profiling
+    information, such as how much time MySQL spent while creating a temporary table,
+    updating, or waiting for a lock. To enable profiling, you need to enable said
+    consumers and also instruments that follow the pattern `''stage/%''`. Once enabled,
+    you can find answers to such questions as “Which stage of the query execution
+    took a critically long time?” The following example searches for stages that took
+    more than one second:'
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`events_stages_[current|history|history_long]`表包含了诸如MySQL在创建临时表、更新或等待锁时花费的时间等分析信息。要启用分析，您需要启用相应的消费者以及遵循模式`''stage/%''`的仪器。一旦启用，您可以找到答案，比如“查询执行的哪个阶段花费了非常长的时间？”以下示例搜索了花费超过一秒的阶段：'
+- en: '[PRE24]'
+  id: totrans-247
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: Another technique for using `events_stages_[current|history|history_long]` tables
+    is to pay attention to those statements that spent more than a certain threshold
+    in stages known to cause performance issues. [Table 3-7](#stages_that_are_indicators_of_performan)
+    lists these stages.
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`events_stages_[current|history|history_long]`表的另一种技术是关注那些在已知会导致性能问题的阶段中花费超过一定阈值的语句。[表3-7](#stages_that_are_indicators_of_performan)列出了��些阶段。
+- en: Table 3-7\. Stages that are indicators of performance issues
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表3-7\. 表现问题的指标阶段
+- en: '| Stage class(es) | Description |'
+  id: totrans-250
+  prefs: []
+  type: TYPE_TB
+  zh: '| 阶段类别 | 描述 |'
+- en: '| --- | --- |'
+  id: totrans-251
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `stage/sql/%tmp%` | Everything related to the temporary tables. |'
+  id: totrans-252
+  prefs: []
+  type: TYPE_TB
+  zh: '| `stage/sql/%tmp%` | 与临时表相关的所有内容。 |'
+- en: '| `stage/sql/%lock%` | Everything related to locks. |'
+  id: totrans-253
+  prefs: []
+  type: TYPE_TB
+  zh: '| `stage/sql/%lock%` | 与锁相关的所有内容。 |'
+- en: '| `stage/%/Waiting for%` | Everything waiting for a resource. |'
+  id: totrans-254
+  prefs: []
+  type: TYPE_TB
+  zh: '| `stage/%/Waiting for%` | 一切等待资源的内容。 |'
+- en: '| `stage/sql/Sending data` | This stage should be compared to the number of
+    `ROWS_SENT` in the statements statistics. If `ROWS_SENT` is small, a statement
+    spending a lot of time in this stage could mean that it has to create a temporary
+    file or table to resolve intermediary results. This is often followed by filtering
+    the rows before sending data to the client. This is usually a symptom of a badly
+    optimized query. |'
+  id: totrans-255
+  prefs: []
+  type: TYPE_TB
+  zh: '| `stage/sql/Sending data` | 这个阶段应该与语句统计中的 `ROWS_SENT` 数量进行比较。如果 `ROWS_SENT`
+    很小，一个在这个阶段花费大量时间的语句可能意味着它必须创建一个临时文件或表来解决中间结果。这通常会在向客户端发送数据之前对行进行过滤。这通常是一个查询优化不佳的症状。'
+- en: '| `stage/sql/freeing items``stage/sql/cleaning up``stage/sql/closing tables``stage/sql/end`
+    | These are stages that clean resources. Unfortunately, they are not detailed
+    enough, and each of them includes more than a single task. If you see that your
+    queries spend a long time in these stages, you most likely hit resource contention
+    due to high concurrency. You need to check your CPU, I/O, and memory usage as
+    well as whether your hardware and MySQL options can handle concurrency that your
+    application creates. |'
+  id: totrans-256
+  prefs: []
+  type: TYPE_TB
+  zh: '| `stage/sql/freeing items``stage/sql/cleaning up``stage/sql/closing tables``stage/sql/end`
+    | 这些是清理资源的阶段。不幸的是，它们的细节不够详细，每个阶段包含的任务不止一个。如果你发现你的查询在这些阶段花费了很长时间，很可能是由于高并发导致资源争用。你需要检查
+    CPU、I/O 和内存使用情况，以及你的硬件和 MySQL 选项是否能够处理应用程序创建的并发。'
+- en: It is very important to note that profiling is available only for the general
+    server stages. Storage engines do not support profiling with `performance_schema`.
+    As a result, stages such as `stage/sql/update` mean that the job is inside the
+    storage engine and may include not only the update itself, but also waits for
+    the engine-specific locks or other contention issues.
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 非常重要的一点是，性能分析仅适用于一般服务器阶段。存储引擎不支持使用 `performance_schema` 进行性能分析。因此，诸如 `stage/sql/update`
+    这样的阶段意味着作业在存储引擎内部，并且可能包括不仅仅是更新本身，还包括等待存储引擎特定锁或其他争用问题。
+- en: Examining Read Versus Write Performance
+  id: totrans-258
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 检查读写性能
+- en: 'Statement instrumentation in Performance Schema could be very useful to understand
+    if your workload is read or write bound. You may start by counting types of statements:'
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Performance Schema 中的语句仪表化非常有用，可以帮助理解你的工作负载是读取还是写入受限。你可以从统计语句的类型开始：
+- en: '[PRE25]'
+  id: totrans-260
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: In this example, the number of `SELECT` queries is larger than the number of
+    any other queries. This shows that most of the queries in this setup are read
+    queries.
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个示例中，`SELECT` 查询的数量大于任何其他查询的数量。这表明在这个设置中，大多数查询都是读取查询。
+- en: 'If you want to know the latency of your statements, aggregate by the `LOCK_TIME`
+    column:'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果想了解语句的延迟，可以按 `LOCK_TIME` 列进行聚合：
+- en: '[PRE26]'
+  id: totrans-263
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'You may also want to know the amount of bytes and rows read and written. For
+    this purpose, use the global status variables `Handler_*`:'
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能还想了解读取和写入的字节数和行数。为此，使用全局状态变量 `Handler_*`：
+- en: '[PRE27]'
+  id: totrans-265
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: Examining Metadata Locks
+  id: totrans-266
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 检查元数据锁
+- en: 'Metadata locks are used to protect database object definitions from modification.
+    Shared metadata locks are set for any SQL statement: `SELECT`, `UPDATE`, and so
+    on. They do not affect other statements that require shared metadata locks. However,
+    they prevent those statements that change the database object definition, such
+    as `ALTER TABLE` or `CREATE INDEX`, from starting until the lock is freed. While
+    most of the issues caused by metadata lock conflicts affect tables, the locks
+    themselves are set for any database object, such as `SCHEMA`, `EVENT`, `TABLESPACE`,
+    and so on.'
+  id: totrans-267
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 元数据锁用于保护数据库对象定义免受修改。任�� SQL 语句都会设置共享元数据锁：`SELECT`、`UPDATE` 等。它们不会影响其他需要共享元数据锁的语句。但是，它们会阻止那些改变数据库对象定义的语句（如
+    `ALTER TABLE` 或 `CREATE INDEX`）启动，直到锁被释放。虽然大多数由元数据锁冲突引起的问题影响表，但锁本身是为任何数据库对象设置的，如
+    `SCHEMA`、`EVENT`、`TABLESPACE` 等。
+- en: 'Metadata locks are held until the transaction finishes. This makes troubleshooting
+    them harder if you use multiple statement transactions. Which statement is waiting
+    for the lock is usually clear: DDL statements implicitly commit transactions,
+    so they are the only statement in the new transaction, and you will find them
+    in the process list in the `"Waiting for a metadata lock"` status. However, the
+    statement that holds the lock may vanish from the process list if it is part of
+    the multiple statement transaction that is still open.'
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 元数据锁会一直保持直到事务结束。如果使用多语句事务，这会使故障排除变得更加困难。哪个语句正在等待锁通常是明确的：DDL 语句会隐式提交事务，因此它们是新事务中唯一的语句，并且你会在进程列表中找到它们处于`"等待元数据锁"`状态。然而，持有锁的语句可能会在进程列表中消失，如果它是仍然打开的多语句事务的一部分。
+- en: The `metadata_locks` table in `performance_schema` holds information about locks
+    that are currently set by different threads, and it also holds information about
+    lock requests that are waiting for the lock. This way, you can easily identify
+    which thread does not allow your DDL request to start and decide if you want to
+    kill this statement or wait until it finishes executing.
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`performance_schema` 中的 `metadata_locks` 表保存了不同线程当前设置的锁的信息，还保存了等待锁的锁请求信息。这样，你可以轻松地识别哪个线程不允许你的
+    DDL 请求启动，并决定是否要终止此语句或等待其执行完成。'
+- en: To enable metadata lock instrumentation, you need to enable the `wait/lock/metadata/sql/mdl`
+    instrument.
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要启用元数据锁仪表化，需要启用 `wait/lock/metadata/sql/mdl` 仪表。
+- en: 'The following example shows that a thread, visible in the process list with
+    ID 5, holds the lock that the thread with `processlist_id=4` is waiting for:'
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下示例显示了一个线程，在进程列表中以 ID 5 可见，持有了线程 `processlist_id=4` 正在等待的锁：
+- en: '[PRE28]'
+  id: totrans-272
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: Examining Memory Usage
+  id: totrans-273
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 检查内存使用情况
+- en: To turn on memory instrumentation in `performance_schema`, enable instruments
+    of the class `memory`. Once enabled, you can find details on exactly how memory
+    is used by the internal MySQL structures.
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在 `performance_schema` 中启用内存仪表化，需要启用 `memory` 类的仪表。一旦启用，你可以找到有关 MySQL 内部结构如何使用内存的详细信息。
+- en: Using performance_schema directly
+  id: totrans-275
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 直接使用performance_schema
+- en: Performance Schema stores memory usage statistics in the digest tables, whose
+    names start with the `memory_summary_` prefix. Memory use aggregation is described
+    in [Table 3-8](#aggregation_parameters_for_memory_use).
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Performance Schema将内存使用统计信息存储在以`memory_summary_`前缀开头的摘要表中。内存使用聚合在[Table 3-8](#aggregation_parameters_for_memory_use)中描述。
+- en: Table 3-8\. Aggregation parameters for memory use
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表3-8\. 内存使用的聚合参数
+- en: '| Aggregation parameter | Description |'
+  id: totrans-278
+  prefs: []
+  type: TYPE_TB
+  zh: '| 聚合参数 | 描述 |'
+- en: '| --- | --- |'
+  id: totrans-279
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `global` | Globally per event name |'
+  id: totrans-280
+  prefs: []
+  type: TYPE_TB
+  zh: '| `global` | 每个事件名称的全局 |'
+- en: '| `thread` | Per thread: includes both background and user threads |'
+  id: totrans-281
+  prefs: []
+  type: TYPE_TB
+  zh: '| `thread` | 每个线程：包括后台线程和用户线程 |'
+- en: '| `account` | User account |'
+  id: totrans-282
+  prefs: []
+  type: TYPE_TB
+  zh: '| `account` | 用户账户 |'
+- en: '| `host` | Host |'
+  id: totrans-283
+  prefs: []
+  type: TYPE_TB
+  zh: '| `host` | 主机 |'
+- en: '| `user` | Username |'
+  id: totrans-284
+  prefs: []
+  type: TYPE_TB
+  zh: '| `user` | 用户名 |'
+- en: 'For example, to find InnoDB structures that use most of the memory, issue the
+    following query:'
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，要找到使用大部分内存的InnoDB结构，请执行以下查询：
+- en: '[PRE29]'
+  id: totrans-286
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: Using sys schema
+  id: totrans-287
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用sys模式
+- en: 'The `sys` schema has views that allow you to get memory statistics in a better
+    way. They also support aggregation by `host`, `user`, `thread`, or `global`. The
+    view `memory_global_total` contains a single value, displaying the total amount
+    of the instrumented memory:'
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`sys`模式具有视图，允许您以更好的方式获取内存统计信息。它们还支持按`host`、`user`、`thread`或`global`进行聚合。视图`memory_global_total`包含一个单一值，显示了被检测内存的总量：'
+- en: '[PRE30]'
+  id: totrans-289
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'Aggregation views convert bytes into kilobytes, megabytes, and gigabytes as
+    needed. The view `memory_by_thread_by_current_bytes` has a `user` column that
+    may take one of the following values:'
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 聚合视图将字节转换为需要的千字节、兆字节和千兆字节。视图`memory_by_thread_by_current_bytes`有一个`user`列，可能取以下值之一：
+- en: '`NAME@HOST`'
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`NAME@HOST`'
+- en: Regular user account, such as `sveta@oreilly.com`.
+  id: totrans-292
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 常规用户账户，比如`sveta@oreilly.com`。
+- en: System users, such as `sql/main` or `innodb/*`
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 系统用户，比如`sql/main`或`innodb/*`
+- en: Data for such “usernames” is taken from the `threads` table and is handy when
+    you need to understand what the particular thread is doing.
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此类“用户名”的数据来自`threads`表，当您需要了解特定线程在做什么时非常方便。
+- en: 'Rows in the view `memory_by_thread_by_current_bytes` are sorted by the currently
+    allocated memory in descending order, so you will easily find which thread takes
+    most of the memory:'
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 视图`memory_by_thread_by_current_bytes`中的行按照当前分配的内存量降序排序，因此您将轻松找到占用大部分内存的线程：
+- en: '[PRE31]'
+  id: totrans-296
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: The preceding example is taken on a laptop; therefore, numbers are not descriptive
+    of a production server. It is still clear that a local connection uses most of
+    the memory, followed by the main server process.
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上面的示例是在笔记本电脑上进行的；因此，数字并不描述生产服务器的情况。仍然清楚的是，本地连接使用了大部分内存，其次是主服务器进程。
+- en: 'The memory instrumentation is handy when you need to find a user thread that
+    takes the most memory. In the following example, a user connection allocated 36
+    GB of RAM, which is quite huge even in modern high-memory systems:'
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你需要找到占用最多内存的用户线程时，内存工具非常方便。在下面的示例中，一个用户连接分配了36 GB的RAM，即使在现代高内存系统中也相当巨大：
+- en: '[PRE32]'
+  id: totrans-299
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: Examining Variables
+  id: totrans-300
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 检查变量
+- en: 'Performance Schema brings variable instrumentation to a new level. It provides
+    instrumentation for:'
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Performance Schema将变量检测提升到一个新水平。它为以下内容提供了检测：
+- en: Server variables
+  id: totrans-302
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 服务器变量
+- en: Global
+  id: totrans-303
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 全局
+- en: Session, for all currently opened sessions
+  id: totrans-304
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 会话，适用于所有当前打开的会话
+- en: Source, from which all current variable values originate
+  id: totrans-305
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 来源，所有当前变量值的来源
+- en: Status variables
+  id: totrans-306
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 状态变量
+- en: Global
+  id: totrans-307
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 全局
+- en: Session, for all currently open sessions
+  id: totrans-308
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 会话，适用于所有当前打开的会话
+- en: Aggregations by
+  id: totrans-309
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 按照聚合
+- en: Host
+  id: totrans-310
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 主机
+- en: User
+  id: totrans-311
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 用户
+- en: Account
+  id: totrans-312
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 账户
+- en: Thread
+  id: totrans-313
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 线程
+- en: User variables
+  id: totrans-314
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 用户变量
+- en: Warning
+  id: totrans-315
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: 'Prior to version 5.7, server and status variables were instrumented in `information_schema`.
+    This instrumentation was limited: it allowed tracking of only global and current
+    session values. Information about variables and status in other sessions, as well
+    as information about the user variables, was not accessible. However, for backward-compatibility
+    reasons, MySQL 5.7 uses `information_schema` to track variables. To enable `performance_schema`
+    support for variables, you need to set the configuration variable `show_compatibility_56`
+    to `0`. This requirement, as well as variable tables in `information_schema`,
+    no longer exists in version 8.0.'
+  id: totrans-316
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在5.7版本之前，服务器和状态变量在`information_schema`中被检测。这种检测是有限的：它只允许跟踪全局和当前会话值。其他会话中的变量和状态信息，以及用户变量的信息是不可访问的。然而，出于向后兼容性的原因，MySQL
+    5.7使用`information_schema`来跟踪变量。要启用对变量的`performance_schema`支持，您需要将配置变量`show_compatibility_56`设置为`0`。这个要求，以及`information_schema`中的变量表，在8.0版本中不再存在。
+- en: 'Global variable values are stored in the table `global_variables`. Session
+    variables for the current session are stored in the table `session_variables`.
+    Both tables have only two columns with self-explanatory names: `VARIABLE_NAME`
+    and `VARIABLE_VALUE`.'
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 全局变量值存储在表`global_variables`中。当前会话的会话变量存储在表`session_variables`中。这两个表只有两列，列名自明：`VARIABLE_NAME`和`VARIABLE_VALUE`。
+- en: The `variables_by_thread` table has an additional column, `THREAD_ID`, indicating
+    the thread to which the variable belongs. This allows you to find threads that
+    set session variable values to be different than specified by the default configuration.
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`variables_by_thread`表有一个额外的列，`THREAD_ID`，指示变量所属的线程。这使您可以找到将会话变量值设置为与默认配置不同的线程。'
+- en: 'In the following example, the thread with `THREAD_ID=84` sets the variable
+    `tx_isolation` to `SERIALIZABLE`, which may lead to situations when transactions
+    acquire more locks than if the default level is used:'
+  id: totrans-319
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下面的示例中，具有`THREAD_ID=84`的线程将变量`tx_isolation`设置为`SERIALIZABLE`，这可能导致事务获取的锁比使用默认级别时更多：
+- en: '[PRE33]'
+  id: totrans-320
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'The following example finds all threads with session variable values that are
+    different from the current active session:'
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面的示例找到所有具有与当前活动会话不同的会话变量值的线程：
+- en: '[PRE34]'
+  id: totrans-322
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'Global and current session status values are stored in the tables `global_status`
+    and `session_status`, respectively. They also have only two columns: `VARIABLE_NAME`
+    and `VARIABLE_VALUE`.'
+  id: totrans-323
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 全局和当前会话状态值分别存储在表`global_status`和`session_status`中。它们也只有两列：`VARIABLE_NAME`和`VARIABLE_VALUE`。
+- en: 'Status variables can be aggregated by user account, host, user, and thread.
+    In my opinion, the most interesting aggregation is by thread because it allows
+    you to identify quickly which connection is creating most of the resource pressure
+    on the server. For example, the following snippet clearly shows that the connection
+    with `THREAD_ID=83` is doing most of the writes:'
+  id: totrans-324
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 状态变量可以按用户帐户、主机、用户和线程进行聚合。在我看来，最有趣的聚合是按线程进行的，因为它可以快速识别哪个连接在服务器上造成了大部分资源压力。例如，以下代码片段清楚地显示了`THREAD_ID=83`的连接正在进行大部分写操作：
+- en: '[PRE35]'
+  id: totrans-325
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'User-defined variables are created as `SET @my_var = ''foo''` and are tracked
+    in the table `user_variables_by_thread`:'
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用户定义变量是通过`SET @my_var = 'foo'`创建的，并在表`user_variables_by_thread`中进行跟踪：
+- en: '[PRE36]'
+  id: totrans-327
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: This instrumentation is useful when you need to find sources of memory consumption
+    because each variable takes bytes to hold its values. You may also use this information
+    to solve tricky issues with persistence connections, using user-defined variables.
+    And, last but not least, this table is the only way to find out which variables
+    you defined in your own session.
+  id: totrans-328
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您需要找出内存消耗的来源时，此工具非常有用，因为每个变量都需要字节来保存其值。您还可以使用此信息解决与持久��接、使用用户定义变量相关的棘手问题。最后但同样重要的是，此表是唯一的方法来查找您在自己会话中定义的变量。
+- en: 'The table `variables_info` does not contain any variable values. Rather, it
+    has information about where server variables originated and other documentation,
+    such as the variable default minimum and maximum values. The `SET_TIME` column
+    contains the timestamp of the latest variable change. The `SET_HOST` and `SET_USER`
+    columns identify the user account that set the variable. For example, to find
+    all the variables that were changed dynamically since the server started, run:'
+  id: totrans-329
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表`variables_info`不包含任何变量值。相反，它包含有关服务器变量来源以及其他文档的信息，例如变量的默认最小值和最大值。`SET_TIME`列包含最新变量更改的时间戳。`SET_HOST`和`SET_USER`列标识设置变量的用户帐户。例如，要查找自服务器启动以来动态更改的所有变量，请运行：
+- en: '[PRE37]'
+  id: totrans-330
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'Possible `VARIABLE_SOURCE` values include:'
+  id: totrans-331
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可能的`VARIABLE_SOURCE`值包括：
+- en: '`COMMAND_LINE`'
+  id: totrans-332
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`COMMAND_LINE`'
+- en: Variable set on the command line
+  id: totrans-333
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在命令行上设置的变量
+- en: '`COMPILED`'
+  id: totrans-334
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`COMPILED`'
+- en: Compiled-in default value
+  id: totrans-335
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 编译默认值
+- en: '`PERSISTED`'
+  id: totrans-336
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`PERSISTED`'
+- en: Set from a server-specific *mysqld-auto.cnf* option file
+  id: totrans-337
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从特定服务器的*mysqld-auto.cnf*选项文件设置
+- en: 'There are also many options for variables, set in different option files. I
+    will not discuss them all: they are either self-descriptive or could be easily
+    checked in the User Reference Manual. The number of details is also increasing
+    from version to version.'
+  id: totrans-338
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 也有许多变量选项，设置在不同的选项文件中。我不会讨论它们全部：它们要么是自描述的，要么可以在用户参考手册中轻松查找。细节的数量也随着版本的增加而增加。
+- en: Examining Most Frequent Errors
+  id: totrans-339
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 检查最频繁的错误
+- en: 'In addition to the specific error information, `performance_schema` provides
+    digest tables, aggregating errors by user, host, account, thread, and globally
+    by the error number. All aggregation tables have a structure similar to that used
+    in the `events_errors_summary_global_by_error` table:'
+  id: totrans-340
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了特定的错误信息，`performance_schema`还提供摘要表，通过用户、主机、帐户、线程以及全局按错误编号聚合错误。所有聚合表的结构与`events_errors_summary_global_by_error`表中使用的结构类似：
+- en: '[PRE38]'
+  id: totrans-341
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: The columns `ERROR_NUMBER`, `ERROR_NAME`, and `SQL_STATE` identify the error.
+    `SUM_ERROR_RAISED` is the number of times the error was raised. `SUM_ERROR_HANDLED`
+    is the number of times the error was handled. `FIRST_SEEN` and `LAST_SEEN` are
+    timestamps when the error was first and last seen.
+  id: totrans-342
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 列`ERROR_NUMBER`、`ERROR_NAME`和`SQL_STATE`标识错误。`SUM_ERROR_RAISED`是错误被引发的次数。`SUM_ERROR_HANDLED`是错误被处理的次数。`FIRST_SEEN`和`LAST_SEEN`是错误首次和最后出现的时间戳。
+- en: Specific aggregate tables have additional columns. Thus, the table `events_​errors_​summary_​by_thread_by_error`
+    has a column named `THREAD_ID`, which identifies the thread that raised the error,
+    the table `events_errors_​summary_​by_host_by_error` has a column named `HOST`,
+    and so on.
+  id: totrans-343
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 特定的聚合表具有额外的列。因此，表`events_errors_summary_by_thread_by_error`有一个名为`THREAD_ID`的列，用于标识引发错误的线程，表`events_errors_summary_by_host_by_error`有一个名为`HOST`的列，依此类推。
+- en: 'For example, to find all accounts that ran statements that caused errors more
+    than 10 times, run:'
+  id: totrans-344
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，要查找所有运行导致错误超过10次的语句的帐户，请运行：
+- en: '[PRE39]'
+  id: totrans-345
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: Error digest tables can be useful for finding out which user accounts, hosts,
+    users, or threads send the most erroneous queries and perform an action. They
+    could also help with errors like `ER_DEPRECATED_UTF8_ALIAS`, which may show that
+    some of the frequently used queries were written for previous MySQL versions and
+    need to be updated.
+  id: totrans-346
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 错误摘要表对于查找哪些用户帐户、主机、用户或线程发送了最多错误查询并执行操作可能很有用。它们还可以帮助处理像`ER_DEPRECATED_UTF8_ALIAS`这样的错误，这可能表明一些经常使用的查询是为以前的MySQL版本编写的，需要更新。
+- en: Examining Performance Schema Itself
+  id: totrans-347
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 检查性能模式本身
+- en: You can examine Performance Schema itself using the same instruments and consumers
+    as you do for your own schemas. Just note that by default, if `performance_schema`
+    is set as the default database, queries to it are not tracked. If you need to
+    examine queries to `performance_schema`, you need to update the `setup_actors`
+    table first.
+  id: totrans-348
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用与自己模式相同的工具和消费者检查性能模式本身。只需注意，默认情况下，如果将`performance_schema`设置为默认数据库，则不会跟踪对其的查询。如果需要检查对`performance_schema`的查询，首先需要更新`setup_actors`表。
+- en: 'Once the `setup_actors` table is updated, all instruments can be used. For
+    example, to find the 10 consumers in `performance_schema` that allocated most
+    of the memory, run:'
+  id: totrans-349
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦更新了`setup_actors`表，所有工具都可以使用。例如，要查找在`performance_schema`中分配了大部分内存的前10个消费者，请运行：
+- en: '[PRE40]'
+  id: totrans-350
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'Or use `sys` schema:'
+  id: totrans-351
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或使用`sys`模式：
+- en: '[PRE41]'
+  id: totrans-352
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: '`performance_schema` also supports the `SHOW ENGINE PERFORMANCE_SCHEMA STATUS`
+    statement:'
+  id: totrans-353
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`performance_schema`还支持`SHOW ENGINE PERFORMANCE_SCHEMA STATUS`语句：'
+- en: '[PRE42]'
+  id: totrans-354
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: In its output, you will find such details as how many specific events are stored
+    in the consumers or the maximum values of the specific metrics. The last row contains
+    the number of bytes that Performance Schema currently takes.
+  id: totrans-355
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在其输出中，您将找到诸如存储在消费者中的特定事件数量或特定指标的最大值等细节。最后一行包含性能模式当前占用的字节数。
+- en: Summary
+  id: totrans-356
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: Performance Schema is a feature that has often been criticized. Earlier versions
+    of MySQL had less than optimal implementations, leading to high resource consumption.
+    It was common advice to simply turn it off.
+  id: totrans-357
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能模式是一个经常受到批评的功能。MySQL的早期版本实现不够优化，导致资源消耗较高。通常建议只需关闭它。
+- en: It was also considered difficult to understand. Enabling an instrument is just
+    enabling an additional bit of code in the server that records data and submits
+    it to the consumers. The consumers are just tables that live in memory, and you
+    need to use standard SQL to ask the table the right questions to find what you
+    are looking for. Understanding how Performance Schema manages its own memory will
+    help you realize that MySQL is not leaking memory; it’s just keeping consumer
+    data in memory, and it only releases that memory on restart.
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它也被认为难以理解。启用一个仪器只是在服务器中启用一个额外的代码片段，记录数据并将其提交给消费者。消费者只是存储在内存中的表，您需要使用标准SQL向表提出正确的问题，以找到您要查找的内容。了解性能模式如何管理自己的内存将帮助您意识到MySQL并非内存泄漏；它只是将消费者数据保留在内存中，并且只在重新启动时释放该内存。
+- en: 'My advice here is simple: you should keep Performance Schema enabled, dynamically
+    enabling the instruments and consumers that will help you address whatever concerns
+    you might have—query performance, locking, disk I/O, errors, and more. You should
+    also leverage the `sys` schema as a shortcut to addressing the most common questions.
+    Doing this will give you an accessible way to measure performance directly from
+    within MySQL.'
+  id: totrans-359
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我在这里的建议很简单：您应该保持性能模式启用，动态启用仪器和消费者，以帮助您解决可能存在的任何问题——查询性能、锁定、磁盘I/O、错误等。您还应该利用`sys`模式作为解决最常见问题的捷径。这样做将为您提供一种直接从MySQL内部测量性能的可访问方式。

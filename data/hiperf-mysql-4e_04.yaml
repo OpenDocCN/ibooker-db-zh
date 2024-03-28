@@ -1,0 +1,1813 @@
+- en: Chapter 4\. Operating System and Hardware Optimization
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第4章。操作系统和硬件优化
+- en: Your MySQL server can perform only as well as its weakest link, and the operating
+    system and hardware on which it runs are often limiting factors. The disk size,
+    the available memory and CPU resources, the network, and the components that link
+    them all limit the system’s ultimate capacity. Thus, you need to choose your hardware
+    carefully and configure the hardware and operating system appropriately. For example,
+    if your workload is I/O bound, one approach is to design your application to minimize
+    MySQL’s I/O workload. However, it’s often smarter to upgrade the I/O subsystem,
+    install more memory, or reconfigure existing disks. If you’re running in a cloud-hosted
+    environment, the information in this chapter can still be very useful, especially
+    for understanding filesystem limitations and Linux I/O schedulers.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你的MySQL服务器的性能只能和它最弱的环节一样好，而运行MySQL的操作系统和硬件通常是限制因素。磁盘大小、可用内存和CPU资源、网络以及连接它们的所有组件都限制了系统的最终容量。因此，你需要仔细选择硬件，并适当配置硬件和操作系统。例如，如果你的工作负载受到I/O限制，一种方法是设计你的应用程序以最小化MySQL的I/O工作负载。然而，升级I/O子系统、安装更多内存或重新配置现有磁盘通常更明智。如果你在云托管环境中运行，本章的信息仍然非常有用，特别是为了了解文件系统限制和Linux
+    I/O调度程序。
+- en: What Limits MySQL’s Performance?
+  id: totrans-2
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 什么限制了MySQL的性能？
+- en: Many different hardware components can affect MySQL’s performance, but the most
+    frequent bottleneck we see is CPU exhaustion. CPU saturation can happen when MySQL
+    tries to execute too many queries in parallel or when a smaller number of queries
+    runs for too long on the CPU.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多不同的硬件组件可以影响MySQL的性能，但我们经常看到的最常见的瓶颈是CPU耗尽。当MySQL尝试并行执行太多查询或较少数量的查询在CPU上运行时间过长时，CPU饱和就会发生。
+- en: I/O saturation can still happen but much less frequently than CPU exhaustion.
+    This is largely because of the transition to using solid-state drives (SSDs).
+    Historically, the performance penalty of no longer working in memory and going
+    to the hard disk drive (HDD) was extreme. SSDs are generally 10 to 20 times faster
+    than SSH. Nowadays, if queries need to hit disk, you’re still going to see decent
+    performance from them.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: I/O饱和仍然可能发生，但发生频率要比CPU耗尽低得多。这在很大程度上是因为过渡到使用固态硬盘（SSD）。从历史上看，不再在内存中工作而转向硬盘驱动器（HDD）的性能惩罚是极端的。SSD通常比SSH快10到20倍。如今，如果查询需要访问磁盘，你仍然会看到它们的性能不错。
+- en: Memory exhaustion can still happen but usually only when you try to allocate
+    too much memory to MySQL. We talk about optimal configuration settings to prevent
+    this in [“Configuring Memory Usage”](ch05.html#configuring_memory_usage) in [Chapter 5](ch05.html#optimizing_server_settings).
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 内存耗尽仍然可能发生，但通常只会在尝试为MySQL分配过多内存时发生。我们在[“配置内存使用”](ch05.html#configuring_memory_usage)中讨论了防止这种情况发生的最佳配置设置，在[第5章](ch05.html#optimizing_server_settings)中。
+- en: How to Select CPUs for MySQL
+  id: totrans-6
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 如何为MySQL选择CPU
+- en: You should consider whether your workload is CPU bound when upgrading current
+    hardware or purchasing new hardware. You can identify a CPU-bound workload by
+    checking the CPU utilization, but instead of looking only at how heavily your
+    CPUs are loaded overall, look at the balance of CPU usage and I/O for your most
+    important queries, and notice whether the CPUs are loaded evenly.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当升级当前硬件或购买新硬件时，你应该考虑你的工作负载是否受CPU限制。你可以通过检查CPU利用率来确定工作负载是否受CPU限制，但不要只看整体CPU负载有多重，而是要看你最重要的查询的CPU使用率和I/O的平衡，并注意CPU是否均匀负载。
+- en: 'Broadly speaking, you have two goals for your server:'
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 广义上说，你的服务器有两个目标：
+- en: Low latency (fast response time)
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 低延迟（快速响应时间）
+- en: To achieve this, you need fast CPUs because each query will use only a single
+    CPU.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要实现这一点，你需要快速的CPU，因为每个查询只会使用一个CPU。
+- en: High throughput
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 高吞吐量
+- en: If you can run many queries at the same time, you might benefit from multiple
+    CPUs to service the queries.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你可以同时运行多个查询，你可能会从多个CPU为查询提供服务中受益。
+- en: If your workload doesn’t utilize all of your CPUs, MySQL can still use the extra
+    CPUs for background tasks such as purging InnoDB buffers, network operations,
+    and so on. However, these jobs are usually minor compared to executing queries.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你的工作负载没有利用所有的CPU，MySQL仍然可以利用额外的CPU执行后台任务，如清理InnoDB缓冲区、网络操作等。然而，与执行查询相比，这些工作通常较小。
+- en: Balancing Memory and Disk Resources
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 平衡内存和磁盘资源
+- en: 'The main reason to have a lot of memory isn’t so you can hold a lot of data
+    in memory: it’s ultimately so you can avoid disk I/O, which is orders of magnitude
+    slower than accessing data in memory. The trick is to balance the memory and disk
+    size, speed, cost, and other qualities so you get good performance for your workload.'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 拥有大量内存的主要原因并不是为了能够在内存中保存大量数据：最终目的是为了避免磁盘I/O，因为磁盘I/O比在内存中访问数据慢几个数量级。关键是平衡内存和磁盘大小、速度、成本和其他特性，以便为你的工作负载获得良好的性能。
+- en: Caching, Reads, and Writes
+  id: totrans-16
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 缓存、读取和写入
+- en: If you have enough memory, you can insulate the disk from read requests completely.
+    If all your data fits in memory, every read will be a cache hit once the server’s
+    caches are warmed up. There will still be logical reads from memory but no physical
+    reads from disk. Writes are a different matter, though. A write can be performed
+    in memory just as a read can, but sooner or later it has to be written to the
+    disk so it’s permanent. In other words, a cache can delay writes, but caching
+    cannot eliminate writes as it can for reads.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你有足够的内存，你可以完全隔离磁盘免受读取请求。如果所有数据都适合内存，一旦服务器的缓存被热起来，每次读取都会是缓存命中。仍然会有来自内存的逻辑读取，但没有来���磁盘的物理读取。然而，写入是另一回事。写入可以像读取一样在内存中执行，但迟早它必须写入磁盘以便永久保存。换句话说，缓存可以延迟写入，但不能像读取那样消除写入。
+- en: 'In fact, in addition to allowing writes to be delayed, caching can permit them
+    to be grouped together in two important ways:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实际上，除了允许延迟写入外，缓存还可以以两种重要的方式将它们分组在一起：
+- en: Many writes, one flush
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 多写一次刷新
+- en: A single piece of data can be changed many times in memory without all of the
+    new values being written to disk. When the data is eventually flushed to disk,
+    all the modifications that happened since the last physical write are permanent.
+    For example, many statements could update an in-memory counter. If the counter
+    is incremented one hundred times and then written to disk, one hundred modifications
+    have been grouped into one write.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一条数据可以在内存中多次更改，而不需要将所有新值都写入磁盘。当数据最终刷新到磁盘时，自上次物理写入以来发生的所有修改都是永久的。例如，许多语句可以更新一个内存中的计数器。如果计数器递增了一百次然后写入磁盘，一百次修改已经被合并为一次写入。
+- en: I/O merging
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: I/O合并
+- en: Many different pieces of data can be modified in memory, and the modifications
+    can be collected together, so the physical writes can be performed as a single
+    disk operation.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多不同的数据可以在内存中被修改，并且修改可以被收集在一起，以便可以将物理写入作为单个磁盘操作执行。
+- en: This is why many transactional systems use a write-ahead logging strategy. Write-ahead
+    logging lets them make changes to the pages in memory without flushing the changes
+    to disk, which usually involves random I/O and is very slow. Instead, they write
+    a record of the changes to a sequential logfile, which is much faster. A background
+    thread can flush the modified pages to disk later; when it does, it can optimize
+    the writes.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是为什么许多事务系统使用预写式日志策略。预写式日志允许它们在内存中对页面进行更改而不刷新更改到磁盘，这通常涉及随机I/O并且非常慢。相反，它们将更改的记录写入顺序日志文件，这样做要快得多。后台线程可以稍后将修改的页面刷新到磁盘；当它这样做时，它可以优化写入。
+- en: Writes benefit greatly from buffering because it converts random I/O into more
+    sequential I/O. Asynchronous (buffered) writes are typically handled by the operating
+    system and are batched so they can be flushed to disk more optimally. Synchronous
+    (unbuffered) writes have to be written to disk before they finish. That’s why
+    they benefit from buffering in a Redundant Array of Inexpensive Disks (RAID) controller’s
+    battery-backed write-back cache (we discuss RAID a bit later).
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写入受益于缓冲，因为它将随机I/O转换为更多的顺序I/O。异步（缓冲）写入通常由操作系统处理，并且会被批处理，以便更优化地刷新到磁盘。同步（非缓冲）写入必须在完成之前写入磁盘。这就是为什么它们受益于在冗余磁盘阵列（RAID）控制器的电池支持写回缓存中进行缓冲（我们稍后会讨论RAID）。
+- en: What’s Your Working Set?
+  id: totrans-25
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 你的工作集是什么？
+- en: Every application has a “working set” of data—that is, the data that it really
+    needs to do its work. A lot of databases also have plenty of data that is not
+    in the working set. You can imagine the database as a desk with filing drawers.
+    The working set consists of the papers you need to have on the desktop to get
+    your work done. The desktop represents main memory in this analogy, while the
+    filing drawers are the hard disks. Just as you don’t need to have *every* piece
+    of paper on the desktop to get your work done, you don’t need the whole database
+    to fit in memory for optimal performance—just the working set.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个应用程序都有一个“工作集”数据，即它真正需要完成工作的数据。许多数据库还有很多不在工作集中的数据。你可以把数据库想象成一个带有文件抽屉的办公桌。工作集包括你需要放在桌面上以完成工作的文件。在这个类比中，桌面代表主内存，而文件抽屉代表硬盘。就像你不需要把*每一张*纸都放在桌面上才能完成工作一样，你不需要整个数据库都适合内存以获得最佳性能——只需要工作集。
+- en: When dealing with HDDs, it was good practice to try to find an effective memory-to-disk
+    ratio. This was largely due to the slower latency and low input/output operations
+    per second (IOPS) of HDDs. With SSDs, the memory-to-disk ratio becomes far less
+    important.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在处理HDD时，寻找有效的内存到磁盘比例是一个好的做法。这在很大程度上是由于HDD的较慢的延迟和低的每秒输入/输出操作数（IOPS）。使用SSD时，内存到磁盘比例变得不那么重要。
+- en: Solid-State Storage
+  id: totrans-28
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 固态存储
+- en: Solid-state (flash) storage is the standard for most database systems, especially
+    online transaction processing (OLTP). Only on very large data warehouses or legacy
+    systems would you typically find HDDs. This shift came as the price of SSDs dropped
+    significantly around 2015.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 固态（闪存）存储是大多数数据库系统的标准，特别是在线事务处理（OLTP）。只有在非常大的数据仓库或传统系统中才会通常找到HDD。这种转变是因为2015年左右SSD的价格显著下降。
+- en: Solid-state storage devices use nonvolatile flash memory chips composed of cells
+    instead of magnetic platters. They’re also called *nonvolatile random access memory
+    (NVRAM)*. They have no moving parts, which makes them behave very differently
+    than hard drives.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 固态存储设备使用由单元组成的非易失性闪存存储芯片，而不是磁盘盘片。它们也被称为*非易失性随机存取存储器（NVRAM）*。它们没有移动部件，这使它们的行为与硬盘非常不同。
+- en: 'Here’s a quick summary of flash performance. High-quality flash devices have:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是闪存性能的简要总结。高质量的闪存设备具有：
+- en: Much better random read and write performance compared to hard drives
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与硬盘相比，随机读写性能要好得多
+- en: Flash devices are usually slightly better at reads than writes.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 闪存设备通常在读取方面比写入更好。
+- en: Better sequential read and write performance than hard drives
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 比硬盘更好的顺序读写性能
+- en: However, it’s not as dramatic an improvement as that of random I/O because hard
+    drives are much slower at random I/O than they are at sequential I/O.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，与随机I/O相比，并没有那么显著的改进，因为硬盘在随机I/O方面比顺序I/O慢得多。
+- en: Much better support for concurrency than hard drives
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 比硬盘更好的并发性支持
+- en: Flash devices can support many more concurrent operations, and in fact, they
+    don’t really achieve their top throughput until you have lots of concurrency.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 闪存设备可以支持更多的并发操作，事实上，只有在有很多并发时它们才能真正达到最高吞吐量。
+- en: The most important things are improvements in random I/O and concurrency. Flash
+    memory gives you very good random I/O performance at high concurrency.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最重要的是随机I/O和并发性能的改进。闪存给您提供了在高并发情况下非常好的随机I/O性能。
+- en: An Overview of Flash Memory
+  id: totrans-39
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 闪存存储概述
+- en: Hard drives with spinning platters and oscillating heads had inherent limitations
+    and characteristics that are consequences of the physics involved. The same is
+    true of solid-state storage, which is built on top of flash memory. Don’t get
+    the idea that solid-state storage is simple. It’s actually more complex than a
+    hard drive in some ways. The limitations of flash memory are pretty severe and
+    hard to overcome, so the typical solid-state device has an intricate architecture
+    with lots of abstractions, caching, and proprietary “magic.”
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有旋转盘片和摆动磁头的硬盘具有固有的限制和特性，这些特性是物理学所涉及的结果。固态存储也是如此，它是建立在闪存之上的。不要以为固态存储很简单。在某些方面，它实际上比硬盘更复杂。闪存的限制相当严重且难以克服，因此典型的固态设备具有复杂的架构，包含许多抽象、缓存和专有的“魔法”。
+- en: The most important characteristic of flash memory is that it can be read many
+    times rapidly and in small units, but writes are much more challenging. A cell
+    can’t be rewritten without a special erase operation and can only be erased in
+    large blocks—for example, 512 KB. The erase cycle is slow and eventually wears
+    out the block. The number of erase cycles a block can tolerate depends on the
+    underlying technology it uses—more about this later.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 闪存的最重要特性是它可以快速多次读取小单位，但写入要困难得多。一个单元不能在没有特殊擦除操作的情况下重写，并且只能在大块中擦除，例如512 KB。擦除周期很慢，最终会使块磨损。一个块可以容忍的擦除周期数量取决于它使用的基础技术——稍后会详细介绍。
+- en: The limitations on writes are the reason for the complexity of solid-state storage.
+    This is why some devices provide stable, consistent performance and others don’t.
+    The magic is all in the proprietary firmware, drivers, and other bits and pieces
+    that make a solid-state device run. To make write operations perform well and
+    avoid wearing out the blocks of flash memory prematurely, the device must be able
+    to relocate pages and perform garbage collection and so-called *wear leveling*.
+    The term *write amplification* is used to describe the additional writes caused
+    by moving data from place to place, writing data and metadata multiple times due
+    to partial block writes.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写入的限制是固态存储复杂性的原因。这就是为什么一些设备提供稳定、一致的性能，而其他设备则不提供。这些“魔法”都在专有的固件、驱动程序和其他组件中，使固态设备运行起来。为了使写入操作性能良好并避免过早磨损闪存块，设备必须能够重新定位页面并执行垃圾回收和所谓的*磨损均衡*。术语*写入放大*用于描述由于将数据从一个地方移动到另一个地方而导致的额外写入，由于部分块写入而多次写入数据和元数据。
+- en: Garbage Collection
+  id: totrans-43
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 垃圾回收
+- en: Garbage collection is important to understand. To keep some blocks fresh and
+    ready for new writes, the device reclaims blocks. This requires some free space
+    on the device. Either the device will have some reserved space internally that
+    you can’t see or you will need to reserve space yourself by not filling it up
+    all the way; this varies from device to device. Either way, as the device fills
+    up, the garbage collector has to work harder to keep some blocks clean, so the
+    write amplification factor increases.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 垃圾回收是很重要的。为了保持一些块的新鲜度并为新的写入做好准备，设备会回收块。这需要设备上的一些空闲空间。设备要么会有一些您看不到的内部保留空间，要么您需要通过不完全填满设备来自行保留空间；这因设备而异。无论哪种方式，随着设备填满，垃圾收集器必须更加努力地保持一些块的清洁，因此写入放大因子会增加。
+- en: As a result, many devices get slower as they fill up. How much slower is different
+    for every vendor and model and depends on the device’s architecture. Some devices
+    are designed for high performance even when they are pretty full, but in general,
+    a 100 GB file will perform differently on a 160 GB SSD than on a 320 GB SSD. The
+    slowdown is caused by having to wait for erases to complete when there are no
+    free blocks. A write to a free block takes a couple of hundred microseconds, but
+    an erase is much slower—typically a few milliseconds.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，许多设备在填满时会变慢。每个供应商和型号的减速程度各不相同，这取决于设备的架构。一些设备即使在相当满时也设计为高性能，但总的来说，100 GB文件在160
+    GB SSD上的表现与在320 GB SSD上的表现不同。减速是由于在没有空闲块时必须等待擦除完成。写入到空闲块需要几百微秒，但擦除速度要慢得多——通常是几毫秒。
+- en: RAID Performance Optimization
+  id: totrans-46
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: RAID性能优化
+- en: Storage engines often keep their data and/or indexes in single large files,
+    which means RAID is usually the most feasible option for storing a lot of data.
+    RAID can help with redundancy, storage size, caching, and speed. But as with the
+    other optimizations we’ve been looking at, there are many variations on RAID configurations,
+    and it’s important to choose one that’s appropriate for your needs.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储引擎通常将它们的数据和/或索引保存在单个大文件中，这意味着RAID通常是存储大量数据的最可行选项。RAID可以帮助提高冗余性、存储容量、缓存和速度。但与我们一直在研究的其他优化一样，RAID配置有许多变体，选择适合您需求的配置非常重要。
+- en: 'We won’t cover every RAID level here, or go into the specifics of exactly how
+    the different RAID levels store data. Instead, we focus on how RAID configurations
+    satisfy a database server’s needs. These are the most important RAID levels:'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们不会在这里涵盖每个RAID级别，也不会详细介绍不同RAID级别如何存储数据的具体细节。���反，我们专注于RAID配置如何满足数据库服务器的需求。以下是最重要的RAID级别：
+- en: RAID 0
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID 0
+- en: RAID 0 is the cheapest and highest-performance RAID configuration, at least
+    when you measure cost and performance simplistically (if you include data recovery,
+    for example, it starts to look more expensive). Because it offers no redundancy,
+    we do not think RAID 0 is ever appropriate on a production database, but if you
+    were truly looking to save costs, it can be a choice in development environments
+    where a full server failure does not turn into an incident.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID 0是最便宜且性能最高的RAID配置，至少在您简单地衡量成本和性能时是这样（例如，如果包括数据恢复，它开始看起来更昂贵）。由于它不提供冗余性，我们认为RAID
+    0在生产数据库上永远不合适，但如果您真的想要节省成本，它可以是开发环境中的选择，其中完整服务器故障不会变成事故。
+- en: Again, note that *RAID 0 does not provide any redundancy*, even though “redundant”
+    is the R in the RAID acronym. In fact, the probability of a RAID 0 array failing
+    is actually *higher* than the probability of any single disk failing, not lower!
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再次注意，*RAID 0 不提供任何冗余性*，尽管“冗余”是 RAID 首字母缩略词中的 R。事实上，RAID 0 阵列失败的概率实际上*高于*任何单个磁盘失败的概率，而不是低于！
+- en: RAID 1
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID 1
+- en: RAID 1 offers good read performance for many scenarios, and it duplicates your
+    data across disks, so there’s good redundancy. RAID 1 is a little bit faster than
+    RAID 0 for reads. It’s good for servers that handle logging and similar workloads
+    because sequential writes rarely need many underlying disks to perform well (as
+    opposed to random writes, which can benefit from parallelization). It is also
+    a typical choice for low-end servers that need redundancy but have only two hard
+    drives.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID 1 对于许多场景提供了良好的读取性能，并且它会在磁盘之间复制您的数据，因此具有良好的冗余性。对于读取来说，RAID 1 比 RAID 0 稍快一点。它适用于处理日志和类似工作负载的服务器，因为顺序写入很少需要许多底层磁盘才能表现良好（与随机写入相反，后者可以从并行化中受益）。对于需要冗余但只有两个硬盘的低端服务器来说，这也是一个典型选择。
+- en: RAID 0 and RAID 1 are very simple, and they can often be implemented well in
+    software. Most operating systems will let you create software RAID 0 and RAID
+    1 volumes easily.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID 0 和 RAID 1 非常简单，通常可以很好地在软件中实现。大多数操作系统都可以让您轻松创建软件 RAID 0 和 RAID 1 卷。
+- en: RAID 5
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID 5
+- en: RAID 5 used to be quite scary for database systems, largely due to the performance
+    implications. With SSDs becoming commonplace, it’s now a viable option. It spreads
+    the data across many disks with distributed parity blocks so that if any one disk
+    fails, the data can be rebuilt from the parity blocks. If two disks fail, the
+    entire volume will fail unrecoverably. In terms of cost per unit of storage, it’s
+    the most economical redundant configuration because you lose only one disk’s worth
+    of storage space across the entire array.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID 5 曾经对数据库系统来说是相当可怕的，主要是由于性能影响。随着 SSD 变得普遍，现在它是一个可行的选择。它将数据分布在许多磁盘上，并使用分布式奇偶校验块，因此如果任何一个磁盘故障，数据可以从奇偶校验块重建。如果两个磁盘故障，整个卷将无法恢复。从每单位存储空间的成本来看，这是最经济的冗余配置，因为整个阵列只损失一个磁盘的存储空间。
+- en: The biggest “gotcha” with RAID 5 is how the array performs if a disk fails.
+    This is because the data has to be reconstructed by reading all the other disks.
+    This affected performance severely on HDD, which is why it was generally discouraged.
+    It was even worse if you had lots of disks. If you try to keep the server online
+    during the rebuild, don’t expect either the rebuild or the array’s performance
+    to be good. Other performance costs included limited scalability because of the
+    parity blocks—RAID 5 doesn’t scale well past 10 disks or so—and caching issues.
+    Good RAID 5 performance depends heavily on the RAID controller’s cache, which
+    can conflict with the database server’s needs. As we mentioned earlier, SSDs offer
+    substantially improved performance in terms of IOPS and throughput, and the issues
+    of poorly performing random read/write performance are also gone.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID 5 最大的“坑”是如果一个磁盘故障时阵列的性能如何。这是因为数据必须通过读取所有其他磁盘来重建。这在 HDD 上严重影响了性能，这就是为什么通常不鼓励使用。如果您有很多磁盘，情况会更糟。如果您尝试在重建过程中保持服务器在线，不要指望重建或阵列的性能会很好。其他性能成本包括由于奇偶校验块的限制而导致的有限可扩展性——RAID
+    5 在超过 10 个磁盘左右时性能不佳——以及缓存问题。良好的 RAID 5 性能严重依赖于 RAID 控制器的缓存，这可能会与数据库服务器的需求发生冲突。正如我们之前提到的，SSD
+    在 IOPS 和吞吐量方面提供了显着改进的性能，而随机读/写性能不佳的问题也消失了。
+- en: One of the mitigating factors for RAID 5 is that it’s so popular. As a result,
+    RAID controllers are often highly optimized for RAID 5, and despite the theoretical
+    limits, smart controllers that use caches well can sometimes perform nearly as
+    well as RAID 10 controllers for some workloads. This might actually reflect that
+    the RAID 10 controllers are less highly optimized, but regardless of the reason,
+    this is what we’ve seen.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID 5 的一个缓解因素是它非常受欢迎。因此，RAID 控制器通常针对 RAID 5 进行了高度优化，尽管存在理论限制，但使用缓存良好的智能控制器有时可以在某些工作负载下表现得几乎与
+    RAID 10 控制器一样好。这实际上可能反映出 RAID 10 控制器的优化程度较低，但无论原因是什么，这就是我们看到的情况。
+- en: RAID 6
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID 6
+- en: The largest issue with RAID 5 was that the loss of two disks was catastrophic.
+    The more disks you have in your array, the higher the probability of disk failure.
+    RAID 6 helps to curb the failure possibility by adding a second parity disk. This
+    allows you to sustain two disk failures and still rebuild the array. The downside
+    is that calculating the additional parity will make writes slower than RAID 5.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID 5 的最大问题是丢失两个磁盘将是灾难性的。阵列中的磁盘越多，磁盘故障的概率就越高。RAID 6 通过添加第二个奇偶校验磁盘来帮助遏制故障可能性。这使您可以承受两个磁盘故障并仍然重建阵列。不足之处在于计算额外的奇偶校验会使写入速度比
+    RAID 5 慢。
+- en: RAID 10
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID 10
+- en: RAID 10 is a very good choice for data storage. It consists of mirrored pairs
+    that are striped, so it scales both reads and writes well. It is fast and easy
+    to rebuild, in comparison to RAID 5\. It can also be implemented in software fairly
+    well.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID 10 对于数据存储是一个非常好的选择。它由镜像对组成，这些镜像对是条带化的，因此它既能很好地扩展读取又能扩展写入。与 RAID 5 相比，它重建速度快且容易。它也可以在软件中实现得相当好。
+- en: 'The performance loss when one hard drive goes out can still be significant
+    because that stripe can become a bottleneck. Performance can degrade by up to
+    50%, depending on the workload. One thing to watch out for is RAID controllers
+    that use a “concatenated mirror” implementation for RAID 10\. This is suboptimal
+    because of the absence of striping: your most frequently accessed data might be
+    placed on only one pair of disks instead of being spread across many, so you’ll
+    get poor performance.'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当一个硬盘故障时，性能损失仍然可能很显著，因为该条带可能成为瓶颈。根据工作负载的不同，性能可能会降低高达 50%。要注意的一件事是，某些 RAID 控制器使用“串联镜像”实现
+    RAID 10。这是次优的，因为缺乏条带化：您最常访问的数据可能只放在一对磁盘上，而不是分布在许多磁盘上，因此性能会很差。
+- en: RAID 50
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID 50
+- en: RAID 50 consists of RAID 5 arrays that are striped, and it can be a good compromise
+    between the economy of RAID 5 and the performance of RAID 10 if you have many
+    disks. This is mainly useful for very large data sets, such as data warehouses
+    or extremely large OLTP systems.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID 50由条带化的RAID 5阵列组成，如果你有很多硬盘，它可以在RAID 5的经济性和RAID 10的性能之间取得很好的折衷。这主要适用于非常大的数据集，比如数据仓库或极大型的OLTP系统。
+- en: '[Table 4-1](#comparison_of_raid_levels) summarizes the various RAID configurations.'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[表 4-1](#comparison_of_raid_levels)总结了各种RAID配置。'
+- en: Table 4-1\. Comparison of RAID levels
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 4-1\. RAID级别比较
+- en: '| Level | Synopsis | Redundancy | Disks required | Faster reads | Faster writes
+    |'
+  id: totrans-68
+  prefs: []
+  type: TYPE_TB
+  zh: '| 级别 | 摘要 | 冗余性 | 所需硬盘 | 更快读取 | 更快写入 |'
+- en: '| --- | --- | --- | --- | --- | --- |'
+  id: totrans-69
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- | --- | --- | --- | --- |'
+- en: '| RAID 0 | Cheap, fast, dangerous | No | N | Yes | Yes |'
+  id: totrans-70
+  prefs: []
+  type: TYPE_TB
+  zh: '| RAID 0 | 便宜，快速，危险 | 否 | N | 是 | 是 |'
+- en: '| RAID 1 | Fast reads, simple, safe | Yes | 2 (usually) | Yes | No |'
+  id: totrans-71
+  prefs: []
+  type: TYPE_TB
+  zh: '| RAID 1 | 快速读取，简单，安全 | 是 | 2（通常） | 是 | 否 |'
+- en: '| RAID 5 | Cheap, fast with SSDs | Yes | N + 1 | Yes | Depends |'
+  id: totrans-72
+  prefs: []
+  type: TYPE_TB
+  zh: '| RAID 5 | 便宜，与SSD一起快速 | 是 | N + 1 | 是 | 取决于 |'
+- en: '| RAID 6 | Like RAID 5 but more resilient | Yes | N + 2 | Yes | Depends |'
+  id: totrans-73
+  prefs: []
+  type: TYPE_TB
+  zh: '| RAID 6 | 类似于RAID 5但更具弹性 | 是 | N + 2 | 是 | 取决于 |'
+- en: '| RAID 10 | Expensive, fast, safe | Yes | 2N | Yes | Yes |'
+  id: totrans-74
+  prefs: []
+  type: TYPE_TB
+  zh: '| RAID 10 | 昂贵，快速，安全 | 是 | 2N | 是 | 是 |'
+- en: '| RAID 50 | For very large data stores | Yes | 2(N + 1) | Yes | Yes |'
+  id: totrans-75
+  prefs: []
+  type: TYPE_TB
+  zh: '| RAID 50 | 用于非常大型数据存储 | 是 | 2(N + 1) | 是 | 是 |'
+- en: RAID Failure, Recovery, and Monitoring
+  id: totrans-76
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: RAID故障、恢复和监控
+- en: RAID configurations (with the exception of RAID 0) offer redundancy. This is
+    important, but it’s easy to underestimate the likelihood of concurrent disk failures.
+    You shouldn’t think of RAID as a strong guarantee of data safety.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID配置（除了RAID 0）提供冗余性。这很重要，但很容易低估同时硬盘故障的可能性。你不应该认为RAID是数据安全的强有力保证。
+- en: RAID doesn’t eliminate—or even reduce—the need for backups. When there is a
+    problem, the recovery time will depend on your controller, the RAID level, the
+    array size, the disk speed, and whether you need to keep the server online while
+    you rebuild the array.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID并不能消除——甚至不能减少——备份的需求。当出现问题时，恢复时间将取决于你的控制器、RAID级别、阵列大小、硬盘速度以及在重建阵列时是否需要保持服务器在线。
+- en: There is a chance of disks failing at exactly the same time. For example, a
+    power spike or overheating can easily kill two or more disks. What’s more common,
+    however, is two disk failures happening close together. Many such issues can go
+    unnoticed. A common cause is corruption on the physical media holding data that
+    is seldom accessed. This might go undetected for months, until either you try
+    to read the data or another drive fails and the RAID controller tries to use the
+    corrupted data to rebuild the array. The larger the hard drive is, the more likely
+    this is.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 硬盘同时发生故障的可能性是存在的。例如，电力波动或过热很容易导致两个或更多硬盘损坏。然而，更常见的是两个硬盘故障发生在较短的时间内。许多这样的问题可能不会被注意到。一个常见的原因是很少访问的物理介质上的损坏，这可能会在几个月内不被发现，直到你尝试读取数据或另一个硬盘故障并且RAID控制器尝试使用损坏的数据重建阵列。硬盘越大，这种情况发生的可能性就越大。
+- en: That’s why it’s important to monitor your RAID arrays. Most controllers offer
+    some software to report on the array’s status, and you need to keep track of this
+    because you might otherwise be totally ignorant of a drive failure. You might
+    miss your opportunity to recover the data and discover the problem only when a
+    second drive fails, and then it’s too late. You should configure a monitoring
+    system to alert you when a drive or volume changes to a degraded or failed status.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是为什么监视你的RAID阵列很重要。大多数控制器提供一些软件来报告阵列的状态，你需要跟踪这些信息，否则你可能完全不知道硬盘故障。你可能会错过恢复数据的机会，只有当第二个硬盘故障时才发现问题，那时已经太迟了。你应该配置一个监控系统，在硬盘或卷更改为降级或失败状态时通知你。
+- en: You can mitigate the risk of latent corruption by actively checking your arrays
+    for consistency at regular intervals. Background Patrol Read, a feature of some
+    controllers that checks for damaged media and fixes it while all the drives are
+    online, can also help avert such problems. As with recovery, extremely large arrays
+    can be slow to check, so make sure you plan accordingly when you create large
+    arrays.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以通过定期主动检查阵列的一致性来减轻潜在损坏的风险。一些控制器的背景巡逻读取功能可以在所有硬盘在线时检查损坏的介质并修复它，也可以帮助避免这些问题。与恢复一样，非常大的阵列可能检查速度较慢，因此在创建大型阵列时一定要做好计划。
+- en: You can also add a hot spare drive, which is unused and configured as a standby
+    for the controller to automatically use for recovery. This is a good idea if you
+    depend on every server. It’s expensive with servers that have only a few hard
+    drives because the cost of having an idle disk is proportionately higher, but
+    if you have many disks, it’s almost foolish not to have a hot spare. Remember
+    that the probability of a drive failure increases rapidly with more disks.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你还可以添加一个热备用硬盘，它是未使用的，并配置为控制器自动用于恢复的待机硬盘。如果你依赖每台服务器，这是一个好主意。对于只有少量硬盘的服务器来说，这是昂贵的，因为拥有一个空闲硬盘的成本相对较高，但如果你有很多硬盘，不配置热备用几乎是愚蠢的。请记住，随着硬盘数量的增加，硬盘故障的概率会迅速增加。
+- en: In addition to monitoring your drives for failures, you should monitor the RAID
+    controller’s battery backup unit and write cache policy. If the battery fails,
+    by default most controllers will disable write caching by changing the cache policy
+    to write-through instead of write-back. This can cause a severe drop in performance.
+    Many controllers will also periodically cycle the battery through a learning process,
+    during which time the cache is also disabled. Your RAID controller’s management
+    utility should let you view and configure when the learning cycle is scheduled
+    so that it doesn’t catch you off guard. Newer RAID controllers avoid this by using
+    a flash-backed cache that uses NVRAM to store uncommitted writes instead of a
+    battery-backed cache. This avoids the entire pain of the learning cycle.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了监视驱动器故障，你还应该监视RAID控制器的电池备份单元和写缓存策略。如果电池故障，默认情况下大多数控制器会通过将缓存策略更改为写穿透而不是写回来禁用写缓存。这可能会导致性能严重下降。许多控制器还会定期通过学习过程循环电池，在此期间缓存也被禁用。你的RAID控制器管理实用程序应该让你查看和配置学习周期何时安排，以免让你措手不及。新一代的RAID控制器通过使用使用NVRAM存储未提交写入的闪存支持缓存来避免这种情况，而不是使用电池支持的缓存。这避免了学习周期的整个痛苦。
+- en: You might also want to benchmark your system with the cache policy set to write-through
+    so you’ll know what to expect. The preferred approach is to schedule your battery
+    learning cycles at low traffic periods, typically at night or during the weekend.
+    If performance suffers badly enough with write-through at any time, you could
+    also failover to another server before your learning cycle begins. As a very last
+    resort, you could reconfigure your servers by changing the `innodb_flush_log_at_trx_commit`
+    and `sync_binlog` variables to lower durability settings. This will reduce the
+    disk utilization during write-through and may offer acceptable performance; however,
+    this should really be done as a last resort. Reducing durability has a big impact
+    on how much data you may lose during a database crash and your ability to recover
+    it.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能还想使用写穿透的缓存策略对系统进行基准测试，这样你就会知道可以期待什么。首选的方法是在低流量时段安排电池学习周期，通常在晚上或周末。如果在任何时候使用写穿透时性能严重下降，你也可以在学习周期开始之前切换到另一台服务器。作为最后的手段，你可以通过更改`innodb_flush_log_at_trx_commit`和`sync_binlog`变量来重新配置服务器，以降低耐久性设置。这将减少写穿透期间的磁盘利用率，并可能提供可接受的性能；然而，这真的应该作为最后的手段。降低耐久性会对在数据库崩溃期间可能丢失的数据量以及恢复数据的能力产生重大影响。
+- en: RAID Configuration and Caching
+  id: totrans-85
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: RAID配置和缓存
+- en: You can usually configure the RAID controller itself by entering its setup utility
+    during the machine’s boot sequence or by running it from the command prompt. Although
+    most controllers offer a lot of options, the two we focus on are the *chunk size*
+    for striped arrays and the *on-controller cache* (also known as the *RAID cache*;
+    we use the terms interchangeably).
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常可以通过在机器的引导序列期间输入其设置实用程序或通过从命令提示符运行来配置RAID控制器本身。尽管大多数控制器提供了许多选项，但我们关注的两个是条带阵列的*块大小*和*控制器缓存*（也称为*RAID缓存*；我们可以互换使用这些术语）。
+- en: The RAID stripe chunk size
+  id: totrans-87
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: RAID条带块大小
+- en: The optimal stripe chunk size is workload and hardware specific. In theory,
+    it’s good to have a large chunk size for random I/O because that means more reads
+    can be satisfied from a single drive.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最佳条带块大小是与工作负载和硬件特定的。理论上，对于随机I/O，拥有较大的块大小是有好处的，因为这意味着更多的读取可以从单个驱动器中满足。
+- en: To see why this is so, consider the size of a typical random I/O operation for
+    your workload. If the chunk size is at least that large and the data doesn’t span
+    the border between chunks, only a single drive needs to participate in the read.
+    But if the chunk size is smaller than the amount of data to be read, there’s no
+    way to avoid involving more than one drive in the read.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要了解为什么会这样，请考虑你的工作负载的典型随机I/O操作的大小。如果块大小至少与该大小相同，并且数据不跨越块之间的边界，只需要一个驱动器参与读取。但是，如果块大小小于要读取的数据量，就无法避免多个驱动器参与读取。
+- en: So much for theory. In practice, many RAID controllers don’t work well with
+    large chunks. For example, the controller might use the chunk size as the cache
+    unit in its cache, which could be wasteful. The controller might also match the
+    chunk size, cache size, and read-unit size (the amount of data it reads in a single
+    operation). If the read unit is too large, its cache might be less effective,
+    and it might end up reading a lot more data than it really needs, even for tiny
+    requests.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理论就到此为止。实际���，许多RAID控制器不适用于大块。例如，控制器可能将块大小用作其缓存中的缓存单元，这可能是浪费的。控制器还可能匹配块大小、缓存大小和读取单元大小（单次操作中读取的数据量）。如果读取单元太大，其缓存可能不太有效，并且可能会读取比实际需要的数据量更多，即使是对于微小的请求。
+- en: It’s also hard to know whether any given piece of data will span multiple drives.
+    Even if the chunk size is 16 KB, which matches InnoDB’s page size, you can’t be
+    certain all of the reads will be aligned on 16 KB boundaries. The filesystem might
+    fragment the file, and it will typically align the fragments on the filesystem
+    block size, which is often 4 KB. Some filesystems might be smarter, but you shouldn’t
+    count on it.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 也很难知道任何给定数据是否会跨越多个驱动器。即使块大小为16 KB，与InnoDB的页面大小相匹配，你也不能确定所有读取是否都对齐在16 KB边界上。文件系统可能会使文件碎片化，并且通常会将碎片对齐在文件系统块大小上，通常为4
+    KB。一些文件系统可能更智能，但你不应该指望它。
+- en: The RAID cache
+  id: totrans-92
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: RAID缓存
+- en: 'The RAID cache is a (relatively) small amount of memory that is physically
+    installed on a hardware RAID controller. It can be used to buffer data as it travels
+    between the disks and the host system. Here are some of the reasons a RAID card
+    might use the cache:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID缓存是物理安装在硬件RAID控制器上的（相对较小的）内存量。它可用于在数据在磁盘和主机系统之间传输时作为缓冲区。以下是RAID卡可能使用缓存的一些原因：
+- en: Caching reads
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 缓存读取
+- en: After the controller reads some data from the disks and sends it to the host
+    system, it can store the data; this will enable it to satisfy future requests
+    for the same data without having to go to disk again.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在控制器从磁盘中读取一些数据并将其发送到主机系统后，它可以存储数据；这将使它能够在不再需要再次访问磁盘的情况下满足对相同数据的未来请求。
+- en: This is usually a very poor use of the RAID cache. Why? Because the operating
+    system and the database server have their own much larger caches. If there’s a
+    cache hit in one of these caches, the data in the RAID cache won’t be used. Conversely,
+    if there’s a miss in one of the higher-level caches, the chance that there’ll
+    be a hit in the RAID cache is vanishingly small. Because the RAID cache is so
+    much smaller, it will almost certainly have been flushed and filled with other
+    data, too. Either way you look at it, it’s a waste of memory to cache reads in
+    the RAID cache.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这通常是 RAID 缓存的非常糟糕的用法。为什么？因为操作系统和数据库服务器有自己更大的缓存。如果其中一个缓存中有缓存命中，RAID 缓存中的数据将不会被使用。反之，如果高级别缓存中有缓存未命中，那么
+    RAID 缓存中有缓存命中的机会几乎为零。由于 RAID 缓存要小得多，它几乎肯定已经被刷新并填充了其他数据。无论从哪个角度看，将读取缓存到 RAID 缓存中都是一种浪费内存的行为。
+- en: Caching read-ahead data
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 缓存预读数据
+- en: If the RAID controller notices sequential requests for data, it might decide
+    to do a read-ahead read—that is, to prefetch data it predicts will be needed soon.
+    It has to have somewhere to put the data until it’s requested, though. It can
+    use the RAID cache for this. The performance impact of this can vary widely, and
+    you should check to ensure it’s actually helping. Read-ahead operations might
+    not help if the database server is doing its own smart read-ahead (as InnoDB does),
+    and it might interfere with the all-important buffering of synchronous writes.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果 RAID 控制器注意到对数据的顺序请求，它可能会决定进行预读操作——即预取它预测很快会需要的数据。但在数据被请求之前，它必须有地方存放数据。它可以使用
+    RAID 缓存来实现这一点。这种操作的性能影响可能会有很大的变化，你应该检查以确保它确实有帮助。如果数据库服务器正在执行自己的智能预读操作（如 InnoDB
+    所做的），预读操作可能不会有帮助，并且可能会干扰同步写入的重要缓冲。
+- en: Caching writes
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 缓存写入
+- en: 'The RAID controller can buffer writes in its cache and schedule them for a
+    later time. The advantage to doing this is twofold: first, it can return “success”
+    to the host system much more quickly than it would be able to if it had to actually
+    perform the writes on the physical disks, and second, it can accumulate writes
+    and do them more efficiently.'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAID 控制器可以在其缓存中缓冲写入并安排它们在稍后执行。这样做的优点是双重的：首先，它可以比实际在物理磁盘上执行写入更快地向主机系统返回“成功”，其次，它可以累积写入并更有效地执行它们。
+- en: Internal operations
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 内部操作
+- en: 'Some RAID operations are very complex—especially RAID 5 writes, which have
+    to calculate parity bits that can be used to rebuild data in the event of a failure.
+    The controller needs to use some memory for this type of internal operation. This
+    is one reason why RAID 5 can perform poorly on some controllers: it needs to read
+    a lot of data into the cache for good performance. Some controllers can’t balance
+    caching writes with caching for the RAID 5 parity operations.'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些 RAID 操作非常复杂——特别是 RAID 5 写入，它们必须计算可以用于在发生故障时重建数据的奇偶校验位。控���器需要为这种类型的内部操作使用一些内存。这是
+    RAID 5 在某些控制器上性能不佳的原因之一：它需要将大量数据读入缓存以获得良好的性能。一些控制器无法平衡缓存写入和 RAID 5 奇偶校验操作的缓存。
+- en: In general, the RAID controller’s memory is a scarce resource that you should
+    try to use wisely. Using it for reads is usually a waste, but using it for writes
+    is an important way to speed up your I/O performance. Many controllers let you
+    choose how to allocate the memory. For example, you can choose how much of it
+    to use for caching writes and how much for reads. For RAID 0, RAID 1, and RAID
+    10, you should probably allocate 100% of the controller’s memory for caching writes.
+    For RAID 5, you should reserve some of the controller’s memory for its internal
+    operations. This is generally good advice, but it doesn’t always apply—different
+    RAID cards require different configurations.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，RAID 控制器的内存是一种稀缺资源，你应该明智地使用它。将其用于读取通常是浪费，但将其用于写入是提高 I/O 性能的重要方式。许多控制器允许你选择如何分配内存。例如，你可以选择将多少内存用于缓存写入，将多少用于读取。对于
+    RAID 0、RAID 1 和 RAID 10，你可能应该将控制器内存的 100% 用于缓存写入。对于 RAID 5，你应该保留一些控制器内存用于其内部操作。这通常是一个好建议，但并不总是适用——不同的
+    RAID 卡需要不同的配置。
+- en: When you’re using the RAID cache for write caching, many controllers let you
+    configure how long it’s acceptable to delay the writes (one second, five seconds,
+    and so on). A longer delay means more writes can be grouped together and flushed
+    to the disks optimally. The downside is that your writes will be more “bursty.”
+    That’s not a bad thing, unless your application happens to make a bunch of write
+    requests just as the controller’s cache fills up, when it’s about to be flushed
+    to disk. If there’s not enough room for your application’s write requests, it’ll
+    have to wait. Keeping the delay shorter means you’ll have more write operations
+    and they’ll be less efficient, but it smooths out the spikiness and helps keep
+    more of the cache free to handle bursts from the application. (We’re simplifying
+    here—controllers often have complex, vendor-specific balancing algorithms, so
+    we’re just trying to cover the basic principles.)
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你使用 RAID 缓存进行写入缓存时，许多控制器允许你配置延迟写入的时间（一秒、五秒等）。延迟时间更长意味着更多的写入可以被分组并优化地刷新到磁盘上。缺点是你的写入将更“突发”。这并不是一件坏事，除非你的应用程序恰好在控制器缓存填满时发出一堆写入请求，即将刷新到磁盘上。如果没有足够的空间来处理应用程序的写入请求，它将不得不等待。保持延迟时间较短意味着你将有更多的写入操作，它们将更不高效，但它可以平滑地处理尖峰，并帮助保持更多的缓存空闲以处理应用程序的突发请求。（我们在这里进行了简化——控制器通常具有复杂的、供应商特定的平衡算法，所以我们只是试图涵盖基本原则。）
+- en: The write cache is very helpful for synchronous writes, such as issuing `fsync()`
+    calls on the transaction logs and creating binary logs with `sync_binlog` enabled,
+    but you shouldn’t enable it unless your controller has a battery backup unit (BBU)
+    or other nonvolatile storage. Caching writes without a BBU is likely to corrupt
+    your database, and even your transactional filesystem, in the event of power loss.
+    If you have a BBU, however, enabling the write cache can increase performance
+    by a factor of 20 or more for workloads that do a lot of log flushes, such as
+    flushing the transaction log when a transaction commits.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写缓存对于同步写入非常有帮助，例如在事务日志上发出`fsync()`调用和启用`sync_binlog`创建二进制日志，但除非您的控制器有电池备份单元（BBU）或其他非易失性存储，否则不应启用它。在没有BBU的情况下缓存写入可能会导致数据库甚至事务性文件系统在断电时损坏。然而，如果您有BBU，启用写缓存可以提高性能，例如对于执行大量日志刷新操作的工作负载，例如在事务提交时刷新事务日志。
+- en: A final consideration is that many hard drives have write caches of their own,
+    which can “fake” `fsync()` operations by lying to the controller that the data
+    has been written to physical media. Hard drives that are attached directly (as
+    opposed to being attached to a RAID controller) can sometimes let their caches
+    be managed by the operating system, but this doesn’t always work either. These
+    caches are typically flushed for an `fsync()` and bypassed for synchronous I/O,
+    but again, the hard drive can lie. You should either ensure that these caches
+    are flushed on `fsync()` or disable them because they are not battery-backed.
+    Hard drives that aren’t managed properly by the operating system or RAID firmware
+    have caused many instances of data loss.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后一个考虑因素是许多硬盘都有自己的写缓存，可以通过欺骗控制器向物理介质写入数据来“伪造”`fsync()`操作。直接连接的硬盘（而不是连接到RAID控制器）有时可以让它们的缓存由操作系统管理，但这也并不总是有效的。这些缓存通常会在`fsync()`时被刷新，并且在同步I/O时被绕过，但是硬盘可能会撒谎。你应该确保这些缓存在`fsync()`时被刷新，或者禁用它们，因为它们没有备用电源。操作系统或RAID固件未正确管理的硬盘已经导致了许多数据丢失的情况。
+- en: For this and other reasons, it’s always a good idea to do genuine crash testing
+    (literally pulling the power plug out of the wall) when you install new hardware.
+    This is often the only way to find subtle misconfigurations or sneaky hard drive
+    behaviors. A handy script for this can be found [online](https://oreil.ly/2Lume).
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 出于这个原因和其他原因，当您安装新硬件时，进行真正的崩溃测试（从墙上拔下电源插头）总是一个好主意。这通常是发现微妙的配置错误或狡猾的硬盘行为的唯一方法。可以在[在线](https://oreil.ly/2Lume)找到一个方便的脚本。
+- en: To test whether you can really rely on your RAID controller’s BBU, make sure
+    you leave the power cord unplugged for a realistic amount of time. Some units
+    don’t last as long without power as they’re supposed to. Here again, one bad link
+    can render your whole chain of storage components useless.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要测试您是否真的可以依赖RAID控制器的BBU，请确保将电源线拔掉一段现实时间。一些设备在没有电源的情况下的持续时间可能不如预期的长。在这里，一个糟糕的环节可能使您整个存储组件链变得无用。
+- en: Network Configuration
+  id: totrans-109
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 网络配置
+- en: Just as latency and throughput are limiting factors for a hard drive, latency
+    and bandwidth are limiting factors for a network connection. The biggest problem
+    for most applications is latency; a typical application does a lot of small network
+    transfers, and the slight delay for each transfer adds up.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就像延迟和吞吐量对硬盘是限制因素一样，延迟和带宽对网络连接也是限制因素。对大多数应用程序来说，最大的问题是延迟；典型应用程序进行大量小型网络传输，每次传输的轻微延迟会累积起来。
+- en: A network that’s not operating correctly is a major performance bottleneck,
+    too. Packet loss is a common problem. Even 1% loss is enough to cause significant
+    performance degradation because various layers in the protocol stack will try
+    to fix the problems with strategies such as waiting a while and then resending
+    packets, which adds extra time. Another common problem is broken or slow DNS resolution.^([1](ch04.html#ch01fn16))
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网络运行不正确也是一个主要的性能瓶颈。数据包丢失是一个常见问题。即使1%的丢包足以导致显著的性能下降，因为协议栈中的各个层将尝试使用策略来解决问题，例如等待一段时间然后重新发送数据包，这会增加额外的时间。另一个常见问题是破损或缓慢的DNS解析。
+- en: DNS is enough of an Achilles’ heel that enabling `skip_name_resolve` is a good
+    idea for production servers. Broken or slow DNS resolution is a problem for lots
+    of applications, but it’s particularly severe for MySQL. When MySQL receives a
+    connection request, it does both a forward and a reverse DNS lookup. There are
+    lots of reasons this could go wrong. When it does, it will cause connections to
+    be denied, slow down the process of connecting to the server, and generally wreak
+    havoc, up to and including denial-of-service attacks. If you enable the `skip_name_resolve`
+    option, MySQL won’t do any DNS lookups at all. However, this also means that your
+    user accounts must have only IP addresses, “localhost,” or IP address wildcards
+    in the `host` column. Any user account that has a hostname in the `host` column
+    will not be able to log in.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DNS足以成为一个致命弱点，因此在生产服务器上启用`skip_name_resolve`是一个好主意。破损或缓慢的DNS解析对许多应用程序都是一个问题，但对于MySQL来说尤为严重。当MySQL收到连接请求时，它会进行正向和反向DNS查找。有很多原因可能导致这种情况出错。一旦出错，将导致连接被拒绝，连接到服务器的过程变慢，并且通常会造成混乱，甚至包括拒绝服务攻击。如果启用`skip_name_resolve`选项，MySQL将不执行任何DNS查找。但是，这也意味着您的用户帐户在`host`列中必须只有IP地址、“localhost”或IP地址通配符。任何在`host`列中具有主机名的用户帐户将无法登录。
+- en: It’s usually more important, though, to adjust your settings to deal efficiently
+    with a lot of connections and small queries. One of the more common tweaks is
+    to change your local port range. Linux systems have a range of local ports that
+    can be used. When the connection is made back to a caller, it uses a local port.
+    If you have many simultaneous connections, you can run out of local ports.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 调整设置以有效处理大量连接和小查询通常更为重要。其中一个更常见的调整是更改本地端口范围。Linux系统有一系列可用的本地端口。当连接返回给调用者时，它使用本地端口。如果有许多同时连接，您可能会用完本地端口。
+- en: 'Here’s a system that is configured to default values:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个配置为默认值的系统：
+- en: '[PRE0]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Sometimes you might need to change these values to a larger range. For example:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时你可能需要将这些值更改为更大的范围。例如：
+- en: '[PRE1]'
+  id: totrans-117
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'The TCP protocol allows a system to queue up incoming connections, like a bucket.
+    If the bucket fills up, clients won’t be able to connect. You can allow more connections
+    to queue up as follows:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: TCP协议允许系统排队接收连接，就像一个桶。如果桶装满了，客户端就无法连接。你可以通过以下方式允许更多连接排队：
+- en: '[PRE2]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'For database servers that are used only locally, you can shorten the timeout
+    that comes after closing a socket in the event that the peer is broken and doesn’t
+    close its side of the connection. The default is one minute on most systems, which
+    is rather long:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于仅在本地使用的数据库服务器，你可以缩短在关闭套接字后的超时时间，以防对等方断开连接但不关闭连接的情况。在大多数系统上，默认值是一分钟，这相当长：
+- en: '[PRE3]'
+  id: totrans-121
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Most of the time, these settings can be left at their defaults. You’ll typically
+    need to change them only when something unusual is happening, such as extremely
+    poor network performance or very large numbers of connections. An Internet search
+    for “TCP variables” will turn up lots of good reading about these and many more
+    variables.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数情况下，这些设置可以保持默认值不变。通常只有在发生异常情况时才需要更改它们，比如网络性能极差或连接数量非常大。在互联网上搜索“TCP变量”会找到很多关于这些变量和更多变量的好文章。
+- en: Choosing a Filesystem
+  id: totrans-123
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 选择文件系统
+- en: Your filesystem choices are pretty dependent on your operating system. In many
+    systems, such as Windows, you really have only one or two choices, and only one
+    (NTFS) is really viable. GNU/Linux, on the other hand, supports many filesystems.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你的文件系统选择在很大程度上取决于你的操作系统。在许多系统中，比如Windows，你实际上只有一两个选择，而且只有一个（NTFS）是真正可行的。另一方面，GNU/Linux支持许多文件系统。
+- en: Many people want to know which filesystems will give the best performance for
+    MySQL on GNU/Linux or, even more specifically, which of the choices is best for
+    InnoDB. The benchmarks actually show that most of them are very close in most
+    respects, but looking to the filesystem for performance is really a distraction.
+    The filesystem’s performance is very workload specific, and no filesystem is a
+    magic bullet. Most of the time, a given filesystem won’t perform significantly
+    better or worse than any other filesystem. The exception is if you run into some
+    filesystem limit, such as how it deals with concurrency, working with many files,
+    fragmentation, and so on.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多人想知道哪种文件系统在GNU/Linux上为MySQL提供最佳性能，甚至更具体地说，哪种选择对InnoDB最好。实际的基准测试显示，它们在大多数方面都非常接近，但是寻求文件系统性能实际上是一个干扰。文件系统的性能非常依赖于工作负载，并且没有一个文件系统是万能的。大多数情况下，一个给定的文件系统不会比其他文件系统表现明显更好或更差。唯一的例外是如果你遇到某些文件系统限制，比如它如何处理并发性、处理许多文件、碎片化等等。
+- en: Overall, you’re best off using a journaling filesystem, such as ext4, XFS, or
+    ZFS. If you don’t, a filesystem check after a crash can take a long time.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总的来说，最好使用一个日志文件系统，比如ext4、XFS或ZFS。如果不这样做，在崩溃后进行文件系统检查可能需要很长时间。
+- en: 'If you use ext3 or its successor, ext4, you have three options for how the
+    data is journaled, which you can place in the */etc/fstab* mount options:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你使用ext3或其后继者ext4，你有三个选项来记录数据的方式，你可以将它们放在*/etc/fstab*挂载选项中：
+- en: '`data=writeback`'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`data=writeback`'
+- en: This option means only metadata writes are journaled. Writes to the metadata
+    are not synchronized with the data writes. This is the fastest configuration,
+    and it’s *usually* safe to use with InnoDB because it has its own transaction
+    log. The exception is that a crash at just the right time could cause corruption
+    in a *.frm* file on a pre-8.0 version of MySQL.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个选项意味着只有元数据写入被记录。元数据写入不与数据写入同步。这是最快的配置，通常与InnoDB一起使用是安全的，因为它有自己的事务日志。唯一的例外是，在MySQL的8.0版本之前，如果在恰当的时机发生崩溃，可能会导致*.frm*文件损坏。
+- en: Here’s an example of how this configuration could cause problems. Say a program
+    decides to extend a file to make it larger. The metadata (the file’s size) will
+    be logged and written before the data is actually written to the (now larger)
+    file. The result is that the file’s tail—the newly extended area—contains garbage.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里有一个示例，说��这种配置可能会导致问题。假设一个程序决定扩展一个文件使其更大。元数据（文件的大小）将在实际写入数据到（现在更大的）文件之前被记录和写入。结果是文件的尾部——新扩展区域——包含垃圾。
+- en: '`data=ordered`'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`data=ordered`'
+- en: This option also journals only the metadata, but it provides some consistency
+    by writing the data before the metadata so it stays consistent. It’s only slightly
+    slower than the `writeback` option, and it’s much safer when there’s a crash.
+    In this configuration, if we suppose again that a program wants to extend a file,
+    the file’s metadata won’t reflect the file’s new size until the data that resides
+    in the newly extended area has been written.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个选项也只记录元数据，但通过在写入数据之前写入数据来提供一些一致性，以保持一致性。它只比`writeback`选项稍慢一点，但在发生崩溃时更安全。在这种配置下，如果我们再次假设一个程序想要扩展一个文件，文件的元数据在数据写入新扩展区域之前不会反映文件的新大小。
+- en: '`data=journal`'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`data=journal`'
+- en: This option provides atomic journaled behavior, writing the data to the journal
+    before it’s written to the final location. It is usually unnecessary and has much
+    higher overhead than the other two options. However, in some cases it can improve
+    performance because the journaling lets the filesystem delay the writes to the
+    data’s final location.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此选项提供原子日志行为，将数据写入日志后再写入最终位置。通常情况下这是不必要的，并且比其他两个选项的开销要大得多。然而，在某些情况下，它可以提高性能，因为日志记录使文件系统能够延迟将数据写入最终位置。
+- en: 'Regardless of the filesystem, there are some specific options that it’s best
+    to disable because they don’t provide any benefit and can add quite a bit of overhead.
+    The most famous is recording access time, which requires a write even when you’re
+    reading a file or directory. To disable this option, add the `noatime,nodiratime`
+    mount options to your */etc/fstab*; this can sometimes boost performance by as
+    much as 5%–10%, depending on the workload and the filesystem (although it might
+    not make much difference in other cases). Here’s a sample */etc/fstab* line for
+    the ext3 options we mentioned:'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论文件系统如何，最好禁用一些特定选项，因为它们不提供任何好处，而且可能会增加相当多的开销。最著名的是记录访问时间，即使您只是读取文件或目录，也需要写入。要禁用此选项，请将`noatime,nodiratime`挂载选项添加到您的*/etc/fstab*；这有时可以提高性能5%–10%，具体取决于工作负载和文件系统（尽管在其他情况下可能没有太大差异）。以下是我们提到的ext3选项的示例*/etc/fstab*行：
+- en: '[PRE4]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: You can also tune the filesystem’s read-ahead behavior because it might be redundant.
+    For example, InnoDB does its own read-ahead prediction. Disabling or limiting
+    read-ahead is especially beneficial on Solaris’s UFS. Using `innodb_​flush_​method=​O_DIRECT`
+    automatically disables read-ahead.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以调整文件系统的预读行为，因为这可能是多余的。例如，InnoDB会进行自己的预读预测。在Solaris的UFS上禁用或限制预读对性能特别有益。使用`innodb_​flush_​method=​O_DIRECT`会自动禁用预读。
+- en: Some filesystems don’t support features you might need. For example, support
+    for direct I/O might be important if you’re using the `O_DIRECT` flush method
+    for InnoDB. Also, some filesystems handle a large number of underlying drives
+    better than others; XFS is often much better at this than ext3, for instance.
+    Finally, if you plan to use Logical Volume Manager (LVM) snapshots for initializing
+    replicas or taking backups, you should verify that your chosen filesystem and
+    LVM version work well together.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些文件系统不支持您可能需要的功能。例如，如果您正在使用InnoDB的`O_DIRECT`刷新方法，对于直接I/O的支持可能很重要。此外，一些文件系统比其他文件系统更好地处理大量底层驱动器；例如，XFS在这方面通常比ext3好得多。最后，如果您计划使用逻辑卷管理器（LVM）快照来初始化副本或进行备份，您应该验证您选择的文件系统和LVM版本是否能很好地配合。
+- en: '[Table 4-2](#common_filesystem_characteristics) summarizes the characteristics
+    of some common filesystems.'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[表4-2](#common_filesystem_characteristics) 总结了一些常见文件系统的特性。'
+- en: Table 4-2\. Common filesystem characteristics
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表4-2\. 常见文件系统特性
+- en: '| Filesystem | Operating system | Journaling | Large directories |'
+  id: totrans-141
+  prefs: []
+  type: TYPE_TB
+  zh: '| 文件系统 | 操作系统 | 日志记录 | 大目录 |'
+- en: '| --- | --- | --- | --- |'
+  id: totrans-142
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- | --- | --- |'
+- en: '| ext3 | GNU/Linux | Optional | Optional/partial |'
+  id: totrans-143
+  prefs: []
+  type: TYPE_TB
+  zh: '| ext3 | GNU/Linux | 可选 | 可选/部分 |'
+- en: '| ext4 | GNU/Linux | Yes | Yes |'
+  id: totrans-144
+  prefs: []
+  type: TYPE_TB
+  zh: '| ext4 | GNU/Linux | 是 | 是 |'
+- en: '| Journaled File System (JFS) | GNU/Linux | Yes | No |'
+  id: totrans-145
+  prefs: []
+  type: TYPE_TB
+  zh: '| 日志文件系统 (JFS) | GNU/Linux | 是 | 否 |'
+- en: '| NTFS | Windows | Yes | Yes |'
+  id: totrans-146
+  prefs: []
+  type: TYPE_TB
+  zh: '| NTFS | Windows | 是 | 是 |'
+- en: '| ReiserFS | GNU/Linux | Yes | Yes |'
+  id: totrans-147
+  prefs: []
+  type: TYPE_TB
+  zh: '| ReiserFS | GNU/Linux | 是 | 是 |'
+- en: '| UFS (Solaris) | Solaris | Yes | Tunable |'
+  id: totrans-148
+  prefs: []
+  type: TYPE_TB
+  zh: '| UFS (Solaris) | Solaris | 是 | 可调 |'
+- en: '| UFS (FreeBSD) | FreeBSD | No | Optional/partial |'
+  id: totrans-149
+  prefs: []
+  type: TYPE_TB
+  zh: '| UFS (FreeBSD) | FreeBSD | 否 | 可选/部分 |'
+- en: '| UFS2 | FreeBSD | No | Optional/partial |'
+  id: totrans-150
+  prefs: []
+  type: TYPE_TB
+  zh: '| UFS2 | FreeBSD | 否 | 可选/部分 |'
+- en: '| XFS | GNU/Linux | Yes | Yes |'
+  id: totrans-151
+  prefs: []
+  type: TYPE_TB
+  zh: '| XFS | GNU/Linux | 是 | 是 |'
+- en: '| ZFS | GNU/Linux, Solaris, FreeBSD | Yes | Yes |'
+  id: totrans-152
+  prefs: []
+  type: TYPE_TB
+  zh: '| ZFS | GNU/Linux, Solaris, FreeBSD | 是 | 是 |'
+- en: We usually recommend using the XFS filesystem. The ext3 filesystem just has
+    too many serious limitations, such as its single mutex per inode, and bad behavior,
+    such as flushing all dirty blocks in the whole filesystem on `fsync()` instead
+    of just one file’s dirty blocks. The ext4 filesystem is an acceptable choice,
+    although there have been performance bottlenecks in specific kernel versions that
+    you should investigate before committing to it.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们通常建议使用XFS文件系统。ext3文件系统有太多严重的限制，比如每个inode只有一个互斥锁，以及不好的行为，比如在`fsync()`上刷新整个文件系统中的所有脏块，而不仅仅是一个文件的脏块。ext4文件系统是一个可以接受的选择，尽管在特定内核版本中可能存在性能瓶颈，您在承诺之前应该调查一下。
+- en: When considering any filesystem for a database, it’s good to consider how long
+    it has been available, how mature it is, and how proven it has been in production
+    environments. The filesystem bits are the very lowest level of data integrity
+    you have in a database.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在考虑为数据库选择任何文件系统时，考虑它已经可用多久，它有多成熟，以及在生产环境中它已经被证明。文件系统位是数据库中最低级别的数据完整性。
+- en: Choosing a Disk Queue Scheduler
+  id: totrans-155
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 选择磁盘队列调度程序
+- en: On GNU/Linux, the queue scheduler determines the order in which requests to
+    a block device are actually sent to the underlying device. The default is Completely
+    Fair Queuing, or `cfq`. It’s okay for casual use on laptops and desktops, where
+    it helps *prevent* I/O starvation, but it’s terrible for servers. It causes very
+    poor response times under the types of workload that MySQL generates because it
+    stalls some requests in the queue needlessly.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在GNU/Linux上，队列调度程序确定请求发送到底层设备的顺序。默认值是完全公平队列，或`cfq`。对于笔记本电脑和台式机的日常使用，它可以防止I/O饥饿，但对于服务器来说很糟糕。因为它会不必要地使一些请求在队列中停滞。
+- en: 'You can see which schedulers are available and which one is active with the
+    following command:'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用以下命令查看可用的调度程序以及哪个是活动的：
+- en: '[PRE5]'
+  id: totrans-158
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: You should replace *`sda`* with the device name of the disk you’re interested
+    in. In our example, the square brackets indicate which scheduler is in use for
+    this device. The other two choices are suitable for server-class hardware, and
+    in most cases they work about equally well. The `noop` scheduler is appropriate
+    for devices that do their own scheduling behind the scenes, such as hardware RAID
+    controllers and storage area networks (SANs), and `deadline` is fine for both
+    RAID controllers and disks that are directly attached. Our benchmarks show very
+    little difference between these two. The main thing is to use anything but `cfq`,
+    which can cause severe performance problems.
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你应该用感兴趣的磁盘设备名称替换*`sda`*。在我们的示例中，方括号表示此设备正在使用哪种调度程序。另外两个选择适用于服务器级硬件，在大多数情况下它们的效果差不多。`noop`调度程序适用于在后台进行自己调度的设备，例如硬件RAID控制器和存储区域网络（SAN），而`deadline`适用于直接连接的RAID控制器和磁盘。我们的基准测试显示这两者之间几乎没有区别。最重要的是使用除了`cfq`之外的任何调度程序，因为它可能导致严重的性能问题。
+- en: Memory and Swapping
+  id: totrans-160
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 内存和交���
+- en: MySQL performs best with a large amount of memory allocated to it. As we learned
+    in [Chapter 1](ch01.html#mysql_architecture), InnoDB uses memory as a cache to
+    avoid disk access. This means that the performance of the memory system can have
+    a direct impact on how fast queries are served. Even today, one of the best ways
+    to ensure faster memory access has been to replace the built-in memory allocator
+    (`glibc`) with an external one such as `tcmalloc` or `jemalloc`. Numerous benchmarks^([2](ch04.html#ch01fn17))
+    have shown that both of these offer improved performance and reduced memory fragmentation
+    when compared with `glibc`.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL在分配给它大量内存时表现最佳。正如我们在[第1章](ch01.html#mysql_architecture)中学到的，InnoDB使用内存作为缓存以避免磁盘访问。这意味着内存系统的性能直接影响查询服务的速度。即使在今天，确保更快的内存访问的最佳方法之一是用外部内存分配器（`glibc`）替换内置内存分配器，如`tcmalloc`或`jemalloc`。许多基准测试^([2](ch04.html#ch01fn17))表明，与`glibc`相比，这两者都提供了改进的性能和减少的内存碎片化。
+- en: Swapping occurs when the operating system writes some virtual memory to disk
+    because it doesn’t have enough physical memory to hold it. Swapping is transparent
+    to processes running on the operating system. Only the operating system knows
+    whether a particular virtual memory address is in physical memory or on disk.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当操作系统将一些虚拟内存写入磁盘因为没有足够的物理内存来保存时，就会发生交换。对于运行在操作系统上的进程，交换是透明的。只有操作系统知道特定虚拟内存地址是在物理内存中还是在磁盘上。
+- en: When using SSDs, the performance penalty isn’t nearly as sharp as it used to
+    be with HDDs. You should still actively avoid swapping—even if just to avoid unnecessary
+    writes that may shorten the overall life span of the disk. You may also consider
+    taking the approach of using no swap, which forgoes the potential altogether but
+    does put you in a situation where running out of memory may lead to process termination.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用SSD时，性能损失不像以前使用HDD那样严重。你仍然应该积极避免交换，即使只是为了避免不必要的写入可能缩短磁盘的整体寿命。你也可以考虑采用不使用交换的方法，这样可以避免潜在的问题，但会使你处于内存耗尽可能导致进程终止的情况。
+- en: On GNU/Linux, you can monitor swapping with *vmstat* (we show some examples
+    in the next section). You need to look at the swap I/O activity, reported in the
+    `si` and `so` columns, rather than the swap usage, which is reported in the `swpd`
+    column. The `swpd` column can show processes that have been loaded but aren’t
+    being used, which are not really problematic. We like the `si` and `so` column
+    values to be `0`, and they should definitely be less than 10 blocks per second.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在GNU/Linux上，你可以使用*vmstat*来监视交换（我们在下一节中展示了一些示例）。你需要查看交换I/O活动，报告在`si`和`so`列中，而不是交换使用情况，报告在`swpd`列中。`swpd`列可能显示已加载但未使用的进程，这并不是真正的问题。我们希望`si`和`so`列的值为`0`，它们肯定应该小于每秒10个块。
+- en: In extreme cases, too much memory allocation can cause the operating system
+    to run out of swap space. If this happens, the resulting lack of virtual memory
+    can crash MySQL. But even if it doesn’t run out of swap space, very active swapping
+    can cause the entire operating system to become unresponsive, to the point that
+    you can’t even log in and kill the MySQL process. Sometimes the Linux kernel can
+    even hang completely when it runs out of swap space. We recommend you run your
+    databases without using swap space at all. Disk is still an order of magnitude
+    slower than RAM, and this avoids all of the headaches mentioned here.
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在极端情况下，过多的内存分配可能导致操作系统的交换空间耗尽。如果发生这种情况，由于虚拟内存的缺乏，MySQL可能会崩溃。但即使不会耗尽交换空间，非常活跃的交换也可能导致整个操作系统无响应，甚至无法登录和终止MySQL进程。有时候当操作系统耗尽交换空间时，Linux内核甚至会完全挂起。我们建议你完全不使用交换空间来运行数据库。磁盘仍然比RAM慢一个数量级，这样可以避免这里提到的所有问题。
+- en: Another thing that frequently happens under extreme virtual memory pressure
+    is that the out-of-memory (OOM) killer process will kick in and kill something.
+    This is frequently MySQL, but it can also be another process such as SSH, which
+    can leave you with a system that’s not accessible from the network. You can prevent
+    this by setting the SSH process’s `oom_adj` or `oom_score_adj` value. When working
+    with dedicated database servers, we highly recommend that you identify any key
+    processes like MySQL and SSH and proactively adjust the OOM killer score to prevent
+    those from being selected first for termination.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在极端虚拟内存压力下经常发生的另一件事是内存不足（OOM）杀手进程会启动并终止某些进程。这经常是MySQL，但也可能是另一个进程，比如SSH，这可能导致你的系统无法从网络访问。你可以通过设置SSH进程的`oom_adj`或`oom_score_adj`值来防止这种情况发生。在使用专用数据库服务器时，我们强烈建议你识别任何关键进程，如MySQL和SSH，并主动调整OOM杀手分数，以防止它们被首先选择终止。
+- en: You can solve most swapping problems by configuring your MySQL buffers correctly,
+    but sometimes the operating system’s virtual memory system decides to swap MySQL
+    anyway, sometimes related to how nonuniform memory access (NUMA) works^([3](ch04.html#ch01fn18))
+    in Linux. This usually happens when the operating system sees a lot of I/O from
+    MySQL, so it tries to increase the file cache to hold more data. If there’s not
+    enough memory, something must be swapped out, and that something might be MySQL
+    itself. Some older Linux kernel versions also have counterproductive priorities
+    that swap things when they shouldn’t, but this has been alleviated a bit in more
+    recent kernels.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过正确配置MySQL缓冲区来解决大多数交换问题，但有时操作系统的虚拟内存系统决定无论如何交换MySQL，有时与Linux中的非统一内存访问（NUMA）的工作方式有关^([3](ch04.html#ch01fn18))。这通常发生在操作系统看到MySQL的大量I/O时，因此它试图增加文件缓存以容纳更多数��。如果内存不足，必须交换出某些内容，而这些内容可能是MySQL本身。一些较旧的Linux内核版本还具有不当的优先级，会在不应该交换时交换内容，但在较新的内核中已经有所缓解。
+- en: 'Operating systems usually allow some control over virtual memory and I/O. We
+    mention a few ways to control them on GNU/Linux. The most basic is to change the
+    value of */proc/sys/vm/swappiness* to a low value, such as `0` or `1`. This tells
+    the kernel not to swap unless the need for virtual memory is extreme. For example,
+    here’s how to check the current value:'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 操作系统通常允许对虚拟内存和I/O进行一些控制。我们在GNU/Linux上提到了一些控制它们的方法。最基本的是将*/proc/sys/vm/swappiness*的值更改为低值，例如`0`或`1`。这告诉内核除非对虚拟内存的需求极端，否则不要交换。例如，这是如何检查当前值的方法：
+- en: '[PRE6]'
+  id: totrans-169
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'The value shown, 60, is the default swappiness setting (the range is from 0
+    to 100). This is a very bad default for servers. It’s only appropriate for laptops.
+    Servers should be set to `0`:'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 显示的值为60，是默认的swappiness设置（范围从0到100）。这对服务器来说是非常糟糕的默认值。这只适用于笔记本电脑。服务器应设置为`0`：
+- en: '[PRE7]'
+  id: totrans-171
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Another option is to change how the storage engines read and write data. For
+    example, using `innodb_flush_method=O_DIRECT` relieves I/O pressure. Direct I/O
+    is not cached, so the operating system doesn’t see it as a reason to increase
+    the size of the file cache. This parameter works only for InnoDB.
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个选项是更改存储引擎读取和写入数据的方式。例如，使用`innodb_flush_method=O_DIRECT`可以减轻I/O压力。直接I/O不会被缓存，因此操作系统不会将其视为增加文件缓存大小的原因。此参数仅适用于InnoDB。
+- en: 'Another option is to use MySQL’s `memlock` configuration option, which locks
+    MySQL in memory. This will avoid swapping, but it can be dangerous: if there’s
+    not enough lockable memory left, MySQL can crash when it tries to allocate more
+    memory. Problems can also be caused if too much memory is locked and there’s not
+    enough left for the operating system.'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个选项是使用MySQL的`memlock`配置选项，将MySQL锁定在内存中。这将避免交换，但可能会很危险：如果没有足够的可锁定内存剩余，当MySQL尝试分配更多内存时，MySQL可能会崩溃。如果锁定了太多内存，而操作系统没有足够的内存剩余，也可能会引起问题。
+- en: Many of the tricks are specific to a kernel version, so be careful, especially
+    when you upgrade. In some workloads, it’s hard to make the operating system behave
+    sensibly, and your only recourse might be to lower the buffer sizes to suboptimal
+    values.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多技巧特定于内核版本，因此要小心，特别是在升级时。在某些工作负载中，很难使操作系统表现得明智，您的唯一选择可能是将缓冲区大小降低到次优值。
+- en: Operating System Status
+  id: totrans-175
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 操作系统状态
+- en: Your operating system provides tools to help you find out what the operating
+    system and hardware are doing. In this section, we’ll show you examples of how
+    to use two widely available tools, *iostat* and *vmstat*. If your system doesn’t
+    provide either of these tools, chances are it will provide something similar.
+    Thus, our goal isn’t to make you an expert at using *iostat* or *vmstat* but simply
+    to show you what to look for when you’re trying to diagnose problems with tools
+    such as these.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您的操作系统提供了工具，帮助您了解操作系统和硬件正在做什么。在本节中，我们将向您展示如何使用两个广泛可用的工具*iostat*和*vmstat*的示例。如果您的系统没有提供这两个工具中的任何一个，那么很可能会提供类似的工具。因此，我们的目标不是让您成为*iostat*或*vmstat*的专家，而只是向您展示在尝试使用这些工具诊断问题时要寻找什么。
+- en: In addition to these tools, your operating system might provide others, such
+    as *mpstat* or *sar*. If you’re interested in other parts of your system, such
+    as the network, you might want to use tools such as *ifconfig* (which shows how
+    many network errors have occurred, among other things) or *netstat* instead.
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了这些工具，您的操作系统可能提供其他工具，如*mpstat*或*sar*。如果您对系统的其他部分感兴趣，例如网络，您可能想使用*ifconfig*（显示发生了多少网络错误等）或*netstat*等工具。
+- en: By default, *vmstat* and *iostat* produce just one report showing the average
+    values of various counters since the server was started, which is not very useful.
+    However, you can give both tools an interval argument. This makes them generate
+    incremental reports showing what the server is doing right now, which is much
+    more relevant. (The first line shows the statistics since the system was started;
+    you can just ignore this line.)
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，*vmstat*和*iostat*只生成一个报告，显示自服务器启动以来各种计数器的平均值，这并不是很有用。但是，您可以为这两个工具提供一个间隔参数。这使它们生成增量报告，显示服务器当前正在执行的操作，这更加相关。（第一行显示自系统启动以来的统计信息；您可以忽略此行。）
+- en: How to read vmstat output
+  id: totrans-179
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 如何阅读vmstat输出
+- en: 'Let’s look at an example of *vmstat* first. To make it print out a new report
+    every five seconds, reporting sizes in megabytes, use the following command:'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们先看一个*vmstat*的示例。要使其每五秒打印一个新报告，以兆字节为单位报告大小，请使用以下命令：
+- en: '[PRE8]'
+  id: totrans-181
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: You can stop *vmstat* with Ctrl-C. The output you see depends on your operating
+    system, so you might need to read the manual page to figure it out.
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用Ctrl-C停止*vmstat*。您看到的输出取决于您的操作系统，因此您可能需要阅读手册页以弄清楚。
+- en: 'As stated earlier, even though we asked for incremental output, the first line
+    of values shows the averages since the server was booted. The second line shows
+    what’s happening right now, and subsequent lines will show what’s happening at
+    five-second intervals. The columns are grouped by one of the following headers:'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如前面所述，尽管我们要求增量输出，但第一行的值显示了自服务器启动以来的平均值。第二行显示了当前的情况，随后的行将显示每隔五秒发生的情况。这些列按以下其中一个标题分组：
+- en: procs
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: procs
+- en: The `r` column shows how many processes are waiting for CPU time. The `b` column
+    shows how many are in uninterruptible sleep, which generally means they’re waiting
+    for I/O (disk, network, user input, and so on).
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`r` 列显示有多少进程正在等待 CPU 时间。`b` 列显示有多少进程处于不可中断的睡眠状态，这通常意味着它们正在等待 I/O（磁盘、网络、用户输入等）。'
+- en: memory
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: memory
+- en: The `swpd` column shows how many blocks are swapped out to disk (paged). The
+    remaining three columns show how many blocks are `free` (unused), how many are
+    being used for buffers (buff), and how many are being used for the operating system’s
+    `cache`.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`swpd` 列显示了被交换到磁盘（分页）的块数。剩下的三列显示了多少块是 `free`（未使用的）、多少块用于缓冲区（buff），以及多少块用于操作系统的
+    `cache`。'
+- en: swap
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: swap
+- en: 'These columns show swap activity: how many blocks per second the operating
+    system is swapping in (from disk) and out (to disk). They are much more important
+    to monitor than the `swpd` column. We like to see `si` and `so` at `0` most of
+    the time, and we definitely don’t like to see more than 10 blocks per second.
+    Bursts are also bad.'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些列显示了交换活动：操作系统每秒交换进（从磁盘）和交换出（到磁盘）的块数。它们比 `swpd` 列更重要。我们希望大部分时间看到 `si` 和 `so`
+    为 `0`，绝对不希望看到超过 10 块每秒。突发也是不好的。
+- en: io
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: io
+- en: These columns show how many blocks per second are read in from (`bi`) and written
+    out to (`bo`) block devices. This usually reflects disk I/O.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些列显示每秒从块设备读入的块数（`bi`）和写出的块数（`bo`）。这通常反映了磁盘 I/O。
+- en: system
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: system
+- en: These columns show the number of interrupts per second (`in`) and the number
+    of context switches per second (`cs`).
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些列显示每秒中断数（`in`）和每秒上下文切换数（`cs`）。
+- en: cpu
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: cpu
+- en: These columns show the percentages of total CPU time spent running user (nonkernel)
+    code, running system (kernel) code, idle, and waiting for I/O. A possible fifth
+    column (`st`) shows the percent “stolen” from a virtual machine if you’re using
+    virtualization. This refers to the time during which something was runnable on
+    the virtual machine, but the hypervisor chose to run something else instead. If
+    the virtual machine doesn’t want to run anything and the hypervisor runs something
+    else, that doesn’t count as stolen time.
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些列显示了总 CPU 时间的百分比，用于运行用户（非内核）代码、运行系统（内核）代码、空闲以及等待 I/O。可能的第五列（`st`）显示了如果您使用虚拟化，则从虚拟机“窃取”的百分比。这指的是在虚拟机上有东西可以运行的时间，但是
+    hypervisor 选择运行其他东西的时间。如果虚拟机不想运行任何东西，而 hypervisor 运行其他东西，那就不算是被窃取的时间。
+- en: The *vmstat* output is system dependent, so you should read your system’s `vmstat(8)`
+    manpage if yours looks different from the sample we’ve shown.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*vmstat* 输出是系统相关的，因此如果您的输出与我们展示的示例不同，您应该阅读您系统的 `vmstat(8)` 手册页。'
+- en: How to read iostat output
+  id: totrans-197
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 如何阅读 iostat 输出
+- en: 'Now let’s move on to *iostat*. By default, it shows some of the same CPU usage
+    information as *vmstat*. We’re usually interested in just the I/O statistics,
+    though, so we use the following command to show only extended device statistics:'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们转向 *iostat*。默认情况下，它显示了与 *vmstat* 相同的一些 CPU 使用信息。不过，我们通常只对 I/O 统计感兴趣，因此我们使用以下命令仅显示扩展设备统计信息：
+- en: '[PRE9]'
+  id: totrans-199
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: As with *vmstat*, the first report shows averages since the server was booted
+    (we generally omit it to save space), and the subsequent reports show incremental
+    averages. There’s one line per device.
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与 *vmstat* 一样，第一个报告显示了自服务器启动以来的平均值（我们通常省略以节省空间），随后的报告显示了增量平均值。每个设备一行。
+- en: 'There are various options that show or hide columns. The official documentation
+    is a bit confusing, and we had to dig into the source code to figure out what
+    was really being shown. Here’s what each column is showing:'
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有各种选项可以显示或隐藏列。官方文档有点混乱，我们不得不深入源代码中找出到底显示了什么。以下是每列显示的内容：
+- en: '`rrqm/s` and `wrqm/s`'
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`rrqm/s` 和 `wrqm/s`'
+- en: The number of merged read and write requests queued per second. *Merged* means
+    the operating system took multiple logical requests from the queue and grouped
+    them into a single request to the actual device.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每秒排队的合并读写请求数。*合并* 意味着操作系统从队列中获取多个逻辑请求，并将它们组合成一个实际设备的单个请求。
+- en: '`r/s` and `w/s`'
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`r/s` 和 `w/s`'
+- en: The number of read and write requests sent to the device per second.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每秒发送到设备的读取和写入请求数。
+- en: '`rkB/s` and `wkB/s`'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`rkB/s` 和 `wkB/s`'
+- en: The number of kilobytes read and written per second.
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每秒读取和写入的千字节数。
+- en: '`avgrq-sz`'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`avgrq-sz`'
+- en: The request size in sectors.
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请求大小（以扇区为单位）。
+- en: '`avgqu-sz`'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`avgqu-sz`'
+- en: The number of requests waiting in the device’s queue.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在设备队列中等待的请求数。
+- en: '`await`'
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`await`'
+- en: The number of milliseconds spent in the disk queue.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在磁盘队列中花费的毫秒数。
+- en: '`r_await` and `w_await`'
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`r_await` 和 `w_await`'
+- en: The average time in milliseconds for read requests issued to the device to be
+    served, for both reads and writes, respectively. This includes the time spent
+    by the requests in queue and the time spent servicing them.
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 发送到设备的读取请求的平均时间（以毫秒为单位），分别为读取和写入。这包括请求在队列中花费的时间以及为其提供服务的时间。
+- en: '`svctm`'
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`svctm`'
+- en: The number of milliseconds spent servicing requests, excluding queue time.
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务请求所花费的毫秒数，不包括队列时间。
+- en: '`%util`^([4](ch04.html#ch01fn19))'
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`%util`^([4](ch04.html#ch01fn19))'
+- en: The percentage of time during which at least one request was active. This is
+    very confusingly named. It is *not* the device’s utilization, if you’re familiar
+    with the standard definition of *utilization* in queuing theory. A device with
+    more than one hard drive (such as a RAID controller) should be able to support
+    a higher concurrency than 1, but `%util` will never exceed 100% unless there’s
+    a rounding error in the math used to compute it. As a result, it is *not* a good
+    indication of device saturation, contrary to what the documentation says, except
+    in the special case where you’re looking at a single physical hard drive.
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 至少有一个请求处于活动状态的时间百分比。这个名字非常令人困惑。如果您熟悉排队理论中*利用率*的标准定义，那么这���是设备的利用率。具有多个硬盘驱动器（如RAID控制器）的设备应该能够支持比1更高的并发性，但是`%util`永远不会超过100%，除非在计算中存在四舍五入误差。因此，与文档所说的相反，它并不是设备饱和的良好指标，除非您正在查看单个物理硬盘的特殊情况。
+- en: 'You can use the output to deduce some facts about a machine’s I/O subsystem.
+    One important metric is the number of requests served concurrently. Because the
+    reads and writes are per second and the service time’s unit is thousandths of
+    a second, you can use Little’s law to derive the following formula for the number
+    of concurrent requests the device is serving:'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用输出推断有关机器I/O子系统的一些事实。一个重要的指标是同时服务的请求数。由于读取和写入是每秒进行的，而服务时间的单位是千分之一秒，您可以使用Little's
+    law推导出设备正在服务的并发请求数的以下公式：
+- en: '[PRE10]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: Plugging the preceding sample numbers into the concurrency formula gives a concurrency
+    of about 0.995\. This means that on average, the device was serving less than
+    one request at a time during the sampling interval.
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将前面的样本数字插入并发公式中得到约0.995的并发性。这意味着在采样间隔期间，设备平均服务的请求少于一个。
+- en: Other Helpful Tools
+  id: totrans-223
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 其他有用的工具
+- en: We’ve shown *vmstat* and *iostat* because they’re widely available, and *vmstat*
+    is usually installed by default on many Unix-like operating systems. However,
+    each of these tools has its limitations, such as confusing units of measurement,
+    sampling at intervals that don’t correspond to when the operating system updates
+    the statistics, and the inability to see all of the metrics at once. If these
+    tools don’t meet your needs, you might be interested in [*dstat*](http://dag.wieers.com/home-made/dstat)
+    or [*collectl*](https://oreil.ly/DSvmM).
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们展示了*vmstat*和*iostat*，因为它们是广泛可用的工具，而*vmstat*通常默认安装在许多类Unix操作系统上。然而，这些工具各有其局限性，比如单位混乱、采样间隔与操作系统更新统计数据的时间不对应，以及无法一次看到所有指标。如果这些工具不符合您的需求，您可能会对[*dstat*](http://dag.wieers.com/home-made/dstat)或[*collectl*](https://oreil.ly/DSvmM)感兴趣。
+- en: We also like to use *mpstat* to watch CPU statistics; it provides a much better
+    idea of how the CPUs are behaving individually, instead of grouping them all together.
+    Sometimes this is very important when you’re diagnosing a problem. You might find
+    *blktrace* to be helpful when you’re examining disk I/O usage, too.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们也喜欢使用*mpstat*来监视CPU统计信息；它提供了关于CPU如何单独运行的更好的想法，而不是将它们全部分组在一起。在诊断问题时，这有时非常重要。当您检查磁盘I/O使用情况时，您可能会发现*blktrace*也很有帮助。
+- en: Percona wrote its own replacement for *iostat* called *pt-diskstats*. It’s part
+    of Percona Toolkit. It addresses some of the complaints about *iostat*, such as
+    the way it presents reads and writes in aggregate and the lack of visibility into
+    concurrency. It is also interactive and keystroke driven, so you can zoom in and
+    out, change the aggregation, filter out devices, and show and hide columns. It
+    is a great way to slice and dice a sample of disk statistics, which you can gather
+    with a simple shell script even if you don’t have the tool installed. You can
+    capture samples of disk activity and email or save them for later analysis.
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Percona编写了自己的*iostat*替代工具称为*pt-diskstats*。它是Percona Toolkit的一部分。它解决了一些关于*iostat*的抱怨，比如它如何将读取和写入汇总以及对并发性的可见性不足。它还是交互式的，通过按键驱动，因此您可以放大和缩小，更改聚合，过滤设备，显示和隐藏列。这是一个很好的方式来切分和分析磁盘统计数据的样本，即使您没有安装该工具，也可以通过简单的shell脚本收集磁盘活动的样本并通过电子邮件或保存以供以后分析。
+- en: Lastly, *perf*, the Linux profiler, is an invaluable tool for inspecting what
+    is going on at the operating system level. You can use *perf* to inspect general
+    information about the operating system, such as why the kernel is using CPU so
+    much. You can also inspect specific process IDs, allowing you to see how MySQL
+    is interacting with the operating system. Inspecting system performance is a very
+    deep dive, so we recommend *Systems Performance, Second Edition* by Brendan Gregg
+    (Pearson) as excellent follow-up reading.
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，Linux分析器*perf*是检查操作系统级别发生的情况的宝贵工具。您可以使用*perf*检查有关操作系统的一般信息，比如为什么内核使用CPU这么多。您还可以检查特定的进程ID，从而查看MySQL如何与操作系统交互。检查系统性能是一个非常深入的过程，因此我们推荐Brendan
+    Gregg的《Systems Performance, Second Edition》（Pearson）作为优秀的后续阅读。
+- en: Summary
+  id: totrans-228
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: Choosing and configuring hardware for MySQL, and configuring MySQL for the hardware,
+    is not a mystical art. In general, you need the same skills and knowledge that
+    you need for most other purposes. However, there are some MySQL-specific things
+    you should know.
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择和配置MySQL的硬件，并为硬件配置MySQL，并不是一门神秘的艺术。一般来说，您需要与大多数其他目的相同的技能和知识。然而，有一些MySQL特定的事项您应该知道。
+- en: What we commonly suggest for most people is to find a good balance between performance
+    and cost. First, we like to use commodity servers, for many reasons. For example,
+    if you’re having trouble with a server and you need to take it out of service
+    while you try to diagnose it, or if you simply want to try swapping it with another
+    server as a form of diagnosis, this is a lot easier to do with a $5,000 server
+    than one that costs $50,000 or more. MySQL is also typically a better fit—both
+    in terms of the software itself and in terms of the typical workloads it runs—for
+    commodity hardware.
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们通常建议大多数人在性能和成本之间找到一个良好的平衡。 首先，我们喜欢使用商品服务器，有很多原因。 例如，如果您的服务器出现问题，您需要将其停机以诊断问题，或者如果您只是想尝试用另一台服务器替换它作为诊断的一种形式，那么使用价值
+    5000 美元的服务器比使用价值 50000 美元或更高的服务器要容易得多。 MySQL 通常也更适合于商品硬件，无论是从软件本身还是从典型的工作负载来看。
+- en: The four fundamental resources MySQL needs are CPU, memory, disk, and network
+    resources. The network doesn’t tend to show up as a serious bottleneck very often,
+    but CPUs, memory, and disks certainly do. The balance of speed and quantity really
+    depends on the workload, and you should strive for a balance of fast and many
+    as your budget allows. The more concurrency you expect, the more you should lean
+    on more CPUs to accommodate your workload.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 需要的四个基本资源是 CPU、内存、磁盘和网络资源。 网络很少会成为严重瓶颈，但 CPU、内存和磁盘确实会。 速度和数量的平衡取决于工作负载，您应该根据预算的允许程度努力实现快速和多样的平衡。
+    你期望的并发越多，你就应该更多地依赖更多的 CPU 来适应你的工作负载。
+- en: The relationship between CPUs, memory, and disks is intricate, with problems
+    in one area often showing up elsewhere. Before you throw resources at a problem,
+    ask yourself whether you should be throwing resources at a different problem instead.
+    If you’re I/O bound, do you need more I/O capacity, or just more memory? The answer
+    hinges on the working set size, which is the set of data that’s needed most frequently
+    over a given duration.
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CPU、内存和磁盘之间的关系错综复杂，一个领域的问题通常会在其他地方显现出来。 在向问题投入资源之前，问问自己是否应该将资源投入到另一个问题上。 如果你受到
+    I/O 限制，你需要更多的 I/O 容量，还是只需要更多的内存？ 答案取决于工作集大小，即在给定时间内最常需要的数据集。
+- en: Solid-state devices are great for improving server performance overall and should
+    generally be the standard for databases now, especially OLTP workloads. The only
+    reason to continue using HDDs is in extremely budget-constrained systems or ones
+    where you need a staggeringly high amount of disk space—on the order of petabytes
+    in a data-warehousing situation.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 固态设备非常适合提高服务器整体性能，现在通常应该成为数据库的标准，特别是 OLTP 工作负载。 继续使用 HDD 的唯一理由是在极度预算受限的系统中或者需要大量磁盘空间的情况下，例如在数据仓库情况下需要
+    PB 级别的磁盘空间。
+- en: In terms of the operating system, there are just a few Big Things that you need
+    to get right, mostly related to storage, networking, and virtual memory management.
+    If you use GNU/Linux, as most MySQL users do, we suggest using the XFS filesystem
+    and setting the swappiness and disk queue scheduler to values that are appropriate
+    for a server. There are some network parameters that you might need to change,
+    and you might wish to tweak a number of other things (such as disabling SELinux),
+    but those changes are a matter of preference.
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在操作系统方面，有一些关键的事项需要正确处理，主要涉及存储、网络和虚拟内存管理。 如果您使用 GNU/Linux，正如大多数 MySQL 用户所做的那样，我们建议使用
+    XFS 文件系统，并将 swappiness 和磁盘队列调度器设置为适合服务器的值。 有一些可能需要更改的网络参数，您可能希望调整其他一些参数（例如禁用 SELinux），但这些更改是个人偏好的问题。
+- en: '^([1](ch04.html#ch01fn16-marker)) Popular haiku: It’s not DNS. There’s no way
+    it’s DNS. It was DNS.'
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch04.html#ch01fn16-marker)) 流行的俳句：这不是 DNS。 不可能是 DNS。 就是 DNS。
+- en: ^([2](ch04.html#ch01fn17-marker)) See the blog posts [“Impact of Memory Allocators
+    on MySQL Performance”](https://oreil.ly/AAJHX) and [“MySQL (or Percona) Memory
+    Usage Tests”](https://oreil.ly/slp7v) for comparisons.
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch04.html#ch01fn17-marker)) 参见博客文章[“内存分配器对 MySQL 性能的影响”](https://oreil.ly/AAJHX)和[“MySQL（或
+    Percona）内存使用测试”](https://oreil.ly/slp7v)进行比较。
+- en: ^([3](ch04.html#ch01fn18-marker)) See [this blog post](https://oreil.ly/VGW65)
+    for more.
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([3](ch04.html#ch01fn18-marker)) 更多信息请参见[此博客文章](https://oreil.ly/VGW65)。
+- en: ^([4](ch04.html#ch01fn19-marker)) Software RAID, like MD/RAID, may not show
+    utilization for the RAID array itself.
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([4](ch04.html#ch01fn19-marker)) 软件 RAID，如 MD/RAID，可能不会显示 RAID 阵列本身的利用率。

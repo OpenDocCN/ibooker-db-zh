@@ -1,0 +1,2415 @@
+- en: Chapter 10\. Backup and Recovery
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第10章。备份和恢复
+- en: If you don’t plan for backups up front, you might later find that you’ve ruled
+    out some of the best options. For example, you might set up a server and then
+    wish for LVM so that you can take filesystem snapshots—but it’s too late. You
+    also might not notice some important performance impacts of configuring your systems
+    for backups. And if you don’t plan for and practice recovery, it won’t go smoothly
+    when you need to do it.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您不事先计划备份，您可能会发现自己排除了一些最佳选项。例如，您可能设置了一个服务器，然后希望使用LVM以便可以进行文件系统快照—但为时已晚。您可能也没有注意到配置系统进行备份会产生一些重要的性能影响。如果您不计划并练习恢复，那么当您需要执行时，情况就不会顺利。
+- en: 'We won’t cover all parts of a well-designed backup and recovery solution in
+    this chapter—just the parts that are relevant to MySQL. Here are some points we
+    decided not to include here but that you should still absolutely be including
+    in your overall backup and recovery strategy:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们不会在本章中涵盖备份和恢复解决方案的所有部分—只涵盖与MySQL相关的部分。以下是我们决定不在此处包括但您绝对应该在整体备份和恢复策略中包括的一些要点：
+- en: Security (access to the backup, privileges to restore data, and whether the
+    files need to be encrypted)
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 安全性（备份访问权限、恢复数据权限以及文件是否需要加密）
+- en: Where to store the backups, including how far away from the source they should
+    be (on a different disk, a different server, or offsite) and how to move the data
+    from the source to the destination
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 备份存储位置，包括与源站点的距离（在不同磁盘、不同服务器或异地）以及如何将数据从源站点移动到目的地
+- en: Retention policies, auditing, legal requirements, and related subjects
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 保留政策、审计、法律要求和相关主题
+- en: Storage solutions and media, compression, and incremental backups
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 存储解决方案和媒体、压缩和增量备份
+- en: Storage formats
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 存储格式
+- en: Monitoring and reporting on your backups
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 监控和报告您的备份
+- en: Backup capabilities built into storage layers or particular devices, such as
+    prefabricated file servers
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 内置到存储层或特定设备中的备份功能，例如预制文件服务器
+- en: 'Before we begin, let’s clarify some key terms. First, you’ll often hear about
+    so-called *hot*, *warm*, and *cold* backups. People generally use these terms
+    to denote a backup’s impact: “hot” backups aren’t supposed to require any server
+    downtime, for example. The problem is that these terms don’t mean the same things
+    to everyone. Some tools even use the word *hot* in their names but definitely
+    don’t perform what we consider to be hot backups. We try to avoid these terms
+    and instead tell you how much a specific technique or tool interrupts your server.'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们开始之前，让我们澄清一些关键术语。首先，您经常会听到所谓的*热备份*、*温备份*和*冷备份*。人们通常使用这些术语来表示备份的影响：“热”备份不应该需要任何服务器停机，例如。问题在于这些术语对每个人来说意义不同。有些工具甚至在其名称中使用*热*这个词，但绝对不执行我们认为的热备份。我们尽量避免使用这些术语，而是告诉您特定技术或工具对服务器的中断程度。
+- en: Two other confusing words are *restore* and *recover*. We use them in specific
+    ways in this chapter. *Restoring* means retrieving data from a backup and either
+    loading it into MySQL or placing the files where MySQL expects them to be. *Recovery*
+    generally means the entire process of rescuing a system, or part of a system,
+    after something has gone wrong. This includes restoring data from backups as well
+    as all the steps necessary to make a server fully functional again, such as restarting
+    MySQL, changing the configuration, warming up the server’s caches, and so on.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另外两个令人困惑的词是*恢复*和*恢复*。在本章中，我们以特定方式使用它们。*恢复*意味着从备份中检索数据，并将其加载到MySQL中，或将文件放在MySQL期望它们在的位置。*恢复*通常意味着在出现问题后拯救系统或系统的一部分的整个过程。这包括从备份中恢复数据以及使服务器完全功能的所有必要���骤，例如重新启动MySQL、更改配置、启动服务器的缓存等。
+- en: To many people, recovery just means fixing corrupted tables after a crash. This
+    is not the same as recovering an entire server. A storage engine’s crash recovery
+    reconciles its data and logfiles. It makes sure the datafiles contain only the
+    modifications made by committed transactions, and it replays transactions from
+    the logfiles that have not yet been applied to the datafiles. This might be part
+    of the overall recovery process, or even part of making backups. However, it’s
+    not the same as the recovery you might need to do after an accidental `DROP TABLE`,
+    for example. Depending on the issue you are recovering from, the actions you take
+    for recovery may be vastly different.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对许多人来说，恢复只意味着在崩溃后修复损坏的表格。这与恢复整个服务器不同。存储引擎的崩溃恢复会协调其数据和日志文件。它确保数据文件仅包含已提交事务所做的修改，并且重新播放尚未应用于数据文件的日志文件中的事务。这可能是整体恢复过程的一部分，甚至是备份的一部分。但是，这与您可能需要在意外`DROP
+    TABLE`之后进行的恢复不同，例如。根据您要从中恢复的问题，您采取的恢复措施可能大不相同。
+- en: 'Lastly, there are two main types of backups: raw and logical. *Raw backups—*sometimes
+    called *physical*^([1](ch10.html#ch01fn68)) *backups—*refer to a copy of files
+    from a filesystem. *Logical backups* refer to the SQL statements needed to reconstruct
+    the data.'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，备份主要有两种类型：原始和逻辑。*原始备份*—有时称为*物理*^([1](ch10.html#ch01fn68)) *备份*—指的是来自文件系统的文件副本。*逻辑备份*指的是重建数据所需的SQL语句。
+- en: Why Backups?
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 为什么备份？
+- en: 'Here are a few reasons that backups are important:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是备份重要性的几个原因：
+- en: Disaster recovery
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 灾难恢复
+- en: Disaster recovery is what you do when hardware fails, a nasty bug corrupts your
+    data, or your server and its data become unavailable or unusable for some other
+    reason. You need to be ready for everything from someone accidentally connecting
+    to the wrong server doing an `ALTER TABLE`, to the building burning down, to a
+    malicious attacker or a MySQL bug. Although the odds of any particular disaster
+    striking are fairly low, taken together they add up.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 灾难恢复是在硬件故障、恶意软件损坏数据或服务器及其数据由于其他原因变得不可用或无法使用时所做的事情。您需要准备好应对一切，从有人意外连接到错误服务器执行`ALTER
+    TABLE`，到建筑物着火，到恶意攻击者或MySQL错误。尽管任何特定灾难发生的几率相当低，但加在一起就会增加。
+- en: People changing their minds
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 人们改变主意
+- en: You’d be surprised how often people intentionally delete data and then want
+    it back.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你会惊讶地发现，人们经常会有意删除数据，然后希望将其找回。
+- en: Auditing
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 审计
+- en: Sometimes you need to know what your data or schema looked like at some point
+    in the past. You might be involved in a lawsuit, for example, or you might discover
+    a bug in your application and need to see what the code used to do (sometimes
+    just having your code in version control isn’t enough).
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时候你需要知道你的数据或模式在过去的某个时间点是什么样子。例如，你可能卷入了诉讼，或者你可能发现了应用程序中的错误，需要查看代码以前是如何运行的（有时仅仅将代码放在版本控制中是不够的）。
+- en: Testing
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 测试
+- en: 'One of the easiest ways to test on realistic data is to refresh a test server
+    periodically with the latest production data. If you’re making backups, it’s easy:
+    just restore the backup to the test server.'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在真实数据上进行测试的最简单方法之一是定期使用最新的生产数据刷新测试服务器。如果你正在进行备份，这很容易：只需将备份恢复到测试服务器即可。
+- en: Check your assumptions. For example, do you assume your shared hosting provider
+    is backing up the MySQL server provided with your account? You might be surprised.
+    Many hosting providers don’t back up MySQL servers at all, and others just do
+    a file copy while the server is running, which probably creates a corrupt backup
+    that’s useless.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 检查你的假设。例如，你是否假设你的共享托管提供商正在备份与你的帐户提供的MySQL服务器？你可能会感到惊讶。许多托管提供商根本不备份MySQL服务器，而其他人只是在服务器运行时进行文件复制，这可能会创建一个损坏的无用备份。
+- en: Defining Recovery Requirements
+  id: totrans-25
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 定义恢复要求
+- en: If all goes well, you’ll never need to think about recovery. But when you do,
+    the best backup system in the world won’t help if you never tested recovering
+    it. You’ll need a great recovery system.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果一切顺利，你永远不需要考虑恢复。但是当你需要时，即使是世界上最好的备份系统也无济于事，如果你从未测试过恢复。你需要一个出色的恢复系统。
+- en: 'Unfortunately, it’s easier to make your backup systems work smoothly than it
+    is to build good recovery processes and tools. Here’s why:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，使您的备份系统正常运行比构建良好的恢复流程和工具更容易。原因如下：
+- en: Backups come first. You can’t recover unless you’ve first backed up, so your
+    attention naturally focuses on backups when building a system.
+  id: totrans-28
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 备份首先要做好。如果没有首先备份，你就无法恢复，因此在构建系统时，你的注意力自然会集中在备份上。
+- en: Backups are automated with scripts and jobs. It’s easy to spend time fine-tuning
+    the backup process, often without thinking of it. Five-minute tweaks to your backup
+    process might not seem important, but are you applying the same attention to recovery,
+    day in and day out?
+  id: totrans-29
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 备份是通过脚本和作业自动化的。很容易花时间对备份过程进行微调，通常是不经思考的。对备份过程进行五分钟的微调可能看起来不重要，但是你是否每天都对恢复过程进行同样的关注呢���
+- en: Backups are routine, but recovery is usually a crisis situation.
+  id: totrans-30
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 备份是例行公事，但恢复通常是一种危机情况。
+- en: Security gets in the way. If you’re doing offsite backups, you’re probably encrypting
+    the backup data or taking other measures to protect it. You know how damaging
+    it would be for your data to be compromised, but how damaging is it when nobody
+    can unlock your encrypted volume to recover your data or when you need to extract
+    a single file from a monolithic encrypted file?
+  id: totrans-31
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 安全性成为障碍。如果你正在进行异地备份，你可能正在对备份数据进行加密或采取其他措施来保护数据。你知道如果你的数据被泄露会有多么糟糕，但是当没有人能解锁你的加密卷以恢复数据，或者当你需要从一个庞大的加密文件中提取单个文件时，情况会有多糟糕呢？
+- en: One person can plan, design, and implement backups. That person might not be
+    available when disaster strikes. You need to train several people and plan for
+    coverage, so you’re not asking an unqualified person to recover your data.
+  id: totrans-32
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个人可以规划、设计和实施备份。当灾难发生时，这个人可能不可用。你需要培训几个人并计划覆盖，这样你就不会要求一个不合格的人来恢复你的数据。
+- en: 'There are two Big Important Requirements that are helpful to consider when
+    you’re planning your backup and recovery strategy. These are the *recovery point
+    objective (RPO)* and the *recovery time objective (RTO)*. If you notice, these
+    sound very similar to the SLOs we discussed in [Chapter 2](ch02.html#monitoring_in_a_reliability_engineering).
+    They define how much data you’re comfortable losing and how long you’re comfortable
+    waiting to get it back. Try to answer the following types of questions when defining
+    your RPO and RTO:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在制定备份和恢复策略时，考虑以下两个重要的要求是有帮助的。这些是*恢复点目标（RPO）*和*恢复时间目标（RTO）*。如果你注意到，这些听起来与我们在[第2章](ch02.html#monitoring_in_a_reliability_engineering)中讨论的SLOs非常相似。它们定义了你可以接受丢失多少数据以及你可以等待多长时间才能恢复数据。在定义RPO和RTO时，尝试回答以下类型的问题：
+- en: How much data can you lose without serious consequences? Do you need point-in-time
+    recovery, or is it acceptable to lose whatever work has happened since your last
+    regular backup? Are there legal requirements?
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你可以丢失多少数据而没有严重后果？你需要点对点恢复吗，还是可以接受自上次常规备份以来发生的任何工作丢失？是否有法律要求？
+- en: How fast does recovery have to be? What kind of downtime is acceptable? What
+    impacts (e.g., partial unavailability) can your application and users accept,
+    and how will you build in the capability to continue functioning when those scenarios
+    happen?
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 恢复必须有多快？可以接受多少停机时间？你的应用程序和用户可以接受什么影响（例如部分不可用），以及当这些情况发生时，你将如何构建继续运行的能力？
+- en: What do you need to recover? Common requirements are to recover a whole server,
+    a single database, a single table, or just specific transactions or statements.
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你需要恢复什么？常见的要求是恢复整个服务器、单个数据库、单个表，或者只是特定的事务或语句。
+- en: It’s a good idea to document the answers to these questions, and indeed your
+    entire backup policy, as well as the backup procedures.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最好将这些问题的答案以及整个备份策略以及备份程序记录下来是个好主意。
+- en: Designing a MySQL Backup Solution
+  id: totrans-38
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 设计MySQL备份解决方案
+- en: Backing up MySQL is harder than it looks. At its most basic, a backup is just
+    a copy of the data, but your application’s needs, MySQL’s storage engine architecture,
+    and your system configuration can make it difficult to make a copy of your data.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 备份MySQL比看起来更困难。在最基本的层面上，备份只是数据的副本，但是你的应用程序需求、MySQL的存储引擎架构以及系统配置可能会使得复制数据变得困难。
+- en: 'Before we go into great detail on all of the available options, we want to
+    recommend:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们详细介绍所有可用选项之前，我们想推荐：
+- en: 'Raw backups are practically a must-have for large databases: logical backups
+    are simply too slow and resource intensive, and recovery from a logical backup
+    takes way too long. Snapshot-based backups, Percona XtraBackup, and MySQL Enterprise
+    Backup are the best options. For small databases, logical backups can work nicely.'
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 原始备份对于大型数据库实际上是必不可少的：逻辑备份太慢且资源密集，从逻辑备份中恢复需要太长时间。基于快照的备份、Percona XtraBackup 和
+    MySQL Enterprise Backup 是最佳选择。对于小型数据库，逻辑备份可以很好地工作。
+- en: Keep several backup generations.
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 保留几代备份。
+- en: Extract logical backups (probably from the raw backups) periodically.
+  id: totrans-43
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 定期提取逻辑备份（可能来自原始备份）。
+- en: Keep binary logs for point-in-time recovery. Set `expire_logs_days` long enough
+    to recover from at least two generations of raw backups so that you can create
+    a replica and start it from the running source without applying any binary logs
+    to it. Back up your binary logs independently of the expiry setting, and keep
+    them in the backup long enough to recover from at least the most recent logical
+    backup.
+  id: totrans-44
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 保留二进制日志以进行按时间点的恢复。设置 `expire_logs_days` 足够长，以便从至少两代原始备份中恢复，这样您可以创建一个副本，并从正在运行的源开始，而无需将任何二进制日志应用于其上。独立于到期设置备份您的二进制日志，并将其保留在备份中足够长的时间，以便从至少最近的逻辑备份中恢复。
+- en: Monitor your backups and backup processes independently from the backup tools
+    themselves. You need external verification that they’re OK.
+  id: totrans-45
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 监控备份和备份过程，独立于备份工具本身。您需要外部验证它们是否正常。
+- en: Test your backups and recovery process by going through the entire recovery
+    process. Measure the resources needed for recovery (CPU, disk space, wall-clock
+    time, network bandwidth, etc.).
+  id: totrans-46
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过完整的恢复过程测试您的备份和恢复过程。测量恢复所需的资源（CPU、磁盘空间、挂钟时间、网络带宽等）。
+- en: Think hard about security. What happens if someone compromises your server—can
+    they then get access to the backup server too, or vice versa?
+  id: totrans-47
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 认真考虑安全性。如果有人入侵了您的服务器，他们是否可以访问备份服务器，反之亦然？
+- en: Knowing your RPO and RTO will guide your backup strategy. Do you need point-in-time
+    recovery capability, or is it enough to recover to last night’s backup and lose
+    whatever work has been done since then? If you need point-in-time recovery, you
+    can probably make a regular backup and ensure that the binary log is enabled,
+    so you can restore that backup and recover to the desired point by replaying the
+    binary log.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 了解您的 RPO 和 RTO 将指导您的备份策略。您是否需要按时间点恢复能力，或者仅恢复到昨晚的备份并丢失自那时以来所做的任何工作？如果需要按时间点恢复，您可能可以定期进行备份并确保启用了二进制日志，以便通过重放二进制日志来恢复到所需点。
+- en: Generally, the more you can afford to lose, the easier it is to do backups.
+    If you have very strict requirements, it’s harder to ensure you can recover everything.
+    There are also different flavors of point-in-time recovery. A “soft” point-in-time
+    recovery requirement means you’d like to be able to re-create your data so that
+    it’s “close enough” to where it was when the problem happened. A “hard” requirement
+    means you can never tolerate the loss of a committed transaction, even if something
+    terrible happens (such as the server catching fire). This requires special techniques,
+    such as keeping your binary log on a separate SAN volume or using Distributed
+    Replicated Block Device (DRBD) disk replication.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，您可以承受的损失越多，备份就越容易。如果您有非常严格的要求，确保您可以恢复所有内容就更加困难。还有不同类型的按时间点恢复。"软"按时间点恢复要求意味着您希望能够重新创建数据，使其与问题发生时的位置“足够接近”。"硬"要求意味着您永远不能容忍已提交事务的丢失，即使发生了可怕的事情（比如服务器着火）。这需要特殊技术，例如将二进制日志保存在单独的
+    SAN 卷上或使用分布式复制块设备（DRBD）磁盘复��。
+- en: Online or Offline Backups?
+  id: totrans-50
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 在线还是离线备份？
+- en: If you can get away with it, shutting down MySQL to make a backup is the easiest,
+    safest, and overall best way to get a consistent copy of the data with minimal
+    risk of corruption or inconsistency. If you shut down MySQL, you can copy the
+    data without any complications from things like dirty buffers in the InnoDB buffer
+    pool or other caches. You don’t need to worry about your data being modified while
+    you’re trying to back it up, and because the server isn’t under load from the
+    application, you can make the backup more quickly.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果可以的话，关闭 MySQL 来进行备份是获得一致数据副本的最简单、最安全和最佳方式，最小化数据损坏或不一致性的风险。如果关闭 MySQL，您可以在没有来自
+    InnoDB 缓冲池或其他缓存中的脏缓冲区等问题的情况下复制数据。您不需要担心在备份数据时数据被修改，因为服务器不会受到应用程序的负载影响，您可以更快地进行备份。
+- en: However, taking a server offline is more expensive than it might seem. As a
+    result, you’ll almost certainly need to design your backups so that they don’t
+    require the production server to be taken offline. Depending on your consistency
+    requirements, though, making a backup while the server is online can still mean
+    interrupting service significantly.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，将服务器下线的成本可能比看起来要高。因此，您几乎肯定需要设计备份，以便不需要将生产服务器下线。但根据您的一致性要求，即使在服务器在线时进行备份也可能会显著中断服务。
+- en: 'Here are some performance-related factors to consider when you’re planning
+    backups:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在计划备份时，以下是一些与性能相关的因素需要考虑：
+- en: Backup time
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 备份时间
+- en: How long does it take to make the backup and copy the backup to the destination?
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 制作备份和将备份复制到目的地需要多长时间？
+- en: Backup load
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 备份负载
+- en: How much does copying the backup to the destination affect the server’s performance?
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将备份复制到目的地会对服务器的性能产生多大影响？
+- en: Recovery time
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 恢复时间
+- en: How long does it take to copy your backup image from its storage location to
+    the MySQL server, replay binary logs, and so on?
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从存储位置复制备份镜像到 MySQL 服务器，重放二进制日志等需要多长时间？
+- en: The biggest trade-off is backup time versus backup load. You can often improve
+    one at the other’s expense; for example, you can prioritize the backup at the
+    expense of causing more performance degradation on the server.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最大的权衡是备份时间与备份负载。通常您可以在其中一个方面改进另一个方面；例如，您可以优先考虑备份，以牺牲服务器性能降低。
+- en: 'You can also design your backups to take advantage of load patterns. For instance,
+    if your server is only 50% loaded for eight hours during the night, you can try
+    to design your backups to load the server less than 50% and still complete within
+    eight hours. You can accomplish this in many ways: for example, you can use *ionice*
+    and *nice* to prioritize the copy or compression operations, use different compression
+    levels, or compress the data on the backup server instead of the MySQL server.
+    You can also use *lzo* or *pigz* for faster compression. You can use `O_DIRECT`
+    or `fadvise()` to bypass the operating system’s cache for the copy operations,
+    so they don’t pollute the server’s caches. Tools such as Percona XtraBackup and
+    MySQL Enterprise Backup also have throttling options, and you can use *pv* with
+    the `--rate-limit` option to limit the throughput of scripts you write yourself.'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以设计备份以利用负载模式。例如，如果您的服务器在夜间的八小时内只有 50% 的负载，您可以尝试设计备份以使服务器的负载低于 50%，并且仍然在八小时内完成。您可以通过许多方式实现这一点：例如，您可以使用
+    *ionice* 和 *nice* 来优先处理复制或压缩操作，使用不同的压缩级别，或者在备份服务器上压缩数据而不是在 MySQL 服务器上压缩。您还可以使用
+    *lzo* 或 *pigz* 进行更快的压缩。您可以使用 `O_DIRECT` 或 `fadvise()` 来绕过操作系统的缓存进行复制操作，以便它们不会污染服务器的缓存。像
+    Percona XtraBackup 和 MySQL Enterprise Backup 这样的工具还具有限速选项，您可以使用 *pv* 和 `--rate-limit`
+    选项来限制您自己编写的脚本的吞吐量。
+- en: Logical or Raw Backups?
+  id: totrans-62
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 逻辑备份还是原始备份？
+- en: 'As mentioned earlier, there are two major ways to back up MySQL’s data: with
+    a *logical backup* (also called a *dump*) and by copying the *raw files*. A logical
+    backup contains the data in a form that MySQL can interpret either as SQL or as
+    delimited text.^([2](ch10.html#ch01fn69)) The raw files are the files as they
+    exist on disk.'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，有两种主要方法可以备份 MySQL 的数据：使用 *逻辑备份*（也称为 *转储*）和通过复制 *原始文件*。逻辑备份包含 MySQL 可以解释的数据形式，可以是
+    SQL 或分隔文本。^([2](ch10.html#ch01fn69)) 原始文件是磁盘上存在的文件。
+- en: Each type of backup has advantages and disadvantages.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每种类型的备份都有优点和缺点。
+- en: Logical backups
+  id: totrans-65
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 逻辑备份
+- en: 'Logical backups have the following advantages:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 逻辑备份具有以下优点：
+- en: They’re normal files you can manipulate and inspect with editors and command-line
+    tools such as *grep* and *sed*. This can be very helpful when restoring data or
+    when you just want to inspect the data without restoring.
+  id: totrans-67
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它们是您可以使用编辑器和命令行工具（如 *grep* 和 *sed*）操纵和检查的普通文件。这在恢复数据或仅想检查数据而不进行恢复时非常有帮助。
+- en: They’re simple to restore. You can just pipe them into *mysql* or use *mysqlimport*.
+  id: totrans-68
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它们很容易恢复。您可以将它们导入 *mysql* 或使用 *mysqlimport*。
+- en: You can back up and restore across the network—that is, on a different machine
+    from the MySQL host.
+  id: totrans-69
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以通过网络进行备份和恢复——也就是说，在与 MySQL 主机不同的机器上。
+- en: They can work for cloud-based MySQL systems, where you have no access to the
+    underlying filesystem.
+  id: totrans-70
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它们可以用于基于云的 MySQL 系统，您无法访问底层文件系统。
+- en: They can be very flexible because *mysqldump—*the tool most people prefer to
+    use to make them—can accept lots of options, such as a `WHERE` clause to restrict
+    which rows are backed up.
+  id: totrans-71
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它们可以非常灵活，因为大多数人喜欢使用的工具 *mysqldump* 可以接受许多选项，例如 `WHERE` 子句来限制备份哪些行。
+- en: They’re independent of the storage engine. Because you create them by extracting
+    data from the MySQL server, they abstract away differences in the underlying data
+    storage.^([3](ch10.html#ch01fn70))
+  id: totrans-72
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它们与存储引擎无关。因为您通过从 MySQL 服务器提取数据来创建它们，它们抽象了底层数据存储的差异。^([3](ch10.html#ch01fn70))
+- en: They can help avoid data corruption. If your disk drives are failing and you
+    copy the raw files, you’ll get an error and/or make a partial or corrupt backup,
+    and unless you check the backup, you won’t notice it and it’ll be unusable later.
+    If the data MySQL has in memory is not corrupt, you can sometimes get a trustworthy
+    logical backup when you can’t get a good raw file copy.
+  id: totrans-73
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它们可以帮助避免数据损坏。如果您的磁盘驱动器出现故障并复制原始文件，您将收到错误消息和/或生成部分或损坏的备份，除非您检查备份，否则您不会注意到它，以后将无法使用。如果
+    MySQL 在内存中的数据没有损坏，有时在无法获得良好的原始文件副本时，您可以获得可信赖的逻辑备份。
+- en: 'Logical backups have their shortcomings, though:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 逻辑备份也有其缺点：
+- en: The server has to do the work of generating them, so they use more CPU cycles.
+  id: totrans-75
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 服务器必须执行生成它们的工作，因此它们使用更多的 CPU 周期。
+- en: Logical backups can be bigger than the underlying files in some cases.^([4](ch10.html#ch01fn71))
+    The ASCII representation of the data isn’t always as efficient as the way the
+    storage engine stores the data. For example, an integer requires 4 bytes to store,
+    but when written in ASCII, it can require up to 12 characters. You can often compress
+    the files effectively and get a smaller backup, but this uses more CPU resources,
+    resulting in a longer recovery time. (Logical backups are typically smaller than
+    raw backups if there are a lot of indexes.)
+  id: totrans-76
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在某些情况下，逻辑备份可能比底层文件更大。^([4](ch10.html#ch01fn71)) 数据的 ASCII 表示并不总是与存储引擎存储数据的方式一样高效。例如，整数需要
+    4 个字节来存储，但在 ASCII 中写入时，可能需要多达 12 个字符。您通常可以有效地压缩文件并获得更小的备份，但这会使用更多的 CPU 资源，导致恢复时间更长。（如果有很多索引，逻辑备份通常比原始备份小。）
+- en: Dumping and restoring your data isn’t always guaranteed to result in the same
+    data. Floating-point representation problems, bugs, and so on can cause trouble,
+    though this is rare.
+  id: totrans-77
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不总是保证将数据转储和恢复为相同的数据。浮点表示问题、错误等可能会导致问题，尽管这很少见。
+- en: Restoring from a logical backup requires MySQL to load and interpret the statements,
+    convert them to the storage format, and rebuild indexes, all of which is very
+    slow.
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从逻辑备份中恢复需要 MySQL 加载和解释语句，将其转换为存储格式，并重建索引，所有这些都非常慢。
+- en: The biggest disadvantages are really the cost of dumping the data from MySQL
+    and the cost of loading data back in via SQL statements. If you use logical backups,
+    it is essential to test the time required for restoring the data.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最大的缺点实际上是从 MySQL 中导出数据的成本以及通过 SQL 语句加载数据的成本。如果使用逻辑备份，测试恢复数据所需的时间是至关重要的。
+- en: Raw backups
+  id: totrans-80
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 原始备份
+- en: 'Raw backups have the following benefits:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 原始备份具有以下优点：
+- en: Raw file backups simply require you to copy the desired files somewhere else
+    for backup. The raw files don’t require any extra work to generate.
+  id: totrans-82
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 原始文件备份只需要将所需文件复制到其他位置进行备份。这些原始文件不需要额外的工作来生成。
+- en: Raw backups are very portable across platforms, operating systems, and MySQL
+    versions. (Logical dumps are, too. We’re simply pointing this out to alleviate
+    any concerns you might have.)
+  id: totrans-83
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 原始备份在各种平台、操作系统和 MySQL 版本之间非常易于移植。（逻辑转储也是如此。我们只是指出这一点以减轻你可能担心的任何问题。）
+- en: It can be faster to restore raw backups because the MySQL server doesn’t have
+    to execute any SQL or build indexes. If you have InnoDB tables that don’t fit
+    entirely in the server’s memory, it can be much faster to restore raw files—an
+    order of magnitude or more. In fact, one of the scariest things about logical
+    backups is their unpredictable restore time.
+  id: totrans-84
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 恢复原始备份可能更快，因为 MySQL 服务器不需要执行任何 SQL 或构建索引。如果你有 InnoDB 表，而这些表完全不适合服务器的内存，那么恢复原始文件可能会快得多——相差一个数量级或更多。事实上，逻辑备份最可怕的一点是其不可预测的恢复时间。
+- en: 'Here are some disadvantages of raw backups:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是原始备份的一些缺点：
+- en: InnoDB’s raw files are often far larger than the corresponding logical backups.
+    The InnoDB tablespace typically has lots of unused space. Quite a bit of space
+    is also used for purposes other than storing table data (the insert buffer, the
+    rollback segment, etc.).
+  id: totrans-86
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: InnoDB 的原始文件通常比相应的逻辑备份要大得多。InnoDB 表空间通常有大量未使用的空间。还有相当多的空间用于存储表数据以外的其他目的（插入缓冲区，回滚段等）。
+- en: Raw backups are not always portable across platforms, operating systems, and
+    MySQL versions. Filename case sensitivity and floating-point formats are places
+    where you might encounter trouble. You might not be able to move files to a system
+    whose floating-point format is different (however, the vast majority of processors
+    use the IEEE floating-point format).
+  id: totrans-87
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 原始备份并非总��在各种平台、操作系统和 MySQL 版本之间易于移植。文件名大小写敏感性和浮点格式是可能遇到问题的地方。你可能无法将文件移动到浮点格式不同的系统（然而，绝大多数处理器使用
+    IEEE 浮点格式）。
+- en: Raw backups are generally easier and much more efficient.^([5](ch10.html#ch01fn72))
+    You should not rely on raw backups for long-term retention or legal requirements,
+    though; you must make logical backups at least periodically.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 原始备份通常更容易且更高效。^([5](ch10.html#ch01fn72)) 但是，你不应该依赖原始备份来满足长期保留或法律要求，你必须至少定期进行逻辑备份。
+- en: Don’t consider a backup (especially a raw backup) to be good until you’ve tested
+    it. For InnoDB, that means starting a MySQL instance and letting InnoDB recovery
+    run, then running `CHECK TABLES`. You can skip this or just run *innochecksum*
+    on the files, but we don’t recommend it.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在测试备份之前，不要认为备份（尤其是原始备份）是好的。对于 InnoDB，这意味着启动一个 MySQL 实例并让 InnoDB 恢复运行，然后运行 `CHECK
+    TABLES`。你可以跳过这一步，或者只对文件运行 *innochecksum*，但我们不建议这样做。
+- en: 'We suggest a blend of the two approaches: make raw copies, then start a MySQL
+    server instance with the resulting data and run *mysqlcheck*. Then, at least periodically,
+    dump the data with *mysqldump* to get a logical backup. This gives you the advantages
+    of both approaches without unduly burdening the production server during the dump.
+    It’s especially convenient if you have the ability to take filesystem snapshots:
+    you can take a snapshot, copy the snapshot to another server and release it, then
+    test the raw files and perform a logical backup.'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们建议两种方法的结合：制作原始副本，然后启动一个 MySQL 服务器实例并运行 *mysqlcheck*。然后，至少定期使用 *mysqldump*
+    将数据转储以获得逻辑备份。这样可以在转储过程中不给生产服务器带来过多负担，同时又能兼顾两种方法的优势。如果你有能力进行文件系统快照，这将特别方便：你可以拍摄快照，将快照复制到另一台服务器并释放它，然后测试原始文件并执行逻辑备份。
+- en: What to Back Up
+  id: totrans-91
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 需要备份什么
+- en: 'Your recovery requirements will dictate what you need to back up. The simplest
+    strategy is to just back up your data and table definitions, but this is a bare-minimum
+    approach. You generally need a lot more to recover a server for use in production.
+    Here are some things you might consider including with your MySQL backups:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你的恢复需求将决定你需要备份什么。最简单的策略就是只备份数据和表定义，但这是一种最基本的方法。通常情况下，你需要更多内容来恢复一个用于生产的服务器。以下是一些你可能考虑与
+    MySQL 备份一起包括的内容：
+- en: Nonobvious data
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 非明显的数据
+- en: 'Don’t forget data that’s easy to overlook: your binary logs and InnoDB transaction
+    logs, for example. Ideally, you should back up the entire data directory for MySQL
+    together.'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不要忘记容易忽视的数据：例如你的二进制日志和 InnoDB 事务日志。理想情况下，你应该一起备份整个 MySQL 的数据目录。
+- en: Code
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 代码
+- en: A modern MySQL server can store a lot of code, such as triggers and stored procedures.
+    If you back up the `mysql` database, you’ll back up much of this code, but then
+    it will be hard to restore a single database in its entirety because some of the
+    “data” in that database, such as stored procedures, will actually be stored in
+    the `mysql` database.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现代的 MySQL 服务器可以存储大量代码，如触发器和存储过程。如果备份 `mysql` 数据库，你将备份大部分代码，但随后要完全恢复单个数据库将会很困难，因为该数据库中的一些“数据”，如存储过程，实际上将存储在
+    `mysql` 数据库中。
+- en: Server configuration
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务器配置
+- en: If you have to recover from a real disaster—say you’re building a server from
+    scratch in a new data center after an earthquake—you’ll appreciate having the
+    server’s configuration files included in the backup.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你必须从真正的灾难中恢复——比如在地震后在新数据中心从头开始构建服务器——你会感激备份中包含了服务器的配置文件。
+- en: Selected operating system files
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择的操作系统文件
+- en: As with the server configuration, it’s important to back up any external configuration
+    that is essential to a production server. On a Unix server, this might include
+    your *cron* jobs, user and group configurations, administrative scripts, and *sudo*
+    rules.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与服务器配置一样，重要的是备份任何对生产服务器至关重要的外部配置。在Unix服务器上，这可能包括你的*cron*作业、用户和组配置、管理脚本和*sudo*规则。
+- en: These recommendations quickly translate into “back up everything” in many scenarios.
+    If you have a lot of data, however, this can get expensive, and you might have
+    to be smarter about how you do your backups. In particular, you might want to
+    back up different data into different backups. For example, you can back up data,
+    binary logs, and operating system and system configuration files separately.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在许多情况下，这些建议很快就会转化为“备份所有内容”。然而，如果你有大量数据，这可能会变得很昂贵，你可能需要更聪明地进行备份。特别是，你可能希望将不同的数据备份到不同的备份中。例如，你可以将数据、二进制日志以及操作系统和系统配置文件分开备份。
+- en: Incremental and Differential Backups
+  id: totrans-102
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 增量备份和差异备份
+- en: 'A common strategy for dealing with too much data is to do regular incremental
+    or differential backups. The difference might be a little confusing, so let’s
+    clarify the terms: a *differential backup* is a backup of everything that has
+    changed since the last full backup, whereas an *incremental backup* contains everything
+    that has changed since the last backup of any type.'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 处理过多数据的常见策略是定期进行增量或差异备份。差异可能有点令人困惑，所以让我们澄清一下术语：*差异备份*是自上次完全备份以来发生变化的所有内容的备份，而*增量备份*包含自上次任何类型备份以来发生变化的所有内容。
+- en: 'For example, suppose that you do a full backup every Sunday. On Monday, you
+    do a differential backup of everything that has changed since Sunday. On Tuesday,
+    you have two choices: you can back up everything that’s changed since Sunday (differential),
+    or you can back up only the data that has changed since Monday’s backup (incremental).'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设你每周日进行完全备份。周一，你可以备份自周日以来发生变化的所有内容。周二，你有两个选择：你可以备份自周日以来发生变化的所有内容（差异备份），或者你可以仅备份自周一备份以来发生变化的数据（增量备份）。
+- en: 'Both differential and incremental backups are partial backups: they generally
+    don’t contain a full data set, because some data almost certainly hasn’t changed.
+    Partial backups are often desirable for their savings in overhead on the server,
+    backup time, and backup space. Some partial backups don’t really reduce the overhead
+    on the server, though. Percona XtraBackup and MySQL Enterprise Backup, for example,
+    still scan every block of data on the server, so they don’t save a lot of overhead,
+    although they do save a bit of wall-clock time, lots of CPU time for compression,
+    and, of course, disk space.^([6](ch10.html#ch01fn73))'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 差异备份和增量备份都是部分备份：它们通常不包含完整的数据集，因为某些数据几乎肯定没有发生变化。部分备份通常受欢迎，因为它们在服务器的开销、备份时间和备份空间上节省了开销。然而，有些部分备份实际上并没有减少服务器的开销。例如，Percona
+    XtraBackup和MySQL Enterprise Backup仍然会扫描服务器上的每个数据块，因此它们并没有节省很多开销，尽管它们确实节省了一些挂钟时间、大量用于压缩的CPU时间，当然还有磁盘空间。^([6](ch10.html#ch01fn73))
+- en: You can get pretty fancy with advanced backup techniques, but the more complex
+    your solution is, the more risky it’s likely to be. Beware of hidden dangers,
+    such as multiple generations of backups that are tightly coupled to one another,
+    because if one generation contains corruption, it can invalidate all of the others,
+    too.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以使用高级备份技术变得相当复杂，但是你的解决方案越复杂，风险就越大。要注意隐藏的危险，比如多代备份彼此紧密耦合，因为如果一个代包含损坏，它也可能使所有其他代无效。
+- en: 'Here are some advanced backup ideas:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是一些高级备份想法：
+- en: Use the incremental backup features of Percona XtraBackup or MySQL Enterprise
+    Backup.
+  id: totrans-108
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用Percona XtraBackup或MySQL Enterprise Backup的增量备份功能。
+- en: Back up your binary logs. You can also use `FLUSH LOGS` to begin a new binary
+    log after each backup, then back up only new binary logs.
+  id: totrans-109
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 备份你的二进制日志。你也可以使用`FLUSH LOGS`在每次备份后开始一个新的二进制日志，然后仅备份新的二进制日志。
+- en: If you have “lookup” tables that contain data such as lists of month names in
+    various languages or abbreviations for states or regions, it can be a good idea
+    to place them into a separate database, so you don’t have to back them up all
+    the time. An even better option would be to move these to code instead of a database.
+  id: totrans-110
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果你有包含各种语言的月份名称列表或州或地区缩写等数据的“查找”表，将它们放入单独的数据库中可能是个好主意，这样你就不必一直备份它们。一个更好的选择是将这些数据移到代码中而不是数据库中。
+- en: Don’t back up rows that haven’t changed. If a table is `INSERT`-only, such as
+    a table that logs hits to a web page, you can add a `TIMESTAMP` column and back
+    up only rows that have been inserted since the last backup. This works best in
+    conjunction with *mysqldump*.
+  id: totrans-111
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不要备份未更改的行。如果一个表只能进行`INSERT`操作，比如记录网页点击的表，你可以添加一个`TIMESTAMP`列，仅备份自上次备份以来插入的行。这与*mysqldump*结合使用效果最佳。
+- en: Don’t back up some data at all. Sometimes this makes a lot of sense—for example,
+    if you have a data warehouse that’s built from other data and is technically redundant,
+    you can merely back up the data you used to build the warehouse instead of the
+    data warehouse itself. This can be a good idea even if it’s very slow to “recover”
+    by rebuilding the warehouse from the original files. Avoiding the backups can
+    add up over time to much greater savings than the potentially faster recovery
+    time you’ll gain by having a full backup. You can also opt not to back up some
+    temporary data, such as tables that hold website session data.
+  id: totrans-112
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不要完全备份某些数据。有时这是很有道理的，例如，如果你有一个从其他数据构建而成且在技术上是冗余的数据仓库，你可以仅备份用于构建数据仓库的数据，而不是数据仓库本身。即使通过从原始文件重新构建数据仓库来“恢复”非常慢，这也可能是一个好主意。随着时间的推移，避免备份可能会带来比通过完全备份获得的潜在更快的恢复时间更大的节省。你也可以选择不备份一些临时数据，比如保存网站会话数据的表。
+- en: Back up everything, but send it to a destination that has data deduplication
+    features, such as a ZFS filer.
+  id: totrans-113
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 备份所有内容，但将其发送到具有数据重复功能的目的地，例如ZFS文件系统。
+- en: The drawbacks of incremental backups include increased recovery complexity,
+    increased risk, and a longer recovery time. If you can do full backups, we suggest
+    that you do so for simplicity’s sake.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 增量备份的缺点包括增加的恢复复杂性、增加的风险和更长的恢复时间。如果可以进行完整备份，我们建议出于简单起见这样做。
+- en: Regardless, you definitely need to do full backups occasionally; we suggest
+    at least weekly. You can’t expect to recover from a month’s worth of incremental
+    backups. Even a week is a lot of work and risk.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论如何，您肯定需要定期进行完整备份；我们建议至少每周一次。您不能指望从一个月的增量备份中恢复。即使一周也是很多工作和风险。
+- en: Replication
+  id: totrans-116
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 复制
+- en: The biggest advantage to backing up from a replica is that it doesn’t interrupt
+    the source or place extra load on it. This is a good reason to set up a replica
+    server, even if you don’t need it for load balancing or high availability. If
+    money is a concern, you can always use the backup replica for other purposes,
+    such as reporting—as long as you don’t write to it and thus change the data you’re
+    trying to back up. The replica doesn’t have to be dedicated to backups; it just
+    has to be able to catch up to the source in time to make your next backup in the
+    event that its other roles make it fall behind in replication at times.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从副本进行备份的最大优势是不会中断源端或给其增加额外负载。这是建立副本服务器的一个很好的理由，即使您不需要它进行负载平衡或高可用性。如果资金是一个问题，您总是可以将备份副本用于其他用途，例如报告——只要您不对其进行写入，从而更改您试图备份的数据。副本不必专门用于备份；它只需要能够及时赶上源端，以便在其其他角色使其在复制方面有时落后时进行下一次备份。
+- en: When you make a backup from a replica, it’s very wise to use GTIDs, as mentioned
+    in [Chapter 9](ch09.html#replication-id000008). This avoids having to save all
+    the information about the replication processes, such as the replica’s position
+    relative to the source. This is useful for cloning new replicas, reapplying binary
+    logs to the source to get point-in-time recovery, promoting the replica to a source,
+    and more. Also be sure that no temporary tables are open if you stop your replica
+    because they might keep you from restarting replication.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您从副本进行备份时，使用GTIDs是非常明智的，如[第9章](ch09.html#replication-id000008)中所述。这样可以避免保存有关复制过程的所有信息，例如副本相对于源端的位置。这对于克隆新副本、重新应用二进制日志以进行时间点恢复、将副本提升为源端等非常有用。还要确保在停止副本时没有打开临时表，因为它们可能会阻止您重新启动复制。
+- en: As we mentioned in [“Delayed Replication”](ch09.html#delayed_replication) in
+    [Chapter 9](ch09.html#replication-id000008), intentionally delaying replication
+    on one of your replicas can be very useful for recovering from some disaster scenarios.
+    Suppose you delay replication by an hour. If an unwanted statement runs on the
+    source, you have an hour to notice it and stop the replica before it repeats the
+    event from its relay log. You can then promote the replica to source and replay
+    some relatively small number of log events, skipping the bad statements. This
+    can be much faster than the point-in-time recovery technique we discuss later.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在[“延迟复制”](ch09.html#delayed_replication)中提到的，在[第9章](ch09.html#replication-id000008)中，有意延迟其中一个副本的复制对于从某���灾难场景中恢复非常有用。假设您将复制延迟了一个小时。如果源端运行了一个不需要的语句，您有一个小时的时间来注意到它并在副本重复其中继日志中的事件之前停止副本。然后，您可以将副本提升为源端，并重放一些相对较少的日志事件，跳过不良语句。这比我们稍后讨论的时间点恢复技术要快得多。
+- en: Note
+  id: totrans-120
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The replica might not have the same data as the source. Many people assume replicas
+    are exact copies of their source, but in our experience, data mismatches on replicas
+    are common, and MySQL has no way to detect this problem. The only way to detect
+    it is with a tool like Percona Toolkit’s *pt-table-checksum*. The best way to
+    prevent this is to use the `super_read_only` flag to ensure that only replication
+    can write to replicas.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 副本可能与源端的数据不同。许多人认为副本是其源端的精确副本，但根据我们的经验，副本上的数据不匹配是常见的，MySQL没有办法检测到这个问题。唯一检测它的方法是使用像Percona
+    Toolkit的*pt-table-checksum*这样的工具。预防这种情况的最佳方法是使用`super_read_only`标志，以确保只有复制可以写入副本。
+- en: Having a replicated copy of your data might help protect you from problems like
+    disk meltdowns on the source, but there’s no guarantee. Replication is *not* a
+    backup.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 拥有数据的复制副本可能有助于保护您免受源端磁盘崩溃等问题的影响，但并不保证。复制*不是*备份。
+- en: Managing and Backing Up Binary Logs
+  id: totrans-123
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 管理和备份二进制日志
+- en: Your server’s binary logs are one of the most important things you can back
+    up. They are necessary for point-in-time recovery, and because they’re usually
+    smaller than your data, they’re easier to back up frequently. If you have a backup
+    of your data at some point and all the binary logs since then, you can replay
+    the binary logs and “roll forward” changes made since the last full backup.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务器的二进制日志是您可以备份的最重要的东西之一。它们对于时间点恢复是必要的，而且由于它们通常比您的数据小，因此更容易频繁备份。如果您在某个时间点备份了数据并备份了那时以来的所有二进制日志，您可以重放二进制日志并“向前滚动”自上次完整备份以来所做的更改。
+- en: MySQL uses the binary log for replication, too. That means that your backup
+    and recovery policy often interacts with your replication configuration. It’s
+    a good idea to back up binary logs frequently. If you can’t afford to lose more
+    than 30 minutes’ worth of data, back them up at least every 30 minutes.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL也使用二进制日志进行复制。这意味着您的备份和恢复策略通常会与您的复制配置互动。频繁备份二进制日志是一个好主意。如果您不能承受丢失超过30分钟数据的情况，至少每30分钟备份一次。
+- en: You’ll need to decide on a log-expiration policy to keep MySQL from filling
+    your disk with binary logs. How large your logs grow depends on your workload
+    and the logging format (row-based logging results in larger log entries). We suggest
+    you keep logs as long as they’re useful, if possible. Keeping them is helpful
+    for setting up replicas, analyzing your server’s workload, auditing, and point-in-time
+    recovery from your last full backup. Consider all of these needs when you decide
+    how long you want to keep your logs.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要决定一个日志过期策略，以防止 MySQL 用二进制日志填满您的磁盘。您的日志增长多大取决于您的工作负载和日志格式（基于行的日志记录导致日志条目较大）。我们建议您尽可能保留有用的日志。保留它们有助于设置副本、分析服务器的工作负载、审计以及从上次完整备份进行时点恢复。在决定要保留日志多长时间时，请考虑所有这些需求。
+- en: A common setup is to use the `binlog_expire_logs_seconds` variable to tell MySQL
+    to purge logs after a while. You should not remove these files by hand.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个常见的设置是使用`binlog_expire_logs_seconds`变量告诉 MySQL 在一段时间后清除日志。不应手动删除这些文件。
+- en: The `binlog_expire_logs_seconds` setting takes effect upon server startup or
+    when MySQL rotates the binary log, so if your binary log never fills up and rotates,
+    the server will not purge older entries. It decides which files to purge by looking
+    at their modification times, not their contents.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`binlog_expire_logs_seconds` 设置在服务器启动时或 MySQL 旋转二进制日志时生效，因此如果您的二进制日志从未填满并旋转，服务器将不会清除旧条目。它通过查看文件的修改时间而不是内容来决定要清除哪些文件。'
+- en: Backup and Recovery Tools
+  id: totrans-129
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 备份和恢复工具
+- en: A variety of good and not-so-good backup tools are available. For raw backups,
+    we recommend Percona XtraBackup. It’s open source, widely used, and well documented.
+    For logical backups, we prefer *mydumper*. Although *mysqldump* ships with MySQL,
+    its single-threaded nature can make for some very long backup and restore times
+    out of the box. *mydumper* has parallelism built in, which can make it much faster
+    to get a logical backup.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有各种好坏不一的备份工具可用。对于原始备份，我们推荐使用 Percona XtraBackup。它是开源的、被广泛使用的，并且有很好的文档。对于逻辑备份，我们更喜欢*mydumper*。虽然*mysqldump*随
+    MySQL 提供，但其单线程性质可能导致初始备份和恢复时间非常长。*mydumper*内置了并行性，这可以使逻辑备份速度更快。
+- en: MySQL Enterprise Backup
+  id: totrans-131
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: MySQL Enterprise Backup
+- en: This tool is part of a MySQL Enterprise subscription from Oracle. Using it does
+    not require stopping MySQL, setting locks, or interrupting normal database activity
+    (although it will cause some extra load on your server). It supports features
+    like compressed backups, incremental backups, and streaming backups to another
+    server. It is the “official” backup tool for MySQL.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个工具是 Oracle 的 MySQL Enterprise 订阅的一部分。使用它不需要停止 MySQL、设��锁定或中断正常的数据库活动（尽管它会在服务器上造成一些额外的负载）。它支持压缩备份、增量备份和流式备份到另一台服务器。这是
+    MySQL 的“官方”备份工具。
+- en: Percona XtraBackup
+  id: totrans-133
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Percona XtraBackup
+- en: Percona XtraBackup is quite similar to MySQL Enterprise Backup in many ways,
+    but it’s open source and free. It supports features like streaming, incremental,
+    compressed, and multithreaded (parallel) backup operations. It also has a variety
+    of special features to reduce the impact of backups on heavily loaded systems.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Percona XtraBackup 在许多方面与 MySQL Enterprise Backup 非常相似，但它是开源且免费的。它支持流式传输、增量、压缩和多线程（并行）备份操作。它还具有各种特殊功能，以减少备份对负载较重系统的影响。
+- en: Percona XtraBackup works by “tailing” the InnoDB logfiles in a background thread,
+    then copying the InnoDB datafiles. This is a slightly involved process, with special
+    checks to ensure that data is copied consistently. When all the datafiles are
+    copied, the log-copying thread finishes, too. The result is a copy of all the
+    data but at different points in time. The logs can now be applied to the datafiles,
+    using InnoDB’s crash recovery routines, to bring all of the datafiles into a consistent
+    state. This is referred to as the *prepare* process. Once prepared, the backup
+    is fully consistent and contains all committed transactions as of the ending point
+    of the file-copy process. All of this happens completely externally to MySQL,
+    so it doesn’t need to connect to or access MySQL in any way.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Percona XtraBackup 通过在后台线程中“尾随” InnoDB 日志文件，然后复制 InnoDB 数据文件来工作。这是一个稍微复杂的过程，具有特殊的检查以确保数据一致性。当所有数据文件都被复制时，日志复制线程也会完成。结果是所有数据的副本，但在不同的时间点。现在可以将日志应用于数据文件，使用
+    InnoDB 的崩溃恢复例程，将所有数据文件带入一致状态。这被称为*准备*过程。一旦准备就绪，备份就完全一致，并包含文件复制过程结束时的所有已提交事务。所有这些都完全在
+    MySQL 外部发生，因此它不需要以任何方式连接或访问 MySQL。
+- en: mydumper
+  id: totrans-136
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: mydumper
+- en: Several current and former MySQL engineers created [*mydumper*](https://oreil.ly/i3AXj)
+    as a replacement for *mysqldump*, based on their years of experience. It is a
+    multithreaded (parallel) backup and restore tool set for MySQL with a lot of nice
+    features. Many people will probably find the speed of multithreaded backups and
+    restores to be this tool’s most attractive feature.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 几位现任和前任 MySQL 工程师根据多年经验创建了[*mydumper*](https://oreil.ly/i3AXj)作为*mysqldump*的替代品。这是一个为
+    MySQL 设计的多线程（并行）备份和恢复工具集，具有许多出色的功能。许多人可能会发现多线程备份和恢复的速度是这个工具最吸引人的特点。
+- en: mysqldump
+  id: totrans-138
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: mysqldump
+- en: Most people use the programs that ship with MySQL, so despite its shortcomings,
+    the most common choice for creating logical backups of data and schemas is *mysqldump*.
+    Refer to the official manual for details on how to use this tool.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数人使用随 MySQL 一起提供的程序，因此尽管存在缺点，创建数据和模式的逻辑备份的最常见选择是*mysqldump*。有关如何使用此工具的详细信息，请参考官方手册。
+- en: Backing Up Data
+  id: totrans-140
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据备份
+- en: As with most things, there are better and worse ways to actually make a backup—and
+    the obvious ways are sometimes not so good. The trick is to maximize your network,
+    disk, and CPU capacity to make backups as fast as possible. This is a balancing
+    act, and you’ll have to experiment to find the “sweet spot.”
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与大多数事物一样，实际进行备份有更好和更糟糕的方法，而明显的方法有时并不那么好。关键是最大限度地利用网络、磁盘和 CPU 容量，使备份尽可能快速。这是一个平衡的过程，您将不得不进行实验以找到“最佳点”。
+- en: Logical SQL Backups
+  id: totrans-142
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 逻辑 SQL 备份
+- en: 'Logical SQL dumps are what most people are familiar with because they’re what
+    *mysqldump* creates by default. For example, dumping a small table with the default
+    options will produce the following (abridged) output:'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数人熟悉逻辑 SQL 转储，因为这是 *mysqldump* 默认创建的。例如，使用默认选项转储小表将产生以下（摘要）输出：
+- en: '[PRE0]'
+  id: totrans-144
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: The dump file contains both the table structure and the data, all written out
+    as valid SQL commands. The file begins with comments that set various MySQL options.
+    These are present either to make the restore work more efficiently or for compatibility
+    and correctness. Next, you can see the table’s structure and then its data. Finally,
+    the script resets the options it changed at the beginning of the dump.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 转储文件包含表结构和数据，全部写成有效的 SQL 命令。文件以设置各种 MySQL 选项的注释开头。这些选项要么是为了使恢复工作更有效，要么是为了兼容性和正确性。接下来，你可以看到表的结构，然后是数据。最后，脚本重置了转储开始时更改的选项。
+- en: The dump’s output is executable for a restore operation. This is convenient,
+    but *mysqldump*’s default options aren’t great for making a huge backup.
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 转储的输出可用于恢复操作。这很方便，但 *mysqldump* 的默认选项不适合进行大型备份。
+- en: '*mysqldump* is not the only tool that can make SQL logical backups. You can
+    also create them with *mydumper* or *phpMyAdmin*, for example. What we’d really
+    like to point out here is not so much problems with any particular tool but rather
+    the shortcomings of doing monolithic SQL logical backups in the first place. Here
+    are the main problem areas:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysqldump* 不是唯一可以进行 SQL 逻辑备份的工具。你也可以使用 *mydumper* 或 *phpMyAdmin* 等工具来创建。我们真正想指出的不是任何特定工具的问题，而是首先进行单体
+    SQL 逻辑备份的缺点。以下是主要问题领域：'
+- en: Schema and data stored together
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模式和数据存储在一起
+- en: Although this is convenient if you want to restore from a single file, it makes
+    things difficult if you need to restore only one table or want to restore only
+    the data. You can alleviate this concern by dumping twice—once for data, once
+    for schema—but you’ll still have the next problem.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管如果你想从单个文件恢复，这很方便，但如果你只需要恢复一个表或者只想恢复数据，这会让事情变得困难。你可以通过两次转储来缓解这个问题——一次用于数据，一次用于模式——但你仍然会遇到下一个问题。
+- en: Huge SQL statements
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 巨大的 SQL 语句
+- en: It’s a lot of work for the server to parse and execute all of the SQL statements.
+    This is a very slow way to load data.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务器解析和执行所有 SQL 语句是一项繁重的工作。这是一种非常慢的加载数据的方式。
+- en: A single huge file
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个巨大的单一文件
+- en: Most text editors can’t edit large files or files with very long lines. Although
+    you can sometimes use command-line stream editors, such as *sed* or *grep,* to
+    pull out the data you need, it’s preferable to keep the files small.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数文本编辑器无法编辑大文件或具有非常长行的文件。虽然有时可以使用命令行流编辑器，比如 *sed* 或 *grep*，来提取所需的数据，但最好保持文件较小。
+- en: Logical backups are expensive
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 逻辑备份是昂贵的
+- en: There are more efficient ways to get data out of MySQL than fetching it from
+    the storage engine and sending it over the client/server protocol as a result
+    set.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从 MySQL 中获取数据的更有效方法比从存储引擎中提取数据并通过客户端/服务器协议发送结果集要好得多。
+- en: As you can see, logical backups can be difficult to make work for your environment.
+    If you need to use logical backups, we strongly recommend that you look at *mydumper*
+    to avoid the single-threaded nature and spend time measuring the impact on your
+    database as you perform the backup.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，逻辑备份可能很难适应你的环境。如果你需要使用逻辑备份，我们强烈建议你查看 *mydumper*，以避免单线程性质，并花时间测量备份对数据库的影响。
+- en: Filesystem Snapshots
+  id: totrans-157
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 文件系统快照
+- en: Filesystem snapshots are a great way to make online backups. Snapshot-capable
+    filesystems can create a consistent image of their contents at an instant in time,
+    which you can then use to make a backup. Snapshot-capable filesystems and appliances
+    include FreeBSD’s filesystem, the ZFS filesystem, GNU/Linux’s LVM, and many SAN
+    systems and file-storage solutions, such as NetApp storage appliances. Some of
+    the remotely attached disk options available in cloud providers offer disk snapshotting
+    as well.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文件系统快照是进行在线备份的好方法。支持快照的文件系统可以在某一时刻创建其内容的一致图像，然后你可以用它来进行备份。支持快照的文件系统和设备包括 FreeBSD
+    的文件系统、ZFS 文件系统、GNU/Linux 的 LVM，以及许多 SAN 系统和文件存储解决方案，比如 NetApp 存储设备。一些云提供商提供的远程附加磁盘选项也提供磁盘快照功能。
+- en: Don’t confuse a snapshot with a backup. Taking a snapshot is simply a way of
+    reducing the time for which locks must be held; after releasing the locks, you
+    must copy the files to the backup. In fact, you can optionally take snapshots
+    on InnoDB without even acquiring locks. We’ll show you two ways to use LVM to
+    make backups of an all-InnoDB system, with your choice of minimal or zero locking.
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不要将快照与备份混淆。拍摄快照只是减少必须保持锁定的时间的一种方式；释放锁定后，你必须将文件复制到备份中。事实上，你甚至可以在不获取锁定的情况下选择在
+    InnoDB 上拍摄快照。我们将向你展示两种使用 LVM 对全 InnoDB 系统进行备份的方法，你可以选择最小或零锁定。
+- en: A snapshot can be a great way to make a backup for specific uses. One example
+    is as a fallback in case of a problem during an upgrade. You can take a snapshot,
+    upgrade, and, if there’s a problem, just roll back to the snapshot. You can do
+    the same thing for any operation that’s uncertain and risky, such as altering
+    a huge table (which will take an unknown amount of time).
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 快照可以是一种为特定用途备份的好方法。一个例子是在升级过程中出现问题时作为备用方案。你可以拍摄一个快照，进行升级，如果出现问题，只需回滚到快照。你可以对任何不确定和风险的操作都采取同样的方式，比如修改一个庞大的表（需要未知的时间）。
+- en: How LVM snapshots work
+  id: totrans-161
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: LVM 快照的工作原理
+- en: LVM uses copy-on-write technology to create a snapshot—that is, a logical copy
+    of an entire volume at an instant in time. It’s a little like MVCC in a database,
+    except it keeps only one old version of the data.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: LVM 使用写时复制技术创建快照——即，在某一时刻的整个卷的逻辑副本。这有点像数据库中的 MVCC，只是它只保留一个旧版本的数据。
+- en: Notice we didn’t say a *physical* copy. A logical copy appears to contain all
+    the same data as the volume you snapshotted, but initially it contains no data.
+    Instead of copying the data to the snapshot, LVM simply notes the time at which
+    you created the snapshot, then it reads the data from the original volume when
+    you request it from the snapshot. So the initial copy is basically an instantaneous
+    operation, no matter how large a volume you’re snapshotting.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们没有说的是*物理*复制。逻辑复制似乎包含与您快��的卷相同的所有数据，但最初不包含任何数据。LVM不会将数据复制到快照中，而是简单地记录您创建快照的时间，然后在您从快照请求数据时从原始卷中读取数据。因此，初始复制基本上是一个瞬时操作，无论您快照的卷有多大。
+- en: When something changes the data in the original volume, LVM copies the affected
+    blocks to an area reserved for the snapshot before it writes any changes to them.
+    LVM doesn’t keep multiple “old versions” of the data, so additional writes to
+    blocks that are changed in the original volume don’t require any further work
+    for the snapshot. In other words, only the first write to each block causes a
+    copy-on-write to the reserved area.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当原始卷中的数据发生变化时，LVM会将受影响的块复制到快照之前保留的区域，然后再对其进行任何更改。LVM不保留多个“旧版本”的数据，因此对于在原始卷中更改的块的额外写入不需要对快照进行进一步处理。换句话说，只有对每个块的第一次写入会导致将其复制到保留区域。
+- en: Now, when you request these blocks in the snapshot, LVM reads the data from
+    the copied blocks instead of from the original volume. This lets you continue
+    to see the same data in the snapshot without blocking anything on the original
+    volume. [Figure 10-1](#how_copy_on_write_technology_reduces_th) depicts this arrangement.
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，当您请求快照中的这些块时，LVM会从复制的块中读取数据，而不是从原始卷中读取。这使您可以继续在快照中看到相同的数据，而不会阻塞原始卷上的任何内容。[图10-1](#how_copy_on_write_technology_reduces_th)描述了这种安排。
+- en: The snapshot creates a new logical device in the */dev* directory, and you can
+    mount this device just as you would mount any other.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 快照在*/dev*目录中创建了一个新的逻辑设备，您可以像挂载其他设备一样挂载这个设备。
+- en: 'You can theoretically snapshot an enormous volume and consume very little physical
+    space with this technique. However, you need to set aside enough space to hold
+    all the blocks you expect to be updated in the original volume while you hold
+    the snapshot open. If you don’t reserve enough copy-on-write space, the snapshot
+    will run out of space, and the device will become unavailable. The effect is like
+    unplugging an external drive: any backup job that’s reading from the device will
+    fail with an I/O error.'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用这种技术，您可以理论上对一个巨大的卷进行快照，并占用非常少的物理空间。但是，您需要预留足够的空间来容纳您期望在保持快照打开时更新的所有块。如果没有预留足够的写时复制空间，快照将耗尽空间，设备将变为不可用。效果就像拔掉外部驱动器一样：任何正在从设备读取的备份作业都将因I/O错误而失败。
+- en: '![](assets/hpm4_1001.png)'
+  id: totrans-168
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_1001.png)'
+- en: Figure 10-1\. How copy-on-write technology reduces the size needed for a volume
+    snapshot
+  id: totrans-169
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图10-1\. 写时复制技术如何减少卷快照所需的空间
+- en: Prerequisites and configuration
+  id: totrans-170
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 先决条件和配置
+- en: 'It’s almost trivial to create a snapshot, but you need to ensure that your
+    system is configured in such a way that you can get a consistent copy of *all*
+    the files you want to back up at a single instant in time. First, make sure your
+    system meets these conditions:'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建快照几乎是微不足道的，但您需要确保系统配置得可以在单个时间点获得*所有*要备份的文件的一致副本。首先确保您的系统满足以下条件：
+- en: All InnoDB files (InnoDB tablespace files and InnoDB transaction logs) must
+    be on a single logical volume (partition). You need absolute point-in-time consistency,
+    and LVM can’t take consistent snapshots of more than one volume at a time. (This
+    is an LVM limitation; some other systems do not have this problem.)
+  id: totrans-172
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 所有InnoDB文件（InnoDB表空间文件和InnoDB事务日志）必须在单个逻辑卷（分区）上。您需要绝对的时间点一致性，而LVM无法同时对多个卷进行一致的快照（这是一个LVM的限制；其他一些系统没有这个问题）。
+- en: If you need to back up the table definitions too, the MySQL data directory must
+    be in the same logical volume. If you use another method to back up table definitions,
+    such as a schema-only backup into your version control system, you might not need
+    to worry about this.
+  id: totrans-173
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果您需要备份表定义，MySQL数据目录必须在同一个逻辑卷中。如果您使用其他方法备份表定义，比如仅将模式备份到您的版本控制系统中，您可能不需要担心这个问题。
+- en: You must have enough free space in the volume group to create the snapshot.
+    How much you need will depend on your workload. When you set up your system, leave
+    some unallocated space so that you’ll have room for snapshots later.
+  id: totrans-174
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您必须在卷组中有足够的空闲空间来创建快照。您需要多少取决于您的工作负载。在设置系统时，留一些未分配空间，以便以后有快照的空间。
+- en: 'LVM has the concept of a *volume group*, which contains one or more logical
+    volumes. You can see the volume groups on your system as follows:'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: LVM有一个*卷组*的概念，其中包含一个或多个逻辑卷。您可以按以下方式查看系统上的卷组：
+- en: '[PRE1]'
+  id: totrans-176
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'This output shows a volume group that has four logical volumes distributed
+    across one physical volume, with about 250 GB free. The `vgdisplay` command gives
+    more detail if you need it. Now let’s take a look at the logical volumes on the
+    system:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此输出显示一个卷组，该卷组在一个物理卷上分布了四个逻辑卷，剩余约250 GB空间。如果需要，`vgdisplay`命令可以提供更多详细信息。现在让我们看看系统上的逻辑卷：
+- en: '[PRE2]'
+  id: totrans-178
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'The output shows that the `mysql` volume has 225 GB of space. The device name
+    is */dev/vg/mysql*. This is just a name, even though it looks like a filesystem
+    path. To add to the confusion, there’s a symbolic link from the file of the same
+    name to the real device node at */dev/mapper/vg-mysql*, which you can see with
+    the `ls` and `mount` commands:'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出显示`mysql`卷有225 GB的空间。设备名称为*/dev/vg/mysql*。这只是一个名称，尽管看起来像一个文件系统路径。为了增加混淆，文件名与真实设备节点*/dev/mapper/vg-mysql*之间有一个符号链接，您可以使用`ls`和`mount`命令查看：
+- en: '[PRE3]'
+  id: totrans-180
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Armed with this information, you’re ready to create a filesystem snapshot.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有了这些信息，您就可以准备创建一个文件系统快照了。
+- en: Creating, mounting, and removing an LVM snapshot
+  id: totrans-182
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 创建、挂载和删除LVM快照
+- en: You can create the snapshot with a single command. You just need to decide where
+    to put it and how much space to allocate for copy-on-write. Don’t hesitate to
+    use more space than you think you’ll need. LVM doesn’t use the space you specify
+    right away; it just reserves it for future use, so there’s no harm in reserving
+    lots of space, unless you need to leave space for other snapshots at the same
+    time.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用单个命令创建快照。您只需决定将其放在何处以及为写时复制分配多少空间。不要犹豫使用比您认为需要的空间更多的空间。LVM 不会立即使用您指定的空间；它只是为将来使用保留它，因此保留大量空间是没有害处的，除非您需要同时为其他快照留出空间。
+- en: 'Let’s create a snapshot just for practice. We’ll give it 16 GB of space for
+    copy-on-write, and we’ll call it `backup_mysql`:'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们为练习创建一个快照。我们将为写时复制提供 16 GB 的空间，并将其命名为 `backup_mysql`：
+- en: '[PRE4]'
+  id: totrans-185
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: Tip
+  id: totrans-186
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: We deliberately called the volume `backup_mysql` instead of `mysql_backup` so
+    that tab completion would be unambiguous. This helps avoid the possibility of
+    tab completion causing you to delete the `mysql` volume group accidentally.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们故意将卷命名为 `backup_mysql` 而不是 `mysql_backup`，以便制表符补全不会引起歧义。这有助于避免制表符补全导致您意外删除
+    `mysql` 卷组的可能性。
+- en: 'Now let’s see the newly created volume’s status:'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们看看新创建的卷的状态：
+- en: '[PRE5]'
+  id: totrans-189
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Notice that the snapshot’s attributes are different from the original device’s
+    and that the display shows a little extra information: its origin and how much
+    of the allocated 16 GB is currently being used for copy-on-write. It’s a good
+    idea to monitor this as you make your backup, so you can see if the device is
+    getting full and is about to fail. You can monitor your device’s status interactively
+    or with a monitoring system, such as Nagios:'
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意快照的属性与原始设备的属性不同，并且显示会显示一些额外信息：其来源以及当前用于写时复制的分配的 16 GB 中使用了多少。在进行备份时监视这一点是个好主意，这样您就可以看到设备是否即将满，即将失败。您可以交互式地监视设备状态，也可以使用监控系统（如
+    Nagios）：
+- en: '[PRE6]'
+  id: totrans-191
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'As you saw from the output of `mount` earlier, the `mysql` volume contains
+    a filesystem. That means the snapshot volume does too, and you can mount and use
+    it just like any other filesystem:'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如您之前从 `mount` 的输出中看到的那样，`mysql` 卷包含一个文件系统。这意味着快照卷也包含一个文件系统，您可以像使用任何其他文件系统一样挂载和使用它：
+- en: '[PRE7]'
+  id: totrans-193
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'This is just for practice, so we’ll unmount and remove the snapshot now with
+    the `lvremove` command:'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这只是为了练习，所以我们现在使用 `lvremove` 命令卸载和删除快照：
+- en: '[PRE8]'
+  id: totrans-195
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Lock-free InnoDB backups with LVM snapshots
+  id: totrans-196
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用 LVM 快照进行无锁 InnoDB 备份
+- en: When you run MySQL 8+ with only InnoDB tables, using GTIDs and full ACID-compliant
+    mode, making a backup is incredibly easy. While MySQL is running, simply take
+    a snapshot, mount the snapshot, and then copy the files to your backup location.
+    There’s no need to lock any files, capture any output, or do anything special.
+    Restoring the files from one of these backups will perform InnoDB crash recovery,
+    and the GTID settings will already know which transactions have been processed.
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你运行 MySQL 8+ 时，只使用 InnoDB 表，使用 GTIDs 和完全符合 ACID 的模式，进行备份非常容易。在 MySQL 运行时，只需拍摄一个快照，挂载快照，然后将文件复制到备份位置。不需要锁定任何文件，捕获任何输出，或者做任何特殊操作。从这些备份中恢复文件将执行
+    InnoDB 崩溃恢复，并且 GTID 设置将已知哪些事务已被处理。
+- en: Planning for LVM backups
+  id: totrans-198
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 为 LVM 备份做计划
+- en: 'The most important thing to plan for is allocating enough space for the snapshot.
+    We take the following approach:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最重要的计划是为快照分配足够的空间。我们采取以下方法：
+- en: Remember that LVM needs to copy each modified block to the snapshot only once.
+    When MySQL writes a block in the original volume, it copies the block to the snapshot,
+    then makes a note of the copied block in its exception table. Future writes to
+    this block will not cause any further copies to the snapshot.
+  id: totrans-200
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 请记住，LVM 需要将每个修改的块仅复制到快照一次。当 MySQL 写入原始卷中的块时，它将该块复制到快照，然后在其异常表中记录已复制的块。将来对此块的写入不会导致进一步复制到快照。
+- en: If you use only InnoDB, consider how InnoDB writes data. Because it writes all
+    data twice, at least half of InnoDB’s write I/O goes to the doublewrite buffer,
+    logfiles, and other relatively small areas on disk. These reuse the same disk
+    blocks over and over, so they’ll have an initial impact on the snapshot, but after
+    that, they’ll stop causing writes to the snapshot.
+  id: totrans-201
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果只使用 InnoDB，请考虑 InnoDB 如何写入数据。因为它将所有数据写入两次，至少一半的 InnoDB 写入 I/O 都会写入双写缓冲区、日志文件和其他相对较小的磁盘区域。这些重复使用相同的磁盘块，因此它们会对快照产生初始影响，但之后它们将停止对快照造成写入。
+- en: Next, estimate how much of your I/O will be writing to blocks that haven’t yet
+    been copied to the snapshot, as opposed to modifying the same data again and again.
+    Be generous with your estimate.
+  id: totrans-202
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 接下来，估计您的 I/O 中有多少将写入尚未复制到快照的块，而不是反复修改相同的数据。对您的估计要慷慨。
+- en: Use *vmstat* or *iostat* to gather statistics on how many blocks your server
+    writes per second.
+  id: totrans-203
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 *vmstat* 或 *iostat* 收集有关服务器每秒写入多少块的统计信息。
+- en: 'Measure (or estimate) how long it will take to copy your backup to another
+    location: in other words, how long you need to keep the LVM snapshot open.'
+  id: totrans-204
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 测量（或估计）将备份复制到另一个位置需要多长时间：换句话说，您需要保持 LVM 快照打开多长时间。
+- en: Let’s suppose you’ve estimated that half of your writes will cause writes to
+    the snapshot’s copy-on-write space, and your server writes 10 MB per second. If
+    it takes an hour (3,600 seconds) to copy the snapshot to another server, you will
+    need 1/2 × 10 MB × 3,600 or 18 GB of space for the snapshot. Err on the side of
+    caution and add some extra space as well.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您估计一半的写入将导致写入到快照的写时复制空间，您的服务器每秒写入 10 MB。如果将快照复制到另一台服务器需要一个小时（3,600 秒），则您将需要
+    1/2 × 10 MB × 3,600 或 18 GB 的快照空间。谨慎起见，还要添加一些额外空间。
+- en: Sometimes it’s easy to calculate how much data will change while you keep the
+    snapshot open.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时候，在保持快照打开的同时计算数据变化量是很容易的。
+- en: Other uses and alternatives
+  id: totrans-207
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 其他用途和替代方案
+- en: You can use snapshots for more than just backups. For example, as mentioned
+    previously, they can be a useful way to take a “checkpoint” just before a potentially
+    dangerous action. Some systems let you promote the snapshot to the original filesystem.
+    This makes it easy to roll back to the point at which you took the snapshot.
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以使用快照不仅仅用于备份。例如，如前所述，它们可以是在潜在危险操作之前进行“检查点”的有用方式。一些系统允许你将快照提升为原始文件系统。这使得回滚到你拍摄快照的时间点变得容易。
+- en: 'Filesystem snapshots aren’t the only way to get an instantaneous copy of your
+    data, either. Another option is a RAID split: if you have a three-disk software
+    RAID mirror, for example, you can remove one disk from the mirror and mount it
+    separately. There’s no copy-on-write penalty, and it’s easy to promote this kind
+    of “snapshot” to be the source’s copy if necessary. After adding the disk back
+    to the RAID set, however, it will have to be resynced. There’s no free lunch,
+    sadly.'
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文件系统快照并不是获取数据的瞬时副本的唯一方式。另一个选择是RAID分离：例如，如果你有一个三盘软件RAID镜像，你可以从镜像中移除一块硬盘并单独挂载它。没有写时复制的惩罚，如果需要的话，很容易将这种“快照”提升为源的副本。然而，在将硬盘重新添加到RAID集之后，它将需要重新同步。很遗憾，没有免费的午餐。
+- en: Percona XtraBackup
+  id: totrans-210
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Percona XtraBackup
+- en: XtraBackup is one of the most popular solutions for backing up MySQL, and for
+    good reason. It is very configurable, including ways to back up compressed, encrypted
+    files.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: XtraBackup是备份MySQL的最流行解决方案之一，原因很充分。它非常灵活，包括备份压缩、加密文件的方式。
+- en: How XtraBackup works
+  id: totrans-212
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: XtraBackup的工作原理
+- en: InnoDB is a crash-safe storage engine. If MySQL experiences a crash, it uses
+    a crash recovery mode, which is based on redo logs, to bring your data back online
+    correctly. Percona XtraBackup is based on this design. When you take a backup
+    with Percona XtraBackup, it records the log sequence number (LSN) and uses that
+    to perform crash recovery on your backed-up files. It also incorporates locking
+    at specific points to ensure that data about replication is consistent with the
+    data. For a more detailed explanation, refer to the [XtraBackup documentation](https://oreil.ly/8JWIB).
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB是一个崩溃安全的存储引擎。如果MySQL遇到崩溃，它将使用基于重做日志的崩溃恢复模式，以正确地将数据重新上线。Percona XtraBackup��是基于这个设计。当你使用Percona
+    XtraBackup进行备份时，它记录日志序列号（LSN），并使用它来对备份文件执行崩溃恢复。它还在特定点进行锁定，以确保关于复制的数据与数据一致。有关更详细的解释，请参考[XtraBackup文档](https://oreil.ly/8JWIB)。
+- en: 'Here’s a sample XtraBackup process:'
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个XtraBackup过程示例：
+- en: '[PRE9]'
+  id: totrans-215
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Up to here, we can see that XtraBackup has determined the running version of
+    MySQL. This helps it determine what capabilities it has and how it should back
+    up files. In our case, the `LOCK TABLES FOR BACKUP` command is available and is
+    how XtraBackup will get a lock on tables:'
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们可以看到XtraBackup已经确定了MySQL的运行版本。这有助于确定它具有什么功能以及如何备份文件。在我们的情况下，`LOCK TABLES
+    FOR BACKUP`命令可用，并且XtraBackup将使用它来锁定表：
+- en: '[PRE10]'
+  id: totrans-217
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'XtraBackup is now copying the files from the source to destination:'
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: XtraBackup现在正在从源复制文件到目标：
+- en: '[PRE11]'
+  id: totrans-219
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'Once finished copying files, it collects replication information:'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制文件完成后，它收集复制信息：
+- en: '[PRE12]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Now XtraBackup has determined the latest checkpoint for InnoDB. This will help
+    it apply the writes that happened during the backup. It releases the previous
+    `LOCK TABLES FOR BACKUP` command with `UNLOCK TABLES`:'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在XtraBackup已经确定了InnoDB的最新检查点。这将帮助它应用备份期间发生的写操作。它使用`UNLOCK TABLES`释放之前的`LOCK
+    TABLES FOR BACKUP`命令：
+- en: '[PRE13]'
+  id: totrans-223
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: The last steps are to record the LSN, copy over a buffer pool dump, and write
+    out the final files. One is a copy of the *my.cnf* file, and the *xtrabackup_info*
+    file contains metadata about the backup, like the MySQL UUID, versions of the
+    server, and XtraBackup.
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后的步骤是记录LSN，复制缓冲池转储，并写出最终文件。其中一个是*my.cnf*文件的副本，*xtrabackup_info*文件包含关于备份的元数据，如MySQL
+    UUID、服务器版本和XtraBackup。
+- en: Example usage
+  id: totrans-225
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 示例用法
+- en: 'We’ve highlighted some basic recipes for how to use XtraBackup in common ways,
+    but a few notes before that:'
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经突出显示了如何以常见方式使用XtraBackup的一些基本方法，但在此之前有一些注意事项：
+- en: Your MySQL installation should be secured with a password. Make sure you use
+    the `--user` and `--password` options to specify an account with enough permissions
+    to make backups.
+  id: totrans-227
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你的MySQL安装应该使用密码进行保护。确保你使用`--user`和`--password`选项指定一个具有足够权限进行备份的帐户。
+- en: XtraBackup is also very verbose in its output. We’ve trimmed the output to highlight
+    the most important parts of each use case.
+  id: totrans-228
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: XtraBackup在输出中也非常详细。我们已经削减了输出以突出每种用例的最重要部分。
+- en: As always, review the official manual for Percona XtraBackup before running
+    any commands here, as syntax and options may change. Even though we’re not aware
+    of any data loss associated with this tool, you should test on a nonproduction
+    backup before trying with your critical data.
+  id: totrans-229
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如往常一样，在运行任何命令之前，请查阅Percona XtraBackup的官方手册，因为语法和选项可能会发生变化。尽管我们不知道与该工具相关的任何数据丢失，但在尝试处理关键数据之前，你应该在非生产备份上进行测试。
+- en: Basic backup to directory
+  id: totrans-230
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 基本备份到目录
+- en: The first method we want to show is how you can use XtraBackup to make a full
+    backup of your data into another directory. This allows you to choose what you
+    do with the data afterward, which could be another disk, a directory on the same
+    disk, or a mounted file share on a larger backup server. Keep in mind, doing this
+    kind of full backup will require the appropriate space available to copy the files.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们想展示的第一种方法是如何使用XtraBackup将数据完整备份到另一个目录。这使你可以选择之后如何处理数据，可以是另一个磁盘、同一磁盘上的目录，或者更大的备份服务器上挂载的文件共享。请记住，进行这种完整备份将需要适当的空间来复制文件。
+- en: 'Here is the most basic usage for XtraBackup, specifying the mode (backup) and
+    where to back up the files (`target-dir`):'
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是XtraBackup的最基本用法，指定模式（备份）和备份文件的位置（`target-dir`）：
+- en: '[PRE14]'
+  id: totrans-233
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Once you execute, the output will look similar to that under [“How XtraBackup
+    works”](#how_xtrabackup_works). If successful, the */backups* directory will contain
+    a complete copy of your data.
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦执行，输出将类似于[“XtraBackup如何工作”](#how_xtrabackup_works)下的内容。如果成功，*/backups*目录将包含完整的数据副本。
+- en: Streaming backup
+  id: totrans-235
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 流式备份
+- en: 'Copying all files into a new directory may not be the most ideal use case.
+    Sometimes it’s easier to keep multiple backups in a directory. This is where the
+    streaming-backup option can be useful. Streaming allows you to write the backup
+    out as a single file:'
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将所有文件复制到新目录可能不是最理想的用例。有时在一个目录中保留多个备份更容易。这就是流式备份选项有用的地方。流式备份允许您将备份写入一个单个文件：
+- en: '[PRE15]'
+  id: totrans-237
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: In this usage, we’ve still specified the `backup` mode and removed the `target-dir`
+    option, since output will be to `STDOUT`. We then redirected it to a file.
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种用法中，我们仍然指定了`backup`模式，并删除了`target-dir`选项，因为输出将到`STDOUT`。然后我们将其重定向到文件中。
+- en: 'Note that you could also use a Bash shell command with date to include the
+    timestamp in the output filename, like this:'
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，您还可以使用 Bash shell 命令和日期一起使用，将时间戳包含在输出文件名中，如下所示：
+- en: '[PRE16]'
+  id: totrans-240
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: This will run through the entire backup process as before, with `<STDOUT>` being
+    used as the destination. The contents will be written to the *xbstream* file in
+    */backups*.
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将像以前一样运行整个备份过程，使用`<STDOUT>`作为目标。内容将被写入`/backups`中的*xbstream*文件。
+- en: Backup with compression
+  id: totrans-242
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 使用压缩备份
+- en: 'As we noted previously, you’ll need to have enough space to make an entire
+    copy of your datafiles or enough space for the single *xbstream* file. One common
+    option to ease the space requirement is to use the compression feature of XtraBackup:'
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们之前提到的，您需要足够的空间来制作整个数据文件的副本，或者足够的空间来存储单个*xbstream*文件。减轻空间需求的一个常见选项是使用 XtraBackup
+    的压缩功能：
+- en: '[PRE17]'
+  id: totrans-244
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: You will notice that instead of showing “Streaming” for each table, it now reports
+    “Compressing and streaming.” In our testing, we had loaded the Sakila Sample Database
+    and observed a 94 MB uncompressed *xbstream* file turn into a 6.5 MB compressed
+    one.
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您会注意到，每个表现在不再显示“Streaming”，而是报告“Compressing and streaming”。在我们的测试中，我们加载了 Sakila
+    示例数据库，并观察到一个94 MB未压缩的*xbstream*文件变成了一个6.5 MB压缩文件。
+- en: Backup with encryption
+  id: totrans-246
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 使用加密备份
+- en: 'The last example we want to cover is using encryption as part of your backup
+    strategy. Using encryption will use more CPU, and your backup process will take
+    longer; however, this could be an acceptable trade-off given that a backup is
+    an easy target to get a lot of data with one file. We’re again using the backup
+    mode and streaming, but we’re using `encrypt` with a cipher and `encrypt-key-file`
+    to point to where the key is:'
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们要涵盖的最后一个示例是将加密作为备份策略的一部分。使用加密将使用更多的 CPU，并且您的备份过程将需要更长时间；然而，考虑到备份���一个轻松获取大量数据的目标，这可能是一个可以接受的权衡。我们再次使用备份模式和流式传输，但我们使用`encrypt`与密码和`encrypt-key-file`指向密钥的位置：
+- en: '[PRE18]'
+  id: totrans-248
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: Our output changed again, indicating “Encrypting and streaming” for each file.
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的输出再次发生变化，对每个文件报告“加密和流式传输”。
+- en: Note that you can also use `--encrypt-key` and specify it on the command line.
+    We discourage doing this because the key will be exposed in the process list or
+    as part of the */proc* filesystem on Linux.
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，您还可以使用`--encrypt-key`并在命令行上指定它。我们不建议这样做，因为密钥将在进程列表中暴露，或作为 Linux 上 */proc*
+    文件系统的一部分。
+- en: Other important flags
+  id: totrans-251
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 其他重要标志
+- en: One of the aspects you’ll want to pay attention to is how long it takes your
+    backup to complete. To help with this, take a look at the `--parallel` and `-compress-threads`
+    options. Using these will increase the CPU usage but should reduce the overall
+    time it takes to back up. Encryption also has a similar parallelization option.
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要注意的一个方面是备份完成所需的时间。为了帮助解决这个问题，请查看`--parallel`和`-compress-threads`选项。使用这些选项将增加
+    CPU 使用率，但应该减少备份所需的总时间。加密也有类似的并行化选项。
+- en: If you have a large number of databases and tables, look at `--rsync` to optimize
+    the file-copy process.
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您有大量数据库和表，可以查看`--rsync`以优化文件复制过程。
+- en: Recovering from a Backup
+  id: totrans-254
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 从备份中恢复
+- en: 'How you recover your data depends on how you backed it up. You might need to
+    take some or all of the following steps:'
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如何恢复数据取决于您如何备份数据。您可能需要执行以下一些或全部步骤：
+- en: Stop the MySQL server.
+  id: totrans-256
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 停止 MySQL 服务器。
+- en: Take notes on the server’s configuration and file permissions.
+  id: totrans-257
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 记下服务器的配置和文件权限。
+- en: Move the data from the backup into the MySQL data directory.
+  id: totrans-258
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将数据从备份中移动到 MySQL 数据目录。
+- en: Make configuration changes.
+  id: totrans-259
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 进行配置更改。
+- en: Change file permissions.
+  id: totrans-260
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 更改文件权限。
+- en: Restart the server with limited access, and wait for it to start fully.
+  id: totrans-261
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 以有限访问权限重新启动服务器，并等待其完全启动。
+- en: Reload logical backup files.
+  id: totrans-262
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 重新加载逻辑备份文件。
+- en: Examine and replay binary logs.
+  id: totrans-263
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 检查并重放二进制日志。
+- en: Verify what you’ve restored.
+  id: totrans-264
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 验证您已恢复的内容。
+- en: Restart the server with full access.
+  id: totrans-265
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 以完全访问权限重新启动服务器。
+- en: We demonstrate how to do each of these steps as needed in the following sections.
+    We also add notes specific to certain backup methods or tools in sections about
+    those methods or tools later in this chapter.
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将根据需要演示如何执行这些步骤。我们还将在本章后面关于这些方法或工具的部分中添加特定于某些备份方法或工具的注释。
+- en: Note
+  id: totrans-267
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: If there’s a chance you’ll need the current versions of your files, *don’t replace
+    them with the files from the backup*. For example, if your backup includes the
+    binary logs and you need to replay binary logs for point-in-time recovery, don’t
+    overwrite the current binary logs with older copies from the backup. Rename them
+    or move them elsewhere if necessary.
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果有可能需要文件的当前版本，请*不要用备份文件替换它们*。例如，如果您的备份包括二进制日志，并且您需要重放二进制日志以进行时间点恢复，请不要用备份中的旧副本覆盖当前的二进制日志。如有必要，请重命名它们或将它们移动到其他位置。
+- en: During recovery, it’s often important to make MySQL inaccessible to everything
+    except the recovery process. We like to start MySQL with the `--skip-networking`
+    and `--socket=/tmp/mysql_recover.sock` options to ensure that it is unavailable
+    to existing applications until we’ve checked it and brought it back online. This
+    is especially important for logical backups, which are loaded in pieces.
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在恢复过程中，通常很重要的是使 MySQL 对除恢复过程之外的所有内容都不可访问。我们喜欢使用`--skip-networking`和`--socket=/tmp/mysql_recover.sock`选项启动
+    MySQL，以确保在我们检查并重新上线之前，它对现有应用程序不可用。这对于逻辑备份尤为重要，因为它们是分段加载的。
+- en: Restoring Logical Backups
+  id: totrans-270
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 恢复逻辑备份
+- en: If you’re restoring logical backups instead of raw files, you need to use the
+    MySQL server itself to load the data back into the tables, as opposed to using
+    the operating system to simply copy files into place.
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你正在恢复逻辑备份而不是原始文件，你需要使用 MySQL 服务器本身将数据加载回表中，而不是使用操作系统简单地将文件复制到指定位置。
+- en: 'Before you load that dump file, however, take a moment to consider how large
+    it is, how long it’ll take to load, and anything you might want to do before you
+    start, such as notifying your users or disabling part of your application. Disabling
+    binary logging might be a good idea, unless you need to replicate the restoration
+    to a replica: a huge dump file is hard enough for the server to load, and writing
+    it to the binary log adds even more (possibly unnecessary) overhead. Loading huge
+    files also has consequences for some storage engines. For example, it’s not a
+    good idea to load 100 GB of data into InnoDB in a single transaction because of
+    the huge rollback segment that will result. You should load in manageable chunks
+    and commit the transaction after each chunk.'
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，在加载那个转储文件之前，花点时间考虑一下它有多大，加载需要多长时间，以及在开始之前可能想要做的任何事情，比如通知用户或禁用应用程序的某些部分。禁用二进制日志可能是个好主意，除非你需要将恢复复制到副本：一个巨大的转储文件对服务器来说已经足够难以加载了，将其写入二进制日志会增加更多（可能是不必要的）开销。加载巨大文件也会对某些存储引擎产生影响。例如，一次性将
+    100 GB 的数据加载到 InnoDB 中不是个好主意，因为会产生巨大的回滚段。你应该分批加载并在每个批次后提交事务。
+- en: There are two kinds of restoration you might do, which correspond to the two
+    kinds of logical backups you can make.
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能会进行两种类型的恢复，这对应于你可以进行的两种逻辑备份。
+- en: 'If you have a SQL dump, the file will contain executable SQL. All you need
+    to do is run it. Assuming you backed up the Sakila Sample Database and schema
+    into a single file, the following is a typical command you might use to restore
+    it:'
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你有一个 SQL 转储文件，文件将包含可执行的 SQL。你只需要运行它。假设你将 Sakila 示例数据库和模式备份到一个文件中，以下是你可能用来恢复的典型命令：
+- en: '[PRE19]'
+  id: totrans-275
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'You can also load the file from within the *mysql* command-line client with
+    the `SOURCE` command. Although this is mostly a different way of doing the same
+    thing, it makes some things easier. For example, if you’re an administrative user
+    in MySQL, you can turn off binary logging of the statements you’ll execute from
+    within your client connection and then load the file without needing to restart
+    the MySQL server:'
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你也可以在 *mysql* 命令行客户端中使用 `SOURCE` 命令加载文件。虽然这基本上是以不同的方式做同样的事情，但它使一些事情变得更容易。例如，如果你是
+    MySQL 中的管理员用户，你可以关闭你的客户端连接中将执行的语句的二进制日志记录，然后加载文件而无需重新启动 MySQL 服务器：
+- en: '[PRE20]'
+  id: totrans-277
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: If you use `SOURCE`, be aware that an error won’t abort a batch of statements,
+    as it will by default when you redirect the file into *mysql*.
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你使用 `SOURCE`，请注意，错误不会中止一批语句，而当你将文件重定向到 *mysql* 时，默认会中止一批语句。
+- en: 'If you compressed the backup, don’t separately decompress and load it. Instead,
+    decompress and load it in a single operation. This is much faster:'
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你压缩了备份文件，不要分别解压缩和加载它。相反，解压缩并一次性加载它。这样速度会快得多：
+- en: '[PRE21]'
+  id: totrans-280
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'What if you want to restore only a single table (for example, the `actor` table)?
+    If your data has no line breaks, it’s not hard to restore the data if the schema
+    is already in place:'
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你只想恢复单个表（例如 `actor` 表）怎么办？如果你的数据没有换行符，如果模式已经存在，恢复数据并不难：
+- en: '[PRE22]'
+  id: totrans-282
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'Or, if the file is compressed:'
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，如果文件被压缩了：
+- en: '[PRE23]'
+  id: totrans-284
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'If you need to create the table as well as restore the data and you have the
+    entire database in a single file, you’ll have to edit the file. This is why some
+    people like to dump each table into its own file. Most editors can’t deal with
+    huge files, especially if they’re compressed. Besides, you don’t want to actually
+    edit the file itself; you just want to extract the relevant lines, so you’ll probably
+    have to do some command-line work. It’s easy to use *grep* to pull out only the
+    `INSERT` statements for a given table, as we did in the previous commands, but
+    it’s harder to get the `CREATE TABLE` statement. Here’s a *sed* script that extracts
+    the paragraph you need:'
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你需要创建表以及恢复数据，并且整个数据库都在一个文件中，你将不得不编辑该文件。这就是为什么有些人喜欢将每个表转储到自己的文件中。大多数编辑器无法处理巨大的文件，特别是如果它们被压缩了。此外，你不想实际编辑文件本身；你只想提取相关行，因此你可能需要进行一些命令行工作。使��
+    *grep* 只提取给定表的 `INSERT` 语句很容易，就像我们在之前的命令中所做的那样，但要获取 `CREATE TABLE` 语句就比较困难。这里有一个
+    *sed* 脚本，可以提取你需要的段落：
+- en: '[PRE24]'
+  id: totrans-286
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: That’s pretty cryptic, we admit. If you have to do this kind of work to restore
+    data, your backups are poorly designed. With a little planning, it’s possible
+    to prevent a situation in which you’re panicked and trying to figure out how *sed*
+    works. Just back up each table into its own file, or, better yet, back up the
+    data and schema separately.
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这相当神秘，我们承认。如果你必须做这种工作来恢复数据，那么你的备份设计很差。通过一点规划，可以避免你陷入恐慌并试图弄清楚 *sed* 如何工作的情况。只需将每个表备份到自己的文件中，或者更好的是，分别备份数据和模式。
+- en: Restoring Raw Files from Snapshot
+  id: totrans-288
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 从快照中恢复原始文件
+- en: Restoring raw files tends to be pretty straightforward, which is another way
+    of saying there aren’t many options. This can be a good or a bad thing depending
+    on your recovery requirements. The usual procedure is simply to copy the files
+    into place.
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 恢复原始文件往往相当简单，这也就意味着选项不多。这可能是好事，也可能是坏事，取决于你的恢复需求。通常的做法就是简单地将文件复制到指定位置。
+- en: If you’re restoring a traditional InnoDB setup, where all tables are stored
+    in a single tablespace, you’ll have to shut down MySQL, copy or move the files
+    into place, and then restart. You also need to ensure that InnoDB’s transaction
+    logfiles match its tablespace files. If the files don’t match—for example, if
+    you replace the tablespace files but not the transaction logfiles—InnoDB will
+    refuse to start. This is one reason it’s crucial to back up the transaction log
+    along with the datafiles.
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你正在恢复传统的InnoDB设置，其中所有表都存储在单个表空间中，你需要关闭MySQL，复制或移动文件到指定位置，然后重新启动。你还需要确保InnoDB的事务日志文件与其表空间文件匹配。如果文件不匹配，例如，如果你替换了表空间文件但没有替换事务日志文件，InnoDB将拒绝启动。这是备份事务日志和数据文件一起备份至关重要的原因之一。
+- en: If you’re using the InnoDB file-per-table feature (`innodb_file_per_table`),
+    InnoDB stores the data and indexes for each table in an *.ibd* file. You can back
+    up and restore individual tables by copying these files, and you can do it while
+    the server is running, but it’s not very simple. The individual files are not
+    independent from InnoDB as a whole. Each *.ibd* file has internal information
+    that tells InnoDB how the file is related to the main (shared) tablespace. When
+    you restore such a file, you have to tell InnoDB to “import” the file.
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你正在使用InnoDB的单表文件特性（`innodb_file_per_table`），InnoDB将每个表的数据和索引存储在一个*.ibd*文件中。你可以通过复制这些文件来备份和恢复单个表，而且你可以在服务器运行时执行此操作，但并不是很简单。这些单独的文件与整个InnoDB不是独立的。每个*.ibd*文件都有内部信息告诉InnoDB文件与主（共享）表空间的关系。当你恢复这样一个文件时，你必须告诉InnoDB“导入”文件。
+- en: There are many restrictions on this process, which you can read about in the
+    MySQL manual section on using per-table tablespaces. The biggest is that you can
+    only restore a table to the server from which you backed it up. It’s not impossible
+    to back up and restore tables in this configuration, but it’s trickier than you
+    might think.
+  id: totrans-292
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在MySQL手册关于使用单表表空间的部分中，有许多限制，你可以阅读。最大的限制是你只能将表恢复到备份它的服务器上。在这种配置下备份和恢复表并不是不可能的，但比你想象的要棘手。
+- en: All this complexity means that restoring raw files can be very tedious, and
+    it’s easy to get it wrong. A good rule of thumb is that the harder and more complex
+    your recovery procedure becomes, the more you need to protect yourself with logical
+    backups as well. It’s always a good idea to have a logical backup, in case something
+    goes wrong and you can’t convince MySQL to use your raw backups.
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有这些复杂性意味着恢复原始文件可能非常繁琐，很容易出错。一个好的经验法则是，恢复过程变得越困难和复杂，你就越需要通过逻辑备份来保护自己。始终保留逻辑备份是一个好主意，以防出现问题，无法说服MySQL使用你的原始备份。
+- en: Restoring with Percona XtraBackup
+  id: totrans-294
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用Percona XtraBackup进行恢复
+- en: In the section [“How XtraBackup works”](#how_xtrabackup_works), we mentioned
+    that it uses InnoDB’s crash-recovery process to take safe backups. This means
+    that for us to use files that were backed up with XtraBackup, we need to go through
+    additional steps.
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[“XtraBackup工作原理”](#how_xtrabackup_works)部分中，我们提到它使用InnoDB的���溃恢复过程来进行安全备份。这意味着为了使用用XtraBackup备份的文件，我们需要经过额外的步骤。
+- en: 'If you used a streaming backup, you’ll need to unpack the *xbstream* file first.
+    For *xbstream*, you can use the `xbstream` command to extract:'
+  id: totrans-296
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你使用了流式备份，你需要先解压*xbstream*文件。对于*xbstream*，你可以使用`xbstream`命令来提取：
+- en: '[PRE25]'
+  id: totrans-297
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'This will extract all files to your current location, or you can use the `-C`
+    option to change to a specific directory beforehand. If you used compression or
+    encryption, you can use similar options to reverse the process. For a compressed
+    file, use `--decompress`, and for encryption, use `--decrypt` while specifying
+    the `--encrypt-key-file` location:'
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将把所有文件提取到当前位置，或者你可以使用`-C`选项在之前更改到特定目录。如果你使用了压缩或加密，你可以使用类似的选项来反向操作。对于压缩文件，使用`--decompress`，对于加密文件，使用`--decrypt`，同时指定`--encrypt-key-file`位置：
+- en: '[PRE26]'
+  id: totrans-299
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'Once complete, the next step is to prepare the files. Preparing is the process
+    that actually performs the crash-recovery actions and ensures that you’re recovering
+    all data:'
+  id: totrans-300
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完成后，下一步是准备文件。准备是实际执行崩溃恢复操作并确保你正在恢复所有数据的过程：
+- en: '[PRE27]'
+  id: totrans-301
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: Tip
+  id: totrans-302
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: If you’re not using streaming mode, you can perform the prepare phase after
+    you make the backup. This will result in backing up a prepared backup and reduce
+    the amount of work you need to do when it comes time to restore.
+  id: totrans-303
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你没有使用流模式，你可以在备份后执行准备阶段。这将导致备份一个准备好的备份，并减少恢复时需要做的工作量。
+- en: 'Once completed and successful, you’re now ready to use these files to start
+    MySQL:'
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完成并成功后，你现在可以使用这些文件来启动MySQL了：
+- en: '[PRE28]'
+  id: totrans-305
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: Tip
+  id: totrans-306
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: You can use the `--copy-back` or `--move-back` flags with `xtrabackup` to copy
+    or move the files into place correctly.
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以使用`xtrabackup`的`--copy-back`或`--move-back`标志将文件正确复制或移动到指定位置。
+- en: XtraBackup will automatically detect your `data-dir` variable from your MySQL
+    installation and move the files to the correct location.
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: XtraBackup将自动检测你的MySQL安装中的`data-dir`变量，并将文件移动到正确的位置。
+- en: Starting MySQL After Restoring Raw Files
+  id: totrans-309
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 在恢复原始文件后启动MySQL
+- en: There are a few things you’ll need to do *before* you start the MySQL server
+    you’re recovering.
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在启动你要恢复的MySQL服务器之前，有一些事情你需要在*之前*做。
+- en: The first and most important thing, and one of the easiest to forget, is to
+    check your server’s configuration and make sure the restored files have the correct
+    owner and permissions before you try to start the MySQL server. These attributes
+    must be exactly right, or MySQL might not start. The attributes vary from system
+    to system, so check your notes to see exactly what you’ll need to set. You typically
+    want the *mysql* user and group to own the files and directories, which you want
+    to be readable and writable by that user and group but no others.
+  id: totrans-311
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一件最重要的事情，也是最容易忘记的事情之一，就是在尝试启动MySQL服务器之前检查服务器的配置，并确保恢复的文件具有正确的所有者和权限。这些属性必须完全正确，否则MySQL可能无法启动。这些属性因系统而异，因此请查看你的笔记以了解你需要设置什么。通常你希望*mysql*用户和组拥有这些文件和目录，你希望这些文件和目录对该用户和组可读可写，但对其他用户不可读写。
+- en: 'We also suggest watching the MySQL error log while the server starts. On a
+    Unix-style system, you can watch the file like this:'
+  id: totrans-312
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还建议在服务器启动时监视MySQL错误日志。在类Unix系统上，你可以这样监视文件：
+- en: '[PRE29]'
+  id: totrans-313
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: The exact location of the error log will vary. Once you’re monitoring the file,
+    you can start the MySQL server and watch for errors. If all goes well, you’ll
+    have a nicely recovered server once MySQL starts.
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 错误日志的确切位置会有所不同。一旦你监视了文件，你可以启动MySQL服务器并观察错误。如果一切顺利，一旦MySQL启动，你将拥有一个完美恢复的服务器。
+- en: Watching the error log is even more important in newer MySQL versions. Even
+    if the server seems to start without trouble, you should run `SHOW TABLE STATUS`
+    in each database, then check the error log again.
+  id: totrans-315
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在较新的MySQL版本中，监视错误日志更加重要。即使服务器似乎没有问题地启动，你也应该在每个数据库中运行`SHOW TABLE STATUS`，然后再次检查错误日志。
+- en: Summary
+  id: totrans-316
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: Everyone knows that they need backups, but not everyone realizes that they need
+    recoverable backups. There are many ways to design backups that contradict your
+    recovery requirements. To help avoid this problem, we suggest that you define
+    and document your RPO and RTO, and use those requirements when choosing a backup
+    system.
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个人都知道他们需要备份，但并非每个人都意识到他们需要可恢复的备份。有许多设计备份的方式与你的恢复需求相矛盾。为了避免这个问题，我们建议你定义和记录你的RPO和RTO，并在选择备份系统时使用这些要求。
+- en: It’s also important to test recovery on a routine basis and ensure that it works.
+    It’s easy to set up *mysqldump* and let it run every night without realizing that
+    your data has grown over time to the point where it might take days or weeks to
+    import again. The worst time to find out how long your recovery will take is when
+    you actually need it. A backup that completes in hours can literally take weeks
+    to restore, depending on your hardware, schema, indexes, and data.
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 定期测试恢复并确保其正常运行非常重要。很容易设置*mysqldump*并让其每晚运行，而没有意识到随着时间的推移，你的数据可能增长到需要花费数天甚至数周才能再次导入的程度。发现你的恢复需要多长时间的最糟糕时机是在你真正需要它的时候。一个在几小时内完成的备份可能需要数周才能恢复，这取决于你的硬件、架构、索引和数据。
+- en: Don’t fall into the trap of thinking that a replica is a backup. It’s a less
+    intrusive source for taking a backup, but it’s not a backup. The same is true
+    of your RAID volume, SAN, and filesystem snapshots. Make sure that your backups
+    can pass the `DROP TABLE` test (or the “I got hacked” test), as well as the test
+    of losing your data center. And if you take backups from a replica, be sure that
+    your replicas are consistent by rebuilding them from your source and enforcing
+    `super_read_only` from that point forward.
+  id: totrans-319
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不要陷入认为副本就是备份的陷阱。它是获取备份的一种较少侵入性的来源，但它不是备份。同样适用于你的RAID卷、SAN和文件系统快照。确保你的备份能通过`DROP
+    TABLE`测试（或“我被黑了”测试），以及失去数据中心的测试。如果你从副本中获取备份，请确保你的副本是一致的，通过从源重新构建它们并从那时起强制执行`super_read_only`。
+- en: 'Hands down, our preferred way to take backups is to use Percona XtraBackup
+    for raw backups and *mydumper* for logical backups. Both techniques let you take
+    nonintrusive binary (raw) backups of your data, which you can then verify by starting
+    a *mysqld* instance and checking the tables. Sometimes you can even kill two birds
+    with one stone: test recovery every single day by restoring the backup to your
+    development or staging server. You can also dump the data from that instance to
+    create a logical backup. We also like to back up binary logs and to keep enough
+    generations of backups and binary logs that we can perform recovery or set up
+    a new replica even if the most recent backup is unusable.'
+  id: totrans-320
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 毫无疑问，我们首选的备份方式是使用Percona XtraBackup进行原始备份，使用*mydumper*进行逻辑备份。这两种技术都可以让你获取非侵入性的二进制（原始）数据备份，然后你可以通过启动一个*mysqld*实例并检查表来验证这些备份。有时你甚至可以一举两得：通过将备份恢复到你的开发或测试服务器，每天测试恢复。你还可以从该实例中导出数据以创建逻辑备份。我们还喜欢备份二进制日志，并保留足够多的备份和二进制日志的生成，以便进行恢复或设置新的副本，即使最近的备份无法使用。
+- en: ^([1](ch10.html#ch01fn68-marker)) Raw backups may also be unintuitively referred
+    to as *physical backups* with the idea you’re moving the physical files to your
+    backup destination. We say “unintuitive” because the file itself isn’t physical
+    at all!
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch10.html#ch01fn68-marker)) 原始备份也可能被误称为*物理备份*，意思是你正在将物理文件移动到备份目的地。我们说“令人费解”，因为文件本身根本不是物理的！
+- en: ^([2](ch10.html#ch01fn69-marker)) Logical backups produced by *mysqldump* are
+    not always text files. SQL dumps can contain many different character sets and
+    can even include binary data that’s not valid character data at all. Lines can
+    be too long for many editors, too. Still, many such files will contain data a
+    text editor can open and read, especially if you run *mysqldump* with the `--hex-blob`
+    option.
+  id: totrans-322
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch10.html#ch01fn69-marker)) 由*mysqldump*生成的逻辑备份并不总是文本文件。SQL转储可以包含许多不同的字符集，甚至可能包含不是有效字符数据的二进制数据。对于许多编辑器来说，行可能太长了。尽管如此，许多这样的文件将包含文本编辑器可以打开和阅读的数据，特别是如果你使用`--hex-blob`选项运行*mysqldump*。
+- en: ^([3](ch10.html#ch01fn70-marker)) Keep in mind that while the data that is dumped
+    is engine independent, the storage engine features may not be compatible. For
+    example, you couldn’t dump an InnoDB database with foreign key relationships defined
+    and expect the foreign keys to work in an engine that doesn’t implement them.
+  id: totrans-323
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([3](ch10.html#ch01fn70-marker)) 请记住，尽管转储的数据是与引擎无关的，但存储引擎的特性可能不兼容。例如，你不能转储定义了外键关系的InnoDB数据库，并期望这些外键在不实现它们的引擎中起作用。
+- en: ^([4](ch10.html#ch01fn71-marker)) In our experience, logical backups are generally
+    smaller than raw backups, but they aren’t always.
+  id: totrans-324
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([4](ch10.html#ch01fn71-marker)) 根据我们的经验，逻辑备份通常比原始备份小，但并非总是如此。
+- en: ^([5](ch10.html#ch01fn72-marker)) It’s worth mentioning that raw backups can
+    be more prone to errors; it’s hard to beat the simplicity of *mysqldump*.
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([5](ch10.html#ch01fn72-marker)) 值得一提的是，原始备份更容易出现错误；很难超越*mysqldump*的简单性。
+- en: ^([6](ch10.html#ch01fn73-marker)) A “true” incremental backup feature for Percona
+    XtraBackup is in progress. It will be able to back up the blocks that have changed
+    without needing to scan every block.
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([6](ch10.html#ch01fn73-marker)) Percona XtraBackup正在开发一个“真正”的增量备份功能。它将能够备份已更改的块，而无需扫描每个块。

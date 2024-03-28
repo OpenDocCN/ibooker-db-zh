@@ -1,0 +1,1227 @@
+- en: Chapter 13\. Compliance with MySQL
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第13章。与MySQL合规
+- en: The role of database engineering teams is of interest to many internal business
+    stakeholders. As we have covered already, you have to plan not just for performance
+    and uptime but also for infrastructure cost, disaster recovery, and all sorts
+    of compliance needs.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库工程团队的角色引起了许多内部业务利益相关者的关注。正如我们已经介绍的，您不仅需要为性能和正常运行计划，还需要考虑基础设施成本、灾难恢复以及各种合规需求。
+- en: Your job is not limited to managing this data while the business is running.
+    You also need to help the business protect the data and certify for regulatory
+    certifications that are either legally required or critical for business. You
+    have to understand the business goals for fulfilling these needs and include these
+    requirements in all data architecture design, including how you automate operational
+    tasks, manage access, and convert administrative tasks into code that automates
+    such tasks.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您的工作不仅限于在业务运行时管理这些数据。您还需要帮助企业保护数据并为法律要求或对业务至关重要的监管认证进行认证。您必须了解实现这些需求的业务目标，并将这些要求包含在所有数据架构设计中，包括如何自动化运营任务、管理访问权限以及将管理任务转换为自动化任务的代码。
+- en: This chapter covers the different types of compliance certifications a business
+    may pursue and various database-specific concerns they have. We help explain how
+    to design for different compliance needs and discuss how access logging can be
+    a crucial part of filling compliance requirements. Finally, we cover data sovereignty
+    as an emerging concern for data architecture practices in all types of businesses.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章涵盖了企业可能追求的不同类型的合规认证以及各种特定于数据库的关注点。我们帮助解释如何为不同的合规需求设计，并讨论访问日志记录如何成为填补合规要求的关键部分。最后，我们涵盖了数据主权作为各类企业数据架构实践中新兴关注点。
+- en: Warning
+  id: totrans-4
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: This chapter does not seek to give you legal advice. We are looking to help
+    you manage compliance needs when you are running a large number of databases and
+    how to design for compliance early on. When looking for advice on how to properly
+    fulfill specific controls, you should always consult with your company’s legal
+    team.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章不旨在为您提供法律建议。我们旨在帮助您在运行大量数据库时管理合规需求，以及如何从早期开始设计合规。在寻求如何正确履行特定控制的建议时，您应始终与公司的法律团队咨询。
+- en: What Is Compliance?
+  id: totrans-6
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 什么是合规？
+- en: Governance, risk management, and compliance (GRC) are the tenets, processes,
+    and laws that guide how a business assesses and prioritizes risk to its assets
+    and how it adheres to laws that govern the processing and transfer of personal
+    or health data it might be using to power its product. Early-stage startups commonly
+    do not have many compliance needs as they find their product market fit. As the
+    business grows, however, you will begin running into a number of regulations.
+    Some regulations need to apply to all of a business’s data, whereas some can be
+    scoped to specific parts.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 治理、风险管理和合规（GRC）是指导企业如何评估和优先考虑其资产风险以及如何遵守管理其产品所使用的个人或健康数据处理和传输的法律的原则、流程和法律。早期初创企业通常不具备许多合规需求，因为他们在找到产品市场契合度时。然而，随着业务的发展，您将开始遇到许多法规。有些法规需要适用于企业所有数据，而有些可以适用于特定部分。
+- en: A regularly used term in the context of compliance is *controls*. Controls are
+    processes and rules that a company internally defines and practices to reduce
+    the chances of an unwanted risk outcome.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在合规背景下经常使用的一个术语是*控制*。控制是公司内部定义和实践的过程和规则，旨在减少不希望的风险结果的机会。
+- en: Let’s introduce some of the compliance regulations you should know about. Later,
+    we cover architectural changes that can help make fulfilling these various requirements
+    more manageable.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们介绍一些您应该了解的合规法规。稍后，我们将介绍可以帮助更轻松满足这些各种要求的架构变更。
+- en: Service Organization Controls Type 2
+  id: totrans-10
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 服务组织控制第2型
+- en: '[Service Organization Controls Type 2 (SOC 2)](https://oreil.ly/PwWBg) is a
+    set of compliance controls that service organizations can use to report on their
+    practices relevant to security, availability, processing integrity, confidentiality,
+    and privacy. Database engineers in organizations looking to be SOC 2 certified
+    will need to have well-established practices around database change management,
+    backup and restore procedures, and managing access to database instances.'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[服务组织控制第2型（SOC 2）](https://oreil.ly/PwWBg)是一组合规控制，服务组织可以用来报告与安全、可用性、处理完整性、机密性和隐私相关的实践。寻求获得SOC
+    2认证的组织中的数据库工程师需要建立良好的数据库变更管理、备份和恢复程序以及管理数据库实例访问权限的实践。'
+- en: Sarbanes–Oxley Act
+  id: totrans-12
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 萨班斯-奥克斯法案
+- en: The [Sarbanes–Oxley Act (SOX) of 2002](https://oreil.ly/qHAN0) is a law that
+    all companies that become publicly traded have to comply with. It is intended
+    to protect investors by improving the accuracy and reliability of corporate disclosures
+    made pursuant to the securities laws and for other purposes. For an engineering
+    organization, SOX duties require proving that databases containing revenue-impacting
+    data are only accessed by those who have a need to and that any changes to this
+    data are logged and the changes are for documented reasons.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[2002年萨班斯-奥克斯法案（SOX）](https://oreil.ly/qHAN0)是一项所有成为上市公司的公司都必须遵守的法���。它旨在通过提高根据证券法规定向投资者披露的公司披露的准确性和可靠性来保护投资者，并为其他目的。对于一个工程组织，SOX职责要求证明包含影响收入的数据的数据库只能被有需要的人访问，并且对这些数据的任何更改都已记录，并且更改有记录的原因。'
+- en: If you are a publicly traded company, SOX control 404 is a legally required
+    control that you have to be familiar with and fulfill. It aims to guarantee with
+    evidence that the financials reported by a company are backed by data access and
+    change management practices that accurately attribute the services rendered to
+    the revenue collected and provide an audit trail for any changes to such data.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您是一家上市公司，SOX控制404是一个您必须熟悉并履行的法律要求的控制。它旨在通过证据保证公司报告的财务状况得到数据访问和变更管理实践的支持，这些实践准确地将提供的服务归因于收取的收入，并为对此类数据的任何更改提供审计跟踪。
+- en: Payment Card Industry Data Security Standard
+  id: totrans-15
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 付款卡行业数据安全标准
+- en: The [Payment Card Industry Data Security Standard (PCI DSS)](https://oreil.ly/V6GBh)
+    is a standard required of all financial institutions handling credit card data.
+    Its intent is to protect credit card holders’ data from being leaked and used
+    in fraudulent transactions.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[付款卡行业数据安全标准（PCI DSS）](https://oreil.ly/V6GBh)是所有处理信用卡数据的金融机构必须遵守的标准。其目的是保护持卡人数据，防止泄露并用于欺诈交易。'
+- en: An important aspect of PCI-DSS control when it comes to your work as a database
+    engineer is managing access to cardholder data. It means you will need to consider
+    that control in your architecture to make sure that card data is managed separately.
+    We will discuss how you can achieve that later in this chapter when we cover separation
+    of roles.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为数据库工程师，当涉及到PCI-DSS控制时，一个重要的方面是管理对持卡人数据的访问。这意味着您需要在架构中考虑该控制，以确保卡数据得到单独管理。我们将在本章后面讨论如何实现这一点，当我们讨论角色分离时。
+- en: Health Insurance Portability and Accountability Act
+  id: totrans-18
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 健康保险可携带性和责任法案
+- en: The [Health Insurance Portability and Accountability Act (HIPAA) of 1996](https://oreil.ly/fKeQd)
+    is a US regulation designed to protect the privacy of health-related data of individuals
+    when collected and processed by health providers, health plans, or their business
+    associates. This law applies to data defined as electronic personal health information
+    (ePHI). Organizations offering products that require HIPAA compliance will need
+    their database engineers to implement controls such as access controls for ePHI,
+    encryption of all ePHI, and activity logging whenever ePHI is accessed.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1996年的[健康保险可携带性和责任法案（HIPAA）](https://oreil.ly/fKeQd)是一项旨在保护个人健康相关数据隐私的美国法规，当这些数据由医疗提供者、医疗计划或其业务伙伴收集和处理时适用。该法律适用于被定义为电子个人健康信息（ePHI）的数据。提供需要符合HIPAA合规性的产品的组织将需要他们的数据库工程师实施控制措施，如ePHI的访问控制、所有ePHI的加密以及每当访问ePHI时进行活动记录。
+- en: Federal Risk and Authorization Management Program
+  id: totrans-20
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 联邦风险和授权管理计划
+- en: For companies operating in the US and looking to generate business with US government
+    entities, the [Federal Risk and Authorization Management Program (FedRAMP)](https://oreil.ly/ZVQqq)
+    is a certification offered by the federal government to qualify businesses for
+    being cloud providers for federal entities. It is a collection of standards required
+    to be eligible to take on federal entities as customers. These standards include
+    configuration management, access controls, security assessments, and audits of
+    access and changes to data.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于在美国运营并希望与美国政府实体开展业务的公司，[联邦风险和授权管理计划（FedRAMP）](https://oreil.ly/ZVQqq)是联邦政府提供的认证，使企业有资格成为联邦实体的云服务提供商。这是一系列要求的标准，使得符合条件的企业有资格接待联邦实体作为客户。这些标准包括配置管理、访问控制、安全评估以及对数据访问和更改的审计。
+- en: General Data Protection Regulation
+  id: totrans-22
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 通用数据保护条例
+- en: General Data Protection Regulation (GDPR) is a European Union regulation introduced
+    in 2016 to govern how personally identifiable information on EU persons is stored
+    and managed by entities that act as data processors, regardless of where they
+    are headquartered. It introduced the first steps of managing data privacy, such
+    as requiring consent before collecting private data, setting limits on access
+    to that private data across a processor’s organization, and providing a legal
+    avenue for individuals to request that their data be purged from the systems of
+    any data processor that may have collected it through their online activity. This
+    is known as the individual’s “right to be forgotten.”
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 《通用数据保护条例》（GDPR）是欧盟于2016年颁布的一项法规，旨在规范个人可识别信息在欧盟人员中的存储和管理方式，无论数据处理实体的总部在何处。它引入了管理数据隐私的第一步，例如在收集私人数据之前要求同意、设定跨处理器组织对该私人数据的访问限制，并为个人提供法律途径，要求任何可能通过其在线活动收集其数据的数据处理器的系统中清除其数据。这被称为个人的“被遗忘权”。
+- en: Schrems II
+  id: totrans-24
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 施雷姆斯II
+- en: In 2020, a case between the EU and Facebook’s Ireland entity was ruled on by
+    the EU justice court. The ruling, commonly known as [*Schrems II*](https://oreil.ly/4wqAm)
+    signaled widespread impact on all US companies that operate and collect data on
+    EU persons.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 2020年，欧盟与Facebook的爱尔兰实体之间的案件由欧盟司法法院裁定。这一裁决，通常被称为[*施雷姆斯II*](https://oreil.ly/4wqAm)，对所有在欧盟运营并收集欧盟人数据的美国公司产生了广泛影响。
+- en: '[Privacy Shield](https://oreil.ly/I9lPC) was the legal standing US companies
+    had been operating under in the EU for years. The Schrems ruling declared it insufficient
+    to protect the privacy of EU persons when their data is collected by US company
+    entities in the EU. At the core of that cancellation is the ruling by the EU justice
+    court that Privacy Shield is not sufficient to guarantee that EU persons will
+    not be surveilled by the US government through US legal means (namely using a
+    mechanism provided by the [Foreign Intelligence Surveillance Act](https://oreil.ly/hthsk)
+    of 1978, or FISA), and that therefore, personally identifiable data on EU persons
+    collected by US entities must remain in the EU and not cross into US assets or
+    be accessible by US persons.'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[隐私盾](https://oreil.ly/I9lPC)是美国公司多年来在欧盟运营的法律基础。施雷姆斯裁决宣布，当美国公司实体在欧盟收集欧盟人的数据时，隐私盾不足以保护欧盟人的隐私。在取消的核心是欧盟司法法院裁定，隐私盾不足以保证欧盟人不会通过美国法律手段（即使用1978年《外国情报监视法案》提供的机制，或FISA）被美国政府监视，因此，由美国实体收集的欧盟人的个人可识别数据必须留在欧盟，不得跨越到美国资产或被美国人访问。'
+- en: The ruling makes it more complex to reason about data architecture in comparison
+    to the initial version of GDPR. Due to how recent this ruling was made, enforcement
+    remains an unknown quantity. This situation leaves each business to determine
+    how much of the data it collects and processes is in scope and in what way. It’s
+    safe to assume that Schrems II will be coming for the applications and data infrastructure
+    you run if you have any current or future customers in Europe.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与GDPR最初版本相比，该裁决使得数据架构的推理变得更加复杂。由于这项裁决是最近才做出的，执法仍然是一个未知的数量。这种情况让每家企业决定其收集和处理的数据有多少在范围内，以及以何种方式。可以肯定的是，如果您有当前或未来的欧洲客户，Schrems
+    II将会针对您运行的应用程序和数据基础设施。
+- en: Building for Compliance Controls
+  id: totrans-28
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 为合规控制构建
+- en: As you can see, the world of regulatory compliance of businesses and, by consequence,
+    the data the business uses to operate is vast, and controls can be numerous depending
+    on the goal of each law or the certification your business needs. The good news
+    is that there is plenty of room for the same work to cover more than one control,
+    allowing for efficiency and more consistent practices when managing the infrastructure.
+    You do, however, need to understand which of these controls are required for the
+    business and for what purpose. Once your company grows to a size where it needs
+    to start implementing any subset of these regulatory compliance controls, you
+    will become the person who gets to present evidence of compliance to different
+    kinds of auditors. Understanding what each control is aimed at will go a long
+    way toward presenting the right kind of evidence to make the audits easier.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如您所看到的，企业的法规合规世界，以及由此产生的企业用于运营的数据，是庞大的，控制措施可能因每项法律的目标或您的企业所需的认证而有所不同。好消息是，同样的工作可以涵盖多个控制措施，从而实现效率和更一致的实践，管理基础设施时。然而，您需要了解哪些控制措施对业务是必需的，以及出于何种目的。一旦您的公司发展到需要开始实施这些法规合规控制的规模，您将成为向不同类型的审计员提供合规证据的人。了解每项控制措施的目的将有助于提供正确类型的证据，使��计更加容易。
+- en: Tip
+  id: totrans-30
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Building for compliance is an ongoing process that cannot be easily “added on”
+    when needed. A lot of the architectural advice presented in this chapter (separation
+    of roles, tracking changes, and so forth) is the sort of thing you should be thinking
+    about and advocating for once your company is past the “still finding market fit”
+    stage. These are practices that will set your business up for success by the time
+    compliance becomes a real need and not just a “nice to have.”
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为合规性构建是一个持续的过程，不能在需要时轻松“添加”。本章中提出的许多架构建议（角色分离、跟踪变更等）是您在公司过了“仍在寻找市场适应性”阶段后应该考虑和倡导的事项。这些实践将使您的业务在合规性真正成为一个需求而不仅仅是“好有的”时，为成功打下基础。
+- en: Secrets Management
+  id: totrans-32
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 机密管理
+- en: 'Before we discuss how to manage secrets, let’s first align on what things in
+    your infrastructure might fall under that definition:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在讨论如何管理机密之前，让我们首先明确您基础设施中可能属于该定义的事物：
+- en: Password strings for applications to interact with databases
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 应用程序与数据库交互的密码字符串
+- en: Password strings for support staff/operators to manage the database instances
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 供支持人员/运营人员管理数据库实例的密码字符串
+- en: API tokens that can access/modify data
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 可以访问/修改数据的API令牌
+- en: SSH private keys
+  id: totrans-37
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: SSH私钥
+- en: Certificate keys
+  id: totrans-38
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 证书密钥
+- en: A core ability you need in your organization to facilitate a lot of security
+    controls is a way to manage secrets securely and separately from managing your
+    configuration. You need a way of delivering and rotating sensitive data like database
+    access credentials, whether it is for use by applications or teams, for the purposes
+    of reporting.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您组织中需要的一个核心能力是以安全和独立的方式管理机密，而不是与配置管理混为一谈。您需要一种交付和轮换敏感数据（如数据库访问凭据）的方式，无论是供应用程序还是团队使用，用于报告目的。
+- en: If you run your applications and databases in a cloud environment, we highly
+    recommend you find out the preferred secrets management solution for that cloud
+    provider before looking to build your own. You will need something that provides
+    at minimum a level of encryption that is acceptable by National Institute of Standards
+    and Technology (NIST) standards^([1](ch13.html#ch01fn87)) because that is required
+    for a number of regulations, including HIPAA and FedRAMP.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您在云环境中运行应用程序和数据库，我们强烈建议您在考虑构建自己的解决方案之前，先了解该云服务提供商的首选机密管理解决方案。您需要的是至少提供符合国家标准与技术研究所（NIST）标准可接受级别的加密，因为这是许多法规（包括HIPAA和FedRAMP）所要求的。
+- en: If your cloud provider does not have an acceptable solution for secret management,
+    you may have to host your own. This might be a new endeavor for your organization
+    and will require a more broad effort than is in scope for this book.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的云服务提供商没有一个可接受的机密管理解决方案，您可能需要自行托管。这可能是您的组织的一项新尝试，需要比本书所涵盖的更广泛的努力。
+- en: Whether you use a managed solution or end up needing to run your own, be aware
+    of the complexity this secret management solution brings to your architecture.
+    The goal of this solution is to manage secrets, not to be a single point of failure
+    for your product. Clearly written trade-offs explaining what happens when the
+    secret management solution is available will come in handy. An explicit conversation
+    in advance with both your legal team and security organization about what secrets
+    are cached and in what ways will help avoid misaligned expectations later.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论您使用托管解决方案还是最终需要自行运行，都要意识到这种机密管理解决方案给您的架构带来的复杂性。这种解决方案的目标是管理机密，而不是成为产品的单点故障。提前与您的法律团队和安全组织明确讨论解决方案可用时会发生什么的权衡将会很有帮助。关于缓存哪些机密以及以何种方式缓存的明确对话将有助于避免后期期望不一致。
+- en: Often, decisions made by a company in its early development days that were based
+    on convenience need to be wound back well before planning for compliance controls.
+    You should be prepared to explain to your leadership why this work is important
+    in the context of improving your security posture and reducing risk.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，公司在早期发展阶段基于便利性做出的���定需要在计划合规控制之前进行调整。您应该准备向领导层解释为什么在改善安全姿势和降低风险的背景下这项工作很重要。
+- en: Do not share users
+  id: totrans-44
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 不要共享用户
+- en: 'Do not share database credentials across services. This is the type of decision
+    that pays off in orders of magnitude if you have a database accidentally leak
+    and you now have to assess the blast radius of how many parts of the application
+    stack and processes have to get a new database credential pair. As a database
+    engineer, it is common to join a startup where folks have taken the seemingly
+    convenient shortcut of “all the code uses the same pair to access the database.”
+    Believe us: this is a very expensive shortcut, and your future self will thank
+    you if you limit the access of each database user to just the service it needs.'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不要跨服务共享数据库凭据。如果您的数据库意外泄漏，现在必须评估应用程序堆栈和流程中有多少部分需要获取新的数据库凭据对，这种决策的效果将成倍增长。作为数据库工程师，加入一家初创公司是很常见的，人们通常会采取看似方便的捷径，“所有代码都使用相同的对来访问数据库。”
+    相信我们：这是一种非常昂贵的捷径，如果您限制每个数据库用户的访问权限仅限于其所需的服务，您的未来自己会感谢您。
+- en: Now that we’ve covered this basic but crucial fundamental practice, let’s talk
+    about things to consider when choosing a solution to store database credentials
+    or secrets in general.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经介绍了这个基本但至关重要的基本实践，让我们谈谈在选择存储数据库凭据或秘密的解决方案时需要考虑的事项。
+- en: Do not check production database credentials in code repositories
+  id: totrans-47
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 不要在代码存储库中检查生产数据库凭据
+- en: This may seem obvious, but it is something that keeps happening as we see in
+    plenty of postsecurity incident reports from companies both large and small. It
+    is important to keep a humble mindset about this and don’t assume that this mistake
+    is unlikely in your organization. A trust-but-verify approach will go a long way
+    toward preventing future pain. Scanning code repositories for potential secret
+    strings before a pull request is merged is a common practice (and something that
+    hosted repo services like GitHub can do for you). If that is not something your
+    organization is already thinking about, you may need to become an advocate for
+    this need. Remember that compliance and security are needed for the organization
+    as a whole, and although not everything can or should be done by the database
+    team, you are a stakeholder in how the engineering organization at large talks
+    about these priorities.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这可能看起来很明显，但我们在许多大大小小公司的安全事件报告中仍然看到这种情况发生。保持谦卑的心态很重要，不要假设这种错误在您的组织中不太可能发生。信任但验证的方法将在很大程度上有助于防止未来的痛苦。在合并拉取请求之前扫描代码存储库中的潜在秘密字符串是一种常见做法（也是像GitHub这样的托管存储库服务可以为您执行的操作）。如果您的组织尚未考虑这一点，您可能需要成为这种需求的倡导者。请记住，合规性和安全性对整个组织都是必需的，尽管并非所有事情都可以或应该由数据库团队完成，但您是整个工程组织讨论这些优先事项的利益相关者之一。
+- en: These practices are fundamental to starting off your compliance and security
+    posture on the right foot. They will make a number of the operations we are about
+    to cover when using secret management all the more straightforward and will further
+    reduce risk to the business if there is ever a need to make an urgent change.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些实践对于正确开始合规性和安全姿势至关重要。它们将使我们在使用秘密管理时即将涵盖的一些操作变得更加简单，并且在有必要进行紧急更改时将进一步降低业务风险。
+- en: Let’s talk about the trade-offs in choosing a secret management solution.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们谈谈在选择秘密管理解决方案时的权衡。
+- en: Choosing a secret management solution
+  id: totrans-51
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 选择一个秘密管理解决方案
+- en: 'Choosing a secret management solution is going to rely on what environment
+    you run in and what can most easily integrate with not just the databases but
+    also the application stack. There will always be trade-offs between convenience
+    and meeting all your needs. So you need to be clear with all stakeholders (some
+    of whom are not in engineering) on what the limitations are and what the trade-offs
+    for availability or resilience are. Some of these trade-offs that you should consider
+    as you check what your cloud (or private) infrastructure can offer include the
+    following:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择一个秘密管理解决方案将取决于您运行的环境以及最容易与数据库和应用程序堆栈集成的内容。在方便性和满足所有需求之间总会存在权衡。因此，您需要明确向所有利益相关者（其中一些不是工程师）说明限制是什么，可用性或弹性的权衡是什么。在检查您的云（或私有）基础设施可以提供的内容时，您应考虑以下一些权衡：
+- en: Space limitations
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 空间限制
+- en: A number of cloud-provided secret management solutions make assumptions about
+    how *long* a secret is, which can lead to surprises if you want to store something
+    longer than a database user and password pair. If your compliance controls require
+    also treating longer text strings as secrets (such as SSH keys or private certificates
+    for SSL), you should check into the maximum size you can store on a given key.
+    One of the land mines some organizations stumble on later is that as the secret
+    footprint grows, a new and different secret management solution is needed to accommodate
+    longer secrets. Now they have to deal with either migrating (which can affect
+    uptime) or managing tooling and integrations with two separate secret solutions,
+    which comes with its own complexity.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多由云提供的秘密管理解决方案对秘密的*长度*做出了假设，这可能会导致意外惊喜，如果您想存储比数据库用户和密码对更长的内容。如果您的合规控制要求将更长的文本字符串（例如SSH密钥或SSL的私有证书）也视为秘密，您应该查看您可以在给定密钥上存储的最大大小。一些组织后来会遇到的雷区之一是，随着秘密足迹的增长，需要一个新的不同的秘密管理解决方案来容纳更长的秘密。现在他们必须处理迁移（可能会影响正常运行时间）或管理工具和与两个单独的秘密解决方案集成的复杂性。
+- en: Secret rotation
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 秘密轮换
+- en: 'If you run in a public cloud and can use their hosted secret management solution,
+    there is good news for you: all three major cloud offerings as of this writing
+    offer some method of automating the rotation of secrets along with versioning
+    to make the transition to new secrets seamless for your services. However, if
+    your secret management solution of choice does not support rotating secrets, then
+    you need to plan for how you will do that both as a planned change (for example,
+    you may have a control that requires that database credentials rotate on a cadence)
+    or as an unplanned emergency change (for instance, someone accidentally checked
+    a database password in a public repository). How do you do this without affecting
+    your running applications? That depends to a large extent on how you deliver configuration
+    changes to running applications and what your deployment pipeline operates. This
+    is the general idea of how to orchestrate it. This change is a deployment. Even
+    if your applications access database credentials as a configuration line, you
+    still need to propagate this configuration change to all of your fleet and typically
+    also orchestrate a restart without affecting availability of the service as a
+    whole.'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你在公共云中运行并且可以使用他们提供的托管密钥管理解决方案，那么对你来说有个好消息：截至目前，所有三个主要的云服务提供商都提供了一些自动化轮换密钥的方法，以及版本控制，使得服务过渡到新密钥对你的服务更加无缝。然而，如果你选择的密钥管理解决方案不支持轮换密钥，那么你需要计划如何进行这项工作，无论是作为计划更改（例如，你可能有一个要求数据库凭据定期轮换的控制）还是作为紧急变更（例如，有人意外地在公共存储库中检查了数据库密码）。如何在不影响正在运行的应用程序的情况下进行这项工作？这在很大程度上取决于你如何向正在运行的应用程序传递配置更改以及你的部署流水线的运作方式。这是如何编排的一般想法。这个变更是一个部署。即使你的应用程序将数据库凭据作为配置行访问，你仍然需要将这个配置更改传播到你的所有设备，并通常还需要编排一个重新启动，而不影响整个服务的可用性。
+- en: Regional availability
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 区域可用性
+- en: Consider that your secret management solution is not just for storing secrets
+    but also for delivering them. If you are to avoid a known bad practice like storing
+    secrets in code, you need your application to be able to retrieve the secrets
+    it needs to handle requests at runtime. This means you now have to think about
+    how these secrets will be retrieved, what happens if your application cannot access
+    the secret management service, and what failure modes this new dependency introduces.
+    If you are responsible for applications that need to run in many geographical
+    regions, the regional capabilities of your secret management solution become another
+    thing to consider. Does the solution by your cloud provider automatically replicate
+    secrets to other regions? Or do you have to build that capability?
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要考虑你的密钥管理解决方案不仅用于存储密钥，还用于传递密钥。如果你要避免像在代码中存储密钥这样的已知不良做法，你需要让你的应用程序能够在运行时检索它需要处理请求的密钥。这意味着你现在必须考虑如何检索这些密钥，如果你的应用程序无法访问密钥管理服务会发生什么，以及这种新依赖引入了什么故障模式。如果你负责需要在许多地理区域运行的应用程序，你的密钥管理解决方案的区域能力就成为另一个需要考虑的因素。你的云提供商的解决方案是否会自动将密钥复制到其他区域？还是你必须构建这种能力？
+- en: Separation of Roles and Data
+  id: totrans-59
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 角色和数据的分离
+- en: An important goal of these regulatory laws is the separation of data based on
+    the risk it presents for either the business or its customers in case of a leak.
+    This is the concept of *least privilege*, both for human access and application
+    code access. This separation allows for more appropriate controls and tracking
+    of changes depending on what the data is and what risk is associated with it.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些监管法律的一个重要目标是根据数据泄露的风险将数据分开，无论是对企业还是对其客户。这就是*最小权限*的概念，无论是对人类访问还是对应用程序代码访问。这种分离允许根据数据内容和相关风险进行更合适的控制和变更跟踪。
+- en: Sharding for compliance reasons
+  id: totrans-61
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 为合规性原因进行分片
+- en: One axis that may force a specific separation of data sets into dedicated clusters
+    is having different compliance requirements with very different controls. Let’s
+    say you are a marketing communications provider that is creating a new, separate
+    product with an emphasis on health-care tech. The data that is currently in use
+    was not health related and was not subject to a number of legal requirements.
+    Once the business makes this entry into health technology, you now have a subset
+    of customers and their data where your company carries the legal burden of being
+    a processor of personal health information (PHI). In that scenario, it makes sense
+    to develop the new product from the get-go in dedicated data storage so that you
+    can more appropriately apply HIPAA compliance controls without adding undue burden
+    on the existing data set and its dependent applications.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可能会迫使特定数据集分开到专用集群的一个因素是具有非常不同控制要求的不同合规性要求。比如说，你是一个市场传播提供商，正在创建一个侧重于医疗技术的新产品。目前正在使用的数据与健康无关，并且不受多项法律要求约束。一旦企业进入健康技术领域，你现在就有了一部分客户及其数据，你的公司承担了作为个人健康信息（PHI）处理者的法律责任。在这种情况下，最好从一开始就在专用数据存储中开发新产品，这样你就可以更适当地应用HIPAA合规性控制，而不会给现有数据集及其依赖的应用程序增加不必要的负担。
+- en: Separate database users
+  id: totrans-63
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 分开数据库用户
+- en: As your product grows more complex and the tech stack that supports it follows
+    suit, you will start having more than one application with data access. It is
+    very important to start well-controlled data access controls early in your organization
+    by not sharing the same database access credentials across multiple code bases.
+    Security incidents and accidental leaks of credentials are events that happen
+    to all sorts of companies regardless of size, and when they do, you will be well
+    served to have the leaked secrets impact a known and isolated blast radius of
+    your business operations as you scramble to rotate that secret.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着您的产品变得更加复杂，支持其的技术堆栈也随之增长，您将开始拥有多个具有数据访问权限的应用程序。在组织早期就开始良好控制数据访问权限非常重要，不要在多个代码库之间共享相同的数据库访问凭据。安全事件和凭据意外泄露是发生在各种公司的事件，无论规模大小，当这些事件发生时，您将受益于泄露的秘密影响已知且隔离的业务操作范围，因为您在匆忙更换该秘密时。
+- en: Tracking Changes
+  id: totrans-65
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 变更跟踪
+- en: 'A number of compliance regulations come with controls around tracking changes:
+    changes to subsets of your data that affect financial reporting, changes to your
+    systems that generate invoices, and how these changes are reviewed, tested, and
+    tracked. One of the obvious first spots where this kind of compliance control
+    becomes pertinent is the database. As you work for a business with expanding compliance
+    responsibilities, processes like “how a schema change gets reviewed, applied,
+    and tracked in production” need more rigor and planning than simply “an engineer
+    logs on the source node in production and makes a change.” This is far less of
+    a burden if you prepare by planning alongside your internal audit team or compliance
+    team for how to handle audits.'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多合规法规都涉及跟踪变更的控制：影响财务报告的数据子集的变更，生成发票的系统的变更，以及这些变更如何被审查、测试和跟踪。这种合规控制首次显而易见的地方之一是数据库。随着您为扩大合规责任的业务工作，像“如何审查、应用和跟踪生产中的模式更改”这样的流程需要比简单地“工程师登录生产源节点并进行更改”更严格和更有计划。如果您通过与内部审计团队或合规团队一起规划如何处理审计来做好准备，这将减轻很多负担。
+- en: The goal here is to avoid annual audits from becoming a major disruptive event
+    where the team is scrambling to collect evidence for the audit team. Instead,
+    if you make some changes to how these normal business operations work, you can
+    have “baked in” evidence that is far simpler to collect and use for audits. You
+    will see in this section a recurring theme around producing structured logs from
+    everything. This is intentional. It goes a long way toward making all sorts of
+    changes trackable in the same manner, and that consistency helps the business
+    achieve its audit needs with far less disruption. You can see how this all comes
+    together in [Figure 13-1](#examples_of_different_operational_tasks).
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里的目标是避免年度审计成为一个重大干扰事件，团队在为审计团队收集证据而忙碌。相反，如果您对这些正常业务操作的工作方式进行一些更改，您可以获得“内置”证据，这样收集和用于审计的证据就会简单得多。您将在本节中看到一个关于从所有方面生成结构化日志的重复主题。这是有意的。这在很大程度上有助于以相同方式跟踪各种变更，这种一致性有助于企业以更少的干扰实现其审计需求。您可以看到这一切是如何在[图13-1](#examples_of_different_operational_tasks)中结合在一起的。
+- en: '![](assets/hpm4_1301.png)'
+  id: totrans-68
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_1301.png)'
+- en: Figure 13-1\. Examples of different operational tasks all sending structured
+    logs to one place, making audits easier
+  id: totrans-69
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图13-1。不同操作任务的示例，所有任务都将结构化日志发送到一个地方，使审计更容易
+- en: Let’s look at different types of changes to database systems and how to automate
+    compliance tracking for them.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看数据库系统的不同变更类型以及如何为其自动化合规跟踪。
+- en: Data access logging
+  id: totrans-71
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 数据访问日志记录
+- en: Many compliance controls ask that you maintain logs of changes or access to
+    specific data sets. This can be for the purposes of tracking changes to financial
+    data or for regulations such as PCI or HIPAA where the data is sensitive enough
+    that all access needs to be tracked.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多合规控制要求您保留��特定数据集的更改或访问的日志。这可以用于跟踪财务数据的更改，也可以用于PCI或HIPAA等法规，其中数据足够敏感，所有访问都需要被跟踪。
+- en: You can address this need directly at the database level by leveraging either
+    [Percona’s audit log plug-in](https://oreil.ly/0SJa0) if you run Percona’s fork
+    or the equivalent [MySQL Enterprise Audit plug-in](https://oreil.ly/2tanA) if
+    you run MySQL Community Server. The benefit here is that you now can track changes
+    at the last hop before data changes, especially if you are in an environment where
+    changes to the database can happen via multiple paths.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以直接在数据库级别解决这个需求，通过利用[Percona的审计日志插件](https://oreil.ly/0SJa0)（如果您使用Percona的分支）或等效的[MySQL企业审计插件](https://oreil.ly/2tanA)（如果您使用MySQL社区服务器）。这样做的好处是，现在您可以在数据更改之前的最后一跳跟踪变更，特别是如果您处于一个数据库可以通过多个路径进行更改的环境中。
+- en: Undesirable options for tracking changes
+  id: totrans-74
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 跟踪变更的不良选项
+- en: 'You may ask, “Why not use triggers to track any changes to the tables I care
+    about?” This is definitely an approach we have seen in the past, but it is not
+    recommended. Here are some reasons we discourage using triggers for this:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可能会问，“为什么不使用触发器跟踪我关心的表的任何更改？”这绝对是我们过去看到的一种方法，但不建议。以下是我们不建议使用触发器的一些原因：
+- en: Triggers are known to present a write performance hit, which will affect you
+    at the worst possible time.
+  id: totrans-76
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 已知触发器会对写入性能造成影响，这将在最糟糕的时候影响您。
+- en: Triggers amount to storing business logic in the database, which is not recommended.
+  id: totrans-77
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 触发器相当于将业务逻辑存储在数据库中，这是不推荐的。
+- en: Storing code in the database will likely circumvent any process for testing,
+    staging, and deploying that code. It is easy for triggers to become an unexpected
+    surprise for your team during incidents.
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将代码存储在数据库中可能会绕过对该代码进行测试、分期和部署的任何流程。在事件期间，触发器可能会成为您的团队的意外惊喜。
+- en: Triggers can only support tracking write actions. It is a solution that cannot
+    expand to track read access if the need arises.
+  id: totrans-79
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 触发器只能支持跟踪写入操作。如果需要，它无法扩展到跟踪读取访问。
+- en: Let’s see how you would use the Percona audit log plug-in and how to tune it.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看如何使用Percona审计日志插件以及如何调整它。
+- en: Installing and tuning Percona audit logs
+  id: totrans-81
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 安装和调整Percona审计日志
+- en: 'Percona’s audit log plug-in ships as part of Percona’s MySQL fork but is not
+    installed or enabled by default. You can install it by running the following command
+    on your instances as part of the bootstrap process of any new instance:'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Percona的审计日志插件作为Percona的MySQL分支的一部分提供，但默认情况下未安装或启用。您可以通过在任何新实例的引导过程中运行以下命令来安装它：
+- en: '[PRE0]'
+  id: totrans-83
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: The second command lists the running plug-ins and should confirm that the audit
+    log plug-in is, in fact, now running as part of the server process. Besides turning
+    it on, you also need to determine how you will ingest its output. This is where
+    the real planning happens.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二个命令列出正在运行的插件，并应确认审计日志插件实际上现在作为服务器进程的一部分在运行。除了启用它，您还需要确定如何摄取其输出。这就是真正的计划发生的地方。
+- en: The audit log plug-in by Percona allows you to define what statement verbs you
+    need to track. This allows for flexibility to meet various controls without committing
+    to a lot of noise in your audit logs that are irrelevant to what you care about.
+    Make sure you review its documentation to properly configure that variable as
+    needed.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Percona的审计日志插件允许您定义需要跟踪的语句动词。这允许灵活地满足各种控制要求，而不会在审计日志中产生大量与您关心的内容无关的噪音。确保您查阅其文档以正确配置该变量。
+- en: 'One of the flexible advantages of the plug-in is that you can have it installed
+    but not actually monitoring queries.^([2](ch13.html#ch01fn88)) This can be useful
+    if you are still working on how to ingest its output and need to turn it off and
+    on without uptime impact. But with that flexibility comes complexity. Besides
+    managing the configuration variables that come with the audit log plug-in, you
+    also need to monitor that it is running at all times. If this is a critical function
+    for the business, it means it is worth monitoring. Since the plug-in can be disabled
+    on the fly without a server restart, you need more than just checking the on disk
+    *my.cnf* file to confirm that it is doing what it needs to be doing. Your best
+    bet is to use shell queries to parse out the current state of the plug-in and
+    confirm that it is, in fact, monitoring queries. Here are two sample single liners
+    to check for each of these:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 插件的一个灵活优势是您可以安装它，但实际上不监视查询。这在您仍在研究如何摄取其输出并需要在不影响正常运行的情况下关闭和打开它时非常有用。但是，这种灵活性也带来了复杂性。除了管理审计日志插件附带的配置变量之外，您还需要监视它是否始终运行。如果这对业务来说是一个关键功能，那么值得监控。由于插件可以在不重新启动服务器的情况下禁用，您需要更多的方式来确认它是否正在执行所需的操作，而不仅仅是检查磁盘上的*my.cnf*文件以确认它是否正在执行所需的操作。您最好使用shell查询来解析插件的当前状态，并确认它是否实际上正在监视查询。以下是两个示例单行查询来检查这两个方面：
+- en: '[PRE1]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: These examples assume that you are only looking to monitor queries. You will
+    need to edit the check if you also expect to use the plug-in to track logins.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些示例假定您只想监视查询。如果您还希望使用插件来跟踪登录，您需要编辑检查。
+- en: Ingesting and using audit plug-in logs
+  id: totrans-89
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 摄取和使用审计插件日志
+- en: As you can see, there is a lot of flexibility with the audit log plug-in, but
+    it also only produces audit events for you. It is on you to determine the best
+    way to ingest these logs, have them in a place where they can be easily searched
+    and analyzed, and reasonably discover anomalies in them without it being a major
+    burden. The plug-in can simply dump the output to local files, but that can increase
+    the risk of causing outages by filling up your database host disks with these
+    logs.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如您所见，审计日志插件具有很大的灵活性，但它也只为您生成审计事件。您需要确定最佳方法来摄取这些日志，将它们放在一个可以轻松搜索和分析的地方，并合理地发现其中的异常，而不至于成为一个重大负担。插件可以简单地将输出转储到本地文件，但这可能会增加通过这些日志填满数据库主机磁盘而导致故障的风险。
+- en: A more complex option is to use the plug-in’s ability to send its output to
+    `rsyslog`, a common Unix log management utility, and from there use `rsyslog`
+    to forward all these events to your organization’s structured logging platform
+    of choice. This option is appealing as it brings this data into the same place
+    where your organization already does structured log storage, which lowers the
+    barrier for stakeholders outside the database team to be able to see, search,
+    and analyze these events. Keep in mind, though, that using `rsyslog` for log forwarding
+    in this manner will require you to become familiar with how it works. Make sure
+    you decide and document in an intentional manner how `rsyslog` for this data stream
+    is configured.^([3](ch13.html#ch01fn89)) It is quite possible there are a number
+    of default configurations in `rsyslog` that are not helpful to your desired outcome,
+    and it is on you to do the due diligence to find these and change them accordingly.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更复杂的选项是使用插件将其输出发送到`rsyslog`，这是一个常见的Unix日志管理实用程序，然后使用`rsyslog`将所有这些事件转发到您组织选择的结构化日志平台。这个选项很吸引人，因为它将这些数据带入到您的组织已经进行结构化日志存储的地方，这降低了数据库团队之外的利益相关者查看、搜索和分析这些事件的门槛。请记住，使用`rsyslog`以这种方式进行日志转发将要求您熟悉它的工作原理。确保您决定并以有意义的方式记录`rsyslog`如何配置这个数据流。可能有许多`rsyslog`的默认配置对您期望的结果没有帮助，您需要尽职调查找出这些配置并相应地更改它们。
+- en: Warning
+  id: totrans-92
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Make sure to document how the audit log plug-in output is stored, even if temporarily,
+    on database hosts. If the shipping method for these files slows down, the impact
+    of buffering the events in the plug-in can affect the performance of the database
+    server itself. This failure state is hard to debug because its only symptom is
+    queries executing slower. Plan chaos testing for the entire pipeline of these
+    logs with resilience in mind.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确保记录审计日志插件输出的存储方式，即使是临时存储在数据库主机上。如��这些文件的传送方式变慢，插件中缓冲事件的影响可能会影响数据库服务器本身的性能。这种故障状态很难调试，因为它的唯一症状是查询执行变慢。考虑以弹性为主的整个这些日志管道的混沌测试计划。
+- en: The Percona audit log plug-in is a powerful tool that can help you fulfill a
+    number of compliance controls. In our experience, it is a far more performant
+    solution than using triggers, and it integrates well with configuration management
+    and structured logging software, making for a solution that is effective across
+    a number of stakeholder teams.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Percona审计日志插件是一个强大的工具，可以帮助您满足许多合规性控制要求。根据我们的经验，它比使用触发器更高效，并且与配置管理和结构化日志记录软件很好地集成，从而形成一个对多个利益相关方团队有效的解决方案。
+- en: Version control for schema changes
+  id: totrans-95
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 模式更改的版本控制
+- en: '[Chapter 6](ch06.html#schema_design_and_management) covered different strategies
+    and tools that facilitate running schema changes at scale. Let’s talk about the
+    compliance concerns these strategies enable.'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[第6章](ch06.html#schema_design_and_management)介绍了不同的策略和工具，有助于规模化运行模式更改。让我们谈谈这些策略所支持的合规性问题。'
+- en: Using version control to both track and run your schema changes comes with built-in
+    tracking of who requested a change, who reviewed and approved it, and how it ran
+    in production. This is also a good reason to use a separate repository per database
+    cluster. As the database footprint in your company grows, you will find that not
+    all databases are created equal. Some will need more rigor for compliance (for
+    example, databases that hold financial data), and some power product experiments
+    that are not as critical. When it comes time for an audit, having the change record
+    for each data set and cluster available will be a huge convenience.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用版本控制来跟踪和运行模式更改，内置跟踪请求更改的人员、审查和批准的人员以及在生产中的运行情况。这也是使用每个数据库集群单独存储库的一个很好的理由。随着公司中数据库的增长，您会发现并非所有数据库都是平等的。有些需要更严格的合规性（例如，保存财务数据的数据库），而有些则用于不太关键的产品实验。在进行审计时，为每个数据集和集群提供更改记录将是一个巨大的便利。
+- en: This separation of data and cluster schema management based on compliance needs
+    also makes it easier to control who can submit or approve schema changes in your
+    version control management of choice. It is common when running a business audit
+    to need to justify who can make changes to the databases. Having a smaller circle
+    of human operators that *can* make changes to this data keeps with least-privilege
+    security principles.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于合规需求的数据和集群模式管理的分离还使得更容易控制谁可以提交或批准您选择的版本控制管理中的模式更改。在进行业务审计时，通常需要证明谁可以对数据库进行更改。拥有一个较小的人员操作圈
+    *可以* 对这些数据进行更改，符合最小权限安全原则。
+- en: Database user management
+  id: totrans-99
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 数据库用户管理
+- en: Changes to databases are not limited to schema changes. You also need to manage
+    database users and their granular privileges in a manner that is trackable and
+    repeatable. Let’s find out how you can meet some common compliance controls that
+    address database access controls.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对数据库的更改不仅限于模式更改。您还需要以可跟踪和可重复的方式管理数据库用户及其细粒度权限。让我们看看如何满足一些常见的合规性控制，以解决数据库访问控制问题。
+- en: Use configuration management
+  id: totrans-101
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 使用配置管理
+- en: A simple way to make database user tracking compliant is to leverage the same
+    process you use to make database configuration changes compliant. You manage it
+    all in a configuration management repository and use source control, a pull request
+    process, and peer review to provide the evidence that all changes to the database
+    users are done in a manner that can be audited and tracked.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使数据库用户跟踪合规的一个简单方法是利用与使数据库配置更改合规的相同流程。您可以在配置管理存储库中管理所有内容，并使用源代码控制、拉取请求流程和同行审查来提供证据，证明对数据库用户的所有更改都是以可审计和可跟踪的方式完成的。
+- en: Plan for credential rotation
+  id: totrans-103
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 计划凭证轮换
+- en: 'Whether for unplanned security incidents or because you have a control that
+    requires rotating credentials on a schedule, you need to have a plan for how to
+    rotate database users without affecting your application uptime. This likely means
+    changing both the username and password string used by applications. If you are
+    not yet running the latest and greatest major version with dual password support,
+    here are the steps you should employ to rotate database credentials in an application
+    in production without affecting the service uptime:'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论是因为未经计划的安全事件还是因为您有一个需要按计划轮换凭证的控制，您都需要制定一个计划，以便在不影响应用程序正常运行时间的情况下轮换数据库用户。这可能意味着更改应用程序使用的用户名和密码字符串。如果您尚未运行最新且最好的主要版本以支持双密码，请按照以下步骤在生产中旋转数据库凭证，而不会影响服务正常运行时间：
+- en: Introduce a new username/password pair in the database first.
+  id: totrans-105
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先在数据库中引入一个新的用户名/密码对。
+- en: Test that the new credentials have the same access privileges the old ones have.
+    Ideally, you do this automatically as part of deploying the new credentials by
+    comparing `SHOW GRANTS` and confirming the privileges are identical.
+  id: totrans-106
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 测试新凭证是否具有与旧凭证相同的访问权限。理想情况下，您应该自动执行此操作，作为部署新凭证的一部分，通过比较`SHOW GRANTS`并确认权限是否相同。
+- en: Create an application deployment that replaces the credentials in your application
+    configuration.
+  id: totrans-107
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建一个应用程序部署，替换应用程序配置中的凭证。
+- en: Restart all instances of this service to make sure the new pair is in use.
+  id: totrans-108
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 重新启动此服务的所有实例，以确保新对正在使用。
+- en: Drop the old username and password pair.
+  id: totrans-109
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 删除旧的用户名和密码对。
+- en: This process should work the same whether the change is routine or urgent because
+    of a credential leak or a security risk. Since the latter is not an event you
+    can control or entirely prevent from happening, you will be best served to have
+    this process automated, or at least well documented in a runbook and done routinely,
+    so it is not a scary fire-drill situation for your team when it happens unexpectedly.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论更改是例行还是紧急的（因为凭证泄漏或安全风险），此过程应该是相同的。由于后者不是您可以控制或完全防止发生的事件，最好将此过程自动化，或至少在运行手册中进行充分记录，并定期执行，以便在发生意外情况时，团队不会感到恐慌。
+- en: Tip
+  id: totrans-111
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Rotating database user passwords in MySQL used to be a complex orchestrating
+    endeavor to accomplish without affecting availability. MySQL 8.0.14 introduced
+    dual password support, which, in conjunction with password expiration policy support,
+    makes doing the right thing far easier operationally.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 中旋转数据库用户密码曾经是一个复杂的协调工作，需要在不影响可用性的情况下完成。MySQL 8.0.14 引入了双密码支持，结合密码过期策略支持，使得在操作上更容易做正确的事情。
+- en: Retire database users not in use
+  id: totrans-113
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 停用不再使用的数据库用户
+- en: Any database user not in use that remains active on your instances is a security
+    liability you do not need. It is important to audit the database users active
+    on your instances regularly, compared to what is configured on your applications,
+    and drop any users not actively in use by any applications.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 任何未使用的数据库用户仍然在您的实例上活跃是一个您不需要的安全风险。定期审计您实例上活跃的数据库用户，与您的应用程序配置进行比较，并删除任何未被任何应用程序活跃使用的用户是很重要的。
+- en: When fulfilling compliance needs for your company, you will come to see that
+    a lot of those compliance controls require the organization to track any and all
+    changes to certain assets. These controls are typical in reports like SOC 2, which
+    we described earlier in this chapter, where the primary concern is providing evidence
+    of data integrity and security.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当为您的公司满足合规需求时，您会发现许多合规控制要求组织跟踪对某些资产的任何和所有更改。这些控制在报告中很典型，比如我们在本章前面描述的 SOC 2，其中主要关注的是提供数据完整性和安全性的证据。
+- en: There are a few ways to find out if a defined database user is in use or not.
+    We covered Performance Schema extensively in [Chapter 3](ch03.html#performance_schema)
+    as a way to inspect server performance. There is a `users` table in Performance
+    Schema that stores historical information about users that have connected to the
+    server. This historical tracking goes as far back as the life of the server process
+    or the maximum size allowed for this table, whichever happens first. Since the
+    table tracks users that *have* connected, not ones that have *not,* you will need
+    to loop over known users and see if any do not appear in this table as the signal
+    that they might not be in use anymore.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有几种方法可以找出一个定义的数据库用户是否正在使用。我们在[第 3 章](ch03.html#performance_schema)中广泛介绍了 Performance
+    Schema 作为检查服务器性能的一种方式。在 Performance Schema 中有一个 `users` 表，存储了连接到服务器的用户的历史信息。这种历史跟踪可以追溯到服务器进程的生命周期或此表允许的最大大小，以先到者为准。由于该表跟踪已连接的用户，而不是未连接的用户，您需要循环遍历已知用户，并查看是否有任何用户不出现在此表中，作为他们可能不再使用的信号。
+- en: 'Here is a query to enable that instrument in Performance Schema:'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个启用 Performance Schema 中该工具的查询：
+- en: '[PRE2]'
+  id: totrans-118
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Once you have that enabled, the table to find this information is `perform​ance_​schema.users`.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦您启用了这个功能，查找此信息的表是 `perform​ance_​schema.users`。
+- en: If you use an audit-logging solution for compliance controls, such as Percona’s
+    plug-in that we mentioned previously, you can use these logs to determine whether
+    a user has connected to the instances within a given number of weeks.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您为合规控制使用审计日志解决方案，比如我们之前提到的 Percona 插件，您可以使用这些日志来确定用户是否在给定的几周内连接到实例。
+- en: Regardless of which way you determine this, it is recommended to set a policy
+    where “after six months of inactivity, a database user that has not connected
+    will be removed.” This is a practice that will help prevent having access that
+    is not needed and is now a liability.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论您如何确定这一点，建议设置一个政策，“在六个月的不活跃后，将删除未连接的数据库用户。” 这是一个有助于防止不需要的访问权限并且现在是一个风险的做法。
+- en: The databases you help manage are going to be in scope for controls that require
+    this level of diligence. As your company matures and starts considering becoming
+    more compliant, you will need to have a story for how you will show evidence that
+    changes to the databases in production are reviewed and tracked before they are
+    applied. The other thing that compliance controls will focus on is proving your
+    ability to restore data and service when a catastrophic event happens. For that,
+    we need to go over to backups and restores and see how they fit in.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您帮助管理的数据库将受到需要这种谨慎程度的控制范围。随着您的公司不断发展并开始考虑更加合规，您需要有一个故事来展示在将数据库更改应用之前如何审查和跟踪生产数据库的变化。合规控制还将关注的另一件事是证明您在发生灾难事件时恢复数据和服务的能力。为此，我们需要转向备份和恢复，看看它们如何适用。
+- en: Backup and Restore Procedures
+  id: totrans-123
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 备份和恢复程序
+- en: '[Chapter 10](ch10.html#backup_and_recovery) covers the different kinds of backups.
+    Backups are obviously important. They can be tremendously helpful in incidents
+    but also are a key part of many compliance controls. In most SOC 2 implementations,
+    you will have controls for both creating and testing the backups (but you should
+    also test your backups anyway). As the number of database clusters you manage
+    grows, you will quickly find that you cannot continue doing processes like backup
+    and backup tests manually, or even report on success and failure by manually reading
+    logfiles.'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[第 10 章](ch10.html#backup_and_recovery)涵盖了不同类型的备份。备份显然很重要。它们在事件中可以极大地帮助，同时也是许多合规控制的关键部分。在大多数
+    SOC 2 实施中，您将有关于创建和测试备份的控制（但无论如何，您应该测试您的备份）。随着您管理的数据库集群数量增加，您很快会发现无法继续手动执行备份和备份测试等流程，甚至无法通过手动阅读日志文件报告成功和失败。'
+- en: 'You need to cover some requirements when assessing how you will manage backups
+    for compliance reasons:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在评估出于合规原因如何管理备份时，您需要满足一些要求：
+- en: You need to automate the process of backups.
+  id: totrans-126
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您需要自动化备份过程。
+- en: You need the backup process to alert you if it fails.
+  id: totrans-127
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果备份失败，您需要备份过程提醒您。
+- en: You need to automate tests of the backups.
+  id: totrans-128
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您需要自动化备份测试。
+- en: Failed tests of backups should also be events you can track somewhere.
+  id: totrans-129
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 备份测试失败也应该是您可以在某处跟踪的事件。
+- en: Next we discuss how to schedule backups and backup tests.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来我们讨论如何安排备份和备份测试。
+- en: Running automated backups and backup tests
+  id: totrans-131
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 运行自动备份和备份测试
+- en: To fulfill these requirements, you need a mechanism that does not just run scheduled
+    jobs (such as *crond* in Linux systems) but that can run on a schedule and also
+    has the ability to send events to your monitoring system and your ticketing system
+    to both alert on failure and track the failure for audits later. One way you can
+    do this is by running backups and backup tests as a monitoring check,^([4](ch13.html#ch01fn90))
+    but backups can take a while to run, especially if you have some database instances
+    sized in the terabytes. Running backups as a monitoring item can work as long
+    as the monitoring system you are about to use for running your backup tasks can
+    handle checks that can run for periods that are much longer than the typical few
+    seconds. So make sure that your team running the monitoring system is aware of
+    this use case.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了满足这些要求，��需要一个机制，不仅仅运行计划任务（例如Linux系统中的*crond*），而且可以按计划运行，并且还具有向您的监控系统和工单系统发送事件的能力，以便在失败时发出警报并为以后的审计跟踪失败。您可以通过将备份和备份测试作为监控检查运行来做到这一点，^([4](ch13.html#ch01fn90))但是备份可能需要一段时间才能运行，特别是如果您有一些以TB为单位的数据库实例。只要监控系统可以处理运行时间远远超过几秒的典型时间的检查，将备份作为监控项目运行就可以工作。因此，请确保运行监控系统的团队意识到这种用例。
+- en: If your monitoring system cannot handle this kind of use case, then make sure
+    you have some method to leave behind “bread crumbs” to track that a backup has
+    happened and finished successfully and that a backup test has happened and also
+    finished successfully. One such bread crumb can be a file with a timestamp in
+    it that your backup process edits at the end of every backup or backup test run
+    as proof that the task happened and was completed. Once that bread crumb is in
+    place, you can use the monitoring system to do the much faster check that the
+    bread crumb exists.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的监控系统无法处理这种用例，那么请确保您有一些方法留下“踪迹”以跟踪备份已经发生并成功完成，以及备份测试已经发生并成功完成。这样的踪迹可以是一个文件，其中包含备份或备份测试运行结束时您的备份过程编辑的时间戳，作为任务发生并完成的证据。一旦放置了这个踪迹，您可以使用监控系统进行更快速的检查，以确保踪迹存在。
+- en: In all these strategies, what you want to have, and what your SOC 2 control
+    requires, is a track record of backups finishing successfully as well as of any
+    failed backups, showing that they were turned into properly tracked work items.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在所有这些策略中，您想要拥有的，以及您的SOC 2控制要求的，是备份成功完成的记录以及任何失败的备份的记录，显示它们已转化为正确跟踪的工作项。
+- en: Centralized logs for backups and backup tests
+  id: totrans-135
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 备份和备份测试的集中日志
+- en: You may also be asked to show logs proving the successful completion of backups
+    and backup test processes. You would be well served to prepare for such an audit
+    item by using a centralized logging solution you can ship logs to for continuity.
+    Remember that the solutions we build for these business needs should assume servers
+    are easily and repeatedly replaceable, not bespoke. So local logfiles on a random
+    instance are not ideal if you ever retire that machine and replace it before the
+    next audit. You want any business-related assets, such as logs of the backup process,
+    to be in a centralized location that anyone with the right access policies can
+    access.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可能还会被要求展示日志，证明备份和备份测试过程成功完成。您最好准备好这样的审计项目，通过使用可以将日志发送到以保持连续性的集中日志解决方案。请记住，我们为这些业务需求构建的解决方案应该假设服务器易于且可重复替换，而不是定制的。因此，如果您在下一次审计之前退休该机器并替换它，那么随机实例上的本地日志文件并不理想。您希望任何与业务相关的资产，例如备份过程的日志，都位于任何具有正确访问策略的人都可以访问的集中位置。
+- en: Disaster-recovery planning through backups
+  id: totrans-137
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 通过备份进行灾难恢复规划
+- en: Also as part of SOC 2 is the requirement to have proper disaster-recovery planning.
+    This means proof that you test any backups that your system produces, you have
+    tracking of when these tests fail and that the failure was corrected, and, ideally,
+    that you have an idea of how long disaster recovery of data takes. This last part
+    requires tracking metrics for how long a test of a backup takes. [Chapter 2](ch02.html#monitoring_in_a_reliability_engineering)
+    mentioned database instance size as a metric for determining whether it is getting
+    too large for backup recovery within an intended objective time. The way to make
+    this a self-improving cycle is to make your backup and scripts that test the backups
+    also send metrics of how long each takes. This way, you have per-database cluster
+    metrics of how long backups take and how long restoring and testing those backups
+    take. You now have a way to track whether any given set of data is getting too
+    large for what the business expects in terms of MTTR. If you are, then you have
+    the data to either prioritize the work to split the data set down to an acceptable
+    size or revisit the business SLA for recovery.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为SOC 2的一部分，还需要进行适当的灾难恢复规划。这意味着您需要证明您测试系统生成的任何备份，您需要跟踪这些测试失败的时间以及失败已经被纠正，并且最好您需要知道数据灾难恢复需要多长时间。这最后一部分需要跟踪备份测试需要多长时间的指标。[第2章](ch02.html#monitoring_in_a_reliability_engineering)提到数据库实例大小作为确定备份恢复是否在预期时间内变得过大的度量标准。使这成为一个自我改进的循环的方法是使您的备份和测试备份的脚本也发送每个任务需要多长时间的指标。这样，您就可以获得每个数据库集群备份需要多长时间以及恢复和测试这些备份需要多长时间的指标。现在您有了一种跟踪任何给定数据集是否变得过大以至于超出业务对MTTR的期望的方法。如果是这样，那么您有数据要么优先处理将数据集分割到可接受大小，要么重新审视业务的恢复SLA。
+- en: 'An important final note about backups: your security stakeholders will need
+    access to both the live databases and the backups to be controlled. Make sure
+    that your backup setup in your favorite cloud provider does not default to permissive
+    access controls for backup buckets. Many security breaches happen not through
+    breaching the live infrastructure, but through backups leaking from a storage
+    bucket somewhere.'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于备份的一个重要最终注意事项：您的安全利益相关者需要访问实时数据库和备份以进行控制。确保您在您喜爱的云服务提供商中的备份设置不会默认为备份存储桶的宽松访问控制。许多安全漏洞并非通过侵入实时基础设施发生，而是通过从某个存储桶泄漏的备份发生。
+- en: Summary
+  id: totrans-140
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: Compliance is a wide-ranging world of policy and controls as well as interpretations
+    of each. It affects not just how you run databases in your business but also the
+    legal, finance, and IT departments, and even how you deploy changes to your software.
+    This chapter focused on how each common type of compliance regulation affects
+    your duties as a database engineer specifically. We then covered different practices
+    and architectural decisions that can be affected by these regulations, which you
+    also need to consider.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 合规性是一个广泛的政策和控制世界，以及对每个解释的影响。它不仅影响您在业务中运行数据库的方式，还影响法律、财务和IT部门，甚至影响您如何部署软件更改。本章重点介绍了每种常见类型的合规性法规如何特别影响您作为数据库工程师的职责。然后我们涵盖了这些法规可能受到影响的不同实践和架构决策，您也需要考虑这些。
+- en: Broadly, the best way to get ahead of control-related nightmares is to plan
+    early. Separate your application users, plan a credential rotation strategy, and
+    ensure that your passwords are always stored encrypted—never as plain text. Ensure
+    that before you need to start logging access to the database, you have a logging
+    pipeline you can trust. Lastly, you want schema changes to be controlled and logged.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 广义上说，摆脱与控制相关的噩梦的最佳方法是提前计划。分离应用程序用户，制定凭据轮换策略，并确保密码始终以加密方式存储——绝不是明文。确保在需要开始记录对数据库的访问之前，你有一个可信赖的日志记录管道。最后，你希望对模式更改进行控制和记录。
+- en: The goal of this chapter has not been to overwhelm you with thinking about all
+    these controls across your entire infrastructure at once, but to make the task
+    of providing evidence for the parts that are in scope for each regulation easier
+    and as automated or simple to put together as possible. Ultimately, these controls
+    are meant to protect the business and your customers’ privacy. Having a strong
+    grasp on what each control aims to achieve will make this important task more
+    manageable for you and your team as your company grows and enters wider markets.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的目标不是让你一次性考虑整个基础架构中所有这些控制措施，而是让为每项法规规定的范围提供证据的任务更容易，并尽可能自动化或简化组合。最终，这些控制措施旨在保护企业和客户的隐私。对每项控制措施的目标有清晰的理解将使您和您的团队在公司发展并进入更广泛市场时更容易管理这一重要任务。
+- en: ^([1](ch13.html#ch01fn87-marker)) For more information on these standards, start
+    a conversation with your friendly information security team or grab the [*NIST
+    Cybersecurity Framework*](https://oreil.ly/s7XOJ) pocket guide from O’Reilly.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch13.html#ch01fn87-marker)) 欲了解更多关于这些标准的信息，请与您友好的信息安全团队交谈，或者从 O’Reilly
+    获取[*NIST网络安全框架*](https://oreil.ly/s7XOJ)口袋指南。
+- en: ^([2](ch13.html#ch01fn88-marker)) See the [plug-in documentation](https://oreil.ly/gwqc2)
+    for more on this.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch13.html#ch01fn88-marker)) 有关此内容，请参阅[插件文档](https://oreil.ly/gwqc2)。
+- en: ^([3](ch13.html#ch01fn89-marker)) As a start, here is an entire page on [“reliable
+    log forwarding”](https://oreil.ly/76e9K).
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([3](ch13.html#ch01fn89-marker)) 作为一个开始，这里有一个关于[“可靠日志转发”](https://oreil.ly/76e9K)的整个页面。
+- en: ^([4](ch13.html#ch01fn90-marker)) In the blog post [“Using Sensu for DBA tasks”](https://oreil.ly/Meunp),
+    you can see some examples of making tasks like backups a part of your database
+    monitoring solution.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([4](ch13.html#ch01fn90-marker)) 在博客文章[“使用 Sensu 进行 DBA 任务”](https://oreil.ly/Meunp)中，您可以看到一些将备份任务纳入数据库监控解决方案的示例。

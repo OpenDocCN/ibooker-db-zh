@@ -1,0 +1,1945 @@
+- en: Chapter 11\. Scaling MySQL
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第 11 章。扩展 MySQL
+- en: Running MySQL in a personal project, or even in a young company, is very different
+    from running it in a business with an established market and “hockey stick growth.”
+    In a high-velocity business setting, traffic can grow orders of magnitude year
+    over year, the environment becomes more complex, and the accompanying data needs
+    accelerate rapidly. Scaling up MySQL is very different from other types of servers
+    largely because of the stateful nature of the data. Compare this to a web server,
+    where the widely accepted model of adding more behind a load balancer is typically
+    all you need to do.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在个人项目中运行 MySQL，甚至在年轻公司中运行 MySQL，与在市��已经建立并且“呈现指数增长”业务中运行 MySQL 大不相同。在高速业务环境中，流量可能每年增长数倍，环境变得更加复杂，伴随的数据需求迅速增加。扩展
+    MySQL 与其他类型的服务器大不相同，主要是因为数据的有状态性质。将其与 Web 服务器进行比较，后者的广泛接受的模型是在负载均衡器后面添加更多服务器通常是您需要做的全部。
+- en: In this chapter, we explain what scaling means and walk you through the different
+    axes where you may need to scale. We explore why read scaling is essential and
+    show you how to accomplish it safely, with strategies like queuing for making
+    scaling writes more predictable. Finally, we cover sharding data sets to scale
+    writes using tools like ProxySQL and Vitess. By the end of this chapter, you should
+    be able to identify what seasonal pattern your system has, how to scale reads,
+    and how to scale writes.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将解释什么是扩展，并引导您了解可能需要扩展的不同方面。我们探讨了为什么读取扩展是必不可少的，并向您展示如何安全地实现它，使用诸如排队等策略使写入扩展更可预测。最后，我们涵盖了使用诸如
+    ProxySQL 和 Vitess 这样的工具对数据集进行分片以扩展写入。通过本章结束时，您应该能够确定系统具有什么季节性模式，如何扩展读取以及如何扩展写入。
+- en: What Is Scaling?
+  id: totrans-3
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 什么是扩展？
+- en: '*Scaling* is the system’s ability to support growing traffic. The criteria
+    for whether a system scales well or scales poorly can be measured by cost and
+    simplicity. If it is excessively expensive or complicated to increase your system’s
+    ability to scale, you likely will expend significantly more effort remediating
+    this as you hit limitations.'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*扩展*是系统支持不断增长的流量的能力。系统是否扩展良好或扩展不佳的标准可以通过成本和简单性来衡量。如果增加系统的扩展能力过于昂贵或复杂，您可能会在遇到限制时花费更多精力来解决这个问题。'
+- en: '*Capacity* is a related concept. The system’s capacity is the amount of work
+    it can perform in a given amount of time.^([1](ch11.html#ch01fn74)) However, capacity
+    must be qualified. The system’s maximum throughput is not the same as its capacity.
+    Most benchmarks measure a system’s maximum throughput, but you can’t push real
+    systems that hard. If you do, performance will degrade, and response times will
+    become unacceptably large and variable. We define the system’s actual capacity
+    as the throughput it can achieve while still delivering acceptable performance.'
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*容量*是一个相关概念。系统的容量是它在给定时间内可以执行的工作量。^([1](ch11.html#ch01fn74)) 但是，容量必须加以限定。系统的最大吞吐量与其容量不同。大多数基准测试衡量系统的最大吞吐量，但您不能过度推动真实系统。如果这样做，性能将下降，响应时间将变得不可接受地长且不稳定。我们将系统的实际容量定义为它在仍然提供可接受性能的情况下可以实现的吞吐量。'
+- en: 'Capacity and scalability are independent of performance. You can compare it
+    to cars on a highway:'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 容量和可扩展性与性能无关。您可以将其比作高速公路上的车辆：
+- en: The system is the highway and all the lanes and cars in it.
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 系统就是高速公路，上面有所有的车道和车辆。
+- en: Performance is how fast the cars are.
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 性能是车辆的速度。
+- en: Capacity is the number of lanes times the maximum safe speed.
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 容量是车道数乘以最大安全速度。
+- en: Scalability is the degree to which you can add more cars and more lanes without
+    slowing traffic.
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 可扩展性是您可以增加更多车辆和更多车道而不会减慢交通的程度。
+- en: In this analogy, scalability depends on factors like how well the interchanges
+    are designed, how many cars have accidents or break down, and whether the cars
+    drive at different speeds or change lanes a lot—but generally, scalability does
+    not depend on how powerful the cars’ engines are. This is not to say that performance
+    doesn’t matter, because it does. We’re just pointing out that systems can be scalable
+    even if they aren’t high performance.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个类比中，可扩展性取决于诸如立交设计的优良程度、有多少车辆发生事故或抛锚、车辆是否以不同的速度行驶或频繁变道等因素，但通常，可扩展性并不取决于车辆引擎的强大程度。这并不是说性能不重要，因为它确实重要。我们只是指出，即使系统性能不高，系统也可以具有可扩展性。
+- en: From the 50,000-foot view, scalability is the ability to add capacity by adding
+    resources.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从 50,000 英尺高度来看，可扩展性是通过增加资源来增加容量的能力。
+- en: 'Even if your MySQL architecture is scalable, your application might not be.
+    If it’s hard to increase capacity for any reason, your application isn’t scalable
+    overall. We previously defined capacity in terms of throughput, but it’s worth
+    looking at capacity from the same 50,000-foot view. From this vantage point, capacity
+    simply means the ability to handle load, and it’s useful to think of load from
+    several different angles:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使您的 MySQL 架构是可扩展的，您的应用程序可能并非如此。如果由于任何原因增加容量很困难，那么您的应用程序整体上就不具备可扩展性。我们先前用吞吐量来定义容量，但从同样的
+    50,000 英尺高度来看容量也是值得一提的。从这个角度来看，容量简单地意味着处理负载的能力，从几个不同的角度来看负载是有用的：
+- en: Quantity of data
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据量
+- en: The sheer volume of data your application can accumulate is one of the most
+    common scaling challenges. This is particularly an issue for many of today’s web
+    applications, which never delete any data. Social networking sites, for example,
+    typically never delete old messages or comments.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您的应用程序可以累积的数据量是最常见的扩展挑战之一。这对今天许多 Web 应用程序来说尤为重要，这些应用程序从不删除任何数据。例如，社交网络网站通常不会删除旧消息或评论。
+- en: Number of users
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用户数量
+- en: Even if each user has only a small amount of data, if you have a lot of users,
+    it adds up—and the data size can grow disproportionately faster than the number
+    of users. Many users generally means more transactions too, and the number of
+    transactions might not be proportional to the number of users. Finally, many users
+    (and more data) can mean increasingly complex queries, especially if queries depend
+    on the number of relationships among users. (The number of relationships is bounded
+    by (*N* × (*N* – 1)) / 2, where *N* is the number of users.)
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使每个用户只有少量数据，如果用户数量很多，数据量会累积起来——而且数据量可能比用户数量增长更快。许多用户通常意味着更多的交易，而交易数量可能与用户数量不成比例。最后，许多用户（和更多数据）可能意味着越来越复杂的查询，特别是如果查询依赖于用户之间的关系数量。
+    （关系数量受到限制，为(*N* × (*N* – 1)) / 2，其中*N*是用户数量。）
+- en: User activity
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用户活动
+- en: 'Not all user activity is equal, and user activity is not constant. If your
+    users suddenly become more active—because of a new feature they like, for example—your
+    load can increase significantly. User activity isn’t just a matter of the number
+    of page views, either. The same number of page views can cause more work if the
+    part of the site that requires a lot of work to generate becomes more popular.
+    Some users are much more active than others, too: they might have many more friends,
+    messages, or photos than the average user.'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并非所有用户活动都是相同的，用户活动也不是恒定的。如果你的用户突然变得更活跃——例如因为他们喜欢的新功能——你的负载可能会显著增加。用户活动不仅仅是页面浏览的数量。即使页面浏览的数量相同，如果需要大量工作才能生成的站点部分变得更受欢迎，那么同样数量的页面浏览可能会导致更多的工作。一些用户比其他用户更活跃：他们可能比普通用户拥有更多的朋友、消息或照片。
+- en: Size of related data sets
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相关数据集的大小
+- en: If there are relationships among users, the application might need to run queries
+    and computations on entire groups of related users. This is more complex than
+    just working with individual users and their data. Social networking sites often
+    face challenges due to popular groups or users who have many friends.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果用户之间存在关系，应用程序可能需要在整个相关用户组上运行查询和计算。这比仅仅处理个别用户及其数据更复杂。社交网络网站经常面临由于拥有许多朋友的热门群体或用户而带来的挑战。
+- en: Scaling challenges can come in many forms. In the next section, we talk about
+    how to determine where your bottleneck is and what you can do about it.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 扩展挑战可能以多种形式出现。在下一节中，我们将讨论如何确定瓶颈所在以及如何解决。
+- en: Read- Versus Write-Bound Workloads
+  id: totrans-23
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 读取受限与写入受限的工作负载
+- en: One of the first things you should examine when thinking about scaling your
+    database architecture is whether you are scaling a *read-bound* workload or a
+    *write-bound* workload. A read-bound workload is one where the amount of read
+    traffic (`SELECT`) is overwhelming the capacity of your server. A write-bound
+    workload overwhelms the capacity of your server to serve DML (`INSERT`, `UPDATE`,
+    `DELETE`). Understanding which you are hitting involves understanding your workload.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在考虑扩展数据库架构时，你应该首先检查的是你是在扩展*读取受限*的工作负载还是*写入受限*的工作负载。读取受限的工作负载是指读取流量（`SELECT`）超过了服务器容量的情况。写入受限的工作负载超过了服务器提供DML（`INSERT`，`UPDATE`，`DELETE`）的能力。了解你所面临的情况涉及了解你的工作负载。
+- en: Understanding Your Workload
+  id: totrans-25
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 理解你的工作负载
+- en: A database workload is many things. First, it’s your capacity, or as we mentioned
+    before, the measure of work over time. For databases, this usually boils down
+    to queries per second. One definition of workload could be how many QPS the system
+    can perform. Don’t be disillusioned by this, however. One thousand QPS at 20%
+    CPU doesn’t always mean you can add four thousand more QPS. Not every query is
+    created equal.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库工作负载包括很多方面。首先，它是你的容量，或者正如我们之前提到的，是单位时间内的工作量。对于数据库来说，这通常归结为每秒查询数。工作负载的一个定义可能是系统可以执行多少QPS。然而，不要被这个迷惑。20%的CPU下的一千个QPS并不总是意味着你可以再增加四千个QPS。并非每个查询都是相同的。
+- en: 'Queries come in all forms: reads, writes, primary key lookups, subqueries,
+    joins, bulk inserts, and so forth. Each has a cost associated with it. This cost
+    is measured in CPU time, or latency. When a query waits longer on a disk to return
+    information, that time is added to the cost.^([2](ch11.html#ch01fn75)) It is important
+    to understand the capacity of your resources. How many CPUs do you have, what
+    are the read and write IOPS and throughput limitations of your disk, and what
+    network throughput do you have? Each of these will have their own influence on
+    latency, which directly relates to your workload.'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询有各种形式：读取、写入、主键查找、子查询、连接、批量插入等等。每种查询都有与之相关的成本。这个成本以CPU时间或延迟来衡量。当一个查询在磁盘上等待返回信息时，这段时间会增加成本。^([2](ch11.html#ch01fn75))
+    了解你的资源容量是很重要的。你有多少个CPU，你的磁盘的读取和写入IOPS和吞吐量限制是多少，你的网络吞吐量是多少？每个因素都会对延迟产生影响，而延迟直接关系到你的工作负载。
+- en: A workload is the blend of all types of queries and their latencies. It would
+    be more fair to say that, if we process one thousand QPS at 20% CPU, we can add
+    four thousand more QPS *as long as their latencies are the same*.^([3](ch11.html#ch01fn76))
+    If we introduce four thousand more queries and we hit a disk IOPS bottleneck,
+    the latency of all reads goes up.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 工作负载是所有类型查询及其延迟的混合。更公平的说法是，如果我们在20%的CPU上处理一千个QPS，我们可以再增加四千个QPS，*只要它们的延迟相同*。^([3](ch11.html#ch01fn76))
+    如果我们引入四千个额外的查询并且遇到磁盘IOPS瓶颈，所有读取的延迟都会增加。
+- en: If the only metrics you have access to are basic system ones, like CPU, memory,
+    and disk, it can be nearly impossible to understand which of these you are hitting.
+    You will want to determine what your read versus write performance is. We provided
+    an example of this in [“Examining Read Versus Write Performance”](ch03.html#examining_read_versus_write_performance)
+    in [Chapter 3](ch03.html#performance_schema). Using that example, you can determine
+    the latency of reads versus writes. If you trend these numbers over time, you
+    can see if your read or write latencies are increasing and, consequently, where
+    you might be bound.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您只能访问基本系统指标，如CPU、内存和磁盘，几乎不可能理解您正在受到哪些限制。您需要确定您的读取与写入性能如何。我们在[“检查读取与写入性能”](ch03.html#examining_read_versus_write_performance)中提供了一个示例，在[第3章](ch03.html#performance_schema)中。使用该示例，您可以确定读取与写入的延迟。如果您随时间趋势这些数字，您可以看到您的读取或写入延迟是否增加，因此您可能受到限制的地方。
+- en: Read-Bound Workloads
+  id: totrans-30
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 读取限制工作负载
+- en: Assume that, when you began designing your product, you took the shortcut of
+    using one source host for all database traffic. Adding more application nodes
+    may scale the clients serving requests but will ultimately be capped by the ability
+    of your one-source database host to respond to these read requests. The primary
+    indicator of this is CPU utilization. High CPU means the server is spending all
+    of its time processing queries. The higher CPU utilization gets, the more latency
+    you will see in queries. This isn’t the only indicator, however. You can also
+    see heavy disk read IOPS or throughput, indicating that you are going to disk
+    very often or for large numbers of rows read from disk.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设，在设计产品时，您采用了一个源主机用于所有数据库流量的捷径。增加更多应用节点可能会扩展为客户端提供请求，但最终将受到您的单一源数据库主机响应这些读取请求的能力的限制。这的主要指标是CPU利用率。高CPU意味着服务器花费所有时间处理查询。CPU利用率越高，您在查询中看到的延迟就越多。然而，这并不是唯一的指标。您还可以看到大量的磁盘读取IOPS或吞吐量，表明您经常访问磁盘或从磁盘读取大量行。
+- en: You can initially improve this by adding indexes, optimizing queries, and caching
+    data you can cache. Once you run out of improvements, you will be left with a
+    read-bound workload and this is where scaling read traffic using replicas comes
+    in. We will discuss later in this chapter how to scale your reads using read replica
+    pools, how to run health checks for these pools, and what pitfalls to avoid when
+    you start using that architecture.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过添加索引、优化查询和缓存可缓存的数据，您可以最初改善这一点。一旦您没有更多的改进空间，您将面临一个读取限制的工作负载，这就是使用副本扩展读取流量的时候。我们将在本章后面讨论如何使用读取副本池扩展您的读取量，如何为这些池运行健康检查，以及在开始使用该架构时要避免的陷阱。
+- en: Write-Bound Workloads
+  id: totrans-33
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 写入限制工作负载
+- en: 'You may also be encountering a write-bound load. Here are some examples of
+    a write-bound database load:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可能也遇到了写入限制的负载。以下是一些写入限制数据库负载的示例：
+- en: Perhaps signups are growing exponentially.
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 可能注册人数正在呈指数增长。
+- en: It is peak ecommerce season, and sales are growing, along with the number of
+    orders to track.
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 现在是高峰电子商务季节，销售额正在增长，订单数量也在增加。
+- en: It is election season, and you have a lot of campaign communication going out.
+  id: totrans-37
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 现在是选举季节，您有很多竞选通讯要发出。
+- en: All of these are business use cases that lead to exponentially more database
+    writes that you now have to scale. Again, a single-source database, even if you
+    can scale it vertically for some time, can only go so far. When the bottleneck
+    is the write volume, you have to start thinking about ways to split your data
+    so that you can accept writes in parallel on separate subsets. We will talk about
+    how to shard for write scaling later in this chapter as well.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有这些都是导致更多数据库写入的业务用例，现在您必须扩展。再次强调，即使您可以在一段时间内垂直扩展单一源数据库，但只能走得这么远。当瓶颈是写入量时，您必须开始考虑如何拆分数据，以便可以在不同的子集上并行接受写入。我们将在本章后面讨论如何为写入扩展而进行分片。
+- en: It’s logical at this point to ask, “What if I’m seeing both types of growth?”
+    It is important to inspect your schema closely and identify whether there is a
+    subset of tables growing faster in reads versus another subset growing in write
+    needs. Trying to scale a database cluster for both at the same time is asking
+    for a lot of pain and incidents. We recommend separating tables in different functional
+    clusters to scale reads and writes independently; this is a prerequisite for scaling
+    read traffic with read pools far more effectively.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一点上，问一下“如果我看到两种类型的增长怎么办？”是很合理的。重要的是仔细检查您的模式，并确定是否有一组表在读取方面增长得比另一组表在写入需求方面增长得更快。尝试同时为两者扩展数据库集群会带来很多痛苦和事件。我们建议将表分开放入不同的功能集群中，以独立扩展读取和写入；这是更有效地扩展读取流量的先决条件。
+- en: Now that you have determined whether you have a read- or write-bound load, we
+    discuss how you can help guide this functional splitting of data in an effective
+    manner.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在您已经确定了您的负载是读取限制还是写入限制，我们将讨论如何以有效的方式帮助引导数据的功能拆分。
+- en: Functional Sharding
+  id: totrans-41
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 功能分片
+- en: Splitting your data based on its “function” in the business is a context-heavy
+    task that requires a deep understanding of what the data is. This goes hand in
+    hand with popular software architecture paradigms like service-oriented architecture
+    (SOA) and microservices. Not all functional approaches are created equal, and
+    in a hyperbolic example, if you were to put each table in its own “functional”
+    database, you could definitely make everything worse through too much fragmentation.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据业务中的“功能”拆分数据是一个需要深入了解数据的上下文密集型任务。这与流行的软件架构范式如面向服务的架构（SOA）和微服务紧密相关。并非所有功能方法都是平等的，在一个夸张的例子中，如果您将每个表放入自己的“功能”数据库中，您可能会通过过多的碎片化使一切变得更糟。
+- en: 'How do you approach splitting your large monolith/mixed concerns database into
+    a sensible set of smaller clusters that help the business scale? Here are some
+    guidelines to keep in mind:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您如何处理将大型单体/混合关注点数据库拆分为一组合理的较小集群，以帮助业务扩展？以下是一些需要牢记的指导原则：
+- en: Do not split based on the structure of the engineering team. That will always
+    change at some point.
+  id: totrans-44
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不要根据工程团队的结构进行拆分。这种情况总会在某个时候发生变化。
+- en: Do split tables based on business function. Tables that power account signups
+    can be separate from tables that host existing customer settings, and tables that
+    power a new feature should start off in their own database.
+  id: totrans-45
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 根据业务功能拆分表格。用于账户注册的表格可以与用于托管现有客户设置的表格分开，用于支持新功能的表格应该从其自己的数据库开始。
+- en: Do not shy away from tackling spots where separate business concerns have been
+    intermingled in the data and you need to advocate for not just data separation
+    but also application refactoring and introducing API access across those boundaries.
+    A common example we have seen is mixing customer identity with customer billing.
+  id: totrans-46
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不要回避处理数据中混合了不同业务关注点的地方，并且您需要倡导不仅进行数据分离，还要进行应用重构，并在这些边界之间引入API访问。我们见过的一个常见例子是将客户身份与客户账单混合在一起。
+- en: It is normal that at first there will be tables that clearly have their own
+    business function and access pattern and therefore are an easy target for splitting
+    off to a separate cluster, but that separation will get more nuanced as you get
+    further along.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 起初，会有一些明显具有自己业务功能和访问模式的表格，因此很容易将其拆分到一个单独的集群中，但随着进展，这种分离会变得更加微妙。
+- en: Now that we have split data in a thoughtful manner based on business function,
+    let’s talk about how to scale for read-bound loads using replica read pools.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经根据业务功能以周到的方式拆分了数据，让我们谈谈如何使用副本读取池来扩展读取负载。
+- en: Scaling Reads with Read Pools
+  id: totrans-49
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用只读池扩展读取
+- en: Replicas in a cluster can serve more than one purpose. First and foremost, they
+    are candidates for failing over writes, either in a planned or unplanned manner,
+    when the current source needs to be taken out of service for any reason. But since
+    these replicas are also constantly running updates to match the data in the source,
+    you can use them to serve read requests as well.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 集群中的副本可以担任多个目的。首先，当当前源需要出于任何原因停止服务时，它们是写入故障转移的候选者，无论是计划的还是非计划的。但由于这些副本也在不断运行更新以匹配源中的数据，您也可以使用它们来提供读取请求。
+- en: In [Figure 11-1](#application_nodes_using_a_virtual_ip_to), we start by getting
+    a visual of what this new setup with read replica pools looks like.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[图11-1](#application_nodes_using_a_virtual_ip_to)中，我们首先看一下具有只读副本池的新设置的可视化效果。
+- en: '![](assets/hpm4_1101.png)'
+  id: totrans-52
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_1101.png)'
+- en: Figure 11-1\. Application nodes using a virtual IP to access read replicas
+  id: totrans-53
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图11-1\. 应用节点使用虚拟IP访问只读副本
+- en: For the sake of simplicity, we will pretend application nodes still fulfill
+    write requests by directly connecting to the source database. We will later cover
+    how connecting to the source node can scale better. Note, though, that the same
+    application nodes connect to a virtual IP, which acts as a middle layer between
+    them and the read replicas. This is a *replica read pool*, and this is how you
+    spread the growing read load to more than one host. You may also note that not
+    all replicas are in the pool. That is a common way to prevent different read workloads
+    from affecting one another. If you have reporting processes or your backup process
+    tends to consume all of the disk I/O resources and cause replication lag, you
+    can leave out one or more replica nodes to fulfill those tasks and exclude it
+    from the read pool that serves customer-facing traffic. Alternatively, you can
+    augment your load balancer health check with a replication check that automatically
+    removes the backup node that is behind from the pool and reintroduces it when
+    it is caught up. The flexibility of turning your read replicas into interchangeable
+    resources grows significantly when there is a single point the application talks
+    to for reads and you can manage these resources seamlessly without impact on your
+    customers.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了简单起见，我们将假装应用节点仍通过直接连接到源数据库来完成写请求。稍后我们将讨论如何更好地连接到源节点。请注意，尽管如此，相同的应用节点连接到一个虚拟
+    IP，该虚拟 IP充当它们与只读副本之间的中间层。这是一个*副本读取池*，这是如何将不断增长的读取负载分散到多个主机的方法。您可能还注意到，并非所有副本都在池中。这是一种常见的方法，用于防止不同的读取工作负载相互影响。如果您的报告流程或备份流程倾向于消耗所有磁盘I/O资源并导致复制延迟，您可以略过一个或多个副本节点来执行这些任务，并将其排除在为客户端流量提供服务的读取池之外。或者，您可以通过将复制检查与负载均衡器健康检查相结合，自动将落后的备份节点从池中移除，并在其赶上时重新引入。当应用程序与一个用于读取的单一节点通信，并且您可以无缝管理这些资源而不影响客户时，将您的只读副本转换为可互换资源的灵活性将显著增加。
+- en: 'Now that there is more than one database host serving read requests, there
+    are a few things to consider for smooth production sailing:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在有多个数据库主机用于提供读取请求，对于顺利的生产运行，有一些事项需要考虑：
+- en: How do you route traffic to all these read replicas?
+  id: totrans-56
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何将流量路由到所有这些只读副本？
+- en: How do you evenly distribute the load?
+  id: totrans-57
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何均匀分配负载？
+- en: How do you run health checks and remove unhealthy or lagged replicas to avoid
+    serving stale data?
+  id: totrans-58
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何运行健康检查并移除不健康或滞后的副本，以避免提供陈旧数据？
+- en: How do you avoid accidentally removing all of the nodes, causing more damage
+    to the application traffic?
+  id: totrans-59
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何避免意外删除所有节点，导致应用流量受到更大的损害？
+- en: How do you manually remove a server proactively for maintenance?
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何主动地为维护目的手动移除服务器？
+- en: How do you add newly provisioned servers to your load balancer?
+  id: totrans-61
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何将新配置的服务器添加到负载均衡器？
+- en: What automated checks are in place to avoid adding a newly provisioned node
+    to the load balancer before it is ready?
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 有哪些自动化检查措施可以避免在新配置的节点准备就绪之前将其添加到负载均衡器？
+- en: Is your definition of “ready for a new node” specific enough?
+  id: totrans-63
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你对“准备好接受新节点”的定义是否足够具体？
+- en: 'A very common way to manage these read pools is to use a load balancer to run
+    a virtual IP that acts as an intermediary for all traffic meant to go to the read
+    replicas. Technologies for doing this include HAProxy, a hardware load balancer
+    if you self-host, or a network load balancer if you are running in a public cloud
+    environment. In the case of using HAProxy, all application hosts will connect
+    to that one “frontend,” and HAProxy takes care of directing those requests to
+    one of the read replicas defined in the backend. Here is a sample HAProxy config
+    file that defines a virtual IP frontend and maps that to multiple read replicas
+    as a backend pool:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 管理这些读取池的一种非常常见的方式是使用负载均衡器运行一个充当所有流向读取副本的流量的中间人的虚拟IP。执行此操作的技术包括HAProxy，如果您自己托管，则为硬件负载均衡器，如果在公共云环境中运行，则为网络负载均衡器。在使用HAProxy的情况下，所有应用主机将连接到那个“前端”，而HAProxy负责将这些请求定向到后端定义的多个读取副本之一。以下是一个定义虚拟IP前端并将其映射到多个读取副本作为后端池的示例HAProxy配置文件：
+- en: '[PRE0]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Typically, you use configuration management to auto populate such a file. There
+    are a few things to note in this configuration. Balancing between your pool nodes
+    with *leastconn* is the recommended way in MySQL. Random balancing such as *roundrobin*
+    in times of elevated load will not help you use the hosts that are not overloaded.
+    Make sure you have the proper database user created on your MySQL instances to
+    run this health check, or else all your nodes will be marked unhealthy.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，您使用配置管理自动填充此类文件。在此配置中有几点需要注意。在MySQL中，使用*leastconn*在池节点之间进行负载均衡是推荐的方式。在负载升高时使用*roundrobin*等随机负载均衡方式将无法帮助您使用未过载的主机。确保在MySQL实例上创建了适当的数据库用户来运行此健康检查，否则所有节点都将被标记为不健康。
+- en: Tooling that facilitates sharding, such as Vitess and ProxySQL, can also act
+    like a load balancer. We’ll cover these tools toward the end of the chapter.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 促进分片的工具，如Vitess和ProxySQL，也可以充当负载均衡器。我们将在本章末讨论这些工具。
+- en: Managing Configuration for Read Pools
+  id: totrans-68
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 为读取池管理配置
+- en: Now that you have a “gate” between the application nodes and your replicas,
+    you need a way to easily manage the nodes included, or not included, in this read
+    pool using your load balancer of choice. You do not want this to be a manually
+    managed configuration. You are already on a trajectory of scaling to lots of database
+    instances, and managing configuration files manually will lead to mistakes, slower
+    response times, and host failures, and it simply does not scale.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在您在应用节点和副本之间有了一个“门”，您需要一种方法来轻松管理包含或不包含在此读取池中的节点，使用您选择的负载均衡器。您不希望这是一个手动管理的配置。您已经在扩展到大量数据库实例的轨道上，手动管理配置文件将导致错误、响应时间变慢、主机故障，并且根本无法扩展。
+- en: Service discovery is a good option to use here for automatically discovering
+    what hosts can be in this list. This may mean deploying a service-discovery solution
+    as part of your tech stack or relying on a managed service-discovery option at
+    your cloud provider, if that is available. The important thing to be careful with
+    here is to be very specific on the criteria that make a read replica qualify for
+    this read pool. Ideally, you exclude the source node and potentially one or more
+    replicas dedicated for reporting. But maybe you need something even more complex
+    where the replicas are further segmented to serve different application read loads?
+    We recommend at minimum three nodes per pool of replicas serving a specific purpose
+    in addition to your backup/reporting server and the source node.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务发现是一个很好的选择，可以自动发现可以在此列表中的主机。这可能意味着将服务发现解决方案部署为技术堆栈的一部分，或者依赖于云提供商提供的托管服务发现选项（如果有的话）。在这里要小心的重要事项是非常明确地指出使读取副本有资格进入此读取池的标准。理想情况下，您应该排除源节点和可能专门用于报告的一个或多个副本。但也许您需要更复杂的东西，其中副本进一步分段以服务不同的应用程序读取负载？我们建议每个池中至少有三个节点的副本，除了您的备份/报告服务器和源节点。
+- en: 'Whether you run your own service discovery^([4](ch11.html#ch01fn77)) or use
+    something offered by your cloud provider, you should be aware of the guarantees
+    of that service. Here are some things to consider, whether you will be running
+    service discovery or working with a team on it:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论您是自己运行服务发现^([4](ch11.html#ch01fn77))还是使用云提供商提供的服务，您都应该了解该服务的保证。以下是一些需要考虑的事项，无论您是运行服务发现还是与团队合作：
+- en: How soon can it detect the failure of a host?
+  id: totrans-72
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它有多快能检测到主机的故障？
+- en: How fast does that data propagate?
+  id: totrans-73
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据传播速度有多快？
+- en: When there is a database instance failure, how will the configuration refresh
+    on your load balancer?
+  id: totrans-74
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当数据库实例发生故障时，负载均衡器上的配置会如何刷新？
+- en: Does the change of database members happen as a background process, or will
+    it require severing existing connections?
+  id: totrans-75
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据库成员的更改是作为后台进程进行，还是需要中断现有连接？
+- en: What happens if service discovery itself is down? Does that impair any new database
+    connections or only impair making changes to load-balancer membership? Can you
+    make changes manually at that point?
+  id: totrans-76
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果服务发现本身出现故障会发生什么？这会影响任何新的数据库连接还是只会影响更改负载均衡器成员资格？在那时，您可以手动进行更改吗？
+- en: With flexibility comes complexity, and you must balance the two for optimal
+    outcomes in production when failures happen. Your job here is to always tether
+    your decisions to what SLIs and SLOs are being pursued and not to achieve a mythical
+    100% uptime goal.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 灵活性带来复杂性，您必须在生产中平衡两者以获得最佳结果。您的工作是始终将决策与正在追求的SLI和SLO联系在一起，而不是实现神话般的100%的正常运行时间目标。
+- en: Now that you know how to populate the configurations and update them as hosts
+    come and go, it’s time to talk about how to run health checks for the members
+    of a replica read pool.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在您知道如何填充配置并在主机进出时更新它们，现在是时候讨论如何为副本读取池的成员运行健康检查了。
+- en: Health Checks for Read Pools
+  id: totrans-79
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 读取池的健康检查
+- en: At this point, you will need to consider what the acceptable criteria that deem
+    a read replica healthy and ready to accept read traffic from the application are.
+    These criteria can be as simple as “the database process is up and running, the
+    port responds” but can become more complex, such as “the database is up, and replication
+    lag needs to be no more than 30 seconds, and read queries need to be running at
+    a latency no higher than 100 ms.”
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这一点上，您需要考虑什么标准可以认为读副本是健康的并准备好接受应用程序的读取流量。这些标准可以简单到“数据库进程正在运行，端口响应”，也可以变得更加复杂，比如“数据库正在运行，复制滞后不超过30秒，读查询运行的延迟不高于100毫秒”。
+- en: Tip
+  id: totrans-81
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Check the state of the variables `read_only` and `super_read_only` to make sure
+    that all the members in the read pool of your load balancer are actually replicas.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 检查变量`read_only`和`super_read_only`的状态，以确保负载均衡器的读取池中的所有成员实际上都是副���。
+- en: 'Deciding how far to take these health checks should be a conversation with
+    your application developer teams so that everyone understands and aligns on what
+    behavior they expect when reading from the database. Here are some questions to
+    ask the team that can help guide this decision process:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 决定进行到何种程度的健康检查应该是与您的应用程序开发团队进行讨论的一个过程，以便每个人都了解并对他们在从数据库读取时期望的行为达成一致。以下是一些可以帮助引导这一决策过程的团队提出的问题：
+- en: How much data staleness is acceptable? If the data returned is a few minutes
+    old, what does that affect?
+  id: totrans-84
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 可接受多少数据陈旧？如果返回的数据几分钟前的，会有什么影响？
+- en: What is the maximum acceptable query latency for the application?
+  id: totrans-85
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 应用程序的最大可接受查询延迟是多少？
+- en: What, if any, retry logic exists for read queries, and if it exists, is it exponential
+    backoff?
+  id: totrans-86
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 读查询是否存在任何重试逻辑，如果存在，是否是指数退避？
+- en: Do we already have an SLO for the application? Does that SLO extend to query
+    latency or only address uptime?
+  id: totrans-87
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我们是否已经为应用程序设定了SLO？该SLO是否延伸到查询延迟或仅涉及正常运行时间？
+- en: How does the system behave in the absence of this data? Is that degradation
+    acceptable? If so, for how long?
+  id: totrans-88
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在没有这些数据的情况下，系统会如何表现？这种退化是否可接受？如果是，那么持续多久？
+- en: In many cases, you will be fine using only a port check to confirm the MySQL
+    process is live and can accept connections. This means that as long as the database
+    is running, it will be part of that pool and serving requests.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在许多情况下，您只需使用端口检查即可确认MySQL进程正在运行且可以接受连接。这意味着只要数据库在运行，它将成为该池的一部分并提供服务请求。
+- en: 'However, sometimes you may need something more sophisticated because the data
+    set involved is critical enough that you do not want to serve it when replication
+    lags more than a few seconds or if replication is not running at all. For these
+    scenarios, you can still use a read pool but augment the health check with an
+    HTTP check. The way this works is that your load balancer of choice will run a
+    command (usually a script) and, based on the response code, will determine if
+    the node is healthy or not. In HAProxy, for example, the backend would have lines
+    of code like this:'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，有时您可能需要更复杂的东西，因为涉及的数据集足够关键，您不希望在复制滞后超过几秒或根本没有运行复制时提供服务。对于这些情况，您仍然可以使用读取池，但可以通过HTTP检查来增强健康检查。其工作原理是您选择的负载均衡器将运行一个命令（通常是一个脚本），并根据响应代码确定节点是否健康。例如，在HAProxy中，后端将具有类似以下代码行：
+- en: '[PRE1]'
+  id: totrans-91
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: This line means that for every host in the read pool, the load balancer will
+    call the path `/check-lag` using a `GET` call and inspect the response code. That
+    path runs a script that holds the logic as to how much lag is acceptable. The
+    script compares existing lag status with that threshold and, depending on that,
+    the load balancer either considers the replica healthy or not.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这一行意味着对于读取池中的每个主机，负载均衡器将使用`GET`调用调用路径`/check-lag`并检查响应代码。该路径运行一个脚本，其中包含有关可接受的滞后程度的逻辑。该脚本将现有的滞后状态与该阈值进行比较，并根据情况，负载均衡器将考虑副本是否健康。
+- en: Warning
+  id: totrans-93
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Even though health checks are a powerful tool, be careful using those with complex
+    logic (such as the lag check described previously), and make sure you have a plan
+    for what to do if all replicas in the pool fail the health checks. You can have
+    a static “fallback” pool that brings all the nodes back in for certain global
+    failures (e.g., the entire cluster is lagged) to avoid accidentally breaking all
+    read requests. For more detail on how one company has implemented this, see [this
+    post on the GitHub blog](https://oreil.ly/zyjA4).
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使健康检查是一个强大的工具，也要小心使用那些具有复杂逻辑的（比如之前描述的滞后检查），并确保你有一个计划，以防池中的所有副本都未通过健康检查。您可以拥有一个静态的“备用”池，用于某些全局故障（例如，整个集群滞后），以避免意外破坏所有读取请求。有关一家公司如何实施此功能的更多详细信息，请参阅[GitHub博客上的这篇文章](https://oreil.ly/zyjA4)。
+- en: Choosing a Load-Balancing Algorithm
+  id: totrans-95
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 选择负载均衡算法
+- en: 'There are many different algorithms to determine which server should receive
+    the next connection. Each vendor uses different terminology, but this list should
+    provide an idea of what’s available:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有许多不同的算法来确定哪个服务器应该接收下一个连接。每个供应商使用不同的术语，但这个列表应该提供了一个可用的想法：
+- en: Random
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随机
+- en: The load balancer directs each request to a server selected at random from the
+    pool of available servers.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 负载均衡器将每个请求定向到从可用服务器池中随机选择的服务器。
+- en: Round-robin
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 轮询
+- en: 'The load balancer sends requests to servers in a repeating sequence: A, B,
+    C, A, B, C, and so on.'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 负载均衡器将请求发送到服务器的重复序列：A、B、C、A、B、C，依此类推。
+- en: Fewest connections
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最少连接
+- en: The next connection goes to the server with the fewest active connections.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一个连接将发送到活动连接最少的服务器。
+- en: Fastest response
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最快响应
+- en: The server that has been handling requests the fastest receives the next connection.
+    This can work well when the pool contains a mix of fast and slow machines. However,
+    it’s very tricky with SQL when the query complexity varies widely. Even the same
+    query can perform very differently under different circumstances, such as when
+    it’s served from the query cache or when the server’s caches already contain the
+    needed data.
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 处理请求速度最快的服务器将接收下一个连接。当池中包含快速和慢速机器时，这种方法可以很好地运作。然而，在 SQL 中，当查询复杂性差异很大时，这就变得非常棘手。即使是相同的查询在不同情况下表现也会有很大差异，比如当它从查询缓存中提取时，或者当服务器的缓存已经包含所需数据时。
+- en: Hashed
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 哈希
+- en: The load balancer hashes the connection’s source IP address, which maps it to
+    one of the servers in the pool. Each time a connection request comes from the
+    same IP address, the load balancer sends it to the same server. The bindings change
+    only when the number of machines in the pool does.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 负载均衡器对连接的源 IP 地址进行哈希处理，将其映射到池中的一个服务器。每当来自相同 IP 地址的连接请求时，负载均衡器都会将其发送到同一台服务器。只有当池中的机器数量发生变化时，绑定才会更改。
+- en: Weighted
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 加权
+- en: The load balancer can combine and add weight to several of the other algorithms.
+    For example, you might have single- and dual-CPU machines. The dual-CPU machines
+    are roughly twice as powerful, so you can tell the load balancer to send them
+    an average of twice as many requests.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 负载均衡器可以结合并增加其他算法的权重。例如，您可能有单CPU和双CPU的机器。双CPU的机器大约是单CPU的两倍强大，因此您可以告诉负载均衡器向它们发送大约两倍数量的请求。
+- en: The best algorithm for MySQL depends on your workload. The least-connections
+    algorithm, for example, might flood new servers when you add them to the pool
+    of available servers before their caches are warmed up.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 MySQL 来说，最佳算法取决于您的工作负载。例如，最小连接算法可能会在将新服务器添加到可用服务器池之前，使新服务器过载。
+- en: You’ll need to experiment to find the best performance for your workload. Be
+    sure to consider what happens under extraordinary circumstances as well as in
+    the day-to-day norm. It is in those extraordinary circumstances—for example, during
+    times of high query load, when you’re doing schema changes, or when an unusual
+    number of servers go offline—that you can least afford something going terribly
+    wrong.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要进行实验，找到最适合您工作负载的性能。一定要考虑在特殊情况下发生的情况，以及日常规范下会发生的情况。在那些特殊情况下，例如在高查询负载时，进行模式更改时，或者在异常数量的服务器下线时，您最不希望出现严重问题。
+- en: We’ve described only instant-provisioning algorithms here, which don’t queue
+    connection requests. Sometimes algorithms that use queuing can be more efficient.
+    For example, an algorithm might maintain a given concurrency on the database server,
+    such as allowing no more than *N* active transactions at the same time. If there
+    are too many active transactions, the algorithm can put a new request in a queue
+    and serve it from the first server that becomes “available” according to the criteria.
+    Some connection pools support queuing algorithms.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们这里只描述了即时配置算法，不排队连接请求。有时使用排队的算法可能更有效。例如，一个算法可能在数据库服务器上维持给定的并发性，比如同时允许不超过*N*个活动事务。如果有太多活动事务，算法可以将新请求放入队列，并从符合条件的第一个“可用”服务器提供服务。一些连接池支持排队算法。
+- en: Now that we have covered how to scale your read load and how to health-check
+    it, it’s time to discuss scaling writes. Before looking for how to scale the writes
+    directly, you can look at places where queuing can make the write traffic growth
+    more manageable. Let’s discuss how queuing can help scale your write performance.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经讨论了如何扩展读取负载以及如何进行健康检查，是时候讨论扩展写入了。在直接寻找如何扩展写入之前，您可以查看排队可以使写入流量增长更可控的地方。让我们讨论一下排队如何帮助扩展您的写入性能。
+- en: Queuing
+  id: totrans-113
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 排队
+- en: Scaling your application layer becomes a lot more complex when scaling write
+    transactions with a data store that favors consistency over availability by design.
+    More application nodes writing to the one source node will lead to a database
+    system more susceptible to lock timeouts, deadlocks, and failed writes to have
+    to retry. All this will ultimately lead to customer-facing errors or unacceptable
+    latencies.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当使用一个偏向一致性而非可用性的数据存储来扩展写事务时，应用层的扩展变得更加复杂。更多的应用节点写入一个源节点将导致数据库系统更容易受到锁超时、死锁和失败写入的影响，必须重试。所有这些最终将导致面向客户的错误或不可接受的延迟。
+- en: Before looking into sharding the data, which we discuss next, you should examine
+    the write hotspots in your data and consider whether all the writes are truly
+    required to persist to the database actively. Can some of them be placed into
+    a queue and written to the database within an acceptable time frame?
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在研究接下来我们将讨论的数据分片之前，您应该检查数据中的写入热点，并考虑是否所有写入都真正需要主动持久化到数据库。一些写入可以放入队列，并在可接受的时间范围内写入数据库吗？
+- en: Let’s say you have a database that stores large data sets of customer historical
+    data. Customers occasionally send API requests to retrieve this data, but you
+    also need to support an API to delete this data. You can plausibly serve read
+    API calls from a growing number of replicas, but what about deletes? The HTTP
+    RFC allows for a response code, “202 Accepted.” You can return that, place the
+    request in a queue (e.g., Apache Kafka or Amazon Simple Queue Service), and process
+    these requests at the pace that doesn’t lead to overloading the database directly
+    with delete calls.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您有一个存储大量客户历史数据的数据库。客户偶尔发送 API 请求来检索这些数据，但您还需要支持一个用于删除这些数据的 API。您可以合理地从越来越多的副本中提供读取
+    API 调用，但删除呢？HTTP RFC 允许一个响应代码，“202 Accepted”。您可以返回该代码，将请求放入队列（例如，Apache Kafka
+    或 Amazon Simple Queue Service），并以不会直���导致数据库过载的速度处理这些请求。
+- en: This is obviously not the same as a 200 response code that implies the request
+    has been instantaneously fulfilled. This is a common spot where negotiation with
+    your product team is crucial for making the guarantees of the API plausible and
+    achievable. The difference between the 200 and 202 response codes is all the engineering
+    work of sharding this data to support a lot more parallel writes.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这显然不同于200响应代码，它意味着请求已经立即完成。在这种情况下，与产品团队进行协商对于使API的保证变得可信和可实现至关重要。200和202响应代码之间的区别在于分片这些数据以支持更多并行写入的所有工程工作。
+- en: One important design choice to make if you do apply queuing to a write load
+    is to determine up front the desired time frame within which these calls are expected
+    to be fulfilled after being placed in queue. Monitoring the growth of the time
+    a request spends in a queue is going to be your metric for when this strategy
+    has run its course and you really need to start splitting this data set to support
+    more parallel write load. You can do that using sharding, which we discuss next.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你将排队应用于写入负载，一个重要的设计选择是提前确定这些调用在放入队列后预期完成的时间范围。监控请求在队列中花费的时间的增长将是你确定这种策略何时已经到头，你真的需要开始分割这个数据集以支持更多并行写入负载的指标。你可以通过分片来实现这一点，接下��我们将讨论。
+- en: Scaling Writes with Sharding
+  id: totrans-119
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用分片扩展写入
+- en: If you cannot manage write traffic growth with optimized queries and queuing
+    writes, then sharding is your next option.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果无法通过优化查询和排队写入来管理写入流量的增长，那么分片是你的下一个选择。
+- en: '*Sharding* means splitting your data into different, smaller database clusters
+    so that you can execute more writes on more source hosts at the same time. There
+    are two different kinds of sharding or partitioning you can do: functional partitioning
+    and data sharding.'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*分片*意味着将数据分割成不同的、更小的数据库集群，这样你就可以同时在更多源主机上执行更多写操作。你可以进行两种不同类型的分片或分区：功能分区和数据分片。'
+- en: '*Functional partitioning*, or division of duties, means dedicating different
+    nodes to different tasks. An example of this might be putting user records on
+    one cluster and their billing on a different cluster. This approach allows each
+    cluster to scale independently. A surge in user registrations might put a strain
+    on the user cluster. With separate systems, your billing cluster is less loaded,
+    allowing you to bill customers. Conversely, if your billing cycle is the first
+    of the month, you can run that knowing you won’t be affecting user registration.'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*功能分区*，或者任务划分，意味着将不同的节点专门用于不同的任务。一个例子可能是将用户记录放在一个集群中，将他们的账单放在另一个集群中。这种方法允许每个集群独立扩展。用户注册激增可能会给用户集群带来压力。有了独立的系统，你的账单集群负载较轻，可以为客户开具账单。相反，如果你的账单周期是每月的第一天，你可以运行它，而不会影响用户注册。'
+- en: '*Data sharding* is the most common and successful approach for scaling today’s
+    very large MySQL applications. You shard the data by splitting it into smaller
+    pieces, or shards, and storing them on different nodes.'
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*数据分片*是当今扩展非常大型MySQL应用程序的最常见和成功的方法。你通过将数据分割成更小的片段或分片，并将它们存储在不同的节点上来进行分片。'
+- en: Most applications shard only the data that needs sharding—typically, the parts
+    of the data set that will grow very large. Suppose you’re building a blogging
+    service. If you expect 10 million users, you might not need to shard the user
+    registration information because you might be able to fit all of the users (or
+    the active subset of them) entirely in memory. If you expect 500 million users,
+    on the other hand, you should probably shard this data. The user-generated content,
+    such as posts and comments, will almost certainly require sharding in either case
+    because these records are much larger and there are many more of them.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数应用程序只对需要分片的数据进行分片——通常是数据集中将会增长非常大的部分。假设你正在构建一个博客服务。如果你预计有1000万用户，你可能不需要对用户注册信息进行分片，因为你可能能够完全将所有用户（或其中的活跃子集）存储在内存中。另一方面，如果你预计有5亿用户，你可能应该对这些数据进行分片。用户生成的内容，如帖子和评论，在任何情况下几乎肯定需要分片，因为这些记录更大，而且数量更多。
+- en: Large applications might have several logical data sets that you can shard differently.
+    You can store them on different sets of servers, but you don’t have to. You can
+    also shard the same data multiple ways, depending on how you access it.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大型应用程序可能有几个逻辑数据集，你可以以不同的方式进行分片。你可以将它们存储在不同的服务器集上，但不一定要这样做。你还可以以不同的方式对同一数据进行分片，具体取决于你如何访问它。
+- en: Be wary when planning to “only shard what needs sharding.” That concept needs
+    to include not just the data that is growing rapidly but also the data that logically
+    belongs with it and will regularly be queried at the same time. If you are sharding
+    based on a `user_id` field but there is a set of other smaller tables that join
+    on that same `user_id` in a majority of queries, it makes sense to shard all these
+    tables together so that you can keep a majority of your application queries against
+    one shard at a time and avoid cross database joins.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在计划“只分片需要分片的内容”时要小心。这个概念不仅需要包括增长迅速的数据，还需要包括逻辑上属于它的数据，并且将经常同时查询。如果你根据`user_id`字段进行分片，但有一组其他小表在大多数查询中与该`user_id`进行连接，那么将这些表一起分片是有意义的，这样你可以一次只对一个分片进行大多数应用查询，避免跨数据库连接。
+- en: Choosing a Partitioning Scheme
+  id: totrans-127
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 选择分区方案
+- en: The most important challenge with sharding is finding and retrieving data. How
+    you find data depends on how you shard it. There are many ways to do this, and
+    some are better than others.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分片的最重要挑战是查找和检索数据。你如何查找数据取决于你如何分片。有许多方法可以做到这一点，有些方法比其他方法更好。
+- en: 'The goal is to make your most important and frequent queries touch as few shards
+    as possible (remember, one of the scalability principles is to avoid crosstalk
+    between nodes). The most critical part of that process is choosing a partitioning
+    key (or keys) for your data. The partitioning key determines which rows should
+    go onto each shard. If you know an object’s partitioning key, you can answer two
+    questions:'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 目标是使您最重要和频繁的查询尽可能少地触及分片（记住，可扩展性原则之一是避免节点之间的交叉通信）。该过程中最关键的部分是选择数据的分区键（或键）。分区键确定应将哪些行放入每个分片。如果您知道对象的分区键，您可以回答两个问题：
+- en: Where should I store this data?
+  id: totrans-130
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我应该将这些数据存储在哪里？
+- en: Where can I find the data I need to fetch?
+  id: totrans-131
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 我可以在哪里找到我需要获取的数据？
+- en: We’ll show you a variety of ways to choose and use a partitioning key later.
+    For now, let’s look at an example. Suppose we do as MySQL’s NDB Cluster does and
+    use a hash of each table’s primary key to partition the data across all the shards.
+    This is a very simple approach, but it doesn’t scale well because it frequently
+    requires you to check all the shards for the data you want. For example, if you
+    want user 3’s blog posts, where can you find them? They are probably scattered
+    evenly across all the shards because they’re partitioned by the primary key, not
+    by the user. Using a primary key hash makes it simple to know where to store the
+    data, but it might make it harder to fetch it, depending on which data you need
+    and whether you know the primary key.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们稍后将展示选择和使用分区键的各种方法。现在，让我们看一个例子。假设我们像MySQL的NDB集群一样，使用每个表主键的哈希来将数据分区到所有分片中。这是一个非常简单的方法，但不适合扩展，因为它经常需要您检查所有分片以获取所需数据。例如，如果您想要用户3的博客文章，您可以在哪里找到它们？它们可能均匀分布在所有分片中，因为它们是按主键分区的，而不是按用户分区的。使用主键哈希使得知道存储数据的位置变得简单，但根据您需要的数据和是否知道主键，可能会使获取数据变得更困难。
+- en: You always want your queries localized to one shard. When sharding your data
+    horizontally, you want to *always* avoid having to query across shards to accomplish
+    a task. Joining data across shards will add complexity to your application layer
+    and eats away at the benefit of sharding the data in the first place. The worst
+    case with sharded data sets is when you have no idea where the desired data is
+    stored so that you need to scan every shard to find it.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您总是希望将查询局限在一个分片中。在水平分片数据时，您希望*始终*避免跨分片查询以完成任务。在跨分片连接数据会增加应用程序层的复杂性，并消耗分片数据的好处。分片数据集的最坏情况是当您不知道所需数据存储在哪里，因此需要扫描每个分片才能找到它。
+- en: A good partitioning key is usually the primary key of a very important entity
+    in the database. These keys determine the unit of sharding. For example, if you
+    partition your data by a user ID or a client ID, the unit of sharding is the user
+    or client.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个好的分区键通常是数据库中一个非常重要实体的主键。这些键确定了分片的单位。例如，如果您按用户ID或客户ID对数据进行分区，那么分片的单位就是用户或客户。
+- en: A good way to start is to diagram your data model with an entity-relationship
+    diagram or an equivalent tool that shows all the entities and their relationships.
+    Try to lay out the diagram so that the related entities are close together. You
+    can often inspect such a diagram visually and find candidates for partitioning
+    keys that you’d otherwise miss. Don’t just look at the diagram, though; consider
+    your application’s queries as well. Even if two entities are related in some way,
+    if you seldom or never join on the relationship, you can break the relationship
+    to implement the sharding.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个好的开始方法是使用实体关系图或显示所有实体及其关系的等效工具绘制数据模型图。尝试布置图表，使相关实体彼此靠近。您通常可以通过视觉检查这样的图表，并找到否则会错过的分区键候选项。但不要只看图表；还要考虑您应用程序的查询。即使两个实体在某种程度上相关，如果您很少或从不在关系上进行连接，您可以打破关系以实现分片。
+- en: Some data models are easier to shard than others, depending on the degree of
+    connectivity in the entity-relationship graph. [Figure 11-2](#two_data_modelscomma_one_easy_to_shard)
+    depicts an easily sharded data model on the left and one that’s difficult to shard
+    on the right.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些数据模型比其他数据模型更容易分片，这取决于实体关系图中的连接程度。[图11-2](#two_data_modelscomma_one_easy_to_shard)展示了左侧易于分片的数据模型和右侧难以分片的数据模型。
+- en: '![](assets/hpm4_1102.png)'
+  id: totrans-137
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_1102.png)'
+- en: Figure 11-2\. Two data models, one easy to shard and the other difficult^([5](ch11.html#ch01fn78))
+  id: totrans-138
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图11-2\. 两个数据模型，一个易于分片，另一��难以分片^([5](ch11.html#ch01fn78))
+- en: The data model on the left is easy to shard because it has many connected subgraphs
+    consisting mostly of nodes with just one connection and you can “cut” the connections
+    between the subgraphs relatively easily. The model on the right is hard to shard
+    because there are no such subgraphs. Most data models, luckily, look more like
+    the lefthand diagram than the righthand one.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 左侧的数据模型易于分片，因为它有许多连接的子图，主要由只有一个连接的节点组成，您可以相对容易地“切断”子图之间的连接。右侧的模型难以分片，因为没有这样的子图。幸运的是，大多数数据模型更像左侧图表而不是右侧图表。
+- en: When choosing a partitioning key, try to pick something that lets you avoid
+    cross-shard queries as much as possible but also makes shards small enough that
+    you won’t have problems with disproportionately large chunks of data. You want
+    the shards to end up uniformly small, if possible, and if not, at least small
+    enough that they’re easy to balance by grouping different numbers of shards together.
+    For example, if your application is US only and you want to divide your data set
+    into 20 shards, you probably shouldn’t shard by state because California has such
+    a huge population. But you could shard by county or telephone area code, because
+    even though those won’t be uniformly populated, there are enough of them that
+    you can still choose 20 sets that will be roughly equally populated in total,
+    and you can choose them with an affinity that helps avoid cross-shard queries.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在选择分区键时，尽量选择一些可以尽可能避免跨片查询的内容，但也要使分片足够小，以免出现数据不均匀的问题。你希望分片最终变得均匀小，如果可能的话，如果不行，至少要足够小，以便通过将不同数量的分片组合在一起来平衡。例如，如果你的应用程序仅限于美国，你想将数据集分成20个分片，你可能不应该按州进行分片，因为加利福尼亚州人口太多。但你可以按县或电话区号进行分片，因为尽管它们的人口不均匀，但它们足够多，以至于你仍然可以选择20组，总体上人口大致相等，并且你可以选择它们以避免跨片查询。
+- en: Multiple Partitioning Keys
+  id: totrans-141
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 多个分区键
+- en: Complicated data models make data sharding more difficult. Many applications
+    have more than one partitioning key, especially if there are two or more important
+    “dimensions” in the data. In other words, the application might need to see an
+    efficient, coherent view of the data from different angles. This means you might
+    need to store at least some data twice within the system.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复杂的数据模型使数据分片更加困难。许多应用程序有多个分区键，特别是如果数据中有两个或更多重要的“维度”。换句话说，应用程序可能需要从不同角度高效、连贯地查看数据。这意味着你可能需要在系统内至少存储一些数据两次。
+- en: 'For example, you might need to shard your blogging application’s data by both
+    the user ID and the post ID because these are two common ways the application
+    looks at the data. Think of it this way: you frequently want to see all posts
+    for a user and all comments for a post. Sharding by user doesn’t help you find
+    comments for a post, and sharding by post doesn’t help you find posts for a user.
+    If you need both types of queries to touch only a single shard, you’ll have to
+    shard both ways.'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，你可能需要按照用户ID和帖子ID对博客应用程序的数据进行分片，因为这是应用程序查看数据的两种常见方式。想象一下：你经常想看到某个用户的所有帖子和某个帖子的所有评论。按用户分片无法帮助你找到帖子的评论，按帖子分片无法帮助你找到用户的帖子。如果你需要让这两种类型的查询仅涉及单个分片，那么你将需要双向分片。
+- en: 'Just because you need multiple partitioning keys doesn’t mean you’ll need to
+    design two completely redundant data stores. Let’s look at another example: a
+    social networking book-club website where the site’s users can comment on books.
+    The website can display all comments for a book as well as all books a user has
+    read and commented on.'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 仅仅因为你需要多个分区键，并不意味着你需要设计两个完全冗余的数据存储。让我们看另一个例子：一个社交网络读书俱乐部网站，用户可以在该网站上评论书籍。该网站可以显示一本书的所有评论，以及用户已阅读并评论的所有书籍。
+- en: You might build one sharded data store for the user data and another for the
+    book data. Comments have both a user ID and a post ID, so they cross the boundaries
+    between shards. Instead of completely duplicating comments, you can store the
+    comments with the user data. Then you can store just a comment’s headline and
+    ID with the book data. This might be enough to render most views of a book’s comments
+    without accessing both data stores, and if you need to display the complete comment
+    text, you can retrieve it from the user data store.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以为用户数据构建一个分片数据存储，为书籍数据构建另一个。评论既有用户ID又有帖子ID，因此它们跨越分片之间的边界。你可以将评论与用户数据一起存储，而只需将评论的标题和ID与书籍数据一起存储。这可能足以在不访问两个数据存储的情况下呈现大多数书籍评论的视图，如果需要显示完整的评论文本，可以从用户数据存储中检索。
+- en: Querying Across Shards
+  id: totrans-146
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 跨片查询
+- en: Most sharded applications have at least some queries that need to aggregate
+    or join data from multiple shards. For example, if the book-club site shows the
+    most popular or active users, it must by definition access every shard. Making
+    such queries work well is the most difficult part of implementing data sharding
+    because what the application sees as a single query needs to be split up and executed
+    in parallel as many queries, one per shard. A good database abstraction layer
+    can help ease the pain, but even then such queries are so much slower and more
+    expensive than in-shard queries that aggressive caching is usually necessary as
+    well.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数分片应用程序至少有一些需要从多个分片聚合或��接数据的查询。例如，如果读书俱乐部网站显示最受欢迎或活跃的用户，它必须根据定义访问每个分片。使这样的查询正常工作是实现数据分片最困难的部分，因为应用程序将一个查询视为单个查询，需要将其拆分并并行执行多个查询，每个查询对应一个分片。一个良好的数据库抽象层可以帮助减轻痛苦，但即使如此，这样的查询比分片内查询慢得多，成本更高，通常也需要积极的缓存。
+- en: You will know that the sharding scheme you chose was a good one if the cross-shard
+    queries become outliers instead of norms. You should strive to make your queries
+    as simple as possible and contained within one shard. For those cases where some
+    cross-shard aggregation is needed, we recommend you make that part of the application
+    logic.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你选择的分片方案使跨片查询成为异常而不是规范，那么你将知道你选择的分片方案是一个好的选择。你应该努力使你的查询尽可能简单，并且包含在一个分片中。对于那些需要一些跨片聚合的情况，我们建议将其作为应用程序逻辑的一部分。
+- en: Cross-shard queries can also benefit from summary tables. You can build them
+    by traversing all the shards and storing the results redundantly on each shard
+    when they’re complete. If duplicating the data on each shard is too wasteful,
+    you can consolidate the summary tables onto another data store so that they’re
+    stored only once.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 跨片查询也可以从摘要表中受益。你可以通过遍历所有分片并在每个分片上存储结果的冗余数据来构建它们。如果在每个分片上复制数据太浪费，你可以将摘要表合并到另一个数据存储中，这样它们只存储一次。
+- en: Nonsharded data often lives in the global node, with heavy caching to shield
+    it from the load.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 非分片数据通常存储在全局节点中，并进行大量缓存以保护免受负载影响。
+- en: Some applications use essentially random sharding where consistent data distribution
+    is important or when there is no good partitioning key. A distributed search application
+    is a good example. In this case, cross-shard queries and aggregation are the norm,
+    not the exception.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些应用程序基本上使用随机分片，其中一致的数据分布很重要，或者当没有很好的分区键时。分布式搜索应用程序是一个很好的例子。在这种情况下，跨分片查询和聚合是常规操作，而不是例外。
+- en: Querying across shards isn’t the only thing that’s harder with sharding. Maintaining
+    data consistency is also difficult. Foreign keys won’t work across shards, so
+    the normal solution is to check referential integrity as needed in the application
+    or use foreign keys within a shard because internal consistency within a shard
+    might be the most important thing. It’s possible to use [XA transactions](https://oreil.ly/Z5gSe),
+    but this is uncommon in practice because of the overhead.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在分片中，跨分片查询并不是唯一困难的事情。保持数据一致性也是困难的。跨分片的外键不起作用，因此正常解决方案是根据需要在应用程序中检查引用完整性或在分片内部使用外键，因为分片内部的一致性可能是最重要的事情。虽然可以使用[XA
+    事务](https://oreil.ly/Z5gSe)，但这在实践中并不常见，因为会增加开销。
+- en: You can also design clean-up processes that run intermittently. For example,
+    if a user’s book-club account expires, you don’t have to remove it immediately.
+    You can write a periodic job to remove the user’s comments from the per-book shard,
+    and you can build a checker script that runs periodically and makes sure the data
+    is consistent across the shards.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以设计定期运行的清理流程。例如，如果用户的读书俱乐部账户过期，您不必立即删除它。您可以编写一个定期作业，从每本书的分片中删除用户的评论，并构建一个定期运行的检查脚本，确保数据在分片之间保持一致。
+- en: Now that we have explained the different ways you can split your data across
+    multiple clusters and how to choose a partitioning key, let’s cover two of the
+    most popular open source tools that can help facilitate both sharding and partitioning.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经解释了如何将数据分割到多个集群以及如何选择分区键的不同方式，让我们来介绍两种最受欢迎的开源工具，可以帮助促进分片和分区。
+- en: Vitess
+  id: totrans-155
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Vitess
+- en: Vitess is a database-clustering system for MySQL. It originated within YouTube,
+    then became PlanetScale, a separate product and company cofounded by Jiten Vaidya
+    and Sugu Sougoumarane.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Vitess 是用于 MySQL 的数据库集群系统。它起源于 YouTube，然后成为 PlanetScale，由 Jiten Vaidya 和 Sugu
+    Sougoumarane 共同创立的一个独立产品和公司。
+- en: 'Vitess enables a number of features:'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Vitess 提供了许多功能：
+- en: Horizontal sharding support, including sharding the data
+  id: totrans-158
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 支持水平分片，包括对数据进行分片
+- en: Topology management
+  id: totrans-159
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 拓扑管理
+- en: Source node failover management
+  id: totrans-160
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 源节点故障转移管理
+- en: Schema change management
+  id: totrans-161
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 模式更改管理
+- en: Connection pooling
+  id: totrans-162
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 连接池
+- en: Query rewriting
+  id: totrans-163
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 查询重写
+- en: Let’s explore Vitess’s architecture and its components.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们探索 Vitess 的架构及其组件。
+- en: Vitess architecture overview
+  id: totrans-165
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: Vitess 架构概述
+- en: '[Figure 11-3](#vitess_architecture_diagramdot_credit_v) is a diagram from Vitess’s
+    website showing the different parts of its architecture.'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 11-3](#vitess_architecture_diagramdot_credit_v) 是来自 Vitess 网站的图表，展示了其架构的不同部分。'
+- en: '![](assets/hpm4_1103.png)'
+  id: totrans-167
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_1103.png)'
+- en: Figure 11-3\. Vitess architecture diagram (adapted from vitess.io)
+  id: totrans-168
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 11-3\. Vitess 架构图（改编自 vitess.io）
+- en: 'Here are some terms you need to know:'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是一些你需要了解的术语：
+- en: Vitess pod
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Vitess pod
+- en: The general encapsulation of a set of databases and the Vitess-related pieces
+    that support sharding, topology management, management of schema changes, and
+    application access to those databases.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一组数据库的一般封装以及支持分片、拓扑管理、模式更改管理和应用程序访问这些数据库的 Vitess 相关部分。
+- en: VTGate
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: VTGate
+- en: The service that controls access to the database instances for applications
+    and operators trying to manage topology, add nodes, or shard some of the data.
+    It is akin to the load balancer in the architecture described previously.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 控制应用程序和运维人员访问数据库实例的服务，用于管理拓扑结构、添加节点或对部分数据进行分片。这类似于之前描述的架构中的负载均衡器。
+- en: VTTablet
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: VTTablet
+- en: The agent running on each database instance managed by Vitess. It can receive
+    database management commands from operators and execute them on the operators’
+    behalf.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Vitess 管理的每个数据库实例上运行的代理。它可以接收来自运维人员的数据库管理命令，并代表运维人员执行这些命令。
+- en: Topology (metadata store)
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 拓扑（元数据存储）
+- en: Holds the inventory of database instances managed by Vitess in a given pod as
+    well as accompanying information.
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在给定 pod 中保存由 Vitess 管理的数据库实例的库存以及相关信息。
+- en: vtctl
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: vtctl
+- en: The command-line tool to make operational changes to a Vitess pod.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用于对 Vitess pod 进行操作更改的命令行工具。
+- en: vtctld
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: vtctld
+- en: A graphical interface for the same management operations.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用于相同管理操作的图形界面。
+- en: Vitess’s architecture starts with a consistent topology store that holds definitions
+    for all the clusters, MySQL instances, and *vtgate* instances. This consistent
+    metadata store plays a crucial role in managing topology changes. When an operator
+    wants to make a change to the topology of a cluster managed by Vitess, it really
+    sends commands through a service called *vtctl* to that data store, which then
+    sends the component operations of that command to *vtgate*.
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Vitess 的架构始于一个一致的拓扑存储，其中保存了所有集群、MySQL 实例和 *vtgate* 实例的定义。这个一致的元数据存储在管理拓扑变化中发挥着至关重要的作用。当运维人员想要对
+    Vitess 管理的集群的拓扑进行更改时，实际上是通过一个名为 *vtctl* 的服务向数据存储发送命令，然后将该命令的组件操作发送给 *vtgate*。
+- en: Vitess offers database operators that can deploy the *vtgate* layer and the
+    metadata store in Kubernetes. Having its control plane in a platform like Kubernetes
+    increases its resilience to single points of failure.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Vitess 提供了可以在 Kubernetes 中部署 *vtgate* 层和元数据存储的数据库运维人员。在像 Kubernetes 这样的平台中拥有其控制平面可以增加其对单点故障的弹性。
+- en: 'One of Vitess’s greatest strengths is [its philosophy about how to scale MySQL](https://oreil.ly/5QKCD),
+    which includes the following:'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Vitess 最大的优势之一是[其关于如何扩展 MySQL 的理念](https://oreil.ly/5QKCD)，其中包括以下内容：
+- en: A preference for using smaller instances
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 偏好使用较小的实例
+- en: Split your data functionally, horizontally, or both. But smaller instances make
+    for a smaller blast radius when failures happen.
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 按功能、水平或两者分割您的数据。但是当发生故障时，较小的实例会导致较小的爆炸半径。
+- en: Replication and automated write failover to increase resilience
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制和自动写入故障转移以增加弹性
+- en: Vitess does not promise “100% online writes” through multiwriter node tricks.
+    Instead, it automates write failover and, during that failover, manages both the
+    topology change and application access to the database nodes to make the write
+    downtime as short as possible.
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Vitess不通过多写节点技巧承诺“100%在线写入”。相反，它自动化写入故障转移，并在故障转移期间管理拓扑变化和应用程序对数据库节点的访问，以使写入停机时间尽可能短。
+- en: Durability using semisync replication
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用半同步复制确保持久性
+- en: Vitess strongly recommends semisync replication (as opposed to the default asynchronous)
+    to ensure that writes are always persisted by more than one node in the database
+    layer before acknowledging them to the application. This is a crucial trade-off
+    in latency for the sake of guaranteed durability that pays its dividends when
+    Vitess needs to failover the writer host in an unplanned manner.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Vitess强烈推荐使用半同步复制（与默认的异步相对）来确保在向应用程序确认写入之前，写入始终由数据库层中的多个节点持久化。这是一种以延迟为代价换取持久性保证的关键权衡，当Vitess需要在非计划方式下故障转移写入主机时，这种权衡会产生回报。
+- en: These architectural principles can help sustain exponential growth in your business
+    traffic with a lot more resilience in the database layer of your infrastructure.
+    And you should heed many of these best practices regardless of whether you specifically
+    use Vitess or another solution as part of your architecture.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些架构原则可以帮助您在业务流量呈指数增长时在基础设施的数据库层具有更多的弹性。无论您是否专门使用Vitess或其他解决方案作为架构的一部分，您都应该遵循这些最佳实践。
+- en: Migrating your stack to Vitess
+  id: totrans-192
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 将您的堆栈迁移到Vitess
+- en: Vitess is an opinionated platform for running the database layer and is not
+    a drop-in solution. Therefore, you need to plan thoughtfully how implementing
+    such a transition would happen before you adopt it as the access layer for your
+    database.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Vitess是一个用于运行数据库层的有���见的平台，而不是一个即插即用的解决方案。因此，在您将其作为数据库访问层之前，您需要深思熟虑地计划如何实施这样的过渡。
+- en: 'Specifically, be sure to consider the following migration steps as you evaluate
+    Vitess as a possible solution:'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 具体而言，在评估Vitess作为可能解决方案时，请务必考虑以下迁移步骤：
+- en: 1\. Test and document the latency you’re introducing to the overall system.
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1\. 测试并记录您为整个系统引入的延迟。
+- en: Introducing a complex stack like Vitess to an application stack will definitely
+    add some amount of latency, especially when you consider the enforcement of semisync
+    replication. Make sure this trade-off is well documented and explicitly communicated
+    so that your downstream dependencies are making informed decisions when building
+    SLOs that rely on this database architecture.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将像Vitess这样复杂的堆栈引入应用程序堆栈肯定会增加一定量的延迟，特别是考虑到半同步复制的执行。确保这种权衡得到充分记录和明确沟通，以便您的下游依赖在构建依赖于这种数据库架构的SLO时做出知情决策。
+- en: 2\. Use the [canary deployment model](https://oreil.ly/ldtnN).
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 2\. 使用[金丝雀部署模型](https://oreil.ly/ldtnN)。
+- en: During the transition in production, you can configure *vttablet* as “externally
+    managed.” This allows for both *vttablet* and direct connections to the database
+    server as you slowly ramp up the connection change through your application node
+    fleet.
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在生产中过渡期间，您可以将*vttablet*配置为“外部管理”。这允许*vttablet*和直接连接到数据库服务器，随着您逐渐通过应用程序节点群增加连接更改。
+- en: 3\. Start sharding.
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 3\. 开始分片。
+- en: Once all the application layer access is through *vtgate*/*vttablet* and not
+    directly to MySQL, you can start using the full feature set of Vitess to split
+    tables off in new clusters, shard data horizontally for more write throughput,
+    or simply add replicas for more read load capacity.^([6](ch11.html#ch01fn79))
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦所有应用层访问都通过*vtgate*/*vttablet*而不是直接访问MySQL，您就可以开始使用Vitess的完整功能集来将表拆分到新的集群中，将数据水平分片以获得更多的写入吞吐量，或者仅仅添加副本以获得更多的读取负载能力。^([6](ch11.html#ch01fn79))
+- en: Vitess is a powerful database access and management product that has come a
+    long way from its early days at Google. It has proven its ability to enable dramatic
+    growth and a resilient database infrastructure. However, this power and flexibility
+    come at a cost of added complexity. Vitess is not as simple as a load balancer
+    passing through traffic, and you should weigh the needs of the business with the
+    cost of introducing and maintaining a database management tool as complex as Vitess.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Vitess是一个强大的数据库访问和管理产品，它已经从早期在谷歌的日子里走过了很长的路。它已经证明了它能够实现戏剧性的增长和一个弹性的数据库基础设施。然而，这种强大和灵活性是以增加复杂性为代价的。Vitess不像一个简单的负载均衡器通过流量，你应该权衡业务需求和引入和维护像Vitess这样复杂的数据库管理工具的成本。
+- en: ProxySQL
+  id: totrans-202
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: ProxySQL
+- en: ProxySQL is written specifically for the MySQL protocol and released with a
+    General Public License (GPL). René Cannaò, a DBA who has consulted for many companies
+    and a long-time MySQL contributor, is the primary author. It is now a full-fledged
+    company that offers paid support and development contracts of the ProxySQL product.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL专门为MySQL协议编写，并以GPL发布。René Cannaò，一个为许多公司提供咨询的DBA和长期的MySQL贡献者，是主要作者。现在它是一个提供ProxySQL产品付费支持和开发合同的全功能公司。
+- en: Let’s dig into some details about its architecture, configuration patterns,
+    use cases, and features.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们深入了解一些关于其架构、配置模式、用例和功能的细节。
+- en: ProxySQL architecture overview
+  id: totrans-205
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: ProxySQL架构概述
+- en: You can use ProxySQL as a layer in between any application code and MySQL instances.
+    ProxySQL provides a session-aware, MySQL-protocol-based interface for applications
+    to interact with the databases. Instead of applications opening connections directly
+    to the database instances, ProxySQL opens them on the applications’ behalf.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以将ProxySQL用作任何应用程序代码和MySQL实例之间的中间层。ProxySQL为应用程序提供了一个基于会话的、基于MySQL协议的接口，用于与数据库交互。代替应用程序直接打开连接到数据库实例，ProxySQL代表应用程序打开连接。
+- en: This design makes the proxy seem invisible to the application nodes. Its session
+    awareness allows for moving these connections between MySQL instances without
+    downtime. This is especially useful when you are dealing with applications that
+    you are no longer investing in because you can now utilize features in ProxySQL
+    without needing to make any changes to code that you may not feel confident changing.
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种设计使代理对应用程序节点看起来是不可见的。其会话感知性允许在没有停机的情况下在MySQL实例之间移动这些连接。当您处理不再投资于的应用程序时，这尤其有用，因为您现在可以利用ProxySQL中的功能而无需对您可能不确定更改的代码进行任何更改。
+- en: ProxySQL also provides powerful connection pooling. Connections opened by applications
+    to ProxySQL are separate from the connections ProxySQL opens to database instances
+    it is configured to connect to. This separation allows for protecting the database
+    instances from sudden traffic spikes in the application layer.
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL还提供强大的连接池。应用程序打开到ProxySQL的连接与ProxySQL打开到配置连接的数据库实例的连接是分开的。这种分离可以保护数据库实例免受应用层突发流量的影响。
+- en: When you have the ability to manage client-side connections separately from
+    how many connections actually are made to the database, you introduce flexibility
+    you did not have before. You can now scale out the application node pool without
+    having to worry that it will increase connection load to the database beyond what
+    you want to support. This allows for diverse scenarios of application and business
+    needs, as we will explain in the common patterns when using ProxySQL.
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您有能力单独管理客户端连接与实际连接到数据库的连接数量时，您引入了以前没有的灵活性。现在您可以扩展应用程序节点池，而无需担心它会增加到数据库的连接负载超出您想要支持的范围。这允许在使用ProxySQL时解释常见模式时，应用程序和业务需求的多样化场景。
+- en: Configuring ProxySQL
+  id: totrans-210
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 配置ProxySQL
+- en: ProxySQL uses a configuration file for startup but maintains its runtime configuration
+    both in memory and in an embedded SQLite file that you can access directly and
+    query using an admin interface.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL在启动时使用配置文件，但在内存中和嵌入式SQLite文件中维护其运行时配置，您可以直接访问并使用管理界面查询。
+- en: ProxySQL’s admin interface allows you to issue commands to change the running
+    configuration, then dump that new configuration out to disk for persistence using
+    MySQL commands. This allows you to make zero-downtime changes to a running ProxySQL
+    instance. You can also use this admin interface to make automated changes issued
+    by your configuration management or automated failover scripts. You can see in
+    [Figure 11-4](#the_interaction_between_application_nod) how your architecture
+    would generally leverage both ProxySQL and service discovery to provide a robust
+    access layer for services.
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL的管理界面允许您发出命令来更改运行配置，然后使用MySQL命令将新配置转储到磁盘以实现持久性。这使您可以对运行中的ProxySQL实例进行零停机更改。您还可以使用此管理界面来进行由配置管理或自动故障转移脚本发出的自动更改。您可以在[图11-4](#the_interaction_between_application_nod)中看到您的架构通常如何利用ProxySQL和服务发现来为服务提供强大的访问层。
+- en: Warning
+  id: totrans-213
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: It’s important to note that while we show ProxySQL as one object in this diagram,
+    we strongly recommend in production environments leveraging its clustering mechanism
+    and deploying multiple instances in a given stack. Never run a single point of
+    failure (SPoF).
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 需要注意的是，虽然我们在此图中将ProxySQL显示为一个对象，但我们强烈建议在生产环境中利用其集群机制，并在给定堆栈中部署多个实例。永远不要运行单点故障（SPoF）。
+- en: '![](assets/hpm4_1104.png)'
+  id: totrans-215
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](assets/hpm4_1104.png)'
+- en: Figure 11-4\. The interaction between application nodes, ProxySQL, and service
+    discovery (adapted from a diagram by Bill Sickles)
+  id: totrans-216
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图11-4。应用程序节点、ProxySQL和服务发现之间的交互（根据Bill Sickles的图表调整）
+- en: ProxySQL has independent and hierarchical health checking for databases it connects
+    to. Based on the results of these health checks, ProxySQL adds or removes hosts
+    or adjusts traffic weights. You can specify replication-lag thresholds, time to
+    connect successfully, and connection retries on failure, among many other configuration
+    options, to control how much fault tolerance is acceptable within the context
+    of your service and application needs. These configuration options allow ProxySQL
+    to react accurately to unresponsive hosts by either temporarily removing backend
+    databases and then repeating the health check later, or fully removing the struggling
+    backend member until an operator is involved.
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL对其连接的数据库进行独立和分层的健康检查。根据这些健康检查的结果，ProxySQL添加或删除主机或调整流量权重。您可以指定复制延迟阈值、成功连接的时间以及连接失败时的重试次数等许多其他配置选项，以控制在服务和应用程序需求的背景下可接受的故障容忍度。这些配置选项允许ProxySQL对不响应的主机做出准确的反应，要么暂时删除后端数据库，然后稍后重复健康检查，要么完全删除挣扎的后端成员，直到操作员介入。
+- en: Using ProxySQL for sharding
+  id: totrans-218
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用ProxySQL进行分片
+- en: ProxySQL is very useful for a number of sharding topologies. While it does not
+    bring automation to the actual splitting of the data the way Vitess does, it can
+    be a great lightweight middle layer that is sharding aware and can route your
+    application connections accordingly. Let’s cover the different ways you can use
+    it to be a routing layer to your shards.
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL对于许多分片拓扑结构非常有用。虽然它不像Vitess那样自动分割数据，但它可以作为一个很好的轻量级中间层，具有分片感知能力，并可以相应地路由应用程序连接。让我们来看看你可以如何将其用作分片层的路由层。
+- en: Sharding by user
+  id: totrans-220
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 按用户分片
+- en: If your data is split functionally or by business function in different database
+    clusters and different application fleets accessing these clusters, you should
+    also be using entirely different database credentials for each of these applications.
+    ProxySQL can leverage this user parameter to route traffic to entirely separate
+    backend database pools for either writes or reads.
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你的数据按功能或业务功能在不同的数据库集群中分割，并且不同的应用程序群访问这些集群，你应该为每个应用程序使用完全不同的数据库凭据。ProxySQL可以利用这个用户参数将流量路由到完全不同的后端数据库池，无论是写入还是读取。
+- en: 'You can configure such routing in ProxySQL by running these commands against
+    its admin interface, then saving the change to its disk configuration file:'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过在其管理界面上运行这些命令，然后将更改保存到其磁盘配置文件中，来配置 ProxySQL 中的此类路由：
+- en: '[PRE2]'
+  id: totrans-223
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Tip
+  id: totrans-224
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Always make sure you are keeping ProxySQL’s runtime configuration and on-disk
+    configuration in sync to avoid nasty surprises when a ProxySQL process restarts.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 始终确保您保持 ProxySQL 的运��时配置和磁盘配置同步，以避免在 ProxySQL 进程重新启动时出现不愉快的惊喜。
+- en: This adds the convenience of also logging all operations done by these users
+    for compliance without causing any load on the database. You will see in [Chapter 13](ch13.html#compliance_with_mysql)
+    that we also recommend separate database users for compliance reasons, and therefore
+    this design aligns with some compliance goals as well.
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这还可以方便地记录所有这些用户执行的操作以符合合规性，而不会对数据库造成任何负载。您将在[第 13 章](ch13.html#compliance_with_mysql)中看到，我们还建议出于合规性原因为不同的数据库用户分别设置，因此这种设计也符合一些合规性目标。
+- en: Sharding by schema
+  id: totrans-227
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 按模式分片
+- en: 'Another way you can use ProxySQL to support sharded data sets is using schema
+    names as the rule to manage the traffic routing. Here is an example of how you
+    would define that in ProxySQL’s configuration:'
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用 ProxySQL 的模式名称作为管理流量路由规则来支持分片数据集的另一种方式。以下是您如何在 ProxySQL 的配置中定义的示例：
+- en: '[PRE3]'
+  id: totrans-229
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Note that this configuration can be used for either horizontal sharding or functional
+    sharding as long as you name your schemas properly.
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，只要正确命名模式，此配置可用于水平分片或功能分片。
+- en: A final important recommendation we have when using ProxySQL in this manner
+    is to make sure to use its native clustering feature, which ensures that a critical
+    configuration table like `mysql_rules` is synced to all the ProxySQL nodes in
+    the cluster, providing redundancy in your middleware layer.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种方式中使用 ProxySQL 时，我们最后一个重要建议是确保使用其原生的集群功能，这样可以确保像`mysql_rules`这样的关键配置表在集群中的所有
+    ProxySQL 节点上同步，为中间件层提供冗余。
+- en: Other benefits of using ProxySQL
+  id: totrans-232
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用 ProxySQL 的其他好处
+- en: Let’s discuss some common patterns where using ProxySQL can help alleviate common
+    issues in fast-growing environments.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们讨论一些常见模式，在这些模式中使用 ProxySQL 可以帮助缓解快速增长环境中的常见问题。
+- en: In many applications, “open more connections to the database” is a pattern we
+    commonly see when query latency starts to climb. However, in practice this can
+    lead to outages^([7](ch11.html#ch01fn80)) and tends to leave a lot of connections
+    idle, consuming resources but not doing any work. When you open more connections
+    by the application layer directly to the database, the amount of resources the
+    database server spends on connection management also increases. This snowballs
+    into thousands of connections overwhelming already overloaded database instances.
+    All of this activity leads to prolonged downtimes, cascading failures in multiple
+    microservices, and extended customer-facing impact.
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在许多应用程序中，“向数据库打开更多连接”是我们在查询延迟开始上升时经常看到的模式。然而，在实践中，这可能导致停机^([7](ch11.html#ch01fn80))，并且倾向于使许多连接处于空闲状态，消耗资源但不执行任何工作。当应用程序层直接向数据库打开更多连接时，数据库服务器在连接管理上花费的资源量也会增加。这会导致数千个连接压倒已经超载的数据库实例。所有这些活动导致持续的停机时间，多个微服务中的级联故障以及延长的面向客户的影响。
+- en: ProxySQL’s connection-management architecture helps shield the database layer
+    from unexpected application peaks by opening to the database only the number of
+    connections that can do work. ProxySQL can reuse those connections for different
+    client-side requests. This behavior maximizes the work that a single connection
+    to the database servers can do, which in turn reduces the number of resources
+    managing connections and allows for more efficient use of the database server’s
+    memory resources.
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL 的连接管理架构通过仅向数据库打开可以工作的连接数量，有助于保护数据库层免受意外应用程序高峰的影响。ProxySQL 可以重用这些连接来处理不同的客户端请求。这种行为最大化了单个连接到数据库服务器可以完成的工作量，从而减少了管理连接的资源数量，并允许更有效地使用数据库服务器的内存资源。
+- en: Other notable features in ProxySQL
+  id: totrans-236
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: ProxySQL 中的其他值得注意的功能
+- en: 'ProxySQL has a number of other features that stand out in a general-use application
+    proxy:'
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL 在一般用途应用程序代理中具有一些突出的功能：
+- en: Query routing based on port, user, or simply a regex match
+  id: totrans-238
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 基于端口、用户或简单的正则表达式匹配的查询路由
+- en: TLS support on both the frontend application connections and backend connections
+    to databases
+  id: totrans-239
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 前端应用程序连接和后端连接到数据库的 TLS 支持
+- en: Support for various MySQL flavors, such as AWS Aurora, Galera Cluster, and Clickhouse
+  id: totrans-240
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 支持各种 MySQL 版本，如 AWS Aurora、Galera Cluster 和 Clickhouse
+- en: Connection mirroring
+  id: totrans-241
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 连接镜像
+- en: Result set caching
+  id: totrans-242
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 结果集缓存
+- en: Query rewrites
+  id: totrans-243
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 查询重写
+- en: Audit log
+  id: totrans-244
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 审计日志
+- en: You can read about the extensive feature set of ProxySQL (which goes well beyond
+    sharding support) by visiting its [documentation](https://oreil.ly/PTZFW).
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过访问其[文档](https://oreil.ly/PTZFW)了解 ProxySQL 的广泛功能集（远远超出分片支持）。
+- en: ProxySQL is a powerful tool you can use for scaling out your application with
+    proper performance protections for the database layer and with added features
+    that support all sorts of business needs (like compliance, security rules, etc.).
+    If your company is finding itself on a high-growth trajectory with a robust mix
+    of new and less-new services sharing database resources, it can be a powerful
+    tool for safely continuing that growth. ProxySQL provides an easy-to-deploy abstraction
+    that can be more sophisticated than HAProxy but with less up-front investment
+    in infrastructure and complexity. However, it also does not offer some of the
+    more advanced features found in Vitess, such as automated sharding of data sets,
+    management of schema changes, and [VReplication](https://oreil.ly/k2J7R), which
+    is a powerful tool for enabling extract, transform, load (ETL) pipelines and changing
+    data streams.
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL是一个强大的工具，您可以使用它来扩展应用程序，并为数据库层提供适当的性能保护，并具有支持各种业务需求的附加功能（如合规性、安全规则等）。如果您的公司发现自己处于高增长轨迹上，拥有一系列新的和不那么新的服务共享数据库资源，那么它可以是一个强大的工具，可以安全地继续这种增长。ProxySQL提供了一个易于部署的抽象，可以比HAProxy更复杂，但在基础设施和复杂性方面的前期投资较少。然而，它也不提供Vitess中找到的一些更高级的功能，比如数据集的自动分片、模式更改的管理，以及[VReplication](https://oreil.ly/k2J7R)，这是一个强大的工具，用于启用抽取、转换、加载（ETL）管道和更改数据流。
+- en: Summary
+  id: totrans-247
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: Scaling MySQL is a journey. You should come out of this chapter more prepared
+    to assess your scaling needs and understand how to scale reads, how to scale writes,
+    and how to make your traffic growth more predictable by adding queuing to your
+    architecture. You should also now understand sharding to scale writes and all
+    the complex decisions that come with it.
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 扩展MySQL是一场旅程。您应该在本章结束时更有准备地评估您的扩展需求，并了解如何扩展读取、如何扩展写入，以及通过向架构添加排队来使您的流量增长更可预测。您现在应该了解如何通过分片来扩展写入以及随之而来的所有复杂决策。
+- en: Before you dive into scalability bottlenecks, make sure you’ve optimized your
+    queries, checked your indexes, and have a solid configuration for MySQL. This
+    may buy you the necessary time to plan a better long-term strategy. Once optimized,
+    focus on determining whether you are read- or write-bound, and then consider what
+    strategies work best to solve any immediate issues. When planning your solution,
+    make sure you consider how to set yourself up for long-term scalability.
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在深入研究可扩展性瓶颈之前，请确保您已经优化了您的查询，检查了您的索引，并为MySQL设置了稳固的配置。这可能为您提供计划更好的长期策略所需的时间。优化后，专注于确定您是读取密集型还是写入密集型，然后考虑哪些策略最适合解决任何即时问题。在规划解决方案时，请确保考虑如何为长期可扩展性做好准备。
+- en: For read-bound workloads, our recommendation is to move to read pools unless
+    replication lag is an impossible problem to overcome. If lag is an issue or if
+    your problem is write-bound, you need to consider sharding as your next step.
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于读取密集型工作负载，我们建议转移到读取池，除非复制延迟是无法克服的问题。如果延迟是一个问题，或者如果您的问题是写入密集型的，您需要考虑分片作为下一步。
+- en: ^([1](ch11.html#ch01fn74-marker)) In the physical sciences, work per unit of
+    time is called *power*, but in computing, “*power*” is such an overloaded term
+    that it’s ambiguous and we avoid it. However, a precise definition of *capacity*
+    is the system’s maximum power output.
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch11.html#ch01fn74-marker)) 在物理科学中，单位时间的工作被称为*功率*，但在计算中，“*功率*”是一个如此多义的术语，以至于它是模棱两可的，我们要避免使用它。然而，*容量*的一个精确定义是系统的最大功率输出。
+- en: ^([2](ch11.html#ch01fn75-marker)) We’re choosing to ignore the complexities
+    of multiple CPUs and context switching for simplicity’s sake in this explanation.
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch11.html#ch01fn75-marker)) 为了简化解释，我们选择忽略多个CPU和上下文切换的复杂性。
+- en: ^([3](ch11.html#ch01fn76-marker)) This is still not entirely accurate because
+    as CPU approaches 100%, latency increases, and you will not be able to add four
+    thousand more queries.
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([3](ch11.html#ch01fn76-marker)) 这仍然不完全准确，因为当CPU接近100%时，延迟会增加，您将无法再添加四千个查询。
+- en: ^([4](ch11.html#ch01fn77-marker)) The most commonly used and our recommendation
+    is [Consul by Hashicorp](https://www.consul.io).
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([4](ch11.html#ch01fn77-marker)) 最常用的并且我们推荐的是[Hashicorp的Consul](https://www.consul.io)。
+- en: ^([5](ch11.html#ch01fn78-marker)) Thanks to the HiveDB project and Britt Crawford
+    for contributing these elegant diagrams.
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([5](ch11.html#ch01fn78-marker)) 感谢HiveDB项目和布里特·克劳福德为提供这些优雅的图表。
+- en: ^([6](ch11.html#ch01fn79-marker)) This deployment strategy is explained in detail
+    by Morgan Tocker in a [talk at Kubecon 2019](https://www.youtube.com/watch?v=OCS45iy5v1M).
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([6](ch11.html#ch01fn79-marker)) 这种部署策略是由摩根·托克在2019年的[Kubecon演讲](https://www.youtube.com/watch?v=OCS45iy5v1M)中详细解释的。
+- en: ^([7](ch11.html#ch01fn80-marker)) For more information, see [the Wikipedia entry
+    on the thundering herd problem](https://oreil.ly/YOtAt).
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([7](ch11.html#ch01fn80-marker)) 欲了解更多信息，请参阅[维基百科关于雷鸣群问题的条目](https://oreil.ly/YOtAt)。

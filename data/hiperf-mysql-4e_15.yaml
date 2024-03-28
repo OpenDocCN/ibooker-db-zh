@@ -1,0 +1,211 @@
+- en: Appendix B. MySQL on Kubernetes
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 附录 B. Kubernetes 上的 MySQL
+- en: If you have been working in tech at all in the past five years, you very likely
+    have heard of Kubernetes, work with teams that run Kubernetes, or have watched
+    a lot of conference talks or read a lot of blog posts that explain Kubernetes.
+    If your organization runs its own Kubernetes clusters, you will at some point
+    get asked whether running MySQL on them too is a good idea. And on the surface
+    it seems like a reasonable path to take. Managing many Kubernetes clusters is
+    a complex task that typically needs dedicated human resources, and it is reasonable
+    for your organization to want to leverage that expertise for more than only stateless
+    workloads. But there are good reasons to explore running MySQL on Kubernetes and
+    not so good reasons to do so. Let’s demystify some of the FUD (fear, uncertainty,
+    doubt) around running MySQL on Kubernetes here.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您在过去五年中一直在科技领域工作，很可能已经听说过 Kubernetes，与运行 Kubernetes 的团队合作，或者看过很多关于 Kubernetes
+    的会议演讲或阅读了很多博客文章。如果您的组织运行自己的 Kubernetes 集群，那么在某个时候，您会被问及是否在其中运行 MySQL 也是一个好主意。从表面上看，这似乎是一个合理的选择。管理许多
+    Kubernetes 集群是一个复杂的任务，通常需要专门的人力资源，因此您的组织希望利用这种专业知识来处理不仅仅是无状态工作负载。但是，有很多理由可以探索在
+    Kubernetes 上运行 MySQL，也有一些不太好的理由。让我们在这里揭开一些关于在 Kubernetes 上运行 MySQL 的恐惧、不确定性和怀疑。
+- en: Provisioning Resources with Kubernetes
+  id: totrans-2
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 Kubernetes 配置资源
+- en: Before Kubernetes reached peak tech popularity, a lot of companies either built
+    entirely bespoke tech stacks for provisioning and managing VMs and bare metal
+    servers or glued together open source projects that did smaller parts of the life
+    cycle of a resource. Then came Kubernetes as a more complete ecosystem for managing
+    both compute and storage resources, and the prospect of using it as the provisioning
+    stack to rule them all has become more and more appealing. Yet stateful loads
+    such as MySQL remained behind and left out of that added value because the common
+    wisdom had been “you can’t run databases on containers.”
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Kubernetes 达到技术高峰之前，许多公司要么构建了完全定制的技术堆栈来配置和管理虚拟机和裸金属服务器，要么将开源项目粘合在一起，完成资源生命周期的较小部分。然后
+    Kubernetes 出现了，作为一个更完整的生态系统，用于管理计算和存储资源，将其作为统一的配置堆栈的前景变得越来越吸引人。然而，像 MySQL 这样的有状态负载仍然落后，因为普遍看法是“你不能在容器上运行数据库。”
+- en: Carefully Scope Your Goal
+  id: totrans-4
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 仔细界定您的目标
+- en: The important thing to keep in mind is “What specific value do we want to get
+    back here?” Kubernetes is powerful for stateless loads because it brings elasticity
+    and efficiency of compute resources. However, it is reasonable to scope down the
+    win when looking at a unified provisioning stack to “we only want to use Kubernetes
+    to provision and configure the systems for database resources.” This means you
+    need to be clear up front that the database workloads that will be provisioned
+    with Kubernetes will be managed separately from stateless workloads, will require
+    different operator skill sets, and will handle container failure differently.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要记住的重要事情是“我们想在这里获得什么具体价值？”Kubernetes 对于无状态负载非常强大，因为它带来了计算资源的弹性和效率。然而，在查看统一的配置堆栈时，将胜利范围缩小到“我们只想使用
+    Kubernetes 来配置和配置数据库资源系统。”这意味着您需要事先明确，将使用 Kubernetes 配置的数据库工作负载将与无状态工作��载分开管理，需要不同的操作员技能集，并且将以不同方式处理容器故障。
+- en: Choose Your Control Plane
+  id: totrans-6
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 选择您的控制平面
+- en: 'There are various MySQL operators in the wild now, but the choice of which
+    is the best will be mostly a consequence of what you decide as the scope of your
+    Kubernetes management of MySQL. Will you need an operator that does it all: provisioning,
+    failover, and managing connecting to the databases? Or will you simply use Kubernetes
+    as a provisioning stack and use other means to manage databases after they are
+    in service? Decide early on what you expect from your control plane, as that will
+    drive a lot of the finer operability details.'
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在有各种 MySQL 操作员，但最佳选择将主要取决于您决定的 Kubernetes 管理 MySQL 的范围。您是否需要一个可以完成所有工作的操作员：配置、故障转移和管理连接到数据库？还是您只需将
+    Kubernetes 用作配置堆栈，并在服务后使用其他方法来管理数据库？早早决定您对控制平面的期望，因为这将驱动许多更精细的可操作性细节。
+- en: The Finer Details
+  id: totrans-8
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 更详细的细节
+- en: 'Once you have decided to start provisioning MySQL resources using Kubernetes,
+    you need to get agreement across your organization on what size data is appropriate
+    for this solution. Remember that this is now a new operating model for running
+    a relational database, and on this less-paved road, everything gets more complex
+    as it gets bigger. Here are some important items to consider as you collaborate
+    with your Kubernetes engineering team (hopefully, you have a dedicated team for
+    this) on how to support stateful workloads:'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦您决定开始使用 Kubernetes 配置 MySQL 资源，您需要在组织中就适合此解决方案的数据规模达成一致。请记住，这现在是一个新的操作模型，用于运行关系型数据库，而在这条少有人走的道路上，随着规模的扩大，一切都变得更加复杂。以下是一些重要事项，您在与
+    Kubernetes 工程团队合作时（希望您有专门的团队负责此事）需要考虑如何支持有状态工作负载：
+- en: What maximum data set size for a single database instance will be supported?
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 单个数据库实例支持的最大数据集大小是多少？
+- en: Will you be mounting volumes to containers and managing container recovery separately
+    from the data mounts? Or will the data be part of the container?
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您是否将卷挂载到容器中，并将容器恢复与数据挂载分开管理？还是数据将成为容器的一部分？
+- en: What maximum query throughput is going to be supported? How will you manage
+    resources?
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将支持的最大查询吞吐量是多少？您将如何管理资源？
+- en: How will you ensure Kubernetes nodes running database workloads are dedicated
+    to that and not shared with stateless, more elastic, workloads?
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您将如何确保运行数据库工作负载的 Kubernetes 节点专用于此，而不与无状态、更具弹性的工作负载共享？
+- en: What control plane will you use for running the database instances? Is it Kubernetes
+    native?
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您将使用什么控制平面来运行数据库实例？它是否是 Kubernetes 本地的？
+- en: How will backups work? What’s the restore process?
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 备份将如何工作？恢复过程是什么？
+- en: How will you control and safely roll out configuration changes and MySQL upgrades?
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您将如何控制并安全地推出配置更改和MySQL升级？
+- en: How will you upgrade your Kubernetes clusters themselves without causing disruption?
+  id: totrans-17
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您将如何升级Kubernetes集群本身而不会造成中断？
+- en: Being on the same page with your partner Kubernetes engineering team on how
+    this solution will work will go a long way toward having well-established SLOs
+    for feature teams looking to use this solution and in properly communicating what
+    it solves and what the teams still have to solve on their own.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与您的合作伙伴Kubernetes工程团队就这个解决方案的工作方式达成一致意见，将有助于为希望使用该解决方案的功能团队建立完善的SLO，并在正确传达解决方案解决了什么以及团队仍需自行解决什么方面。
+- en: Our advice with running MySQL on Kubernetes is to invest in learning a control
+    plane that is already vetted and proven in the Kubernetes ecosystem, like Vitess.
+    But also crawl before you try to run. MySQL should not be the first guinea pig
+    for running workloads on Kubernetes in your organization. Always prove viability
+    and learn the sharp edges as a team with stateless workloads first before attempting
+    to run more complex use cases like MySQL. As you determine the best initial use
+    cases for adoption, start with small data sets (databases that are only a few
+    gigabytes on disk) and with less mission-critical data sets to get your team,
+    the Kubernetes team, and the feature teams familiar with the new operational model
+    of running stateful workloads on Kubernetes with less risk to the business.^([1](app02.html#ch01fn93))
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在运行MySQL on Kubernetes时的建议是投资于学习一个已经在Kubernetes生态系统中经过验证和证明的控制平面，比如Vitess。但在尝试运行之前，也要先爬行。在您的组织中，MySQL不应该是在Kubernetes上运行工作负载的第一个实验对象。始终要证明可行性，并与无状态工作负载团队一起学习尖锐的边缘，然后再尝试运行像MySQL这样更复杂的用例。在确定最佳的初始采用用例时，从小数据集（仅在磁盘上几个千兆字节的数据库）和较少关键数据集开始，以使您的团队、Kubernetes团队和功能团队熟悉在Kubernetes上运行有状态工作负载的新操作模型，同时对业务风险较小。
+- en: 'Running stateful workloads on Kubernetes has been maturing for the past few
+    years and continues to do so with critical contributions from companies that have
+    invested significant engineering hours into making it a more plausible reality,
+    but it is still in its infancy compared to running on VMs directly, and you will
+    find that a slow and careful approach to adoption is what pays off in the long
+    run. Especially consider what the failure modes look like with MySQL on Kubernetes
+    and ask yourself: if everything goes wrong, how will I put this back together
+    again? Will I lose data? Make sure you have an answer.'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Kubernetes上运行有状态工作负载已经成熟了几年，并且随着那些投入大量工程时间使其更具可行性的公司的重要贡献，它仍处于初期阶段，与直接在VM上运行相比，您会发现缓慢和谨慎的采用方法才是长远回报的关键。特别要考虑MySQL在Kubernetes上的故障模式是什么样的，并问自己：如果一切都出错了，我该如何重新组合？我会丢失数据吗？确保您有答案。
+- en: Summary
+  id: totrans-21
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: Kubernetes is one of the fastest growing infrastructure platforms in tech right
+    now and for good reason. The engineer velocity it enables and the rich ecosystem
+    that is supported by the cloud native foundation make it an appealing investment
+    for companies. But you should consider decisions like running MySQL on Kubernetes
+    through the lens of risk and reward to your team and your company. Make sure you
+    have a shared understanding of where stateful services like data stores are in
+    your organization’s Kubernetes journey. It is understandable to want to leverage
+    existing investment in Kubernetes for all workloads, but that needs to be well
+    balanced against your data store layer’s stability needs.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Kubernetes是当前技术领域中增长最快的基础设施平台之一，而且理由充分。它所带来的工程速度和由云原生基金会支持的丰富生态系统使其成为公司吸引投资的有吸引力的选择。但您应该通过风险和回报的视角来考虑像在Kubernetes上运行MySQL这样的决策，以及对您的团队和公司的影响。确保您对组织的Kubernetes之旅中像数据存储这样的有状态服务的位置有共同的理解。想要利用Kubernetes对所有工作负载的现有投资是可以理解的，但这需要与数据存储层的稳定性需求进行良好的平衡。
+- en: ^([1](app02.html#ch01fn93-marker)) For an excellent “from the trenches” conference
+    talk about running database workloads on Kubernetes, we recommend [“The Container
+    Operator’s Manual”](https://oreil.ly/TVD6c) keynote, by Alice Goldfuss.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](app02.html#ch01fn93-marker))关于在Kubernetes上运行数据库工作负载的出色“实战”会议演讲，我们推荐由Alice
+    Goldfuss主持的[“容器操作员手册”](https://oreil.ly/TVD6c)主题演讲。

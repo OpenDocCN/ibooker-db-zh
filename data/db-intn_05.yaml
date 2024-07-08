@@ -1,0 +1,1089 @@
+- en: Chapter 4\. Implementing B-Trees
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第四章。实现 B-树
+- en: In the previous chapter, we talked about general principles of binary format
+    composition, and learned how to create cells, build hierarchies, and connect them
+    to pages using pointers. These concepts are applicable for both in-place update
+    and append-only storage structures. In this chapter, we discuss some concepts
+    specific to B-Trees.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前一章中，我们讨论了二进制格式组合的一般原则，并学习了如何创建单元格、构建层次结构，并使用指针将它们连接到页面。这些概念适用于就地更新和仅追加存储结构。在本章中，我们讨论了一些特定于
+    B-树的概念。
+- en: 'The sections in this chapter are split into three logical groups. First, we
+    discuss organization: how to establish relationships between keys and pointers,
+    and how to implement headers and links between pages.'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章节分为三个逻辑组。首先，我们讨论组织：如何建立键和指针之间的关系，以及如何实现页面之间的头部和链接。
+- en: Next, we discuss processes that occur during root-to-leaf descends, namely how
+    to perform binary search and how to collect breadcrumbs and keep track of parent
+    nodes in case we later have to split or merge nodes.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们讨论了在从根到叶的下降过程中发生的过程，即如何执行二进制搜索，如何收集面包屑并跟踪父节点，以防后续需要拆分或合并节点。
+- en: Lastly, we discuss optimization techniques (rebalancing, right-only appends,
+    and bulk loading), maintenance processes, and garbage collection.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们讨论了优化技术（重新平衡、仅右追加和批量加载）、维护过程和垃圾回收。
+- en: Page Header
+  id: totrans-5
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 页面头
+- en: The page header holds information about the page that can be used for navigation,
+    maintenance, and optimizations. It usually contains flags that describe page contents
+    and layout, number of cells in the page, lower and upper offsets marking the empty
+    space (used to append cell offsets and data), and other useful metadata.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 页面头包含关于页面的信息，可用于导航、维护和优化。通常包含描述页面内容和布局的标志、页面中单元格的数量、标记空白空间的下限和上限偏移量（用于附加单元格偏移量和数据），以及其他有用的元数据。
+- en: For example, [PostgreSQL](https://databass.dev/links/12) stores the page size
+    and layout version in the header. In [MySQL InnoDB](https://databass.dev/links/13),
+    page header holds the number of heap records, level, and some other implementation-specific
+    values. In [SQLite](https://databass.dev/links/14), page header stores the number
+    of cells and a rightmost pointer.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，[PostgreSQL](https://databass.dev/links/12) 在头部存储页面大小和布局版本。在 [MySQL InnoDB](https://databass.dev/links/13)
+    中，页面头包含堆记录的数量、层级和一些其他特定于实现的值。在 [SQLite](https://databass.dev/links/14) 中，页面头存储单元格数量和最右指针。
+- en: Magic Numbers
+  id: totrans-8
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 魔法数字
+- en: One of the values often placed in the file or page header is a magic number.
+    Usually, it’s a multibyte block, containing a constant value that can be used
+    to signal that the block represents a page, specify its kind, or identify its
+    version.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文件或页面头部经常放置一个魔法数字值。通常是一个多字节块，包含一个常量值，可用于信号化该块表示页面、指定其类型或识别其版本。
+- en: Magic numbers are often used for validation and sanity checks [[GIAMPAOLO98]](app01.html#GIAMPAOLO98).
+    It’s very improbable that the byte sequence at a random offset would exactly match
+    the magic number. If it did match, there’s a good chance the offset is correct.
+    For example, to verify that the page is loaded and aligned correctly, during write
+    we can place the magic number `50 41 47 45` (hex for `PAGE`) into the header.
+    During the read, we validate the page by comparing the four bytes from the read
+    header with the expected byte sequence.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 魔法数字经常用于验证和健全性检查 [[GIAMPAOLO98]](app01.html#GIAMPAOLO98)。在随机偏移处的字节序列恰好匹配魔法数字的可能性非常小。如果匹配，则偏移可能是正确的。例如，在写入过程中，我们可以将
+    `50 41 47 45`（`PAGE` 的十六进制表示）放入头部以验证页面是否正确加载和对齐。在读取过程中，通过将读取头部的四个字节与预期的字节序列进行比较来验证页面。
+- en: Sibling Links
+  id: totrans-11
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 兄弟链接
+- en: Some implementations store forward and backward links, pointing to the left
+    and right sibling pages. These links help to locate neighboring nodes without
+    having to ascend back to the parent. This approach adds some complexity to split
+    and merge operations, as the sibling offsets have to be updated as well. For example,
+    when a non-rightmost node is split, its right sibling’s backward pointer (previously
+    pointing to the node that was split) has to be re-bound to point to the newly
+    created node.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些实现存储向前和向后的链接，指向左右兄弟页面。这些链接帮助定位相邻节点，而无需返回父节点。这种方法增加了拆分和合并操作的复杂性，因为必须更新兄弟偏移量。例如，当非最右节点被拆分时，其右兄弟的后向指针（之前指向被拆分的节点）必须重新绑定以指向新创建的节点。
+- en: In [Figure 4-1](#sibling_links_1) you can see that to locate a sibling node,
+    unless the siblings are linked, we have to refer to the parent node. This operation
+    might ascend all the way up to the root, since the direct parent can only help
+    to address *its* own children. If we store sibling links directly in the header,
+    we can simply follow them to locate the previous or next node on the same level.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[图4-1](#sibling_links_1)中，您可以看到为了定位兄弟节点，除非兄弟节点已链接，否则必须参考父节点。此操作可能一直上升到根，因为直接的父节点只能帮助处理*它的*子节点。如果直接在头部存储兄弟链接，我们可以简单地跟随它们来定位同一级别上的前一个或下一个节点。
+- en: '![dbin 0401](assets/dbin_0401.png)'
+  id: totrans-14
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0401](assets/dbin_0401.png)'
+- en: Figure 4-1\. Locating a sibling by following parent links (a) versus sibling
+    links (b)
+  id: totrans-15
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图4-1\. 通过跟随父链接（a）与兄弟链接（b）定位兄弟节点
+- en: One of the downsides of storing sibling links is that they have to be updated
+    during splits and merges. Since updates have to happen in a sibling node, not
+    in a splitting/merging node, it may require additional locking. We discuss how
+    sibling links can be useful in a concurrent B-Tree implementation in [“Blink-Trees”](ch05.html#b_link_trees).
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储兄弟链接的一个缺点是在拆分和合并时必须更新它们。由于更新必须在兄弟节点而不是在拆分/合并节点中发生，可能需要额外的锁定。我们在[“Blink-Trees”](ch05.html#b_link_trees)中讨论了在并发B-树实现中兄弟链接的用处。
+- en: Rightmost Pointers
+  id: totrans-17
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 最右指针
+- en: 'B-Tree separator keys have strict invariants: they’re used to split the tree
+    into subtrees and navigate them, so there is always one more pointer to child
+    pages than there are keys. That’s where the `+1` mentioned in [“Counting Keys”](ch02.html#counting_keys)
+    is coming from.'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: B-树分隔键具有严格的不变性：它们用于将树分割为子树并导航它们，因此子页面的指针总是比键多一个。这解释了[“计数键”](ch02.html#counting_keys)中提到的`+1`。
+- en: 'In [“Separator Keys”](ch02.html#separator_keys), we described separator key
+    invariants. In many implementations, nodes look more like the ones displayed in
+    [Figure 4-2](#rightmost_pointer): each separator key has a child pointer, while
+    the last pointer is stored separately, since it’s not paired with any key. You
+    can compare this to [Figure 2-10](ch02.html#tree_subrange).'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[“分隔键”](ch02.html#separator_keys)中，我们描述了分隔键的不变性。在许多实现中，节点看起来更像是[图4-2](#rightmost_pointer)所显示的：每个分隔键都有一个子指针，而最后一个指针单独存储，因为它不与任何键对应。您可以将此与[图2-10](ch02.html#tree_subrange)进行比较。
+- en: '![dbin 0402](assets/dbin_0402.png)'
+  id: totrans-20
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0402](assets/dbin_0402.png)'
+- en: Figure 4-2\. Rightmost pointer
+  id: totrans-21
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图4-2\. 最右指针
+- en: This extra pointer can be stored in the header as, for example, it is implemented
+    in [SQLite](https://databass.dev/links/16).
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此额外的指针可以存储在头部中，例如在[SQLite](https://databass.dev/links/16)中实现的方式。
+- en: If the rightmost child is split and the new cell is appended to its parent,
+    the rightmost child pointer has to be reassigned. As shown in [Figure 4-3](#rightmost_pointer_2),
+    after the split, the cell appended to the parent (shown in gray) holds the promoted
+    key and points to the split node. The pointer to the new node is assigned instead
+    of the previous rightmost pointer. A similar approach is described and implemented
+    in SQLite.^([1](ch04.html#idm46466888850552))
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果最右边的子节点被拆分，并且新单元追加到其父节点中，则必须重新分配最右边的子节点指针。如图[4-3](#rightmost_pointer_2)所示，在拆分后，追加到父节点的单元（显示为灰色）包含了提升的键，并指向拆分的节点。新节点的指针被分配到之前的最右边指针位置。SQLite中描述并实现了类似的方法。^([1](ch04.html#idm46466888850552))
+- en: '![dbin 0403](assets/dbin_0403.png)'
+  id: totrans-24
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0403](assets/dbin_0403.png)'
+- en: Figure 4-3\. Rightmost pointer update during node split. The promoted key is
+    shown in gray.
+  id: totrans-25
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图4-3\. 节点拆分期间的最右指针更新。提升的键显示为灰色。
+- en: Node High Keys
+  id: totrans-26
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 节点高键
+- en: We can take a slightly different approach and store the rightmost pointer in
+    the cell along with the node *high key*. The high key represents the highest possible
+    key that can be present in the subtree under the current node. This approach is
+    used by PostgreSQL and is called B^(link)-Trees (for concurrency implications
+    of this approach, see [“Blink-Trees”](ch05.html#b_link_trees)).
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以采用略有不同的方法，将右边的指针与节点的*高键*一起存储在单元中。高键表示当前节点下可能存在的最高键。这种方法被PostgreSQL采用，称为B^(link)-Trees（有关此方法的并发影响，请参阅[“Blink-Trees”](ch05.html#b_link_trees)）。
+- en: B-Trees have `N` keys (denoted with `K[i]`) and `N + 1` pointers (denoted with
+    `P[i]`). In each subtree, keys are bounded by `K[i-1] ≤ K[s] < K[i]`. The `K[0]
+    = -∞` is implicit and is not present in the node.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: B-树有`N`个键（用`K[i]`表示）和`N + 1`个指针（用`P[i]`表示）。在每个子树中，键的范围由`K[i-1] ≤ K[s] < K[i]`界定。隐含地，`K[0]
+    = -∞`不出现在节点中。
+- en: 'B^(link)-Trees add a `K[N+1]` key to each node. It specifies an upper bound
+    of keys that can be stored in the subtree to which the pointer `P[N]` points,
+    and therefore is an upper bound of values that can be stored in the current subtree.
+    Both approaches are shown in [Figure 4-4](#rightmost_pointer_4): (a) shows a node
+    *without* a high key, and (b) shows a node with a high key.'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: B^(link)-Trees 向每个节点添加 `K[N+1]` 键。它指定了可以存储在指针 `P[N]` 所指向的子树中的键的上限，因此也是当前子树中可以存储的值的上限。两种方法都显示在
+    [Figure 4-4](#rightmost_pointer_4) 中：(a) 显示了一个没有高键的节点，(b) 显示了一个带有高键的节点。
+- en: '![dbin 0404](assets/dbin_0404.png)'
+  id: totrans-30
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0404](assets/dbin_0404.png)'
+- en: Figure 4-4\. B-Trees without (a) and with (b) a high key
+  id: totrans-31
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: Figure 4-4\. B-Trees 没有高键 (a) 和有高键 (b)
+- en: In this case, pointers can be stored pairwise, and each cell can have a corresponding
+    pointer, which might simplify rightmost pointer handling as there are not as many
+    edge cases to consider.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，指针可以成对存储，并且每个单元格可以有相应的指针，这可能会简化右侧指针处理，因为不需要考虑那么多边缘情况。
+- en: 'In [Figure 4-5](#rightmost_pointer_3), you can see schematic page structure
+    for both approaches and how the search space is split differently for these cases:
+    going up to `+∞` in the first case, and up to the upper bound of `K[3]` in the
+    second.'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 [Figure 4-5](#rightmost_pointer_3) 中，您可以看到两种方法的示意页面结构以及这些情况下搜索空间如何不同：在第一种情况下，搜索范围延伸到
+    `+∞`，而在第二种情况下，搜索范围延伸到 `K[3]` 的上限。
+- en: '![dbin 0405](assets/dbin_0405.png)'
+  id: totrans-34
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0405](assets/dbin_0405.png)'
+- en: Figure 4-5\. Using +∞ as a virtual key (a) versus storing the high key (b)
+  id: totrans-35
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: Figure 4-5\. 使用 +∞ 作为虚拟键 (a) 与存储高键 (b)
+- en: Overflow Pages
+  id: totrans-36
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 溢出页面
+- en: 'Node size and tree fanout values are fixed and do not change dynamically. It
+    would also be difficult to come up with a value that would be universally optimal:
+    if variable-size values are present in the tree and they are large enough, only
+    a few of them can fit into the page. If the values are tiny, we end up wasting
+    the reserved space.'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 节点大小和树的分支值是固定的，不会动态改变。要找到一个在所有情况下都最优的值是很困难的：如果树中存在可变大小的值，并且它们足够大，那么只有少数值可以适应页面。如果值很小，我们将浪费预留的空间。
+- en: The B-Tree algorithm specifies that every node keeps a specific number of items.
+    Since some values have different sizes, we may end up in a situation where, according
+    to the B-Tree algorithm, the node is not *full* yet, but there’s *no more free
+    space* on the fixed-size *page* that holds this node. Resizing the page requires
+    copying already written data to the new region and is often impractical. However,
+    we still need to find a way to increase or extend the page size.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: B-Tree 算法规定每个节点保留特定数量的项。由于某些值的大小不同，我们可能会遇到这样的情况：根据 B-Tree 算法，节点尚未*满*，但包含此节点的固定大小*页*上已经*没有更多的空闲空间*。调整页面大小需要将已写入的数据复制到新的区域，通常是不切实际的。然而，我们仍然需要找到一种方法来增加或扩展页面大小。
+- en: To implement variable-size nodes without copying data to the new contiguous
+    region, we can build nodes from multiple linked pages. For example, the default
+    page size is 4 K, and after inserting a few values, its data size has grown over
+    4 K. Instead of allowing arbitrary sizes, nodes are allowed to grow in 4 K increments,
+    so we allocate a 4 K extension page and link it from the original one. These linked
+    page extensions are called *overflow pages*. For clarity, we call the original
+    page the *primary page* in the scope of this section.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了实现可变大小的节点而无需将数据复制到新的连续区域，我们可以从多个链接页面构建节点。例如，默认页面大小为 4K，在插入几个值后，其数据大小已经超过了
+    4K。节点允许以 4K 递增地增长，因此我们分配一个 4K 扩展页面，并将其从原始页面链接过来。这些链接的页面扩展被称为*溢出页面*。为了清晰起见，在本节的范围内我们称原始页面为*主要页面*。
+- en: Most B-Tree implementations allow storing only up to a fixed number of payload
+    bytes in the B-Tree node directly and *spilling* the rest to the overflow page.
+    This value is calculated by dividing the node size by fanout. Using this approach,
+    we cannot end up in a situation where the page has no free space, as it will always
+    have at least `max_payload_size` bytes. For more information on overflow pages
+    in SQLite, see the [SQLite source code repository](https://databass.dev/links/16);
+    also check out the [MySQL InnoDB documentation](https://databass.dev/links/17).
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数 B-Tree 实现仅允许在 B-Tree 节点中直接存储固定数量的有效负载字节，并将其余部分*溢出*到溢出页面。这个值是通过将节点大小除以分支数来计算的。使用这种方法，我们不会出现页面没有空闲空间的情况，因为它始终至少有
+    `max_payload_size` 字节。有关 SQLite 中溢出页面的更多信息，请参阅 [SQLite 源代码库](https://databass.dev/links/16)；还可以查看
+    [MySQL InnoDB 文档](https://databass.dev/links/17)。
+- en: When the inserted payload is larger than `max_payload_size`, the node is checked
+    for whether or not it already has any associated overflow pages. If an overflow
+    page already exists and has enough space available, extra bytes from the payload
+    are spilled there. Otherwise, a new overflow page is allocated.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当插入的负载大于`max_payload_size`时，会检查节点是否已经有任何关联的溢出页。如果已经存在溢出页并且有足够的空间可用，额外的字节从负载中溢出到那里。否则，将分配一个新的溢出页。
+- en: In [Figure 4-6](#overflow_pages_1), you can see a primary page and an overflow
+    page with records pointing from the primary page to the overflow one, where their
+    payload continues.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[图 4-6](#overflow_pages_1)中，您可以看到一个主页和一个溢出页，记录从主页指向溢出页，其中它们的负载继续。
+- en: '![dbin 0406](assets/dbin_0406.png)'
+  id: totrans-43
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0406](assets/dbin_0406.png)'
+- en: Figure 4-6\. Overflow pages
+  id: totrans-44
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 4-6\. 溢出页
+- en: Overflow pages require some extra bookkeeping, since they may get fragmented
+    as well as primary pages, and we have to be able to reclaim this space to write
+    new data, or discard the overflow page if it’s not needed anymore.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 溢出页需要额外的簿记，因为它们可能像主页一样碎片化，我们必须能够回收这些空间以写入新数据，或者如果不再需要，则丢弃溢出页。
+- en: When the first overflow page is allocated, its page ID is stored in the header
+    of the primary page. If a single overflow page is not enough, multiple overflow
+    pages are linked together by storing the next overflow page ID in the previous
+    one’s header. Several pages may have to be traversed to locate the overflow part
+    for the given payload.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当分配第一个溢出页时，其页 ID 存储在主页的头部。如果单个溢出页不够，多个溢出页通过在上一个头部中存储下一个溢出页 ID 进行链接。为了找到给定负载的溢出部分，可能需要遍历多个页。
+- en: Since keys usually have high cardinality, storing a portion of a key makes sense,
+    as most of the comparisons can be made on the trimmed key part that resides in
+    the primary page.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于键通常具有高基数，存储部分键是有意义的，因为大部分比较可以在主页上的修剪键部分上进行。
+- en: For data records, we have to locate their overflow parts to return them to the
+    user. However, this doesn’t matter much, since it’s an infrequent operation. If
+    all data records are oversize, it is worth considering specialized blob storage
+    for large values.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于数据记录，我们必须找到它们的溢出部分以返回给用户。不过，这并不重要，因为这是一个不经常发生的操作。如果所有数据记录都超大，值得考虑为大值使用专门的
+    blob 存储。
+- en: Binary Search
+  id: totrans-49
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 二分查找
+- en: We’ve already discussed the B-Tree lookup algorithm (see [“B-Tree Lookup Algorithm”](ch02.html#b_tree_lookup_algorithm))
+    and mentioned that we locate a searched key within the node using the *binary
+    search* algorithm. Binary search works *only* for sorted data. If keys are not
+    ordered, they can’t be binary searched. This is why keeping keys in order and
+    maintaining a sorted invariant is essential.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经讨论了 B-树查找算法（参见[“B-树查找算法”](ch02.html#b_tree_lookup_algorithm)），并提到我们使用二分查找算法在节点内定位搜索键。二分查找仅适用于排序数据。如果键未排序，则无法进行二分查找。这就是为什么保持键的顺序并维护排序不变性至关重要。
+- en: The binary search algorithm receives an array of sorted items and a searched
+    key, and returns a number. If the returned number is positive, we know that the
+    searched key was found and the number specifies its position in the input array.
+    A negative return value indicates that the searched key is not present in the
+    input array and gives us an *insertion point*.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二分查找算法接收一个已排序项目的数组和一个搜索键，并返回一个数字。如果返回的数字是正数，我们知道搜索键已找到，并指定其在输入数组中的位置。负返回值表明搜索键不在输入数组中，并提供*插入点*。
+- en: The insertion point is the index of the first element that is *greater than*
+    the given key. An absolute value of this number is the index at which the searched
+    key can be inserted to preserve order. Insertion can be done by shifting elements
+    over one position, starting from an insertion point, to make space for the inserted
+    element [[SEDGEWICK11]](app01.html#SEDGEWICK11).
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 插入点是第一个元素的索引，该元素*大于*给定键。该数字的绝对值是搜索键可以插入以保持顺序的索引。插入可以通过从插入点开始移动元素一个位置来完成，以便为插入的元素腾出空间[[SEDGEWICK11]](app01.html#SEDGEWICK11)。
+- en: The majority of searches on higher levels do not result in exact matches, and
+    we’re interested in the search direction, in which case we have to find the first
+    value that is greater than the searched one and follow the corresponding child
+    link into the associated subtree.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 高层次的大多数搜索不会导致精确匹配，我们对搜索方向感兴趣，在这种情况下，我们必须找到第一个大于搜索键的值，并跟随相关子树的相应子链接。
+- en: Binary Search with Indirection Pointers
+  id: totrans-54
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 二分查找与间接指针
+- en: Cells in the B-Tree page are stored in the insertion order, and only cell offsets
+    preserve the logical element order. To perform binary search through page cells,
+    we pick the middle cell offset, follow its pointer to locate the cell, compare
+    the key from this cell with the searched key to decide whether the search should
+    continue left or right, and continue this process recursively until the searched
+    element or the insertion point is found, as shown in [Figure 4-7](#binary_search).
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: B-Tree 页面中的单元格按插入顺序存储，只有单元格偏移保留逻辑元素顺序。要通过页面单元格执行二分查找，我们选择中间单元格偏移，跟随其指针定位单元格，将此单元格的键与搜索的键进行比较，决定搜索应继续向左还是向右，递归地继续这个过程，直到找到搜索的元素或插入点，如[图 4-7](#binary_search)所示。
+- en: '![dbin 0407](assets/dbin_0407.png)'
+  id: totrans-56
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0407](assets/dbin_0407.png)'
+- en: Figure 4-7\. Binary search with indirection pointers. The searched element is
+    shown in gray. Dotted arrows represent binary search through cell pointers. Solid
+    lines represent accesses that follow the cell pointers, necessary to compare the
+    cell value with a searched key.
+  id: totrans-57
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 4-7\. 使用间接指针进行二分查找。搜索的元素显示为灰色。虚线箭头表示通过单元格指针进行二分查找。实线表示访问，按照单元格指针进行比较单元格值与搜索键的必要访问。
+- en: Propagating Splits and Merges
+  id: totrans-58
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 分裂和合并的传播
+- en: As we’ve discussed in previous chapters, B-Tree splits and merges can propagate
+    to higher levels. For that, we need to be able to traverse a chain back to the
+    root node from the splitting leaf or a pair of merging leaves.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在前几章中讨论的那样，B-Tree 的分裂和合并可能会传播到更高的级别。为此，我们需要能够从分裂的叶子或一对合并的叶子逆向遍历链到根节点。
+- en: B-Tree nodes may include parent node pointers. Since pages from lower levels
+    are always paged in when they’re referenced from a higher level, it is not even
+    necessary to persist this information on disk.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: B-Tree 节点可能包括父节点指针。由于从较高级别引用时总是将较低级别页面加载到内存中，因此甚至不需要将此信息持久化到磁盘上。
+- en: 'Just like sibling pointers (see [“Sibling Links”](#sibling_links)), parent
+    pointers have to be updated whenever the parent changes. This happens in all the
+    cases when the separator key with the page identifier is transferred from one
+    node to another: during the parent node splits, merges, or rebalancing of the
+    parent node.'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就像兄弟指针（参见[“兄弟链接”](#sibling_links)）一样，当父节点发生变化时，必须更新父指针。这种情况在分隔键与页面标识符在节点间转移时都会发生：在父节点分裂、合并或重新平衡时。
+- en: Some implementations (for example, [WiredTiger](https://databass.dev/links/20))
+    use parent pointers for leaf traversal to avoid deadlocks, which may happen when
+    using sibling pointers (see [[MILLER78]](app01.html#MILLER78), [[LEHMAN81]](app01.html#LEHMAN81)).
+    Instead of using sibling pointers to traverse leaf nodes, the algorithm employs
+    parent pointers, much like we saw in [Figure 4-1](#sibling_links_1).
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些实现（例如，[WiredTiger](https://databass.dev/links/20)）使用父指针进行叶子遍历，以避免在使用兄弟指针时可能出现的死锁（参见[[MILLER78]](app01.html#MILLER78)，[[LEHMAN81]](app01.html#LEHMAN81)）。算法类似于我们在[图 4-1](#sibling_links_1)中看到的，使用父指针而不是兄弟指针来遍历叶节点。
+- en: To address and locate a sibling, we can follow a pointer from the parent node
+    and recursively descend back to the lower level. Whenever we reach the end of
+    the parent node after traversing all the siblings sharing the parent, the search
+    continues upward recursively, eventually reaching up to the root and continuing
+    back down to the leaf level.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要定位和找到兄弟节点，可以从父节点的指针开始，递归地向下到达较低级别。每当我们在遍历所有共享父节点的兄弟节点后到达父节点末尾时，搜索会继续向上递归，最终达到根节点，然后继续向下到达叶级别。
+- en: Breadcrumbs
+  id: totrans-64
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 面包屑
+- en: Instead of storing and maintaining parent node pointers, it is possible to keep
+    track of nodes traversed on the path to the target leaf node, and follow the chain
+    of parent nodes in reverse order in case of cascading splits during inserts, or
+    merges during deletes.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以不存储和维护父节点指针，而是在插入时跟踪路径到目标叶节点，然后在插入期间进行级联分裂或在删除期间进行合并时，按照逆序跟踪父节点链。
+- en: During operations that may result in structural changes of the B-Tree (insert
+    or delete), we first traverse the tree from the root to the leaf to find the target
+    node and the insertion point. Since we do not always know up front whether or
+    not the operation will result in a split or merge (at least not until the target
+    leaf node is located), we have to collect *breadcrumbs*.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在可能导致 B-Tree 结构变化的操作（插入或删除）期间，我们首先从根到叶遍历树，找到目标节点和插入点。由于我们并不总是事先知道操作是否会导致分裂或合并（至少在定位到目标叶节点之前不知道），因此我们必须收集
+    *面包屑*。
+- en: Breadcrumbs contain references to the nodes followed from the root and are used
+    to backtrack them in reverse when propagating splits or merges. The most natural
+    data structure for this is a stack. For example, PostgreSQL stores breadcrumbs
+    in a stack, internally referenced as BTStack.^([2](ch04.html#idm46466888762856))
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 面包屑包含从根节点开始跟随的节点的引用，并在传播分裂或合并时以反向回溯它们。这个过程中最自然的数据结构是堆栈。例如，PostgreSQL 将面包屑存储在一个名为
+    BTStack 的内部堆栈中。^([2](ch04.html#idm46466888762856))
+- en: If the node is split or merged, breadcrumbs can be used to find insertion points
+    for the keys pulled to the parent and to walk back up the tree to propagate structural
+    changes to the higher-level nodes, if necessary. This stack is maintained in memory.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果节点被分裂或合并，可以使用面包屑来找到被移动到父节点的键的插入点，并沿着树向上遍历以传播结构变化到更高级别的节点（如果有必要的话）。此堆栈保存在内存中。
+- en: '[Figure 4-8](#btree_breadcrumbs) shows an example of root-to-leaf traversal,
+    collecting breadcrumbs containing pointers to the visited nodes and cell indices.
+    If the target leaf node is split, the item on top of the stack is popped to locate
+    its immediate parent. If the parent node has enough space, a new cell is appended
+    to it at the cell index from the breadcrumb (assuming the index is still valid).
+    Otherwise, the parent node is split as well. This process continues recursively
+    until either the stack is empty and we have reached the root, or there was no
+    split on the level.'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 4-8](#btree_breadcrumbs) 展示了从根到叶子的遍历示例，收集包含指向访问节点和单元索引的面包屑。如果目标叶节点被分裂，堆栈顶部的项目将被弹出以定位其直接父节点。如果父节点有足够的空间，则在其上附加一个新单元格到面包屑的单元索引处（假设索引仍然有效）。否则，父节点也会被分裂。这个过程递归地继续，直到堆栈为空并且我们已经到达根，或者在该层没有分裂发生。'
+- en: '![dbin 0408](assets/dbin_0408.png)'
+  id: totrans-70
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0408](assets/dbin_0408.png)'
+- en: Figure 4-8\. Breadcrumbs collected during lookup, containing traversed nodes
+    and cell indices. Dotted lines represent logical links to visited nodes. Numbers
+    in the breadcrumbs table represent indices of the followed child pointers.
+  id: totrans-71
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 4-8\. 查找期间收集的面包屑，包含遍历的节点和单元索引。虚线表示到访节点的逻辑链接。面包屑表中的数字表示跟随的子指针的索引。
+- en: Rebalancing
+  id: totrans-72
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 重新平衡
+- en: Some B-Tree implementations attempt to postpone split and merge operations to
+    amortize their costs by *rebalancing* elements within the level, or moving elements
+    from more occupied nodes to less occupied ones for as long as possible before
+    finally performing a split or merge. This helps to improve node occupancy and
+    may reduce the number of levels within the tree at a potentially higher maintenance
+    cost of rebalancing.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些 B-Tree 的实现尝试通过 *重新平衡* 元素在层内的位置或将元素从占用较多的节点移动到占用较少的节点，来延迟分裂和合并操作以摊销其成本。这有助于提高节点的占用率，并可能在较高的重新平衡维护成本下减少树中的层数。
+- en: Load balancing can be performed during insert and delete operations [[GRAEFE11]](app01.html#GRAEFE11).
+    To improve space utilization, instead of splitting the node on overflow, we can
+    transfer some of the elements to one of the sibling nodes and make space for the
+    insertion. Similarly, during delete, instead of merging the sibling nodes, we
+    may choose to move some of the elements from the neighboring nodes to ensure the
+    node is at least half full.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在插入和删除操作期间可以执行负载平衡 [[GRAEFE11]](app01.html#GRAEFE11)。为了提高空间利用率，我们可以在溢出时将一些元素转移到其中一个兄弟节点，并为插入腾出空间。类似地，在删除期间，我们可以选择从相邻节点移动一些元素，以确保节点至少半满时，而不是合并兄弟节点。
+- en: B*-Trees keep distributing data between the neighboring nodes until both siblings
+    are full [[KNUTH98]](app01.html#KNUTH98). Then, instead of splitting a single
+    node into two half-empty ones, the algorithm splits two nodes into three nodes,
+    each of which is two-thirds full. SQLite uses this variant in the [implementation](https://databass.dev/links/22).
+    This approach improves an average occupancy by postponing splits, but requires
+    additional tracking and balancing logic. Higher utilization also means more efficient
+    searches, because the height of the tree is smaller and fewer pages have to be
+    traversed on the path to the searched leaf.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: B*树将数据在邻居节点之间分配，直到两个兄弟节点都满[[KNUTH98]](app01.html#KNUTH98)。然后，算法不再将单个节点分成两个半空节点，而是将两个节点分成三个节点，每个节点都是三分之二满。SQLite在[实现](https://databass.dev/links/22)中使用了这种变体。这种方法通过推迟拆分来提高平均占用率，但需要额外的跟踪和平衡逻辑。更高的利用率还意味着搜索更有效率，因为树的高度较小，在搜索到达叶子节点的路径上需要遍历的页面较少。
+- en: '[Figure 4-9](#btree_balancing_1) shows distributing elements between the neighboring
+    nodes, where the left sibling contains more elements than the right one. Elements
+    from the more occupied node are moved to the less occupied one. Since balancing
+    changes the min/max invariant of the sibling nodes, we have to update keys and
+    pointers at the parent node to preserve it.'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 4-9](#btree_balancing_1)展示了在邻居节点之间分配元素的情况，左边的兄弟节点包含的元素比右边的多。从占用更多的节点移动元素到占用较少的节点。由于平衡改变了兄弟节点的最小/最大不变量，我们必须更新父节点的键和指针以保持它。'
+- en: '![dbin 0409](assets/dbin_0409.png)'
+  id: totrans-77
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0409](assets/dbin_0409.png)'
+- en: 'Figure 4-9\. B-Tree balancing: Distributing elements between the more occupied
+    node and the less occupied one'
+  id: totrans-78
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 4-9\. B-Tree平衡：在占用更多的节点和占用较少的节点之间分配元素
+- en: Load balancing is a useful technique used in many database implementations.
+    For example, SQLite implements the [*balance-siblings* algorithm](https://databass.dev/links/23),
+    which is somewhat close to what we have described in this section. Balancing might
+    add some complexity to the code, but since its use cases are isolated, it can
+    be implemented as an optimization at a later stage.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 负载平衡是许多数据库实现中使用的一种有用技术。例如，SQLite实现了[*balance-siblings*算法](https://databass.dev/links/23)，它与本节描述的内容有些相似。平衡可能会给代码增加一些复杂性，但由于其用例是孤立的，可以在后期作为优化来实现。
+- en: Right-Only Appends
+  id: totrans-80
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 仅右侧追加
+- en: Many database systems use auto-incremented monotonically increasing values as
+    primary index keys. This case opens up an opportunity for an optimization, since
+    all the insertions are happening toward the end of the index (in the rightmost
+    leaf), so most of the splits occur on the rightmost node on each level. Moreover,
+    since the keys are monotonically incremented, given that the ratio of appends
+    versus updates and deletes is low, nonleaf pages are also less fragmented than
+    in the case of randomly ordered keys.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多数据库系统使用自增单调递增值作为主索引键。这种情况为优化提供了机会，因为所有插入都发生在索引的末尾（最右边的叶子节点），所以大多数拆分发生在每个级别的最右节点上。此外，由于键是单调递增的，考虑到追加与更新和删除的比例较低，非叶页面也比随机排序键的情况下碎片化较少。
+- en: PostgreSQL is calling this case a [*fastpath*](https://databass.dev/links/24).
+    When the inserted key is strictly greater than the first key in the rightmost
+    page, and the rightmost page has enough space to hold the newly inserted entry,
+    the new entry is inserted into the appropriate location in the cached rightmost
+    leaf, and the whole read path can be skipped.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PostgreSQL将这种情况称为[*fastpath*](https://databass.dev/links/24)。当插入的键严格大于右侧页的第一个键，并且右侧页有足够的空间来容纳新插入的条目时，新条目将插入到缓存的右侧叶子节点的适当位置，并且可以跳过整个读取路径。
+- en: SQLite has a similar concept and calls it [*quickbalance*](https://databass.dev/links/25).
+    When the entry is inserted on the far right end and the target node is full (i.e.,
+    it becomes the largest entry in the tree upon insertion), instead of rebalancing
+    or splitting the node, it allocates the new rightmost node and adds its pointer
+    to the parent (for more on implementing balancing in SQLite, see [“Rebalancing”](#btree_rebalancing)).
+    Even though this leaves the newly created page nearly empty (instead of half empty
+    in the case of a node split), it is very likely that the node will get filled
+    up shortly.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQLite有一个类似的概念，并称其为[*quickbalance*](https://databass.dev/links/25)。当条目插入到最右端并且目标节点已满（即插入时成为树中最大的条目），而不是重新平衡或分割节点，它会分配新的最右节点并将其指针添加到父节点（有关在SQLite中实现平衡的更多信息，请参阅[“Rebalancing”](#btree_rebalancing)）。尽管这会使新创建的页面几乎为空（而不是节点分割时的一半空），但很可能这个节点很快就会被填满。
+- en: Bulk Loading
+  id: totrans-84
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: '**批量加载**'
+- en: If we have presorted data and want to bulk load it, or have to rebuild the tree
+    (for example, for defragmentation), we can take the idea with right-only appends
+    even further. Since the data required for tree creation is already sorted, during
+    bulk loading we only need to append the items at the rightmost location in the
+    tree.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们有预排序的数据并且希望批量加载它，或者必须重建树（例如碎片整理），我们可以进一步采用仅向右追加的想法。由于用于树创建的数据已经排序，在批量加载期间，我们只需要将项目追加到树中最右边的位置。
+- en: In this case, we can avoid splits and merges altogether and compose the tree
+    from the bottom up, writing it out level by level, or writing out higher-level
+    nodes as soon as we have enough pointers to already written lower-level nodes.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，我们完全可以避免分割和合并，并且可以从底部向上组合树，逐层写出，或者在我们已经有足够指向已写出的低级节点的指针后，立即写出高级节点。
+- en: One approach for implementing bulk loading is to write presorted data on the
+    leaf level page-wise (rather then inserting individual elements). After the leaf
+    page is written, we propagate its first key to the parent and use a normal algorithm
+    for building higher B-Tree levels [[RAMAKRISHNAN03]](app01.html#RAMAKRISHNAN03).
+    Since appended keys are given in the sorted order, all splits in this case occur
+    on the rightmost node.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实现批量加载的一种方法是按页对叶级别的预排序数据进行写入（而不是插入单个元素）。在写入叶页之后，我们将其第一个键传播到父节点，并使用常规算法构建更高的B树级别[[RAMAKRISHNAN03]](app01.html#RAMAKRISHNAN03)。由于附加键按排序顺序给出，因此在此情况下所有的分割都发生在最右边的节点上。
+- en: Since B-Trees are always built starting from the bottom (leaf) level, the complete
+    leaf level can be written out before any higher-level nodes are composed. This
+    allows having all child pointers at hand by the time the higher levels are constructed.
+    The main benefits of this approach are that we do not have to perform any splits
+    or merges on disk and, at the same time, have to keep only a minimal part of the
+    tree (i.e., all parents of the currently filling leaf node) in memory for the
+    time of construction.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于B树总是从底部（叶子）级别开始构建，可以在组合任何高级节点之前写出完整的叶子级别。这样做允许在构建高级别时手头上有所有子指针。这种方法的主要好处在于我们无需在磁盘上执行任何分割或合并，并且同时在构建过程中只需保留树的最小部分（即当前填充叶子节点的所有父节点）在内存中。
+- en: Immutable B-Trees can be created in the same manner but, unlike mutable B-Trees,
+    they require no space overhead for subsequent modifications, since all operations
+    on a tree are final. All pages can be completely filled up, improving occupancy
+    and resulting into better performance.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不可变B树可以以相同的方式创建，但与可变B树不同，它们不需要为后续修改的空间开销，因为对树的所有操作都是最终的。所有页面都可以完全填充，提高占用率并实现更好的性能。
+- en: Compression
+  id: totrans-90
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '**压缩**'
+- en: 'Storing the raw, uncompressed data can induce significant overhead, and many
+    databases offer ways to compress it to save space. The apparent trade-off here
+    is between access speed and compression ratio: larger compression ratios can improve
+    data size, allowing you to fetch more data in a single access, but might require
+    more RAM and CPU cycles to compress and decompress it.'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储原始的未压缩数据可能会引入显著的开销，许多数据库提供了压缩方法以节省空间。这里的明显折衷是在访问速度和压缩比之间：更大的压缩比可以提高数据大小，允许您在单次访问中获取更多数据，但可能需要更多的RAM和CPU周期来进行压缩和解压缩。
+- en: 'Compression can be done at different granularity levels. Even though compressing
+    entire files can yield better compression ratios, it has limited application as
+    a whole file has to be recompressed on an update, and more granular compression
+    is usually better-suited for larger datasets. Compressing an entire index file
+    is both impractical and hard to implement efficiently: to address a particular
+    page, the whole file (or its section containing compression metadata) has to be
+    accessed (in order to locate a compressed section), decompressed, and made available.'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 压缩可以在不同的粒度级别进行。尽管压缩整个文件可能会产生更好的压缩比，但在整个文件更新时，应用受限，并且通常更精细的压缩更适合较大的数据集。压缩整个索引文件既不切实际，也难以有效实现：为了处理特定页面，必须访问整个文件（或包含压缩元数据的部分），解压缩并使其可用。
+- en: An alternative is to compress data page-wise. It fits our discussion well, since
+    the algorithms we’ve been discussing so far use fixed-size pages. Pages can be
+    compressed and uncompressed independently from one another, allowing you to couple
+    compression with page loading and flushing. However, a compressed page in this
+    case can occupy only a fraction of a disk block and, since transfers are usually
+    done in units of disk blocks, it might be necessary to page in extra bytes [[RAY95]](app01.html#RAY95).
+    In [Figure 4-10](#compression_1), you can see a compressed page (a) taking less
+    space than the disk block. When we load this page, we also page in additional
+    bytes that belong to the other page. With pages that span multiple disk blocks,
+    like (b) in the same image, we have to read an additional block.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种选择是逐页压缩数据。这与我们讨论的算法非常匹配，因为到目前为止我们讨论的算法使用固定大小的页面。页面可以独立地进行压缩和解压缩，允许将压缩与页面加载和刷新结合起来。然而，在这种情况下，一个压缩的页面可能仅占据磁盘块的一小部分，并且由于通常以磁盘块为单位进行传输，可能需要分页额外字节[[RAY95]](app01.html#RAY95)。在[图4-10](#compression_1)中，您可以看到一个压缩页面（a）占用的空间少于磁盘块。当加载这个页面时，我们还会分页加载属于其他页面的额外字节。像同一图像中的（b）跨越多个磁盘块的页面，我们需要读取额外的块。
+- en: '![dbin 0410](assets/dbin_0410.png)'
+  id: totrans-94
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0410](assets/dbin_0410.png)'
+- en: Figure 4-10\. Compression and block padding
+  id: totrans-95
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图4-10\. 压缩和块填充
+- en: Another approach is to compress data only, either row-wise (compressing entire
+    data records) or column-wise (compressing columns individually). In this case,
+    page management and compression are decoupled.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种方法是仅对数据进行压缩，可以按行（压缩整个数据记录）或按列（单独压缩列）压缩。在这种情况下，页面管理和压缩是解耦的。
+- en: Most of the open source databases reviewed while writing this book have pluggable
+    compression methods, using available libraries such as [Snappy](https://databass.dev/links/26),
+    [zLib](https://databass.dev/links/27), [lz4](https://databass.dev/links/28), and
+    many others.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在编写本书时，大多数开源数据库都有可插拔的压缩方法，使用可用库如[Snappy](https://databass.dev/links/26)、[zLib](https://databass.dev/links/27)、[lz4](https://databass.dev/links/28)等。
+- en: 'As compression algorithms yield different results depending on a dataset and
+    potential objectives (e.g., compression ratio, performance, or memory overhead),
+    we will not go into comparison and implementation details in this book. There
+    are many overviews available that evaluate different compression algorithms for
+    different block sizes (for example, [Squash Compression Benchmark](https://databass.dev/links/29)),
+    usually focusing on four metrics: memory overhead, compression performance, decompression
+    performance, and compression ratio. These metrics are important to consider when
+    picking a compression library.'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于压缩算法根据数据集和潜在目标（例如压缩比、性能或内存开销）产生不同的结果，本书不会详细比较和实施细节。有许多概述可用于评估不同块大小的不同压缩算法（例如[Squash压缩基准](https://databass.dev/links/29)），通常关注四个指标：内存开销、压缩性能、解压性能和压缩比。在选择压缩库时考虑这些指标至关重要。
+- en: Vacuum and Maintenance
+  id: totrans-99
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 真空和维护
+- en: So far we’ve been mostly talking about user-facing operations in B-Trees. However,
+    there are other processes that happen in parallel with queries that maintain storage
+    integrity, reclaim space, reduce overhead, and keep pages in order. Performing
+    these operations in the background allows us to save some time and avoid paying
+    the price of cleanup during inserts, updates, and deletes.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们主要讨论了B树中用户操作。然而，还有其他与查询并行进行的过程，这些过程维护存储完整性、回收空间、减少开销并保持页面顺序。在后台执行这些操作允许我们节省时间，避免在插入、更新和删除期间付出清理的代价。
+- en: 'The described design of slotted pages (see [“Slotted Pages”](ch03.html#slotted_pages))
+    requires maintenance to be performed on pages to keep them in good shape. For
+    example, subsequent splits and merges in internal nodes or inserts, updates, and
+    deletes on the leaf level can result in a page that has enough *logical* space
+    but does not have enough *contiguous* space, since it is fragmented. [Figure 4-11](#vacuum_1)
+    shows an example of such a situation: the page still has some logical space available,
+    but it’s fragmented and is split between the two deleted (garbage) records and
+    some remaining free space between the header/cell pointers and cells.'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所述的分槽页设计（见[“分槽页”](ch03.html#slotted_pages)）需要对页面进行维护以保持良好状态。例如，在内部节点的连续分裂和合并或在叶级别的插入、更新和删除之后，页面可能会有足够的*逻辑*空间但不具有足够的*连续*空间，因为它是碎片化的。[图 4-11](#vacuum_1)展示了这种情况的一个例子：页面仍然有一些逻辑空间可用，但是它是碎片化的，并且在头部/单元指针和单元之间的两个已删除（垃圾）记录之间保留了一些剩余的自由空间。
+- en: '![dbin 0411](assets/dbin_0411.png)'
+  id: totrans-102
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0411](assets/dbin_0411.png)'
+- en: Figure 4-11\. An example of a fragmented page
+  id: totrans-103
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 4-11\. 一个碎片化页面的示例
+- en: 'B-Trees are navigated from the root level. Data records that can be reached
+    by following pointers down from the root node are *live* (addressable). Nonaddressable
+    data records are said to be *garbage*: these records are not referenced anywhere
+    and cannot be read or interpreted, so their contents are as good as nullified.'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: B-树从根级别进行导航。可以通过从根节点向下跟随指针到达的数据记录是*活跃*的（可寻址的）。不可寻址的数据记录称为*垃圾*：这些记录在任何地方都没有引用，不能读取或解释，因此其内容可以视为已置空。
+- en: 'You can see this distinction in [Figure 4-11](#vacuum_1): cells that still
+    have pointers to them are addressable, unlike the removed or overwritten ones.
+    Zero-filling of garbage areas is often skipped for performance reasons, as eventually
+    these areas are overwritten by the new data anyway.'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[图 4-11](#vacuum_1)中可以看到这种区别：仍然有指向它们的指针的单元是可寻址的，而已移除或覆盖的单元则不是。出于性能考虑，垃圾区域通常跳过零填充，因为最终这些区域会被新数据覆盖。
+- en: Fragmentation Caused by Updates and Deletes
+  id: totrans-106
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 更新和删除引起的碎片化
+- en: Let’s consider under which circumstances pages get into the state where they
+    have nonaddressable data and have to be compacted. On the leaf level, deletes
+    only remove cell offsets from the header, leaving the cell itself intact. After
+    this is done, the cell is not *addressable* anymore, its contents will not appear
+    in the query results, and nullifying it or moving neighboring cells is not necessary.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们考虑在什么情况下页面会处于非可寻址数据的状态并且必须进行压缩。在叶级别，删除仅从头部中移除单元偏移量，但单元本身保持不变。完成此操作后，该单元不再是*可寻址*的，其内容不会出现在查询结果中，因此无需将其置空或移动相邻的单元。
+- en: When the page is split, only offsets are trimmed and, since the rest of the
+    page is not addressable, cells whose offsets were truncated are not reachable,
+    so they will be overwritten whenever the new data arrives, or garbage-collected
+    when the vacuum process kicks in.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当页面分裂时，仅修剪偏移量，并且由于页面的其余部分不可寻址，因此偏移量被截断的单元不可访问，因此它们在新数据到达时将被覆盖，或在真空过程启动时进行垃圾收集。
+- en: Note
+  id: totrans-109
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Some databases rely on garbage collection, and leave removed and updated cells
+    in place for multiversion concurrency control (see [“Multiversion Concurrency
+    Control”](ch05.html#mvcc)). Cells remain accessible for the concurrently executing
+    transactions until the update is complete, and can be collected as soon as no
+    other thread accesses them. Some databases maintain structures that track *ghost*
+    records, which are collected as soon as all transactions that may have seen them
+    complete [[WEIKUM01]](app01.html#WEIKUM01).
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些数据库依赖于垃圾收集，并且保留已删除和更新的单元以进行多版本并发控制（见[“多版本并发控制”](ch05.html#mvcc)）。这些单元在并发执行的事务完成之前仍然可以访问，并且可以在没有其他线程访问它们时立即收集。一些数据库维护跟踪*幽灵*记录的结构，这些记录在所有可能看到它们的事务完成后立即收集[[WEIKUM01]](app01.html#WEIKUM01)。
+- en: Since deletes only discard cell offsets and do not relocate remaining cells
+    or physically remove the target cells to occupy the freed space, freed bytes might
+    end up scattered across the page. In this case, we say that the page is *fragmented*
+    and requires defragmentation.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于删除仅丢弃单元偏移量而不重新定位剩余单元或物理删除目标单元以占用释放的空间，因此释放的字节可能分散在页面上。在这种情况下，我们称页面*碎片化*并且需要进行碎片整理。
+- en: To make a write, we often need a contiguous block of free bytes where the cell
+    fits. To put the freed fragments back together and fix this situation, we have
+    to *rewrite* the page.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要进行写入，我们通常需要一块连续的空闲字节块，其中单元可以适合。 为了将释放的片段重新组合并修复此情况，我们必须*重新编写*页面。
+- en: Insert operations leave tuples in their insertion order. This does not have
+    as significant an impact, but having naturally sorted tuples can help with cache
+    prefetch during sequential reads.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 插入操作按其插入顺序留下元组。 这对性能影响不大，但具有自然排序的元组可以帮助在顺序读取期间进行缓存预取。
+- en: 'Updates are mostly applicable to the leaf level: internal page keys are used
+    for guided navigation and only define subtree boundaries. Additionally, updates
+    are performed on a per-key basis, and generally do not result in structural changes
+    in the tree, apart from the creation of overflow pages. On the leaf level, however,
+    update operations do not change cell order and attempt to avoid page rewrite.
+    This means that multiple versions of the cell, only one of which is addressable,
+    may end up being stored.'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更新主要适用于叶级别：内部页面键用于导航，仅定义子树边界。 另外，更新是按键基础进行的，并且通常不会导致树的结构更改，除了创建溢出页面。 然而，在叶级别，更新操作不会改变单元顺序，并且试图避免页面重写。
+    这意味着存储多个版本的单元，其中只有一个是可寻址的。
+- en: Page Defragmentation
+  id: totrans-115
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 页面碎片整理
+- en: The process that takes care of space reclamation and page rewrites is called
+    *compaction*, *vacuum*, or just *maintenance*. Page rewrites can be done synchronously
+    on write if the page does not have enough free physical space (to avoid creating
+    unnecessary overflow pages), but compaction is mostly referred to as a distinct,
+    asynchronous process of walking through pages, performing garbage collection,
+    and rewriting their contents.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 负责空间回收和页面重写的过程称为*紧缩*、*真空*或仅称为*维护*。 如果页面没有足够的空闲物理空间（以避免创建不必要的溢出页面），则可以在写入时同步进行页面重写，但是紧缩通常被称为遍历页面的一个独特异步过程，执行垃圾收集并重写其内容。
+- en: This process reclaims the space occupied by dead cells, and rewrites cells in
+    their logical order. When pages are rewritten, they may also get relocated to
+    new positions in the file. Unused in-memory pages become available and are returned
+    to the page cache. IDs of the newly available on-disk pages are added to the *free
+    page list* (sometimes called a *freelist*^([3](ch04.html#idm46466888661080))).
+    This information has to be persisted to survive node crashes and restarts, and
+    to make sure free space is not lost or leaked.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此过程回收占用空间的死单元，并按其逻辑顺序重写单元。 当重新编写页面时，它们也可能被重新定位到文件中的新位置。 未使用的内存中页面变得可用，并返回到页面缓存。
+    新可用的磁盘页面的ID被添加到*空闲页面列表*（有时称为*空闲列表*^（[3]（ch04.html＃idm46466888661080）））。 必须持久化此信息以便在节点崩溃和重新启动时存活，并确保不会丢失或泄漏空闲空间。
+- en: Summary
+  id: totrans-118
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 概述
+- en: 'In this chapter, we discussed the concepts specific to on-disk B-Tree implementations,
+    such as:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们讨论了特定于磁盘B-Tree实现的概念，例如：
+- en: Page header
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 页面头
+- en: What information is usually stored there.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常存储哪些信息。
+- en: Rightmost pointers
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最右指针
+- en: These are not paired with separator keys, and how to handle them.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些未与分隔键配对，以及如何处理它们。
+- en: High keys
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 高键
+- en: Determine the maximum allowed key that can be stored in the node.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确定可以存储在节点中的最大允许键。
+- en: Overflow pages
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 溢出页面
+- en: Allow you to store oversize and variable-size records using fixed-size pages.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 允许您使用固定大小页面存储超大和可变大小的记录。
+- en: 'After that, we went through some details related to root-to-leaf traversals:'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 之后，我们详细讨论了从根到叶遍历相关的细节：
+- en: How to perform binary search with indirection pointers
+  id: totrans-129
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何使用间接指针执行二进制搜索
+- en: How to keep track of tree hierarchies using parent pointers or breadcrumbs
+  id: totrans-130
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何使用父指针或面包屑跟踪树层次结构
+- en: 'Lastly, we went through some optimization and maintenance techniques:'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们介绍了一些优化和维护技术：
+- en: Rebalancing
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重新平衡
+- en: Moves elements between neighboring nodes to reduce a number of splits and merges.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 移动相邻节点之间的元素以减少分裂和合并的次数。
+- en: Right-only appends
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 仅右侧追加
+- en: Appends the new rightmost cell instead of splitting it under the assumption
+    that it will quickly fill up.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 附加新的最右单元而不是分裂它的假设是它会迅速填满。
+- en: Bulk loading
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 批量加载
+- en: A technique for efficiently building B-Trees from scratch from sorted data.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一种从排序数据有效地构建B-Tree的技术。
+- en: Garbage collection
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 垃圾收集
+- en: A process that rewrites pages, puts cells in key order, and reclaims space occupied
+    by unaddressable cells.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个重写页面、按键顺序放置单元并回收不可寻址单元占用空间的过程。
+- en: These concepts should bridge the gap between the basic B-Tree algorithm and
+    a real-world implementation, and help you better understand how B-Tree–based storage
+    systems work.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些概念应该弥合基本的B树算法与真实世界实现之间的差距，帮助你更好地理解基于B树的存储系统如何工作。
+- en: ^([1](ch04.html#idm46466888850552-marker)) You can find this algorithm in the
+    `balance_deeper` function in [the project repository](https://databass.dev/links/15).
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch04.html#idm46466888850552-marker)) 你可以在项目仓库的`balance_deeper`函数中找到该算法，[项目仓库链接](https://databass.dev/links/15)。
+- en: '^([2](ch04.html#idm46466888762856-marker)) You can read more about it in the
+    project repository: [*https://databass.dev/links/21*](https://databass.dev/links/21).'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch04.html#idm46466888762856-marker)) 你可以在项目仓库中详细了解：[*https://databass.dev/links/21*](https://databass.dev/links/21)。
+- en: ^([3](ch04.html#idm46466888661080-marker)) For example, SQLite maintains a [list
+    of pages](https://databass.dev/links/30) that are not used by the database, where
+    *trunk* pages are held in a linked list and hold addresses of freed pages.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([3](ch04.html#idm46466888661080-marker)) 例如，SQLite维护一个未被数据库使用的页面列表，其中*trunk*页面以链表形式存储，并保存了释放页面的地址。

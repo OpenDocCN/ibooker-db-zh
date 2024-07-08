@@ -1,0 +1,2366 @@
+- en: Chapter 7\. Log-Structured Storage
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第七章。日志结构存储
+- en: Accountants don’t use erasers or they end up in jail.
+  id: totrans-1
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: 会计师不使用橡皮擦，否则他们会进监狱。
+- en: ''
+  id: totrans-2
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: Pat Helland
+  id: totrans-3
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: Pat Helland
+- en: When accountants have to modify the record, instead of erasing the existing
+    value, they create a new record with a correction. When the quarterly report is
+    published, it may contain minor modifications, correcting the previous quarter
+    results. To derive the bottom line, you have to go through the records and calculate
+    a subtotal [[HELLAND15]](app01.html#HELLAND15).
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当会计师需要修改记录时，他们不会擦除现有值，而是创建一个带有更正的新记录。当季度报告发布时，可能会包含微小的修改，纠正之前季度的结果。要得出最终结果，必须查看记录并计算小计[[HELLAND15]](app01.html#HELLAND15)。
+- en: 'Similarly, immutable storage structures do not allow modifications to the existing
+    files: tables are written once and are never modified again. Instead, new records
+    are appended to the new file and, to find the final value (or conclude its absence),
+    records have to be reconstructed from multiple files. In contrast, mutable storage
+    structures modify records on disk in place.'
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同样，不可变存储结构不允许修改现有文件：表格只写一次，以后不再修改。相反，新记录附加到新文件中，并且为了找到最终值（或确定其不存在），必须从多个文件中重建记录。
+- en: 'Immutable data structures are often used in functional programming languages
+    and are getting more popular because of their safety characteristics: once created,
+    an immutable structure doesn’t change, all of its references can be accessed concurrently,
+    and its integrity is guaranteed by the fact that it cannot be modified.'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不可变数据结构经常用于函数式编程语言，并因其安全特性而变得越来越流行：一旦创建，不可变结构不会改变，所有引用可以并发访问，并且其完整性由于无法修改而得到保证。
+- en: On a high level, there is a strict distinction between how data is treated inside
+    a storage structure and outside of it. Internally, immutable files can hold multiple
+    copies, more recent ones overwriting the older ones, while mutable files generally
+    hold only the most recent value instead. When accessed, immutable files are processed,
+    redundant copies are reconciled, and the most recent ones are returned to the
+    client.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在高层次上，存储结构内部和外部如何处理数据有严格的区别。在内部，不可变文件可以保存多个副本，较新的副本会覆盖较旧的副本，而可变文件通常只保存最新的值。访问时，不可变文件被处理，冗余副本被协调，并返回给客户端最新的副本。
+- en: As do other books and papers on the subject, we use B-Trees as a typical example
+    of mutable structure and *Log-Structured Merge Trees* (LSM Trees) as an example
+    of an immutable structure. Immutable LSM Trees use append-only storage and merge
+    reconciliation, and B-Trees locate data records on disk and update pages at their
+    original offsets in the file.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如其他关于此主题的书籍和论文所述，我们使用B-树作为可变结构的典型示例，*日志结构合并树*（LSM树）作为不可变结构的示例。不可变LSM树使用追加写入存储和合并协调，而B-树在磁盘上定位数据记录并在文件中的原始偏移处更新页面。
+- en: 'In-place update storage structures are optimized for read performance [[GRAEFE04]](app01.html#GRAEFE04):
+    after locating data on disk, the record can be returned to the client. This comes
+    at the expense of write performance: to update the data record in place, it first
+    has to be located on disk. On the other hand, append-only storage is optimized
+    for write performance. Writes do not have to locate records on disk to overwrite
+    them. However, this is done at the expense of reads, which have to retrieve multiple
+    data record versions and reconcile them.'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就地更新存储结构优化了读取性能[[GRAEFE04]](app01.html#GRAEFE04)：在找到磁盘上的数据后，可以将记录返回给客户端。这是以写入性能为代价的：要在原地更新数据记录，首先必须找到它们在磁盘上的位置。另一方面，追加写入存储优化了写入性能。写入不需要在磁盘上找到记录来覆盖它们。然而，这是以读取性能为代价的，需要检索多个数据记录版本并进行协调。
+- en: So far we’ve mostly talked about mutable storage structures. We’ve touched on
+    the subject of immutability while discussing copy-on-write B-Trees (see [“Copy-on-Write”](ch06.html#copy_on_write_b_tree)),
+    FD-Trees (see [“FD-Trees”](ch06.html#fd_trees)), and Bw-Trees (see [“Bw-Trees”](ch06.html#bw_tree)).
+    But there are more ways to implement immutable structures.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们大多数时间讨论的是可变存储结构。在讨论写时复制B-树（见[“写时复制”](ch06.html#copy_on_write_b_tree)）、FD-树（见[“FD-树”](ch06.html#fd_trees)）和Bw-树（见[“Bw-树”](ch06.html#bw_tree)）时，我们已经触及了不可变性的主题。但是，实现不可变结构的方法还有更多。
+- en: Because of the structure and construction approach taken by mutable B-Trees,
+    most I/O operations during reads, writes, and maintenance are *random*. Each write
+    operation first needs to locate a page that holds a data record and only then
+    can modify it. B-Trees require node splits and merges that relocate already written
+    records. After some time, B-Tree pages may require maintenance. Pages are fixed
+    in size, and some free space is reserved for future writes. Another problem is
+    that even when only one cell in the page is modified, an entire page has to be
+    rewritten.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于可变B-树采用的结构和构建方法，读取、写入和维护过程中大多数I/O操作都是*随机*的。每次写入操作首先需要定位包含数据记录的页面，然后才能修改它。B-树需要节点的分裂和合并来重新定位已写入的记录。一段时间后，B-树页面可能需要维护。页面大小固定，并保留了一些空闲空间供未来写入使用。另一个问题是，即使仅修改页面中的一个单元，也必须重新写入整个页面。
+- en: 'There are alternative approaches that can help to mitigate these problems,
+    make some of the I/O operations sequential, and avoid page rewrites during modifications.
+    One of the ways to do this is to use immutable structures. In this chapter, we’ll
+    focus on LSM Trees: how they’re built, what their properties are, and how they
+    are different from B-Trees.'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存在可帮助减轻这些问题、使一些I/O操作变得顺序化并避免修改期间的页面重写的替代方法。其中一种方法是使用不可变结构。在本章中，我们将专注于LSM树：它们的构建方式、其特性以及与B-树的区别。
+- en: LSM Trees
+  id: totrans-13
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: LSM树
+- en: 'When talking about B-Trees, we concluded that space overhead and write amplification
+    can be improved by using buffering. Generally, there are two ways buffering can
+    be applied in different storage structures: to postpone propagating writes to
+    disk-resident pages (as we’ve seen with [“FD-Trees”](ch06.html#fd_trees) and [“WiredTiger”](ch06.html#wiredtiger)),
+    and to make write operations sequential.'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在讨论B-树时，我们得出结论，通过使用缓冲可以改善空间开销和写入放大问题。一般来说，缓冲可以应用于不同存储结构的两种方式：将写入操作延迟到磁盘驻留页面（正如我们在
+    [“FD-Trees”](ch06.html#fd_trees) 和 [“WiredTiger”](ch06.html#wiredtiger) 中看到的），以及使写入操作顺序化。
+- en: One of the most popular immutable on-disk storage structures, LSM Tree uses
+    buffering and append-only storage to achieve sequential writes. The LSM Tree is
+    a variant of a disk-resident structure similar to a B-Tree, where nodes are fully
+    occupied, optimized for sequential disk access. This concept was first introduced
+    in a paper by Patrick O’Neil and Edward Cheng [[ONEIL96]](app01.html#ONEIL96).
+    Log-structured merge trees take their name from log-structured filesystems, which
+    write all modifications on disk in a log-like file [[ROSENBLUM92]](app01.html#ROSENBLUM92).
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为最受欢迎的不可变磁盘存储结构之一，LSM树使用缓冲和追加写入来实现顺序写入。LSM树是一种类似于B-树的磁盘驻留结构的变体，其中节点完全被占用，优化了顺序磁盘访问。这个概念最早由帕特里克·奥尼尔和爱德华·程在一篇论文中提出
+    [[ONEIL96]](app01.html#ONEIL96)。日志结构合并树从日志结构文件系统得名，该系统将所有修改都以日志文件的形式写入磁盘 [[ROSENBLUM92]](app01.html#ROSENBLUM92)。
+- en: Note
+  id: totrans-16
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: LSM Trees write immutable files and merge them together over time. These files
+    usually contain an index of their own to help readers efficiently locate data.
+    Even though LSM Trees are often presented as an alternative to B-Trees, it is
+    common for B-Trees to be used as the internal indexing structure for an LSM Tree’s
+    immutable files.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: LSM树将不可变文件写入并随时间合并它们。这些文件通常包含自己的索引，以帮助读者高效地定位数据。尽管LSM树通常被提出作为B-树的替代方案，但常见的做法是使用B-树作为LSM树不可变文件的内部索引结构。
+- en: The word “merge” in LSM Trees indicates that, due to their immutability, tree
+    contents are merged using an approach similar to merge sort. This happens during
+    maintenance to reclaim space occupied by the redundant copies, and during reads,
+    before contents can be returned to the user.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: LSM树中的“合并”一词表明，由于其不可变性，树内容使用类似于归并排序的方法合并。这在维护期间用于回收占用的空间，并在读取之前进行内容合并以返回给用户。
+- en: LSM Trees defer data file writes and buffer changes in a memory-resident table.
+    These changes are then propagated by writing their contents out to the immutable
+    disk files. All data records remain accessible in memory until the files are fully
+    persisted.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: LSM树推迟数据文件的写入，并将更改缓冲在内存中的表中。然后通过将其内容写入不可变的磁盘文件来传播这些更改。所有数据记录在文件完全持久化之前仍然可以在内存中访问。
+- en: 'Keeping data files immutable favors sequential writes: data is written on the
+    disk in a single pass and files are append-only. Mutable structures can pre-allocate
+    blocks in a single pass (for example, indexed sequential access method (ISAM)
+    [[RAMAKRISHNAN03]](app01.html#RAMAKRISHNAN03) [[LARSON81]](app01.html#LARSON81)),
+    but subsequent accesses still require random reads and writes. Immutable structures
+    allow us to lay out data records sequentially to prevent fragmentation. Additionally,
+    immutable files have higher *density*: we do not reserve any extra space for data
+    records that are going to be written later, or for the cases when updated records
+    require more space than the originally written ones.'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 保持数据文件不变有利于顺序写入：数据一次性写入磁盘，文件只能追加。可变结构可以一次性预分配块（例如，索引顺序存取方法（ISAM）[[RAMAKRISHNAN03]](app01.html#RAMAKRISHNAN03)
+    [[LARSON81]](app01.html#LARSON81)），但随后的访问仍需要随机读写。不可变结构允许我们按顺序布置数据记录，以防止碎片化。此外，不可变文件具有更高的*密度*：我们不为稍后将要写入的数据记录保留额外空间，也不为更新后的记录需要比最初写入的记录更多的空间而保留额外空间。
+- en: Since files are immutable, insert, update, and delete operations do not need
+    to locate data records on disk, which significantly improves write performance
+    and throughput. Instead, duplicate contents are allowed, and conflicts are resolved
+    during the read time. LSM Trees are particularly useful for applications where
+    writes are far more common than reads, which is often the case in modern data-intensive
+    systems, given ever-growing amounts of data and ingest rates.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于文件是不可变的，插入、更新和删除操作无需在磁盘上定位数据记录，这显著提高了写入性能和吞吐量。相反，允许重复内容，并在读取时解决冲突。LSM树在写入远远超过读取的应用中特别有用，这在现代数据密集型系统中经常发生，考虑到不断增长的数据量和摄取速率。
+- en: Reads and writes do not intersect by design, so data on disk can be read and
+    written without segment locking, which significantly simplifies concurrent access.
+    In contrast, mutable structures employ hierarchical locks and latches (you can
+    find more information about locks and latches in [“Concurrency Control”](ch05.html#b_tree_concurrency))
+    to ensure on-disk data structure integrity, and allow multiple concurrent readers
+    but require exclusive subtree ownership for writers. LSM-based storage engines
+    use linearizable in-memory views of data and index files, and only have to guard
+    concurrent access to the structures managing them.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 设计上，读取和写入不交叉，因此可以在磁盘上读取和写入数据而无需段锁定，这显著简化了并发访问。相比之下，可变结构使用分层锁和闩（有关锁和闩的更多信息，请参见[“并发控制”](ch05.html#b_tree_concurrency)），以确保磁盘数据结构的完整性，并允许多个并发读取器，但需要独占子树所有权以供写入者使用。基于LSM的存储引擎使用数据和索引文件的线性化内存视图，并且只需保护管理它们的结构的并发访问。
+- en: Both B-Trees and LSM Trees require some housekeeping to optimize performance,
+    but for different reasons. Since the number of allocated files steadily grows,
+    LSM Trees have to merge and rewrite files to make sure that the smallest possible
+    number of files is accessed during the read, as requested data records might be
+    spread across multiple files. On the other hand, mutable files may have to be
+    rewritten partially or wholly to decrease fragmentation and reclaim space occupied
+    by updated or deleted records. Of course, the exact scope of work done by the
+    housekeeping process heavily depends on the concrete implementation.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: B树和LSM树都需要一些维护工作来优化性能，但原因不同。由于分配的文件数量稳步增长，LSM树必须合并和重写文件，以确保在读取时访问尽可能少的文件，因为所请求的数据记录可能分布在多个文件中。另一方面，可变文件可能必须部分或完全重写，以减少碎片化并回收更新或删除的记录占用的空间。当然，维护过程的具体工作范围严重依赖于具体的实现。
+- en: LSM Tree Structure
+  id: totrans-24
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: LSM树结构
+- en: We start with ordered LSM Trees [[ONEIL96]](app01.html#ONEIL96), where files
+    hold sorted data records. Later, in [“Unordered LSM Storage”](#unordered_lsm_storage),
+    we’ll also discuss structures that allow storing data records in insertion order,
+    which has some obvious advantages on the write path.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们从有序LSM树开始[[ONEIL96]](app01.html#ONEIL96)，其中文件保存排序的数据记录。稍后在[“无序LSM存储”](#unordered_lsm_storage)中，我们还将讨论允许按插入顺序存储数据记录的结构，这在写入路径上具有明显优势。
+- en: As we just discussed, LSM Trees consist of smaller memory-resident and larger
+    disk-resident components. To write out immutable file contents on disk, it is
+    necessary to first *buffer* them in memory and *sort* their contents.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们刚刚讨论的那样，LSM树由较小的内存驻留和较大的磁盘驻留组件组成。要将不可变文件内容写入磁盘，需要先在内存中*缓冲*它们并*排序*它们的内容。
+- en: 'A memory-resident component (often called a *memtable*) is mutable: it buffers
+    data records and serves as a target for read and write operations. Memtable contents
+    are persisted on disk when its size grows up to a configurable threshold. Memtable
+    updates incur no disk access and have no associated I/O costs. A separate write-ahead
+    log file, similar to what we discussed in [“Recovery”](ch05.html#write_ahead_log),
+    is required to guarantee durability of data records. Data records are appended
+    to the log and committed in memory before the operation is acknowledged to the
+    client.'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 内存中的组件（通常称为 *内存表*）是可变的：它缓冲数据记录，并作为读写操作的目标。当内存表的大小增长到可配置的阈值时，内存表的内容被持久化到磁盘上。内存表的更新不会产生磁盘访问，并且没有相关的I/O成本。为了保证数据记录的持久性，需要一个单独的预写式日志文件，类似于我们在
+    [“恢复”](ch05.html#write_ahead_log) 中讨论过的内容。数据记录被追加到日志中，并在操作被客户端确认之前在内存中提交。
+- en: 'Buffering is done in memory: all read and write operations are applied to a
+    memory-resident table that maintains a sorted data structure allowing concurrent
+    access, usually some form of an in-memory sorted tree, or any data structure that
+    can give similar performance characteristics.'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 缓冲是在内存中完成的：所有读写操作均应用于维护排序数据结构的内存表格，允许并发访问，通常是某种形式的内存中排序树，或者任何能提供类似性能特征的数据结构。
+- en: 'Disk-resident components are built by *flushing* contents buffered in memory
+    to disk. Disk-resident components are used only for reads: buffered contents are
+    persisted, and files are never modified. This allows us to think in terms of simple
+    operations: writes against an in-memory table, and reads against disk and memory-based
+    tables, merges, and file removals.'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 磁盘中的组件是通过将缓冲在内存中的内容刷新到磁盘上构建的。磁盘中的组件仅用于读取：缓冲的内容被持久化，文件从不被修改。这使我们可以按照简单操作进行思考：针对内存表的写入，以及针对磁盘和基于内存的表的读取、合并和文件删除。
+- en: Throughout this chapter, we will be using the word *table* as a shortcut for
+    *disk-resident table*. Since we’re discussing semantics of a storage engine, this
+    term is not ambiguous with a *table* concept in the wider context of a database
+    management system.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章节中，我们将使用术语 *表格* 作为 *磁盘中存储的表格* 的简写。由于我们正在讨论存储引擎的语义，这个术语在更广泛的数据库管理系统上下文中不会与
+    *表格* 的概念产生歧义。
+- en: Two-component LSM Tree
+  id: totrans-31
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 两组件LSM树
+- en: We distinguish between two- and multicomponent LSM Trees. *Two-component LSM
+    Trees* have only one disk component, comprised of immutable segments. The disk
+    component here is organized as a B-Tree, with 100% node occupancy and read-only
+    pages.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们区分两种和多组件LSM树。*两组件LSM树* 只有一个磁盘组件，由不可变的段组成。这里的磁盘组件以B-树形式组织，节点占用率达到100%，页是只读的。
+- en: Memory-resident tree contents are flushed on disk in parts. During a flush,
+    for each flushed in-memory subtree, we find a corresponding subtree on disk and
+    write out the merged contents of a memory-resident segment and disk-resident subtree
+    into the new segment on disk. [Figure 7-1](#two_component_lsm_tree_1) shows in-memory
+    and disk-resident trees before a merge.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 内存中树的内容将分批刷新到磁盘上。在每次刷新期间，对于每个刷新的内存子树，我们会找到磁盘上相应的子树，并将内存中段和磁盘中子树的合并内容写入磁盘上的新段中。[图 7-1](#two_component_lsm_tree_1)
+    在合并之前展示了内存中和磁盘中的树。
+- en: '![dbin 0701](assets/dbin_0701.png)'
+  id: totrans-34
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0701](assets/dbin_0701.png)'
+- en: Figure 7-1\. Two-component LSM Tree before a flush. Flushing memory- and disk-resident
+    segments are shown in gray.
+  id: totrans-35
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-1\. 刷新前的两组件LSM树。展示了内存和磁盘中段的刷新。
+- en: After the subtree is flushed, superseded memory-resident and disk-resident subtrees
+    are discarded and replaced with the result of their merge, which becomes addressable
+    from the preexisting sections of the disk-resident tree. [Figure 7-2](#two_component_lsm_tree_2)
+    shows the result of a merge process, already written to the new location on disk
+    and attached to the rest of the tree.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在子树刷新后，被取代的内存和磁盘子树被丢弃，并替换为它们合并的结果，该结果从磁盘中树的现有部分可寻址。[图 7-2](#two_component_lsm_tree_2)
+    展示了合并过程的结果，已写入到磁盘上的新位置，并附加到树的其余部分。
+- en: '![dbin 0702](assets/dbin_0702.png)'
+  id: totrans-37
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0702](assets/dbin_0702.png)'
+- en: Figure 7-2\. Two-component LSM Tree after a flush. Merged contents are shown
+    in gray. Boxes with dashed lines depict discarded on-disk segments.
+  id: totrans-38
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-2\. 刷新后的两组件LSM树。合并内容显示为灰色。虚线框表示被丢弃的磁盘段。
+- en: A merge can be implemented by advancing iterators reading the disk-resident
+    leaf nodes and contents of the in-memory tree in lockstep. Since both sources
+    are sorted, to produce a sorted merged result, we only need to know the *current*
+    values of both iterators during each step of the merge process.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 合并可以通过推进迭代器，同时读取磁盘中的叶节点和内存树的内容来实现。由于两个源都是排序的，为了产生排序的合并结果，我们在合并过程的每一步中只需要知道两个迭代器的*当前*值。
+- en: This approach is a logical extension and continuation of our conversation on
+    immutable B-Trees. Copy-on-write B-Trees (see [“Copy-on-Write”](ch06.html#copy_on_write_b_tree))
+    use B-Tree structure, but their nodes are not fully occupied, and they require
+    copying pages on the root-leaf path and creating a *parallel* tree structure.
+    Here, we do something similar, but since we buffer writes in memory, we amortize
+    the costs of the disk-resident tree update.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种方法是对不可变B树的逻辑扩展和延续。写时复制B树（见[“写时复制”](ch06.html#copy_on_write_b_tree)）使用B树结构，但它们的节点没有完全占用，并且需要在根到叶路径上复制页面并创建*并行*树结构。在这里，我们做了类似的事情，但由于我们在内存中缓冲写入，我们分摊了磁盘中树更新的成本。
+- en: 'When implementing subtree merges and flushes, we have to make sure of three
+    things:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在实现子树合并和刷新时，我们必须确保三件事：
+- en: '*As soon as* the flush process starts, all new writes have to go to the new
+    memtable.'
+  id: totrans-42
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*一旦*刷新过程开始，所有新写入都必须进入新的内存表。'
+- en: '*During* the subtree flush, both the disk-resident and flushing memory-resident
+    subtree have to remain accessible for reads.'
+  id: totrans-43
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*在*子树刷新期间，必须保持对磁盘中的表和刷新内存中的子树的可访问性。'
+- en: '*After* the flush, publishing merged contents, and discarding unmerged disk-
+    and memory-resident contents have to be performed atomically.'
+  id: totrans-44
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*在*刷新后，发布合并内容，并丢弃未合并的磁盘和内存中的内容必须是原子操作。'
+- en: 'Even though two-component LSM Trees can be useful for maintaining index files,
+    no implementations are known to the author as of time of writing. This can be
+    explained by the write amplification characteristics of this approach: merges
+    are relatively frequent, as they are triggered by memtable flushes.'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然两组分LSM树在维护索引文件方面可能很有用，但截至目前作者还不知道有任何实现。这可以通过这种方法的写放大特性来解释：合并相对频繁，因为它们是由内存表刷新触发的。
+- en: Multicomponent LSM Trees
+  id: totrans-46
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 多组分LSM树
+- en: Let’s consider an alternative design, multicomponent LSM Trees that have more
+    than just one disk-resident table. In this case, entire memtable contents are
+    flushed in a single run.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们考虑一种替代设计，即有多个磁盘中的表的多组分LSM树，而不仅仅是一个。在这种情况下，整个内存表的内容将在单次运行中被刷新。
+- en: It quickly becomes evident that after multiple flushes we’ll end up with multiple
+    disk-resident tables, and their number will only grow over time. Since we do not
+    always know exactly which tables are holding required data records, we might have
+    to access multiple files to locate the searched data.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 很快就会显而易见，在多次刷新之后，我们将会得到多个磁盘中的表，它们的数量会随着时间的推移而增加。由于我们并不总是确切地知道哪些表保存着所需的数据记录，我们可能不得不访问多个文件来定位搜索的数据。
+- en: Having to read from multiple sources instead of just one might get expensive.
+    To mitigate this problem and keep the number of tables to minimum, a periodic
+    merge process called *compaction* (see [“Maintenance in LSM Trees”](#compaction))
+    is triggered. Compaction picks several tables, reads their contents, merges them,
+    and writes the merged result out to the new combined file. Old tables are discarded
+    simultaneously with the appearance of the new merged table.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 需要从多个来源读取而不是仅一个可能会变得昂贵。为了减轻这个问题并将表的数量保持在最小限度，触发一个定期合并过程称为*压缩*（见[“LSM树的维护”](#compaction)）。压缩选择多个表，读取它们的内容，将它们合并，并将合并结果写入新的组合文件中。旧表与新合并表的出现同时被丢弃。
+- en: '[Figure 7-3](#multi_component_lsm_tree) shows the multicomponent LSM Tree data
+    life cycle. Data is first buffered in a memory-resident component. When it gets
+    too large, its contents are flushed on disk to create disk-resident tables. Later,
+    multiple tables are merged together to create larger tables.'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图7-3](#multi_component_lsm_tree)显示了多组分LSM树数据的生命周期。数据首先在内存中的组件中进行缓冲。当它变得过大时，其内容会被刷新到磁盘上，形成磁盘中的表。稍后，多个表将被合并以创建更大的表。'
+- en: '![dbin 0703](assets/dbin_0703.png)'
+  id: totrans-51
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0703](assets/dbin_0703.png)'
+- en: Figure 7-3\. Multicomponent LSM Tree data life cycle
+  id: totrans-52
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图7-3\. 多组分LSM树数据生命周期
+- en: The rest of this chapter is dedicated to multicomponent LSM Trees, building
+    blocks, and their maintenance processes.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的其余部分专门讨论多组分LSM树、构建模块及其维护过程。
+- en: In-memory tables
+  id: totrans-54
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 内存中的表
+- en: 'Memtable flushes can be triggered periodically, or by using a size threshold.
+    Before it can be flushed, the memtable has to be *switched*: a new memtable is
+    allocated, and it becomes a target for all new writes, while the old one moves
+    to the flushing state. These two steps have to be performed atomically. The flushing
+    memtable remains available for reads until its contents are fully flushed. After
+    this, the old memtable is discarded in favor of a newly written disk-resident
+    table, which becomes available for reads.'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 内存表刷新可以定期触发，也可以使用大小阈值触发。在刷新之前，必须*切换*内存表：分配新的内存表，并且它成为所有新写入的目标，而旧的内存表则移至刷新状态。这两个步骤必须以原子方式执行。刷新的内存表在其内容完全刷新之前仍然可供读取。之后，旧内存表被丢弃，而新写入的磁盘驻留表可供读取。
+- en: 'In [Figure 7-4](#lsm_internals_structure_1), you see the components of the
+    LSM Tree, relationships between them, and operations that fulfill transitions
+    between them:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[图 7-4](#lsm_internals_structure_1)中，您可以看到LSM树的组件、它们之间的关系以及实现它们之间过渡的操作：
+- en: Current memtable
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当前内存表
+- en: Receives writes and serves reads.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接收写入并提供读取服务。
+- en: Flushing memtable
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 刷新内存表
+- en: Available for reads.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可供读取。
+- en: On-disk flush target
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 磁盘刷新目标
+- en: Does not participate in reads, as its contents are incomplete.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于其内容不完整，因此不参与读取。
+- en: Flushed tables
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 刷新的表
+- en: Available for reads as soon as the flushed memtable is discarded.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦刷新的内存表被丢弃，就可供读取。
+- en: Compacting tables
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 合并表
+- en: Currently merging disk-resident tables.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当前正在合并磁盘驻留表。
+- en: Compacted tables
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 紧凑的表
+- en: Created from flushed or other compacted tables.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由刷新或其他紧凑表创建。
+- en: '![dbin 0704](assets/dbin_0704.png)'
+  id: totrans-69
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0704](assets/dbin_0704.png)'
+- en: Figure 7-4\. LSM component structure
+  id: totrans-70
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-4\. LSM组件结构
+- en: Data is already sorted in memory, so a disk-resident table can be created by
+    sequentially writing out memory-resident contents to disk. During a flush, both
+    the flushing memtable and the current memtable are available for read.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据已在内存中排序，因此可以通过将内存中的内容顺序写入磁盘来创建磁盘驻留表。在刷新期间，刷新内存表和当前内存表均可供读取。
+- en: Until the memtable is fully flushed, the only disk-resident version of its contents
+    is stored in the write-ahead log. When memtable contents are fully flushed on
+    disk, the log can be *trimmed*, and the log section, holding operations applied
+    to the flushed memtable, can be discarded.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 直到内存表完全刷新，其内容的唯一磁盘版本存储在前置日志中。当内存表内容在磁盘上完全刷新时，可以*修剪*日志，并丢弃保存应用于刷新内存表的操作的日志部分。
+- en: Updates and Deletes
+  id: totrans-73
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 更新和删除
+- en: In LSM Trees, insert, update, and delete operations do not require locating
+    data records on disk. Instead, redundant records are reconciled during the read.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在LSM树中，插入、更新和删除操作不需要在磁盘上查找数据记录。相反，在读取期间会协调冗余记录。
+- en: Removing data records from the memtable is not enough, since other disk or memory
+    resident tables may hold data records for the same key. If we were to implement
+    deletes by just removing items from the memtable, we would end up with deletes
+    that either have no impact or would *resurrect* the previous values.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 仅从内存表中删除数据记录是不够的，因为其他磁盘或内存驻留表可能保存了相同键的数据记录。如果我们通过仅从内存表中删除项目来实现删除，那么我们最终会得到要么没有影响要么会*复活*以前的值。
+- en: 'Let’s consider an example. The flushed disk-resident table contains data record
+    `v1` associated with a key `k1`, and the memtable holds its new value `v2`:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们考虑一个例子。刷新的磁盘驻留表包含与键`k1`关联的数据记录`v1`，而内存表则保留其新值`v2`：
+- en: '[PRE0]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'If we just remove `v2` from the memtable and flush it, we effectively resurrect
+    `v1`, since it becomes the only value associated with that key:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们仅从内存表中删除`v2`并进行刷新，实际上会复活`v1`，因为它成为与该键关联的唯一值：
+- en: '[PRE1]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Because of that, deletes need to be recorded *explicitly*. This can be done
+    by inserting a special *delete entry* (sometimes called a *tombstone* or a *dormant
+    certificate*), indicating removal of the data record associated with a specific
+    key:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，删除需要明确记录。这可以通过插入特殊的*删除条目*（有时称为*墓碑*或*休眠证书*）来实现，指示删除与特定键关联的数据记录：
+- en: '[PRE2]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: The reconciliation process picks up tombstones, and filters out the shadowed
+    values.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 协调过程会捡起墓碑，并过滤掉阴影值。
+- en: Sometimes it might be useful to remove a consecutive range of keys rather than
+    just a single key. This can be done using *predicate deletes*, which work by appending
+    a delete entry with a predicate that sorts according to regular record-sorting
+    rules. During reconciliation, data records matching the predicate are skipped
+    and not returned to the client.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时，删除连续范围的键可能比仅仅删除单个键更有用。这可以通过*谓词删除*来完成，其工作方式是追加一个带有根据常规记录排序规则排序的谓词的删除条目。在协调期间，与谓词匹配的数据记录将被跳过，并且不会返回给客户端。
+- en: Predicates can take a form of `DELETE FROM table WHERE key ≥ "k2" AND key <
+    "k4"` and can receive any range matchers. Apache Cassandra implements this approach
+    and calls it *range tombstones*. A range tombstone covers a range of keys rather
+    than just a single key.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 谓词可以采用`DELETE FROM table WHERE key ≥ "k2" AND key < "k4"`的形式，并且可以接收任何范围匹配器。Apache
+    Cassandra实现了这种方法，并将其称为*范围墓碑*。范围墓碑涵盖的是一系列键，而不仅仅是单个键。
+- en: 'When using range tombstones, resolution rules have to be carefully considered
+    because of overlapping ranges and disk-resident table boundaries. For example,
+    the following combination will hide data records associated with `k2` and `k3`
+    from the final result:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用范围墓碑时，必须仔细考虑解析规则，因为存在重叠的范围和磁盘上的表边界。例如，以下组合将从最终结果中隐藏与`k2`和`k3`相关的数据记录：
+- en: '[PRE3]'
+  id: totrans-86
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: LSM Tree Lookups
+  id: totrans-87
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: LSM树查找
+- en: LSM Trees consist of multiple components. During lookups, more than one component
+    is usually accessed, so their contents have to be merged and reconciled before
+    they can be returned to the client. To better understand the merge process, let’s
+    see how tables are iterated during the merge and how conflicting records are combined.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: LSM树由多个组件组成。在查找期间，通常会访问多个组件，因此它们的内容在返回给客户端之前必须进行合并和协调。为了更好地理解合并过程，让我们看看在合并期间如何迭代表格以及如何组合冲突记录。
+- en: Merge-Iteration
+  id: totrans-89
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 合并迭代
+- en: 'Since contents of disk-resident tables are sorted, we can use a multiway merge-sort
+    algorithm. For example, we have three sources: two disk-resident tables and one
+    memtable. Usually, storage engines offer a *cursor* or an *iterator* to navigate
+    through file contents. This cursor holds the offset of the last consumed data
+    record, can be checked for whether or not iteration has finished, and can be used
+    to retrieve the next data record.'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于磁盘上的表是有序的，我们可以使用多路归并排序算法。例如，我们有三个来源：两个磁盘上的表和一个内存表。通常，存储引擎提供一个*游标*或*迭代器*来遍历文件内容。该游标保存了上一个消耗的数据记录的偏移量，可以检查迭代是否已完成，并可用于检索下一个数据记录。
+- en: A multiway merge-sort uses a *priority queue*, such as *min-heap* [[SEDGEWICK11]](app01.html#SEDGEWICK11),
+    that holds up to `N` elements (where `N` is the number of iterators), which sorts
+    its contents and prepares the next-in-line smallest element to be returned. The
+    head of each iterator is placed into the queue. An element in the head of the
+    queue is then the minimum of all iterators.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 多路归并排序使用*优先队列*，例如*最小堆* [[SEDGEWICK11]](app01.html#SEDGEWICK11)，它可以保存多达`N`个元素（其中`N`是迭代器的数量），对其内容进行排序并准备返回下一个最小的元素。每个迭代器的头部都会放入队列中。队列头部的元素是所有迭代器中的最小值。
+- en: Note
+  id: totrans-92
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: A priority queue is a data structure used for maintaining an ordered queue of
+    items. While a regular queue retains items in order of their addition (first in,
+    first out), a priority queue re-sorts items on insertion and the item with the
+    highest (or lowest) priority is placed in the head of the queue. This is particularly
+    useful for merge-iteration, since we have to output elements in a sorted order.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 优先队列是一种用于维护有序队列的数据结构。虽然常规队列保留按添加顺序排列的项目（先进先出），但优先队列在插入时重新排序项目，并将具有最高（或最低）优先级的项目放在队列的头部。这在归并迭代中特别有用，因为我们必须按排序顺序输出元素。
+- en: When the smallest element is removed from the queue, the iterator associated
+    with it is checked for the next value, which is then placed into the queue, which
+    is re-sorted to preserve the order.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当队列中移除最小的元素时，与之关联的迭代器将被检查下一个数值，然后放入队列中，队列会重新排序以保持顺序。
+- en: Since all iterator contents are sorted, reinserting a value from the iterator
+    that held the previous smallest value of all iterator heads also preserves an
+    invariant that the queue still holds the smallest elements from all iterators.
+    Whenever one of the iterators is exhausted, the algorithm proceeds without reinserting
+    the next iterator head. The algorithm continues until either query conditions
+    are satisfied or all iterators are exhausted.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于所有迭代器内容都已排序，从持有所有迭代器头部的迭代器中重新插入值，也保持了队列仍然包含来自所有迭代器的最小元素的不变性。当其中一个迭代器耗尽时，算法继续进行而不重新插入下一个迭代器头。直到满足查询条件或所有迭代器耗尽为止。
+- en: '[Figure 7-5](#lsm_merge) shows a schematic representation of the merge process
+    just described: head elements (light gray items in source tables) are placed to
+    the priority queue. Elements from the priority queue are returned to the output
+    iterator. The resulting output is sorted.'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 7-5](#lsm_merge)展示了刚才描述的合并过程的示意图：头元素（源表中的浅灰色项目）被放置到优先级队列中。从优先级队列返回到输出迭代器的元素。最终的输出是排序的。'
+- en: It may happen that we encounter more than one data record for the same key during
+    merge-iteration. From the priority queue and iterator invariants, we know that
+    if each iterator only holds a single data record per key, and we end up with multiple
+    records for the same key in the queue, these data records must have come from
+    the different iterators.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在合并迭代过程中可能会遇到同一键的多条数据记录。根据优先级队列和迭代器不变性，我们知道如果每个迭代器只保留一个键的单个数据记录，并且在队列中有多个相同键的记录，这些数据记录必定来自不同的迭代器。
+- en: '![dbin 0705](assets/dbin_0705.png)'
+  id: totrans-98
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0705](assets/dbin_0705.png)'
+- en: Figure 7-5\. LSM merge mechanics
+  id: totrans-99
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-5\. LSM合并机制
+- en: 'Let’s follow through one example step-by-step. As input data, we have iterators
+    over two disk-resident tables:'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们逐步跟随一个示例。作为输入数据，我们有两个磁盘驻留表的迭代器：
+- en: '[PRE4]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'The priority queue is filled from the iterator heads:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 优先级队列从迭代器头部填充：
+- en: '[PRE5]'
+  id: totrans-103
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Key `k1` is the smallest key in the queue and is appended to the result. Since
+    it came from `Iterator 2`, we refill the queue from it:'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 键`k1`是队列中最小的键，并被追加到结果中。由于它来自`Iterator 2`，我们从中重新填充队列：
+- en: '[PRE6]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Now, we have *two* records for the `k2` key in the queue. We can be sure there
+    are no other records with the same key in any iterator because of the aforementioned
+    invariants. Same-key records are merged and appended to the merged result.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，在队列中有`k2`键的*两条*记录。由于前述的不变性，我们可以确定在任何迭代器中没有其他具有相同键的记录。相同键的记录被合并并追加到合并结果中。
+- en: 'The queue is refilled with data from both iterators:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从两个迭代器中重新填充队列的数据：
+- en: '[PRE7]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Since all iterators are now empty, we append the remaining queue contents to
+    the output:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于所有迭代器现在都为空，我们将剩余的队列内容追加到输出中：
+- en: '[PRE8]'
+  id: totrans-110
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'In summary, the following steps have to be repeated to create a combined iterator:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总结来说，必须重复以下步骤以创建组合迭代器：
+- en: Initially, fill the queue with the first items from each iterator.
+  id: totrans-112
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最初，用每个迭代器的第一个项目填充队列。
+- en: Take the smallest element (head) from the queue.
+  id: totrans-113
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从队列中取出最小的元素（头）。
+- en: Refill the queue from the corresponding iterator, unless this iterator is exhausted.
+  id: totrans-114
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从相应的迭代器中重新填充队列，除非此迭代器已耗尽。
+- en: In terms of complexity, merging iterators is the same as merging sorted collections.
+    It has `O(N)` memory overhead, where `N` is the number of iterators. A sorted
+    collection of iterator heads is maintained with `O(log N)` (average case) [[KNUTH98]](app01.html#KNUTH98).
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就合并排序集合而言，合并迭代器的复杂度与合并排序集合相同。它具有`O(N)`的内存开销，其中`N`是迭代器的数量。维护具有`O(log N)`（平均情况）的排序集合的迭代器头部。
+- en: Reconciliation
+  id: totrans-116
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 协调
+- en: Merge-iteration is just a single aspect of what has to be done to merge data
+    from multiple sources. Another important aspect is *reconciliation* and *conflict
+    resolution* of the data records associated with the same key.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 合并迭代仅仅是合并来自多个来源的数据所需完成的单个方面。另一个重要方面是同一键的*协调*和*冲突解决*数据记录。
+- en: Different tables might hold data records for the same key, such as updates and
+    deletes, and their contents have to be reconciled. The priority queue implementation
+    from the preceding example must be able to allow multiple values associated with
+    the same key and trigger reconciliation.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不同的表可能保存同一键的数据记录，例如更新和删除，它们的内容必须进行协调。前面示例中的优先级队列实现必须能够允许与同一键关联的多个值并触发协调。
+- en: Note
+  id: totrans-119
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: An operation that inserts the record to the database if it does not exist, and
+    updates an existing one otherwise, is called an *upsert*. In LSM Trees, insert
+    and update operations are indistinguishable, since they do not attempt to locate
+    data records previously associated with the key in all sources and reassign its
+    value, so we can say that we *upsert* records by default.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果不存在，则将记录插入到数据库中并更新现有记录的操作称为*upsert*。在 LSM 树中，插入和更新操作不可区分，因为它们不尝试在所有源中定位以前与键关联的数据记录并重新分配其值，所以我们默认通过*upsert*记录。
+- en: To reconcile data records, we need to understand which one of them takes precedence.
+    Data records hold metadata necessary for this, such as timestamps. To establish
+    the order between the items coming from multiple sources and find out which one
+    is more recent, we can compare their timestamps.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要调和数据记录，我们需要了解哪个数据记录优先。数据记录包含必要的元数据，如时间戳。为了确定来自多个来源的项目之间的顺序并找出哪一个更近，我们可以比较它们的时间戳。
+- en: Records shadowed by the records with higher timestamps are not returned to the
+    client or written during compaction.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 高时间戳记录阴影的记录在压缩期间不会返回给客户端或写入。
+- en: Maintenance in LSM Trees
+  id: totrans-123
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: LSM 树中的维护
+- en: Similar to mutable B-Trees, LSM Trees require maintenance. The nature of these
+    processes is heavily influenced by the invariants these algorithms preserve.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 类似于可变 B 树，LSM 树需要进行维护。这些过程的性质受这些算法保持的不变量的影响。
+- en: In B-Trees, the maintenance process collects unreferenced cells and defragments
+    the pages, reclaiming the space occupied by removed and shadowed records. In LSM
+    Trees, the number of disk-resident tables is constantly growing, but can be reduced
+    by triggering periodic compaction.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 B 树中，维护过程会收集未引用的单元并对页面进行碎片整理，回收被移除和阴影记录占用的空间。在 LSM 树中，磁盘驻留表的数量不断增加，但可以通过触发周期性压缩来减少。
+- en: Compaction picks multiple disk-resident tables, iterates over their entire contents
+    using the aforementioned merge and reconciliation algorithms, and writes out the
+    results into the newly created table.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 压缩会选择多个磁盘驻留表，使用上述的合并和调和算法遍历它们的整个内容，并将结果写入新创建的表中。
+- en: Since disk-resident table contents are sorted, and because of the way merge-sort
+    works, compaction has a theoretical memory usage upper bound, since it should
+    only hold iterator heads in memory. All table contents are consumed sequentially,
+    and the resulting merged data is also written out sequentially. These details
+    may vary between implementations due to additional optimizations.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于磁盘驻留表内容已排序，并且由于合并排序的工作方式，压缩具有理论上的内存使用上限，因为它应该只在内存中保留迭代器头。所有表内容都按顺序消耗，并且生成的合并数据也按顺序写出。由于额外的优化，这些细节在不同的实现中可能会有所不同。
+- en: Compacting tables remain available for reads until the compaction process finishes,
+    which means that for the duration of compaction, it is required to have enough
+    free space available on disk for a compacted table to be written.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在压缩过程完成之前，压缩表会一直对读取操作可用，这意味着在压缩期间需要足够的空闲磁盘空间来写入压缩后的表。
+- en: At any given time, multiple compactions can be executed in the system. However,
+    these concurrent compactions usually work on nonintersecting sets of tables. A
+    compaction writer can both merge several tables into one and partition one table
+    into multiple tables.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 系统可以同时执行多个压缩操作。然而，这些并发压缩通常在非交集的表集合上工作。压缩写入器既可以将多个表合并为一个，也可以将一个表分区为多个表。
+- en: Leveled compaction
+  id: totrans-130
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 层次压缩
+- en: Compaction opens up multiple opportunities for optimizations, and there are
+    many different compaction strategies. One of the frequently implemented compaction
+    strategies is called *leveled compaction*. For example, it is used by [RocksDB](https://databass.dev/links/76).
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 压缩为优化开辟了多种机会，有许多不同的压缩策略。其中经常实施的一种压缩策略称为*层次压缩*。例如，[RocksDB](https://databass.dev/links/76)
+    使用了这种策略。
+- en: Leveled compaction separates disk-resident tables into *levels*. Tables on each
+    level have target sizes, and each level has a corresponding *index* number (identifier).
+    Somewhat counterintuitively, the level with the highest index is called the *bottommost*
+    level. For clarity, this section avoids using terms *higher* and *lower level*
+    and uses the same qualifiers for *level index*. That is, since 2 is larger than
+    1, level 2 has a higher index than level 1\. The terms *previous* and *next* have
+    the same order semantics as level indexes.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分层压实将磁盘上的表格分为*级别*。每个级别的表格有目标大小，并且每个级别都有对应的*索引*号（标识符）。有些不直观的是，索引号最高的级别称为*底层*级别。为了清晰起见，本节避免使用“更高级别”和“更低级别”术语，并对*级别索引*使用相同的修饰符。也就是说，由于
+    2 大于 1，级别 2 的索引比级别 1 更高。术语*上一级*和*下一级*具有与级别索引相同的顺序语义。
+- en: Level-0 tables are created by flushing memtable contents. Tables in level 0
+    may contain overlapping key ranges. As soon as the number of tables on level 0
+    reaches a threshold, their contents are merged, creating new tables for level
+    1.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Level-0 表格是通过刷新内存表内容创建的。Level 0 的表格可能包含重叠的键范围。一旦 Level 0 的表格数量达到阈值，它们的内容就会被合并，为
+    Level 1 创建新的表格。
+- en: Key ranges for the tables on level 1 and all levels with a higher index do not
+    overlap, so level-0 tables have to be partitioned during compaction, split into
+    ranges, and merged with tables holding corresponding key ranges. Alternatively,
+    compaction can include *all* level-0 and level-1 tables, and output partitioned
+    level-1 tables.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Level 1 和所有更高索引级别的表格键范围不重叠，因此在压实过程中必须对 Level-0 表格进行分区，分割并与持有对应键范围的表格合并。或者，压实可以包括*所有*
+    Level-0 和 Level-1 表格，并输出分区的 Level-1 表格。
+- en: Compactions on the levels with the higher indexes pick tables from two consecutive
+    levels with overlapping ranges and produce a new table on a higher level. [Figure 7-6](#leveled_compaction)
+    schematically shows how the compaction process migrates data between the levels.
+    The process of compacting level-1 and level-2 tables will produce a new table
+    on level 2\. Depending on how tables are partitioned, multiple tables from one
+    level can be picked for compaction.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 较高索引级别上的压实会从具有重叠范围的两个连续级别中选取表格，并在更高级别上生成新表格。[图 7-6](#leveled_compaction) 概略显示了压实过程如何在级别之间迁移数据。对
+    Level-1 和 Level-2 表格进行压实将在 Level 2 上生成新表格。根据表格的分区方式，可以选择来自一个级别的多个表格进行压实。
+- en: '![dbin 0706](assets/dbin_0706.png)'
+  id: totrans-136
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0706](assets/dbin_0706.png)'
+- en: Figure 7-6\. Compaction process. Gray boxes with dashed lines represent currently
+    compacting tables. Level-wide boxes represent the target data size limit on the
+    level. Level 1 is over the limit.
+  id: totrans-137
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-6\. 压实过程。虚线的灰色框表示当前正在压实的表格。级别整体框表示级别上的目标数据大小限制。级别 1 超过了限制。
+- en: Keeping different key ranges in the distinct tables reduces the number of tables
+    accessed during the read. This is done by inspecting the table metadata and filtering
+    out the tables whose ranges do not contain a searched key.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在不同表格中保持不同键范围可以减少读取过程中访问的表格数量。这通过检查表格元数据并过滤那些范围不包含搜索键的表格来完成。
+- en: Each level has a limit on the table size and the maximum number of tables. As
+    soon as the number of tables on level 1 or any level with a higher index reaches
+    a threshold, tables from the *current* level are merged with tables on the *next*
+    level holding the overlapping key range.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个级别的表格大小和最大表格数量都有限制。一旦第一级或任何更高索引的级别的表格数量达到阈值，当前级别的表格就会与持有重叠键范围的下一级别的表格合并。
+- en: 'Sizes grow exponentially between the levels: tables on each next level are
+    exponentially larger than tables on the previous one. This way, the freshest data
+    is always on the level with the lowest index, and older data gradually migrates
+    to the higher ones.'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在各级别之间，表格大小呈指数增长：每个下一级别上的表格都比前一个级别上的表格大得多。这样，最新的数据始终位于索引最低的级别上，而旧数据逐渐迁移到较高的级别。
+- en: Size-tiered compaction
+  id: totrans-141
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 大小分层压实
+- en: 'Another popular compaction strategy is called *size-tiered compaction*. In
+    size-tiered compaction, rather than grouping disk-resident tables based on their
+    level, they’re grouped by size: smaller tables are grouped with smaller ones,
+    and bigger tables are grouped with bigger ones.'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种流行的压实策略称为*大小分层压实*。在大小分层压实中，不是根据它们的级别将磁盘上的表格分组，而是根据它们的大小：较小的表格与较小的表格组合在一起，较大的表格与较大的表格组合在一起。
+- en: Level 0 holds the smallest tables that were either flushed from memtables or
+    created by the compaction process. When the tables are compacted, the resulting
+    merged table is written to the level holding tables with corresponding sizes.
+    The process continues recursively incrementing levels, compacting and promoting
+    larger tables to higher levels, and demoting smaller tables to lower levels.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Level 0包含了从内存表刷新或通过压实过程创建的最小表格。当表格压实后，生成的合并表格将写入保存相应大小表格的级别。这个过程递归地增加级别，压实并将较大的表格提升到更高的级别，将较小的表格降级到较低的级别。
+- en: Warning
+  id: totrans-144
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: 'One of the problems with size-tiered compaction is called *table starvation*:
+    if compacted tables are still small enough after compaction (e.g., records were
+    shadowed by the tombstones and did not make it to the merged table), higher levels
+    may get starved of compaction and their tombstones will not be taken into consideration,
+    increasing the cost of reads. In this case, compaction has to be forced for a
+    level, even if it doesn’t contain enough tables.'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大小层次压实的一个问题称为*表饥饿*：如果在压实后合并表格仍然足够小（例如，记录被墓碑遮蔽且未包含在合并表格中），较高级别可能会被压实饥饿，并且其墓碑将不会被考虑，增加读取的成本。在这种情况下，必须强制对一个级别进行压实，即使它不包含足够的表格。
+- en: There are other commonly implemented compaction strategies that might optimize
+    for different workloads. For example, Apache Cassandra also implements [a *time
+    window* compaction strategy](https://databass.dev/links/77), which is particularly
+    useful for time-series workloads with records for which time-to-live is set (in
+    other words, items have to be expired after a given time period).
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还有其他常用的压实策略，可能会针对不同的工作负载进行优化。例如，Apache Cassandra还实现了[a *time window*压实策略](https://databass.dev/links/77)，特别适用于设置了存活时间的时间序列工作负载中的记录（换句话说，项目必须在给定时间段后过期）。
+- en: The time window compaction strategy takes write timestamps into consideration
+    and allows dropping entire files that hold data for an already expired time range
+    without requiring us to compact and rewrite their contents.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 时间窗口压实策略考虑了写入时间戳，并允许丢弃持有已过期时间范围数据的整个文件，而无需压实和重写其内容。
+- en: Read, Write, and Space Amplification
+  id: totrans-148
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 读、写和空间放大
+- en: When implementing an optimal compaction strategy, we have to take multiple factors
+    into consideration. One approach is to reclaim space occupied by duplicate records
+    and reduce space overhead, which results in higher write amplification caused
+    by re-writing tables continuously. The alternative is to avoid rewriting the data
+    continuously, which increases read amplification (overhead from reconciling data
+    records associated with the same key during the read), and space amplification
+    (since redundant records are preserved for a longer time).
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在实现最佳压实策略时，我们必须考虑多个因素。一种方法是回收占用的重复记录空间，减少空间开销，这会导致由于持续重写表格而增加的写放大。另一种选择是避免连续重写数据，这会增加读放大（在读取期间关联同一键的数据记录的开销）和空间放大（因为冗余记录被长时间保留）。
+- en: Note
+  id: totrans-150
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: One of the big disputes in the database community is whether B-Trees or LSM
+    Trees have lower write amplification. It is extremely important to understand
+    the *source* of write amplification in both cases. In B-Trees, it comes from writeback
+    operations and subsequent updates to the same node. In LSM Trees, write amplification
+    is caused by migrating data from one file to the other during compaction. Comparing
+    the two directly may lead to incorrect assumptions.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库社区的一大争议是B树还是LSM树的写放大更低。非常重要的是要理解这两种情况下写放大的*来源*。在B树中，它来自写回操作和对同一节点的后续更新。在LSM树中，写放大是由于在压实过程中将数据从一个文件迁移到另一个文件而导致的。直接比较这两者可能会导致错误的假设。
+- en: 'In summary, when storing data on disk in an immutable fashion, we face three
+    problems:'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总之，在以不可变方式将数据存储在磁盘上时，我们面临三个问题：
+- en: Read amplification
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 读放大
+- en: Resulting from a need to address multiple tables to retrieve data.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于需要访问多个表格以检索数据而产生。
+- en: Write amplification
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写放大
+- en: Caused by continuous rewrites by the compaction process.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由压实过程连续重写引起。
+- en: Space amplification
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 空间放大
+- en: Arising from storing multiple records associated with the same key.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于存储与同一键关联的多个记录而产生。
+- en: We’ll be addressing each one of these throughout the rest of the chapter.
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章的其余部分我们将详细讨论每一个问题。
+- en: RUM Conjecture
+  id: totrans-160
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: RUM推测
+- en: 'One of the popular cost models for storage structures takes three factors into
+    consideration: *R*ead, *U*pdate, and *M*emory overheads. It is called RUM Conjecture
+    [[ATHANASSOULIS16]](app01.html#ATHANASSOULIS16).'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储结构的流行成本模型之一考虑了三个因素：*读取*、*更新*和*内存开销*。它被称为 RUM 猜想 [[ATHANASSOULIS16]](app01.html#ATHANASSOULIS16)。
+- en: RUM Conjecture states that reducing two of these overheads inevitably leads
+    to change for the worse in the third one, and that optimizations can be done only
+    at the expense of one of the three parameters. We can compare different storage
+    engines in terms of these three parameters to understand which ones they optimize
+    for, and which potential trade-offs this may imply.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RUM 猜想指出，减少这三个开销中的两个不可避免地会对第三个产生负面影响，并且只能以其中一个参数的牺牲来进行优化。我们可以比较不同的存储引擎在这三个参数上的表现，从而了解它们优化了哪些参数，以及这可能意味着哪些潜在的权衡。
+- en: An ideal solution would provide the lowest read cost while maintaining low memory
+    and write overheads, but in reality, this is not achievable, and we are presented
+    with a trade-off.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理想的解决方案应在保持低读取成本的同时，保持低内存和写入开销，但实际上这是不可实现的，我们必须进行权衡。
+- en: B-Trees are read-optimized. Writes to the B-Tree require locating a record on
+    disk, and subsequent writes to the same page might have to update the page on
+    disk multiple times. Reserved extra space for future updates and deletes increases
+    space overhead.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: B 树是针对读取优化的。对 B 树的写入需要定位磁盘上的记录，并且可能需要多次更新磁盘上的同一页。为未来更新和删除保留额外空间会增加空间开销。
+- en: LSM Trees do not require locating the record on disk during write and do not
+    reserve extra space for future writes. There is still some space overhead resulting
+    from storing redundant records. In a default configuration, reads are more expensive,
+    since multiple tables have to be accessed to return complete results. However,
+    optimizations we discuss in this chapter help to mitigate this problem.
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: LSM 树在写入时不需要定位磁盘上的记录，并且不为未来的写入保留额外空间。由于存储冗余记录而仍然存在一些空间开销。在默认配置中，读取更昂贵，因为需要访问多个表来返回完整的结果。然而，在本章讨论的优化方法有助于缓解这个问题。
+- en: As we’ve seen in the chapters about B-Trees, and will see in this chapter, there
+    are ways to improve these characteristics by applying different optimizations.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在关于 B 树的章节中看到的，并将在本章中看到的，通过应用不同的优化方法可以改善这些特性。
+- en: This cost model is not perfect, as it does not take into account other important
+    metrics such as latency, access patterns, implementation complexity, maintenance
+    overhead, and hardware-related specifics. Higher-level concepts important for
+    distributed databases, such as consistency implications and replication overhead,
+    are also not considered. However, this model can be used as a first approximation
+    and a rule of thumb as it helps understand what the *storage engine* has to offer.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个成本模型并不完美，因为它没有考虑其他重要的度量标准，如延迟、访问模式、实现复杂性、维护开销和硬件相关的细节。对于分布式数据库而言，如一致性影响和复制开销等更高层次的概念也没有考虑进去。然而，这个模型可以作为一个初步的近似值和经验法则，因为它有助于理解
+    *存储引擎* 提供了什么。
+- en: Implementation Details
+  id: totrans-168
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '**实施细节**'
+- en: 'We’ve covered the basic dynamics of LSM Trees: how data is read, written, and
+    compacted. However, there are some other things that many LSM Tree implementations
+    have in common that are worth discussing: how memory- and disk-resident tables
+    are implemented, how secondary indexes work, how to reduce the number of disk-resident
+    tables accessed during read and, finally, new ideas related to log-structured
+    storage.'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经讨论了 LSM 树的基本动态：数据如何读取、写入和压缩。然而，许多 LSM 树实现中有一些共同点也值得讨论：内存和磁盘上的表是如何实现的，辅助索引的工作原理，如何在读取时减少磁盘上的表的访问次数，以及与日志结构化存储相关的新思路。
+- en: Sorted String Tables
+  id: totrans-170
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: '**排序字符串表**'
+- en: So far we’ve discussed the hierarchical and logical structure of LSM Trees (that
+    they consist of multiple memory- and disk-resident components), but have not yet
+    discussed how disk-resident tables are implemented and how their design plays
+    together with the rest of the system.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们已经讨论了 LSM 树的层次结构和逻辑结构（它们由多个内存和磁盘上的组件组成），但尚未讨论磁盘上的表是如何实现的，以及它们的设计如何与系统的其他部分协同工作。
+- en: 'Disk-resident tables are often implemented using *Sorted String Tables* (SSTables).
+    As the name suggests, data records in SSTables are sorted and laid out in key
+    order. SSTables usually consist of two components: index files and data files.
+    Index files are implemented using some structure allowing logarithmic lookups,
+    such as B-Trees, or constant-time lookups, such as hashtables.'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 磁盘驻留表通常使用*排序字符串表*（SSTables）实现。正如其名称所示，SSTables 中的数据记录是按键顺序排序和布局的。SSTables 通常由两个组件组成：索引文件和数据文件。索引文件使用一些允许对数查找的结构实现，如
+    B 树，或者使用哈希表进行常量时间查找。
+- en: Since data files hold records in key order, using hashtables for indexing does
+    not prevent us from implementing range scans, as a hashtable is only accessed
+    to locate the first key in the range, and the range itself can be read from the
+    data file sequentially while the range predicate still matches.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于数据文件按键顺序保存记录，使用哈希表进行索引并不妨碍我们实现范围扫描，因为哈希表仅用于定位范围内的第一个键，而范围本身可以从数据文件顺序读取，只要范围谓词仍然匹配。
+- en: The index component holds keys and data entries (offsets in the data file where
+    the actual data records are located). The data component consists of concatenated
+    key-value pairs. The cell design and data record formats we discussed in [Chapter 3](ch03.html#file_formats)
+    are largely applicable to SSTables. The main difference here is that cells are
+    written sequentially and are not modified during the life cycle of the SSTable.
+    Since the index files hold pointers to the data records stored in the data file,
+    their offsets have to be known by the time the index is created.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引组件包含键和数据条目（数据文件中存储实际数据记录的偏移量）。数据组件由连接的键值对组成。我们在[第 3 章](ch03.html#file_formats)中讨论的单元设计和数据记录格式在
+    SSTables 中大部分适用。这里的主要区别在于单元是顺序写入的，并且在 SSTable 的生命周期内不会被修改。由于索引文件保存了指向数据文件中存储的数据记录的指针，因此在创建索引时必须知道它们的偏移量。
+- en: During compaction, data files can be read sequentially without addressing the
+    index component, as data records in them are already ordered. Since tables merged
+    during compaction have the same order, and merge-iteration is order-preserving,
+    the resulting merged table is also created by writing data records sequentially
+    in a single run. As soon as the file is fully written, it is considered immutable,
+    and its disk-resident contents are not modified.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在压实期间，可以顺序读取数据文件，而无需处理索引组件，因为它们中的数据记录已经有序。由于在压实过程中合并的表具有相同的顺序，并且合并迭代保持顺序，因此结果合并后的表也是通过单次顺序写入数据记录而创建的。一旦文件完全写入，它被视为不可变，并且其磁盘驻留内容不会修改。
+- en: Bloom Filters
+  id: totrans-176
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 布隆过滤器
+- en: The source of read amplification in LSM Trees is that we have to address multiple
+    disk-resident tables for the read operation to complete. This happens because
+    we do not always know up front whether or not a disk-resident table contains a
+    data record for the searched key.
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: LSM 树中读取放大的源头是，我们必须为读操作完成对多个磁盘驻留表进行地址访问。这是因为我们并不总是事先知道磁盘驻留表是否包含搜索键的数据记录。
+- en: One of the ways to prevent table lookup is to store its key range (smallest
+    and largest keys stored in the given table) in metadata, and check if the searched
+    key belongs to the range of that table. This information is imprecise and can
+    only tell us if the data record *can* be present in the table. To improve this
+    situation, many implementations, including [Apache Cassandra](https://databass.dev/links/78)
+    and [RocksDB](https://databass.dev/links/79), use a data structure called a *Bloom
+    filter*.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 防止表查找的一种方法是将其键范围（存储在给定表中的最小和最大键）存储在元数据中，并检查搜索的键是否属于该表的范围。这些信息并不精确，只能告诉我们数据记录*可能*存在于表中。为了改善这种情况，许多实现，包括[Apache
+    Cassandra](https://databass.dev/links/78)和[RocksDB](https://databass.dev/links/79)，使用一种称为*布隆过滤器*的数据结构。
+- en: Note
+  id: totrans-179
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Probabilistic data structures are generally more space efficient than their
+    “regular” counterparts. For example, to check set membership, cardinality (find
+    out the number of distinct elements in a set), or frequency (find out how many
+    times a certain element has been encountered), we would have to store all set
+    elements and go through the entire dataset to find the result. Probabilistic structures
+    allow us to store approximate information and perform queries that yield results
+    with an element of uncertainty. Some commonly known examples of such data structures
+    are a Bloom filter (for set membership), HyperLogLog (for cardinality estimation)
+    [[FLAJOLET12]](app01.html#FLAJOLET12), and Count-Min Sketch (for frequency estimation)
+    [[CORMODE12]](app01.html#CORMODE12).
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 概率数据结构通常比其“常规”对应物更节省空间。例如，要检查集合成员资格、基数（查找集合中不同元素的数量）或频率（查找某个元素被遇到的次数），我们必须存储所有集合元素并遍历整个数据集以找到结果。概率结构允许我们存储近似信息并执行带有不确定性的查询。一些常见的这类数据结构示例包括
+    Bloom filter（用于集合成员资格）、HyperLogLog（用于基数估计） [[FLAJOLET12]](app01.html#FLAJOLET12)，和
+    Count-Min Sketch（用于频率估计） [[CORMODE12]](app01.html#CORMODE12）。
+- en: A *Bloom filter*, conceived by Burton Howard Bloom in 1970 [[BLOOM70]](app01.html#BLOOM70),
+    is a space-efficient probabilistic data structure that can be used to test whether
+    the element is a member of the set or not. It can produce false-positive matches
+    (say that the element is a member of the set, while it is not present there),
+    but cannot produce false negatives (if a negative match is returned, the element
+    is guaranteed not to be a member of the set).
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一种由 Burton Howard Bloom 在 1970 年提出的 *Bloom filter* [[BLOOM70]](app01.html#BLOOM70)，是一种空间高效的概率数据结构，用于测试元素是否属于集合。它可以产生误报匹配（说元素属于集合，而实际上不存在），但不会产生漏报（如果返回负匹配，则确保元素不属于集合）。
+- en: In other words, a Bloom filter can be used to tell if the key *might be in the
+    table* or *is definitely not in the table*. Files for which a Bloom filter returns
+    a negative match are skipped during the query. The rest of the files are accessed
+    to find out if the data record is actually present. Using Bloom filters associated
+    with disk-resident tables helps to significantly reduce the number of tables accessed
+    during a read.
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 换句话说，Bloom filter 可用于判断键 *可能在表中* 或 *绝对不在表中*。Bloom filter 返回负匹配的文件在查询期间被跳过。其余文件被访问以确定数据记录是否实际存在。使用与磁盘驻留表相关联的
+    Bloom filter 可显著减少读取过程中访问的表数。
+- en: A Bloom filter uses a large bit array and multiple hash functions. Hash functions
+    are applied to keys of the records in the table to find indices in the bit array,
+    bits for which are set to `1`. Bits set to `1` in all positions determined by
+    the hash functions indicate a *presence* of the key in the set. During lookup,
+    when checking for element presence in a Bloom filter, hash functions are calculated
+    for the key again and, if bits determined by *all* hash functions are `1`, we
+    return the positive result stating that item is a member of the set with a certain
+    probability. If at least one of the bits is `0`, we can precisely say that element
+    is not present in the set.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Bloom filter 使用一个大比特数组和多个哈希函数。哈希函数应用于表中记录的键，以在比特数组中找到索引，并将位设为 `1`。由哈希函数确定的所有位置中设置为
+    `1` 的位表明集合中存在该键。在查找时，当检查 Bloom filter 中元素存在性时，再次计算键的哈希函数，如果所有哈希函数确定的位均为 `1`，则返回正结果，说明该项以一定概率是集合成员。如果至少一个位为
+    `0`，则可以准确地说元素不在集合中。
+- en: Hash functions applied to different keys can return the same bit position and
+    result in a *hash collision*, and `1` bits only imply that *some* hash function
+    has yielded this bit position for *some* key.
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 应用于不同键的哈希函数可能返回相同的位位置，导致 *哈希碰撞*，并且 `1` 位只表明某个哈希函数为某个键产生了这个位位置。
+- en: 'Probability of false positives is managed by configuring the size of the bit
+    set and the number of hash functions: in a larger bit set, there’s a smaller chance
+    of collision; similarly, having more hash functions, we can check more bits and
+    have a more precise outcome.'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 误报概率由设置比特集的大小和哈希函数的数量来管理：在较大的比特集中，碰撞的机会较小；同样地，使用更多的哈希函数，我们可以检查更多的比特并获得更精确的结果。
+- en: The larger bit set occupies more memory, and computing results of more hash
+    functions may have a negative performance impact, so we have to find a reasonable
+    middle ground between acceptable probability and incurred overhead. Probability
+    can be calculated from the expected set size. Since tables in LSM Trees are immutable,
+    set size (number of keys in the table) is known up front.
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更大的位集占用更多内存，计算更多哈希函数的结果可能会对性能产生负面影响，因此我们必须在可接受的概率和额外开销之间找到一个合理的平衡点。概率可以从期望的集合大小计算得出。由于LSM树中的表是不可变的，因此可以预先知道集合大小（表中的键数）。
+- en: Let’s take a look at a simple example, shown in [Figure 7-7](#bloom_filter_1).
+    We have a 16-way bit array and 3 hash functions, which yield values `3`, `5`,
+    and `10` for `key1`. We now set bits at these positions. The next key is added
+    and hash functions yield values of `5`, `8`, and `14` for `key2`, for which we
+    set bits, too.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看一个简单的例子，如[图7-7](#bloom_filter_1)所示。我们有一个16位的位数组和3个哈希函数，它们为`key1`产生了值`3`、`5`和`10`。现在我们设置这些位置的位。接下来添加下一个键，并且哈希函数为`key2`产生了值`5`、`8`和`14`，我们也设置了这些位置的位。
+- en: '![dbin 0707](assets/dbin_0707.png)'
+  id: totrans-188
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0707](assets/dbin_0707.png)'
+- en: Figure 7-7\. Bloom filter
+  id: totrans-189
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图7-7\. 布隆过滤器
+- en: 'Now, we’re trying to check whether or not `key3` is present in the set, and
+    hash functions yield `3`, `10`, and `14`. Since all three bits were set when adding
+    `key1` and `key2`, we have a situation in which the Bloom filter returns a false
+    positive: `key3` was never appended there, yet all of the calculated bits are
+    set. However, since the Bloom filter only claims that element *might* be in the
+    table, this result is acceptable.'
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们尝试检查集合中是否存在`key3`，并且哈希函数返回`3`、`10`和`14`。由于在添加`key1`和`key2`时所有三位均被设置，所以布隆过滤器出现了误判：`key3`从未添加过，但所有计算出的位都被设置。但是，由于布隆过滤器只声称元素*可能*在表中，这个结果是可以接受的。
+- en: If we try to perform a lookup for `key4` and receive values of `5`, `9`, and
+    `15`, we find that only bit `5` is set, and the other two bits are unset. If even
+    one of the bits is unset, we know for sure that the element was never appended
+    to the filter.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们尝试查找`key4`并得到值`5`、`9`和`15`，我们发现只有位`5`被设置，其余两位未设置。如果有一个位未设置，我们可以确定该元素从未添加到过滤器中。
+- en: Skiplist
+  id: totrans-192
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 跳表
+- en: There are many different data structures for keeping sorted data in memory,
+    and one that has been getting more popular recently because of its simplicity
+    is called a *skiplist* [[PUGH90b]](app01.html#PUGH90b). Implementation-wise, a
+    skiplist is not much more complex than a singly-linked list, and its probabilistic
+    complexity guarantees are close to those of search trees.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存在许多不同的数据结构用于在内存中保持排序数据，其中一种因其简单性而近年来越来越流行的称为*跳表*[[PUGH90b]](app01.html#PUGH90b)。就实现而言，跳表与单向链表相比并不复杂，其概率复杂性保证接近搜索树的复杂性。
+- en: Skiplists do not require rotation or relocation for inserts and updates, and
+    use probabilistic balancing instead. Skiplists are generally less cache-friendly
+    than in-memory B-Trees, since skiplist nodes are small and randomly allocated
+    in memory. Some implementations improve the situation by using [unrolled linked
+    lists](https://databass.dev/links/80).
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 跳表在插入和更新时不需要旋转或重新定位，而是使用概率平衡。由于跳表节点较小且在内存中随机分配，通常比内存中的B树不太友好于缓存。一些实现通过使用[展开链表](https://databass.dev/links/80)改善了这种情况。
+- en: A skiplist consists of a series of nodes of a different *height*, building linked
+    hierarchies allowing to skip ranges of items. Each node holds a key, and, unlike
+    the nodes in a linked list, some nodes have more than just one successor. A node
+    of height `h` is linked *from* one or more predecessor nodes of a height *up to*
+    `h`. Nodes on the lowest level can be linked from nodes of any height.
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 跳表（skiplist）由一系列不同*高度*的节点组成，构建了链接的层次结构，允许跳过一定范围的项目。每个节点包含一个关键字，在链接列表中的节点不同，某些节点不止一个后继节点。高度为`h`的节点是从一个或多个高度*至*`h`的前驱节点链接而来。最低层的节点可以从任何高度的节点链接而来。
+- en: Node height is determined by a random function and is computed during insert.
+    Nodes that have the same height form a *level*. The number of levels is capped
+    to avoid infinite growth, and a maximum height is chosen based on how many items
+    can be held by the structure. There are exponentially fewer nodes on each next
+    level.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 节点的高度由随机函数确定，并在插入时计算。具有相同高度的节点形成一个*级别*。级别数量受限以避免无限增长，并基于结构可以容纳的项目数量选择最大高度。每个下一级别上的节点数量指数级减少。
+- en: Lookups work by following the node pointers on the highest level. As soon as
+    the search encounters the node that holds a key that is *greater than* the searched
+    one, its predecessor’s link to the node on the next level is followed. In other
+    words, if the searched key is *greater than* the current node key, the search
+    continues forward. If the searched key is *smaller than* the current node key,
+    the search continues from the predecessor node on the next level. This process
+    is repeated recursively until the searched key or its predecessor is located.
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询通过跟随最高级别的节点指针工作。一旦搜索遇到持有大于搜索键的键的节点，就跟随其前驱节点对下一个级别上的节点的链接。换句话说，如果搜索的键大于当前节点的键，则从当前节点继续。如果搜索的键小于当前节点的键，则从下一个级别上的前驱节点继续搜索。该过程递归重复，直到定位到搜索键或其前驱节点。
+- en: 'For example, searching for key 7 in the skiplist shown in [Figure 7-8](#skiplist_example)
+    can be done as follows:'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，在图 [7-8](#skiplist_example) 中显示的跳表中搜索键值 7 可以如下进行：
+- en: Follow the pointer on the highest level, to the node that holds key `10`.
+  id: totrans-199
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 跟随最高级别上的指针，到持有键值 `10` 的节点。
+- en: Since the searched key `7` is *smaller than* `10`, the next-level pointer from
+    the head node is followed, locating a node holding key `5`.
+  id: totrans-200
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 由于搜索的键值 `7` *小于* `10`，从头节点开始跟随下一个级别的指针，定位到持有键值 `5` 的节点。
+- en: The highest-level pointer on this node is followed, locating the node holding
+    key `10` again.
+  id: totrans-201
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 此节点的最高级指针被跟随，再次定位到持有键值 `10` 的节点。
+- en: The searched key `7` is *smaller than* `10`, and the next-level pointer from
+    the node holding key `5` is followed, locating a node holding the searched key
+    `7`.
+  id: totrans-202
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 搜索的键值 `7` *小于* `10`，从持有键值 `5` 的节点开始跟随下一个级别的指针，定位到持有搜索键值 `7` 的节点。
+- en: '![dbin 0708](assets/dbin_0708.png)'
+  id: totrans-203
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0708](assets/dbin_0708.png)'
+- en: Figure 7-8\. Skiplist
+  id: totrans-204
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-8\. 跳表
+- en: During insert, an insertion point (node holding a key or its predecessor) is
+    found using the aforementioned algorithm, and a new node is created. To build
+    a tree-like hierarchy and keep balance, the height of the node is determined using
+    a random number, generated based on a probability distribution. Pointers in predecessor
+    nodes holding keys *smaller than* the key in a newly created node are linked to
+    point to that node. Their higher-level pointers remain intact. Pointers in the
+    newly created node are linked to corresponding successors on each level.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在插入期间，使用上述算法找到插入点（持有键或其前驱的节点），并创建一个新节点。为了构建类似树的层次结构并保持平衡，使用基于概率分布生成的随机数确定节点的高度。持有键值
+    *小于* 新创建节点中键的前驱节点的指针被链接到该节点。它们的高级指针保持不变。新创建节点中的指针链接到每个级别上相应的后继节点。
+- en: During delete, forward pointers of the removed node are placed to predecessor
+    nodes on corresponding levels.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 删除时，被移除节点的前向指针被放置到相应级别的前驱节点上。
+- en: We can create a concurrent version of a skiplist by implementing a linearizability
+    scheme that uses an additional `fully_linked` flag that determines whether or
+    not the node pointers are fully updated. This flag can be set using compare-and-swap
+    [[HERLIHY10]](app01.html#HERLIHY10). This is required because the node pointers
+    have to be updated on multiple levels to fully restore the skiplist structure.
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以通过实现一个线性化方案创建一个跳表的并发版本，该方案使用一个额外的 `fully_linked` 标志来确定节点指针是否已完全更新。可以使用比较并交换来设置此标志
+    [[HERLIHY10]](app01.html#HERLIHY10)。这是必需的，因为节点指针必须在多个级别上更新，以完全恢复跳表结构。
+- en: In languages with an unmanaged memory model, reference counting or *hazard pointers*
+    can be used to ensure that currently referenced nodes are not freed while they
+    are accessed concurrently [[RUSSEL12]](app01.html#RUSSEL12). This algorithm is
+    deadlock-free, since nodes are always accessed from higher levels.
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在具有非托管内存模型的语言中，可以使用引用计数或 *危险指针* 来确保在并发访问时不会释放当前引用的节点 [[RUSSEL12]](app01.html#RUSSEL12)。该算法是无死锁的，因为节点始终从较高级别访问。
+- en: Apache Cassandra uses skiplists for the secondary [index memtable implementation](https://databass.dev/links/81).
+    WiredTiger uses skiplists for some in-memory operations.
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Apache Cassandra 在二级 [索引内存表实现](https://databass.dev/links/81) 中使用跳表。WiredTiger
+    在某些内存操作中也使用跳表。
+- en: Disk Access
+  id: totrans-210
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 磁盘访问
+- en: Since most of the table contents are disk-resident, and storage devices generally
+    allow accessing data blockwise, many LSM Tree implementations rely on the page
+    cache for disk accesses and intermediate caching. Many techniques described in
+    [“Buffer Management”](ch05.html#buffer_pool), such as page eviction and pinning,
+    still apply to log-structured storage.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于表格内容大多存储在磁盘上，并且存储设备通常允许按块访问数据，因此许多LSM Tree实现依赖于页面缓存进行磁盘访问和中间缓存。许多在[“缓冲管理”](ch05.html#buffer_pool)中描述的技术，如页面逐出和固定，仍然适用于日志结构化存储。
+- en: The most notable difference is that in-memory contents are immutable and therefore
+    require no additional locks or latches for concurrent access. Reference counting
+    is applied to make sure that currently accessed pages are not evicted from memory,
+    and in-flight requests complete before underlying files are removed during compaction.
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最显著的区别在于内存中的内容是不可变的，因此不需要额外的锁或闩锁以进行并发访问。引用计数用于确保当前访问的页面在内存中不被逐出，并且在压缩期间完成的请求在底层文件在移除之前都得到满足。
+- en: Another difference is that data records in LSM Trees are not necessarily page
+    aligned, and pointers can be implemented using absolute offsets rather than page
+    IDs for addressing. In [Figure 7-9](#lsm_reading_mid_block), you can see records
+    with contents that are not aligned with disk blocks. Some records cross the page
+    boundaries and require loading several pages in memory.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个不同之处在于LSM Tree中的数据记录不一定是页面对齐的，指针可以使用绝对偏移而不是页面ID进行寻址。在[图 7-9](#lsm_reading_mid_block)中，您可以看到内容不与磁盘块对齐的记录。一些记录跨越页面边界，需要加载多个页面到内存中。
+- en: '![dbin 0709](assets/dbin_0709.png)'
+  id: totrans-214
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0709](assets/dbin_0709.png)'
+- en: Figure 7-9\. Unaligned data records
+  id: totrans-215
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-9\. 未对齐的数据记录
+- en: Compression
+  id: totrans-216
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 压缩
+- en: We’ve discussed compression already in context of B-Trees (see [“Compression”](ch04.html#b_tree_compression)).
+    Similar ideas are also applicable to LSM Trees. The main difference here is that
+    LSM Tree tables are immutable, and are generally written in a single pass. When
+    compressing data page-wise, compressed pages are not page aligned, as their sizes
+    are smaller than that of uncompressed ones.
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经在B树的上下文中讨论了压缩（参见[“压缩”](ch04.html#b_tree_compression)）。类似的想法也适用于LSM Tree。这里的主要区别在于LSM
+    Tree表是不可变的，并且通常是单次写入。在按页面压缩数据时，压缩页面不是页面对齐的，因为它们的大小比未压缩的页面小。
+- en: To be able to address compressed pages, we need to keep track of the address
+    boundaries when writing their contents. We could fill compressed pages with zeros,
+    aligning them to the page size, but then we’d lose the benefits of compression.
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了能够处理压缩页面，我们需要在编写其内容时跟踪地址边界。我们可以用零填充压缩页面，并将其与页面大小对齐，但这样我们将失去压缩的好处。
+- en: To make compressed pages addressable, we need an indirection layer which stores
+    offsets and sizes of compressed pages. [Figure 7-10](#compression_in_lsm) shows
+    the mapping between compressed and uncompressed blocks. Compressed pages are *always*
+    smaller than the originals, since otherwise there’s no point in compressing them.
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使压缩页面可寻址，我们需要一个间接层，该层存储压缩页面的偏移量和大小。[图 7-10](#compression_in_lsm)显示了压缩和未压缩块之间的映射。压缩页面*总是*比原始页面小，否则压缩它们就没有意义。
+- en: '![dbin 0710](assets/dbin_0710.png)'
+  id: totrans-220
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0710](assets/dbin_0710.png)'
+- en: Figure 7-10\. Reading compressed blocks. Dotted lines represent pointers from
+    the mapping table to the offsets of compressed pages on disk. Uncompressed pages
+    generally reside in the page cache.
+  id: totrans-221
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-10\. 读取压缩块。虚线表示从映射表指向磁盘上压缩页面偏移量的指针。未压缩页面通常驻留在页面缓存中。
+- en: During compaction and flush, compressed pages are appended sequentially, and
+    compression information (the original uncompressed page offset and the actual
+    compressed page offset) is stored in a separate file segment. During the read,
+    the compressed page offset and its size are looked up, and the page can be uncompressed
+    and materialized in memory.
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在压缩和刷新期间，压缩页面按顺序追加，并且压缩信息（原始未压缩页面偏移量和实际压缩页面偏移量）存储在单独的文件段中。在读取期间，查找压缩页面偏移量及其大小，并且页面可以在内存中解压缩和实体化。
+- en: Unordered LSM Storage
+  id: totrans-223
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 无序的LSM存储
+- en: 'Most of the storage structures discussed so far store data *in order*. Mutable
+    and immutable B-Tree pages, sorted runs in FD-Trees, and SSTables in LSM Trees
+    store data records in key order. The order in these structures is preserved differently:
+    B-Tree pages are updated in place, FD-Tree runs are created by merging contents
+    of two runs, and SSTables are created by buffering and sorting data records in
+    memory.'
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止讨论的大多数存储结构都按顺序存储数据。可变和不可变B树页，FD-Tree中的有序运行，以及LSM树中的SSTable按键顺序存储数据记录。这些结构中的顺序保存方式不同：B树页原地更新，FD-Tree运行通过合并两个运行的内容创建，而SSTable通过在内存中缓冲和排序数据记录创建。
+- en: In this section, we discuss structures that store records in random order. Unordered
+    stores generally do not require a separate log and allow us to reduce the cost
+    of writes by storing data records in insertion order.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们讨论了以随机顺序存储记录的结构。无序存储通常不需要单独的日志，并且通过按插入顺序存储数据记录来减少写入成本。
+- en: Bitcask
+  id: totrans-226
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Bitcask
+- en: '[Bitcask](https://databass.dev/links/82), one of the storage engines used in
+    [Riak](https://databass.dev/links/83), is an unordered log-structured storage
+    engine [[SHEEHY10b]](app01.html#SHEEHY10b). Unlike the log-structured storage
+    implementations discussed so far, it *does not* use memtables for buffering, and
+    stores data records directly in logfiles.'
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[Bitcask](https://databass.dev/links/82)，在[Riak](https://databass.dev/links/83)中使用的存储引擎之一，是一种无序的日志结构化存储引擎[[SHEEHY10b]](app01.html#SHEEHY10b)。与迄今为止讨论的日志结构化存储实现不同，它*不*使用memtables进行缓冲，并直接将数据记录存储在日志文件中。'
+- en: To make values searchable, Bitcask uses a data structure called *keydir*, which
+    holds references to the *latest* data records for the corresponding keys. Old
+    data records may still be present on disk, but are not referenced from keydir,
+    and are garbage-collected during compaction. Keydir is implemented as an in-memory
+    hashmap and has to be rebuilt from the logfiles during startup.
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使值可搜索，Bitcask使用称为*keydir*的数据结构，它保存相应键的*最新*数据记录的引用。旧的数据记录可能仍然存在于磁盘上，但在keydir中没有引用，并在合并过程中进行垃圾回收。Keydir作为内存哈希表实现，在启动期间必须从日志文件中重建。
+- en: During a *write*, a key and a data record are appended to the logfile sequentially,
+    and the pointer to the newly written data record location is placed in keydir.
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在*写入*过程中，键和数据记录会按顺序附加到日志文件中，并将指向新写入数据记录位置的指针放置在keydir中。
+- en: Reads check the keydir to locate the searched key and follow the associated
+    pointer to the logfile, locating the data record. Since at any given moment there
+    can be only one value associated with the key in the keydir, point queries do
+    not have to merge data from multiple sources.
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 读取操作通过keydir检查来定位所搜索的键，并跟随相关指针到日志文件中，定位数据记录。由于在任何给定时刻，keydir中只能与键关联一个值，因此点查询无需从多个来源合并数据。
+- en: '[Figure 7-11](#bitcask_architecture) shows mapping between the keys and records
+    in data files in Bitcask. Logfiles hold data records, and keydir points to the
+    latest *live* data record associated with each key. Shadowed records in data files
+    (ones that were superseded by later writes or deletes) are shown in gray.'
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 7-11](#bitcask_architecture)展示了Bitcask中数据文件中键和记录之间的映射关系。日志文件存储数据记录，而keydir指向每个键对应的最新的*活跃*数据记录。数据文件中的阴影记录（即后续写入或删除操作所取代的记录）显示为灰色。'
+- en: '![dbin 0711](assets/dbin_0711.png)'
+  id: totrans-232
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0711](assets/dbin_0711.png)'
+- en: Figure 7-11\. Mapping between keydir and data files in Bitcask. Solid lines
+    represent pointers from the key to the latest value associated with it. Shadowed
+    key/value pairs are shown in light gray.
+  id: totrans-233
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-11\. keydir与Bitcask中数据文件之间的映射关系。实线表示从键到与之关联的最新值的指针。浅灰色显示阴影键值对。
+- en: During compaction, contents of all logfiles are read sequentially, merged, and
+    written to a new location, preserving only *live* data records and discarding
+    the shadowed ones. Keydir is updated with new pointers to relocated data records.
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在合并过程中，所有日志文件的内容都会被顺序读取、合并并写入新位置，仅保留*活跃*数据记录并丢弃阴影记录。keydir将更新为指向重新定位的数据记录的新指针。
+- en: Data records are stored directly in logfiles, so a separate write-ahead log
+    doesn’t have to be maintained, which reduces both space overhead and write amplification.
+    A downside of this approach is that it offers only point queries and doesn’t allow
+    range scans, since items are unordered both in keydir and in data files.
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据记录直接存储在日志文件中，因此无需维护单独的预写日志，这既减少了空间开销又减少了写放大。这种方法的缺点是只支持点查询，不允许范围扫描，因为keydir和数据文件中的条目都是无序的。
+- en: Advantages of this approach are simplicity and great point query performance.
+    Even though multiple versions of data records exist, only the latest one is addressed
+    by keydir. However, having to keep all keys in memory and rebuilding keydir on
+    startup are limitations that might be a deal breaker for some use cases. While
+    this approach is great for point queries, it does not offer any support for range
+    queries.
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种方法的优点在于简单和出色的点查询性能。即使数据记录存在多个版本，keydir 只会处理最新的版本。然而，需要在内存中保留所有键并在启动时重建 keydir
+    是一些使用场景可能无法接受的限制。虽然这种方法非常适合点查询，但不支持范围查询。
+- en: WiscKey
+  id: totrans-237
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: WiscKey
+- en: Range queries are important for many applications, and it would be great to
+    have a storage structure that could have the write and space advantages of unordered
+    storage, while still allowing us to perform range scans.
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 范围查询对许多应用程序非常重要，希望有一种存储结构既能够享受无序存储的写入和空间优势，同时又能够执行范围扫描，这将是非常好的。
+- en: 'WiscKey [[LU16]](app01.html#LU16) decouples sorting from garbage collection
+    by keeping the keys sorted in LSM Trees, and keeping data records in unordered
+    append-only files called *vLogs* (value logs). This approach can solve two problems
+    mentioned while discussing Bitcask: a need to keep all keys in memory and to rebuild
+    a hashtable on startup.'
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: WiscKey [[LU16]](app01.html#LU16) 通过在 LSM 树中保持键排序，并在称为 *vLogs*（值日志）的无序追加文件中保留数据记录，将排序与垃圾收集解耦。这种方法可以解决在讨论
+    Bitcask 时提到的两个问题：需要在内存中保留所有键，并在启动时重建哈希表的需求。
+- en: '[Figure 7-12](#wisc_key_architecture) shows key components of WiscKey, and
+    mapping between keys and log files. vLog files hold unordered data records. Keys
+    are stored in sorted LSM Trees, pointing to the latest data records in the logfiles.'
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 7-12](#wisc_key_architecture) 展示了 WiscKey 的关键组件，以及键和日志文件之间的映射。vLog 文件包含无序的数据记录。键存储在排序的
+    LSM 树中，指向日志文件中的最新数据记录。'
+- en: Since keys are typically much smaller than the data records associated with
+    them, compacting them is significantly more efficient. This approach can be particularly
+    useful for use cases with a low rate of updates and deletes, where garbage collection
+    won’t free up as much disk space.
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于键通常比与其关联的数据记录小得多，因此紧凑它们的效率显著提高。这种方法对于更新和删除率较低的用例特别有用，垃圾收集不会释放大量磁盘空间。
+- en: 'The main challenge here is that because vLog data is unsorted, range scans
+    require random I/O. WiscKey uses internal SSD parallelism to prefetch blocks in
+    parallel during range scans and reduce random I/O costs. In terms of block transfers,
+    the costs are still high: to fetch a single data record during the range scan,
+    the entire page where it is located has to be read.'
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里的主要挑战在于，因为 vLog 数据是无序的，范围扫描需要随机 I/O。WiscKey 在范围扫描期间利用内部 SSD 并行性以并行预取块，并降低随机
+    I/O 成本。在块传输方面，成本仍然很高：为了获取范围扫描中的单个数据记录，必须读取其所在的整个页面。
+- en: '![dbin 0712](assets/dbin_0712.png)'
+  id: totrans-243
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0712](assets/dbin_0712.png)'
+- en: 'Figure 7-12\. Key components of WiscKey: index LSM Trees and vLog files, and
+    relationships between them. Shadowed records in data files (ones that were superseded
+    by later writes or deletes) are shown in gray. Solid lines represent pointers
+    from the key in the LSM tree to the latest value in the log file.'
+  id: totrans-244
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-12\. WiscKey 的关键组件：索引 LSM 树和 vLog 文件，以及它们之间的关系。数据文件中的阴影记录（被后续写入或删除取代的记录）显示为灰色。实线表示从
+    LSM 树中的键到日志文件中的最新值的指针。
+- en: During compaction, vLog file contents are read sequentially, merged, and written
+    to a new location. Pointers (values in a key LSM Tree) are updated to point to
+    these new locations. To avoid scanning entire vLog contents, WiscKey uses `head`
+    and `tail` pointers, holding information about vLog segments that hold live keys.
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在压缩期间，vLog 文件内容按顺序读取，合并并写入新位置。指向这些新位置的指针（LSM 树中的值）会得到更新。为了避免扫描整个 vLog 内容，WiscKey
+    使用 `head` 和 `tail` 指针，记录存活键的 vLog 段的信息。
+- en: 'Since data in vLog is unsorted and contains no liveness information, the key
+    tree has to be scanned to find which values are still live. Performing these checks
+    during garbage collection introduces additional complexity: traditional LSM Trees
+    can resolve file contents during compaction without addressing the key index.'
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于 vLog 中的数据是无序的且不包含存活信息，因此必须扫描键树以查找哪些值仍然存活。在垃圾收集期间执行这些检查引入了额外的复杂性：传统的 LSM 树可以在压缩过程中解决文件内容，而无需处理键索引。
+- en: Concurrency in LSM Trees
+  id: totrans-247
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: LSM 树的并发性
+- en: The main concurrency challenges in LSM Trees are related to switching *table
+    views* (collections of memory- and disk-resident tables that change during flush
+    and compaction) and log synchronization. Memtables are also generally accessed
+    concurrently (except core-partitioned stores such as ScyllaDB), but concurrent
+    in-memory data structures are out of the scope of this book.
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: LSM树中的主要并发挑战与切换*表视图*（在刷新和压实期间变化的内存和磁盘上的表集合）和日志同步相关。内存表通常也是并发访问的（例如ScyllaDB之类的核心分区存储除外），但本书不涉及并发的内存数据结构。
+- en: 'During flush, the following rules have to be followed:'
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在刷新期间，必须遵循以下规则：
+- en: The new memtable has to become available for reads and writes.
+  id: totrans-250
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 新的内存表必须对读取和写入变得可用。
+- en: The old (flushing) memtable has to remain visible for reads.
+  id: totrans-251
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 旧的（正在刷新的）内存表必须对读取保持可见。
+- en: The flushing memtable has to be written on disk.
+  id: totrans-252
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 刷新的内存表必须写入磁盘。
+- en: Discarding a flushed memtable and making a flushed disk-resident table have
+    to be performed as an atomic operation.
+  id: totrans-253
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 应当作为一个原子操作执行丢弃已刷新的内存表和使已刷新的磁盘上的表。
+- en: The write-ahead log segment, holding log entries of operations applied to the
+    flushed memtable, has to be discarded.
+  id: totrans-254
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 写前日志段，保存已应用于刷新的内存表的日志条目，必须被丢弃。
+- en: 'For example, Apache Cassandra solves these problems by using [operation order
+    barriers](https://databass.dev/links/84): all operations that were accepted for
+    write will be waited upon prior to the memtable flush. This way the flush process
+    (serving as a consumer) knows which other processes (acting as producers) depend
+    on it.'
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，Apache Cassandra通过使用[操作顺序屏障](https://databass.dev/links/84)解决这些问题：所有接受写入的操作在内存表刷新之前将等待。这样，刷新过程（作为消费者）知道其他进程（作为生产者）依赖于它。
+- en: 'More generally, we have the following synchronization points:'
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更一般地说，我们有以下同步点：
+- en: Memtable switch
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 内存表切换
+- en: After this, all writes go only to the new memtable, making it primary, while
+    the old one is still available for reads.
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此后，所有写入仅发送到新的内存表，使其成为主要的，而旧的仍然可供读取。
+- en: Flush finalization
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 刷新完成
+- en: Replaces the old memtable with a flushed disk-resident table in the table view.
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在表视图中用已刷新的磁盘上的表替换旧的内存表。
+- en: Write-ahead log truncation
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写前日志截断
+- en: Discards a log segment holding records associated with a flushed memtable.
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 丢弃保存与已刷新的内存表关联的日志段。
+- en: These operations have severe correctness implications. Continuing writes to
+    the old memtable might result in data loss; for example, if the write is made
+    into a memtable section that was already flushed. Similarly, failing to leave
+    the old memtable available for reads until its disk-resident counterpart is ready
+    will result in incomplete results.
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些操作对正确性有严重影响。继续写入旧内存表可能导致数据丢失；例如，如果写入的是已经被刷新的内存表部分。同样地，如果不保留旧内存表供读取，直到其对应的磁盘上的副本准备就绪，将导致结果不完整。
+- en: 'During compaction, the table view is also changed, but here the process is
+    slightly more straightforward: old disk-resident tables are discarded, and the
+    compacted version is added instead. Old tables have to remain accessible for reads
+    until the new one is fully written and is ready to replace them for reads. Situations
+    in which the same tables participate in multiple compactions running in parallel
+    have to be avoided as well.'
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在压实期间，表视图也会发生变化，但在这里过程稍微更为直接：旧的磁盘上的表被丢弃，并且代之以压实版本。旧表必须保持对读取的可访问性，直到新表完全写入并准备好用于读取替换它们。还必须避免同一表在多个并行运行的压实中参与的情况。
+- en: 'In B-Trees, log truncation has to be coordinated with flushing dirty pages
+    from the page cache to guarantee durability. In LSM Trees, we have a similar requirement:
+    writes are buffered in a memtable, and their contents are not durable until fully
+    flushed, so log truncation has to be coordinated with memtable flushes. As soon
+    as the flush is complete, the log manager is given the information about the latest
+    flushed log segment, and its contents can be safely discarded.'
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在B树中，日志截断必须与从页缓存刷新脏页协调，以保证耐久性。在LSM树中，我们有一个类似的要求：写入被缓冲在内存表中，直到完全刷新，其内容不是持久的，因此日志截断必须与内存表刷新协调。一旦刷新完成，日志管理器将获得关于最新刷新日志段的信息，并且其内容可以安全丢弃。
+- en: 'Not synchronizing log truncations with flushes will also result in data loss:
+    if a log segment is discarded before the flush is complete, and the node crashes,
+    log contents will not be replayed, and data from this segment won’t be restored.'
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不同步日志截断与刷新也会导致数据丢失：如果在刷新完成之前丢弃了日志段，并且节点崩溃，则不会重播日志内容，并且无法恢复此段的数据。
+- en: Log Stacking
+  id: totrans-267
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 日志堆叠
+- en: 'Many modern filesystems are log structured: they buffer writes in a memory
+    segment and flush its contents on disk when it becomes full in an append-only
+    manner. SSDs use log-structured storage, too, to deal with small random writes,
+    minimize write overhead, improve wear leveling, and increase device lifetime.'
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多现代文件系统都是日志结构化的：它们在内存段中缓冲写入，并在其内容填满时以只追加方式将其刷新到磁盘。 SSD也使用日志结构化存储来处理小的随机写入，最小化写入开销，改善磨损平衡，并增加设备寿命。
+- en: Log-structured storage (LSS) systems started gaining popularity around the time
+    SSDs were becoming more affordable. LSM Trees and SSDs are a good match, since
+    sequential workloads and append-only writes help to reduce amplification from
+    in-place updates, which negatively affect performance on SSDs.
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 日志结构化存储（LSS）系统开始在SSD变得更加可负担得起时变得流行起来。 LSM树和SSD非常匹配，因为顺序工作负载和仅追加写入有助于减少原位更新的放大，这会对SSD性能产生负面影响。
+- en: If we stack multiple log-structured systems on top each other, we can run into
+    several problems that we were trying to solve using LSS, including write amplification,
+    fragmentation, and poor performance. At the very least, we need to keep the SSD
+    flash translation layer and the filesystem in mind when developing our applications
+    [[YANG14]](app01.html#YANG14).
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们将多个日志结构化系统堆叠在一起，可能会遇到几个我们试图使用LSS解决的问题，包括写入放大、碎片化和性能差。至少，在开发应用程序时，我们需要牢记SSD闪存转换层和文件系统[[YANG14]](app01.html#YANG14)。
+- en: Flash Translation Layer
+  id: totrans-271
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 闪存转换层
+- en: 'Using a log-structuring mapping layer in SSDs is motivated by two factors:
+    small random writes have to be batched together in a physical page, and the fact
+    that SSDs work by using program/erase cycles. Writes can be done only into previously
+    *erased* pages. This means that a page cannot be *programmed* (in other words,
+    written) unless it is empty (in other words, was *erased*).'
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在SSD中使用日志结构化映射层的动机有两个因素：小的随机写入必须批量写入物理页面，并且SSD通过使用程序/擦除周期工作。只有*擦除*的页面才能进行*编程*（换句话说，写入）。这意味着页面只有在*空的*情况下（换句话说，已*擦除*）才能进行*编程*。
+- en: A *single* page cannot be erased, and only *groups* of pages in a *block* (typically
+    holding 64 to 512 pages) can be erased together. [Figure 7-13](#block_page_grouping)
+    shows a schematic representation of pages, grouped into blocks. The flash translation
+    layer (FTL) translates logical page addresses to their physical locations and
+    keeps track of page states (live, discarded, or empty). When FTL runs out of free
+    pages, it has to perform garbage collection and erase discarded pages.
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*单个* 页面不能被擦除，只能将*块*（通常包含64到512个页面）中的页面组合在一起进行擦除。[图7-13](#block_page_grouping)显示了页面的示意图，分组成块。闪存转换层（FTL）将逻辑页面地址转换为其物理位置，并跟踪页面状态（活动的、丢弃的或空的）。当FTL耗尽空闲页面时，必须执行垃圾收集并擦除已丢弃的页面。'
+- en: '![dbin 0713](assets/dbin_0713.png)'
+  id: totrans-274
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0713](assets/dbin_0713.png)'
+- en: Figure 7-13\. SSD pages, grouped into blocks
+  id: totrans-275
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图7-13\. SSD页面，分组成块
+- en: There are no guarantees that all pages in the block that is about to be erased
+    are discarded. Before the block can be erased, FTL has to relocate its *live*
+    pages to one of the blocks containing empty pages. [Figure 7-14](#block_relocation)
+    shows the process of moving live pages from one block to new locations.
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不能保证要擦除的块中的所有页面都是已丢弃的。在块可以擦除之前，FTL必须将其*活动*页面重新定位到包含空页面的块之一。[图7-14](#block_relocation)显示了从一个块中移动活动页面到新位置的过程。
+- en: '![dbin 0714](assets/dbin_0714.png)'
+  id: totrans-277
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0714](assets/dbin_0714.png)'
+- en: Figure 7-14\. Page relocation during garbage collection
+  id: totrans-278
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图7-14\. 垃圾收集期间的页面重新定位
+- en: When all live pages are relocated, the block can be safely erased, and its empty
+    pages become available for writes. Since FTL is aware of page states and state
+    transitions and has all the necessary information, it is also responsible for
+    SSD *wear leveling*.
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当所有活动页面被重新定位后，块可以安全地被擦除，其空页面变为可用于写入。由于FTL了解页面状态和状态转换并具有所有必要信息，因此还负责SSD的*磨损平衡*。
+- en: Note
+  id: totrans-280
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Wear leveling distributes the load evenly across the medium, avoiding hotspots,
+    where blocks fail prematurely because of a high number of program-erase cycles.
+    It is required, since flash memory cells can go through only a limited number
+    of program-erase cycles, and using memory cells evenly helps to extend the lifetime
+    of the device.
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 磨损平衡将负载均匀地分布在介质上，避免热点，其中块由于高数量的编程-擦除周期而提前失效。这是必要的，因为闪存记忆单元只能经历有限次数的编程-擦除周期，均匀使用内存单元有助于延长设备的寿命。
+- en: In summary, the motivation for using log-structured storage on SSDs is to amortize
+    I/O costs by batching small random writes together, which generally results in
+    a smaller number of operations and, subsequently, reduces the number of times
+    the garbage collection is triggered.
+  id: totrans-282
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总之，将日志结构化存储用于 SSD 的动机在于通过将小的随机写入批处理在一起来摊销 I/O 成本，通常会导致较少的操作次数，进而减少垃圾回收触发的次数。
+- en: Filesystem Logging
+  id: totrans-283
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 文件系统日志记录
+- en: On top of that, we get filesystems, many of which also use logging techniques
+    for write buffering to reduce write amplification and use the underlying hardware
+    optimally.
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，我们还得到了许多使用日志技术进行写入缓冲以减少写放大并充分利用底层硬件的文件系统。
+- en: Log stacking manifests in a few different ways. First, each layer has to perform
+    its own bookkeeping, and most often the underlying log does not expose the information
+    necessary to avoid duplicating the efforts.
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 日志堆叠以几种不同的方式表现出来。首先，每个层次必须执行自己的簿记，而最常见的是底层日志不公开避免重复努力所需的信息。
+- en: '[Figure 7-15](#higher_log_removal) shows a mapping between a higher-level log
+    (for example, the application) and a lower-level log (for example, the filesystem)
+    resulting in redundant logging and different garbage collection patterns [[YANG14]](app01.html#YANG14).
+    Misaligned segment writes can make the situation even worse, since discarding
+    a higher-level log segment may cause fragmentation and relocation of the neighboring
+    segments’ parts.'
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 7-15](#higher_log_removal) 显示了高级日志（例如应用程序）和低级日志（例如文件系统）之间的映射，导致冗余记录和不同的垃圾回收模式
+    [[YANG14]](app01.html#YANG14)。不对齐的段写入可能会使情况变得更糟，因为丢弃高级日志段可能会导致片段化并重新定位相邻段的部分。'
+- en: '![dbin 0715](assets/dbin_0715.png)'
+  id: totrans-287
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0715](assets/dbin_0715.png)'
+- en: Figure 7-15\. Misaligned writes and discarding of a higher-level log segment
+  id: totrans-288
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-15\. 写入不对齐和高级日志段的丢弃
+- en: Because layers do not communicate LSS-related scheduling (for example, discarding
+    or relocating segments), lower-level subsystems might perform redundant operations
+    on discarded data or the data that is about to be discarded. Similarly, because
+    there’s no single, standard segment size, it may happen that unaligned higher-level
+    segments occupy multiple lower-level segments. All these overheads can be reduced
+    or completely avoided.
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为各层不进行相关的 LSS 调度（例如，丢弃或重新定位段），较低级别的子系统可能对已丢弃的数据或即将丢弃的数据执行冗余操作。同样，由于不存在单一标准的段大小，高级别不对齐的段可能占用多个较低级别的段。所有这些开销可以减少或完全避免。
+- en: 'Even though we say that log-structured storage is all about sequential I/O,
+    we have to keep in mind that database systems may have multiple write streams
+    (for example, log writes parallel to data record writes) [[YANG14]](app01.html#YANG14).
+    When considered on a hardware level, interleaved sequential write streams may
+    not translate into the same sequential pattern: blocks are not necessarily going
+    to be placed in write order. [Figure 7-16](#overlapping_streams) shows multiple
+    streams overlapping in time, writing records that have sizes not aligned with
+    the underlying hardware page size.'
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管我们说日志结构化存储全部涉及顺序 I/O，我们必须记住数据库系统可能具有多个写入流（例如，并行于数据记录写入的日志写入）[[YANG14]](app01.html#YANG14)。在硬件层面上考虑时，交错的顺序写入流可能不会转化为相同的顺序模式：块不一定按写入顺序放置。[图 7-16](#overlapping_streams)
+    显示了多个时间重叠的流，写入大小不与底层硬件页大小对齐的记录。
+- en: '![dbin 0716](assets/dbin_0716.png)'
+  id: totrans-291
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0716](assets/dbin_0716.png)'
+- en: Figure 7-16\. Unaligned multistream writes
+  id: totrans-292
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-16\. 不对齐的多流写入
+- en: This results in fragmentation that we tried to avoid. To reduce interleaving,
+    some database vendors recommend keeping the log on a separate device to isolate
+    workloads and be able to reason about their performance and access patterns independently.
+    However, it is more important to keep partitions aligned to the underlying hardware
+    [[INTEL14]](app01.html#INTEL14) and keep writes aligned to page size [[KIM12]](app01.html#KIM12).
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这导致了我们试图避免的碎片化。为了减少交错，一些数据库供应商建议将日志保存在单独的设备上，以隔离工作负载并独立地分析其性能和访问模式。然而，保持分区与底层硬件对齐[[INTEL14]](app01.html#INTEL14)，并将写操作与页面大小对齐[[KIM12]](app01.html#KIM12)更为重要。
+- en: LLAMA and Mindful Stacking
+  id: totrans-294
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: LLAMA与专注堆叠
+- en: Well, you’ll never believe this, but that llama you’re looking at was once a
+    human being. And not just any human being. That guy was an emperor. A rich, powerful
+    ball of charisma.
+  id: totrans-295
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: 嗯，你绝对不会相信，但你眼前那只羊驼曾经是一个人类。而且不仅仅是普通人。那家伙曾是一位皇帝。一个富有、强大而充满魅力的家伙。
+- en: ''
+  id: totrans-296
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: Kuzco from *The Emperor’s New Groove*
+  id: totrans-297
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: 库兹科（*The Emperor’s New Groove*）
+- en: In [“Bw-Trees”](ch06.html#bw_tree), we discussed an immutable B-Tree version
+    called Bw-Tree. Bw-Tree is layered on top of a *latch-free, log-structured, access-method
+    aware* (LLAMA) storage subsystem. This layering allows Bw-Trees to grow and shrink
+    dynamically, while leaving garbage collection and page management transparent
+    for the tree. Here, we’re most interested in the *access-method aware* part, demonstrating
+    the benefits of coordination between the software layers.
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[“Bw-Trees”](ch06.html#bw_tree)章节中，我们讨论了一种名为Bw-Tree的不可变B-Tree版本。Bw-Tree建立在一个*无锁、日志结构化、访问方法感知*（LLAMA）存储子系统之上。这种分层允许Bw-Tree在动态增长和收缩，同时保持垃圾收集和页面管理对树透明。这里，我们最感兴趣的是*访问方法感知*的部分，展示了软件层之间协同的好处。
+- en: To recap, a *logical* Bw-Tree node consists of a linked list of *physical* delta
+    nodes, a chain of updates from the newest one to the oldest one, ending in a base
+    node. Logical nodes are linked using an in-memory mapping table, pointing to the
+    location of the latest update on disk. Keys and values are added to and removed
+    from the logical nodes, but their physical representations remain immutable.
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总结一下，*逻辑* Bw-Tree节点由*物理*增量节点的链表组成，从最新到最旧的更新链，最终以基本节点结束。逻辑节点使用内存中的映射表链接，指向磁盘上最新更新的位置。键和值被添加到逻辑节点并从中移除，但它们的物理表示保持不变。
+- en: Log-structured storage buffers node updates (delta nodes) together in 4 Mb flush
+    buffers. As soon as the page fills up, it’s flushed on disk. Periodically, garbage
+    collection reclaims space occupied by the unused delta and base nodes, and relocates
+    the live ones to free up fragmented pages.
+  id: totrans-300
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 日志结构化存储将节点更新（增量节点）一起缓冲在4 Mb的刷新缓冲区中。一旦页面填满，就会被刷新到磁盘上。定期进行垃圾回收，回收未使用的增量和基本节点占用的空间，并将活跃节点重新定位以释放碎片化页面。
+- en: Without access-method awareness, interleaved delta nodes that belong to different
+    logical nodes will be written in their insertion order. Bw-Tree awareness in LLAMA
+    allows for the consolidation of several delta nodes into a single contiguous physical
+    location. If two updates in delta nodes *cancel* each other (for example, an insert
+    followed by delete), their *logical* consolidation can be performed as well, and
+    only the latter delete can be persisted.
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 没有访问方法感知，属于不同逻辑节点的交错增量节点将按照它们的插入顺序写入。LLAMA中的Bw-Tree意识允许将几个增量节点合并到单个连续的物理位置。如果两个增量节点的更新*互相取消*（例如插入后跟随删除），它们的*逻辑*合并也可以执行，只有后者的删除可以被持久化。
+- en: LSS garbage collection can also take care of consolidating the logical Bw-Tree
+    node contents. This means that garbage collection will not only reclaim the free
+    space, but also significantly reduce the physical node fragmentation. If garbage
+    collection only rewrote several delta nodes contiguously, they would still take
+    the same amount of space, and readers would need to perform the work of applying
+    the delta updates to the base node. At the same time, if a higher-level system
+    consolidated the nodes and wrote them contiguously to the new locations, LSS would
+    *still* have to garbage-collect the old versions.
+  id: totrans-302
+  prefs: []
+  type: TYPE_NORMAL
+  zh: LSS垃圾收集还可以处理整理逻辑Bw-Tree节点内容。这意味着垃圾收集不仅会回收空闲空间，还会显著减少物理节点的碎片化。如果垃圾收集只重写连续的几个增量节点，它们仍将占用相同的空间，并且读者需要执行应用增量更新到基本节点的工作。与此同时，如果高级系统整理节点并将它们连续写入新位置，LSS将*仍然*需要垃圾收集旧版本。
+- en: By being aware of Bw-Tree semantics, several deltas may be rewritten as a single
+    base node with all deltas already applied *during* garbage collection. This reduces
+    the total space used to represent this Bw-Tree node and the latency required to
+    read the page while reclaiming the space occupied by discarded pages.
+  id: totrans-303
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过了解 Bw-Tree 的语义，几个增量可以在垃圾收集期间重写为已应用所有增量的单个基本节点。这减少了表示此 Bw-Tree 节点所使用的总空间以及读取页面时所需的延迟，同时回收被丢弃页面占用的空间。
+- en: You can see that, when considered carefully, stacking can yield many benefits.
+    It is not necessary to always build tightly coupled single-level structures. Good
+    APIs and exposing the right information can significantly improve efficiency.
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 仔细考虑后，您会发现堆叠可以带来许多好处。不必总是构建紧密耦合的单层结构。良好的 API 和适当的信息公开可以显著提高效率。
+- en: Open-Channel SSDs
+  id: totrans-305
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 开放通道 SSD
+- en: An alternative to stacking software layers is to skip all indirection layers
+    and use the hardware directly. For example, it is possible to avoid using a filesystem
+    and flash translation layer by developing for Open-Channel SSDs. This way, we
+    can avoid at least two layers of logs and have more control over wear-leveling,
+    garbage collection, data placement, and scheduling. One of the implementations
+    that uses this approach is LOCS (LSM Tree-based KV Store on Open-Channel SSD)
+    [[WANG13]](app01.html#WANG13). Another example using Open-Channel SSDs is LightNVM,
+    implemented in the Linux kernel [[BJØRLING17]](app01.html#BJØRLING17).
+  id: totrans-306
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 跳过所有间接层并直接使用硬件是堆叠软件层的一种替代方法。例如，通过为开放通道 SSD 开发，可以避免使用文件系统和闪存转换层。这样，我们至少可以避免两层日志，并对磨损均衡、垃圾收集、数据放置和调度有更多控制。采用这种方法的实现之一是基于
+    LSM Tree 的开放通道 SSD 的 KV 存储 LOCS [[WANG13]](app01.html#WANG13)。另一个使用开放通道 SSD 的示例是在
+    Linux 内核中实现的 LightNVM [[BJØRLING17]](app01.html#BJØRLING17)。
+- en: The flash translation layer usually handles data placement, garbage collection,
+    and page relocation. Open-Channel SSDs expose their internals, drive management,
+    and I/O scheduling without needing to go through the FTL. While this certainly
+    requires much more attention to detail from the developer’s perspective, this
+    approach may yield significant performance improvements. You can draw a parallel
+    with using the `O_DIRECT` flag to bypass the kernel page cache, which gives better
+    control, but requires manual page management.
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 闪存转换层通常处理数据放置、垃圾收集和页面重定位。开放通道 SSD 公开其内部结构、驱动管理和 I/O 调度，无需经过 FTL。尽管从开发者的角度来看，这显然需要更多的细节关注，但这种方法可能带来显著的性能提升。您可以将其与使用
+    `O_DIRECT` 标志绕过内核页缓存进行类比，这提供了更好的控制，但需要手动管理页面。
+- en: Software Defined Flash (SDF) [[OUYANG14]](app01.html#OUYANG14), a hardware/software
+    codesigned Open-Channel SSDs system, exposes an asymmetric I/O interface that
+    takes SSD specifics into consideration. Sizes of read and write units are different,
+    and write unit size corresponds to erase unit size (block), which greatly reduces
+    write amplification. This setting is ideal for log-structured storage, since there’s
+    only one software layer that performs garbage collection and relocates pages.
+    Additionally, developers have access to internal SSD parallelism, since every
+    channel in SDF is exposed as a separate block device, which can be used to further
+    improve performance.
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 软件定义的闪存（SDF）[[OUYANG14]](app01.html#OUYANG14)，一种硬件/软件共设计的开放通道 SSD 系统，公开了考虑 SSD
+    具体情况的不对称 I/O 接口。读写单元的大小不同，写单元大小对应擦除单元大小（块），大大减少了写放大。这种设置非常适合日志结构化存储，因为只有一个软件层执行垃圾收集和重定位页面。此外，开发人员可以访问内部
+    SSD 的并行性，因为 SDF 中的每个通道都公开为单独的块设备，可用于进一步提高性能。
+- en: Hiding complexity behind a simple API might sound compelling, but can cause
+    complications in cases in which software layers have different semantics. Exposing
+    *some* underlying system internals may be beneficial for better integration.
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将复杂性隐藏在简单的 API 背后可能听起来很吸引人，但在软件层具有不同语义的情况下可能会引起复杂性。公开部分底层系统内部可能有助于更好地集成。
+- en: Summary
+  id: totrans-310
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: '*Log-structured storage* is used everywhere: from the flash translation layer,
+    to filesystems and database systems. It helps to reduce write amplification by
+    batching small random writes together in memory. To reclaim space occupied by
+    removed segments, LSS periodically triggers garbage collection.'
+  id: totrans-311
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*日志结构化存储* 随处可见：从闪存转换层到文件系统和数据库系统。它通过批处理内存中的小随机写入来减少写放大。为了回收已删除段占用的空间，LSS 定期触发垃圾收集。'
+- en: '*LSM Trees* take some ideas from LSS and help to build index structures managed
+    in a log-structured manner: writes are batched in memory and flushed on disk;
+    shadowed data records are cleaned up during compaction.'
+  id: totrans-312
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*LSM树*借鉴了一些LSS的思想，帮助构建以日志结构方式管理的索引结构：写入在内存中批处理并在磁盘上刷新；在压实过程中清理影子数据记录。'
+- en: It is important to remember that many software layers use LSS, and make sure
+    that layers are stacked optimally. Alternatively, we can skip the filesystem level
+    altogether and access hardware directly.
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记住，许多软件层使用**LSS**，确保层次堆叠优化。或者，我们可以完全跳过文件系统层，直接访问硬件。

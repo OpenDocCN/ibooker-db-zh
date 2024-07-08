@@ -1,0 +1,1998 @@
+- en: Chapter 11\. Replication and Consistency
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第11章。复制与一致性
+- en: 'Before we move on to discuss consensus and atomic commitment algorithms, let’s
+    put together the last piece required for their in-depth understanding: *consistency
+    models*. Consistency models are important, since they explain visibility semantics
+    and behavior of the system in the presence of multiple copies of data.'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们继续讨论共识和原子提交算法之前，让我们一起完成对其深入理解所需的最后一块内容：*一致性模型*。一致性模型很重要，因为它们解释了在存在多个数据副本的情况下系统的可见性语义和行为。
+- en: '*Fault tolerance* is a property of a system that can continue operating correctly
+    in the presence of failures of its components. Making a system fault-tolerant
+    is not an easy task, and it may be difficult to add fault tolerance to the existing
+    system. The primary goal is to remove a single point of failure from the system
+    and make sure that we have redundancy in mission-critical components. Usually,
+    redundancy is entirely transparent for the user.'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*容错性*是系统在其组件发生故障时仍能继续正确运行的特性。使系统具备容错性并不是一件容易的任务，而且向现有系统添加容错性可能会很困难。主要目标是从系统中删除单点故障，并确保我们在关键任务组件中具有冗余。通常，冗余对用户来说是完全透明的。'
+- en: A system can continue operating correctly by storing multiple copies of data
+    so that, when one of the machines fails, the other one can serve as a failover.
+    In systems with a single source of truth (for example, primary/replica databases),
+    failover can be done explicitly, by promoting a replica to become a new master.
+    Other systems do not require explicit reconfiguration and ensure consistency by
+    collecting responses from multiple participants during read and write queries.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个系统可以通过存储数据的多个副本来继续正确运行，这样，当其中一个机器失败时，另一个可以作为故障切换。在具有单一真相来源的系统中（例如，主/副本数据库），可以通过显式地将副本提升为新主节点来执行故障切换。其他系统则无需显式重新配置，并通过在读写查询期间收集多个参与者的响应来确保一致性。
+- en: Data *replication* is a way of introducing redundancy by maintaining multiple
+    copies of data in the system. However, since updating multiple copies of data
+    atomically is a problem equivalent to consensus [[MILOSEVIC11]](app01.html#MILOSEVIC11),
+    it might be quite costly to perform this operation for *every* operation in the
+    database. We can explore some more cost-effective and flexible ways to make data
+    *look* consistent from the user’s perspective, while allowing some degree of divergence
+    between participants.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据的*复制*是通过在系统中维护数据的多个副本来引入冗余的一种方式。然而，由于原子性地更新多个数据副本等同于共识问题[[MILOSEVIC11]](app01.html#MILOSEVIC11)，因此对数据库中的*每个*操作执行此操作可能是相当昂贵的。我们可以探索一些更具成本效益和灵活性的方法，使数据从用户的角度看起来*一致*，同时允许参与者之间存在一定程度的分歧。
+- en: 'Replication is particularly important in multidatacenter deployments. Geo-replication,
+    in this case, serves multiple purposes: it increases availability and the ability
+    to withstand a failure of one or more datacenters by providing redundancy. It
+    can also help to reduce the latency by placing a copy of data physically closer
+    to the client.'
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在多数据中心部署中，复制尤为重要。在这种情况下，地理复制有多重作用：它增加了可用性，并通过提供冗余性来增强一个或多个数据中心发生故障时的容错能力。它还可以通过将数据的副本物理放置在距客户端更近的地方来帮助减少延迟。
+- en: 'When data records are modified, their copies have to be updated accordingly.
+    When talking about replication, we care most about three events: *write*, *replica
+    update*, and *read*. These operations trigger a sequence of events initiated by
+    the client. In some cases, updating replicas can happen after the write has finished
+    from the client perspective, but this still does not change the fact that the
+    client has to be able to observe operations in a particular order.'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当数据记录被修改时，它们的副本必须相应地更新。在讨论复制时，我们最关心的是三个事件：*写*、*副本更新*和*读*。这些操作会触发客户端发起的一系列事件。在某些情况下，更新副本可以在客户端完成写操作之后发生，但这并不改变客户端必须能够按特定顺序观察操作的事实。
+- en: Achieving Availability
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实现可用性
+- en: 'We’ve talked about the fallacies of distributed systems and have identified
+    many things that can go wrong. In the real world, nodes aren’t always alive or
+    able to communicate with one another. However, intermittent failures should not
+    impact *availability*: from the user’s perspective, the system as a whole has
+    to continue operating as if nothing has happened.'
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经讨论了分布式系统的谬误，并确定了许多可能出错的事情。在现实世界中，节点并不总是存活或能够彼此通信。然而，间歇性的故障不应影响*可用性*：从用户的角度来看，整个系统必须继续运行，好像什么都没有发生一样。
+- en: 'System availability is an incredibly important property: in software engineering,
+    we always strive for high availability, and try to minimize downtime. Engineering
+    teams brag about their uptime metrics. We care so much about availability for
+    several reasons: software has become an integral part of our society, and many
+    important things cannot happen without it: bank transactions, communication, travel,
+    and so on.'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 系统的可用性是一个非常重要的属性：在软件工程中，我们始终追求高可用性，并试图将停机时间最小化。工程团队以其正常运行时间指标而自豪。我们如此关心可用性有几个原因：软件已成为我们社会的一个重要组成部分，许多重要的事情如果没有它是无法实现的：银行交易、通信、旅行等等。
+- en: 'For companies, lack of availability can mean losing customers or money: you
+    can’t shop in the online store if it’s down, or transfer the money if your bank’s
+    website isn’t responding.'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于公司来说，可用性不足可能意味着失去客户或金钱：如果在线商店不可用，您无法购物；如果银行网站不响应，您无法转账。
+- en: To make the system highly available, we need to design it in a way that allows
+    handling failures or unavailability of one or more participants gracefully. For
+    that, we need to introduce redundancy and replication. However, as soon as we
+    add redundancy, we face the problem of keeping several copies of data in sync
+    and have to implement recovery mechanisms.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使系统高度可用，我们需要以一种允许优雅处理一个或多个参与者故障或不可用的方式设计它。为此，我们需要引入冗余和复制。然而，一旦我们添加了冗余，就面临着保持多个数据副本同步并实施恢复机制的问题。
+- en: Infamous CAP
+  id: totrans-12
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 分布式系统的臭名昭著
+- en: '*Availability* is a property that measures the ability of the system to serve
+    a response for every request successfully. The theoretical definition of availability
+    mentions eventual response, but of course, in a real-world system, we’d like to
+    avoid services that take indefinitely long to respond.'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*可用性*是一个属性，衡量系统成功为每个请求提供响应的能力。可用性的理论定义提到了最终的响应，但在现实世界的系统中，我们当然希望避免服务花费无限长时间才能响应。'
+- en: Ideally, we’d like every operation to be *consistent*. Consistency is defined
+    here as atomic or *linearizable* consistency (see [“Linearizability”](#linearizability)).
+    Linearizable history can be expressed as a sequence of instantaneous operations
+    that preserves the original operation order. Linearizability simplifies reasoning
+    about the possible system states and makes a distributed system appear as if it
+    was running on a single machine.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理想情况下，我们希望每个操作都是*一致的*。在这里，一致性定义为原子或*可线性化*一致性（参见[“线性化”](#linearizability)）。可线性化历史可以表达为保留原始操作顺序的一系列瞬时操作。线性化简化了对可能系统状态的推理，并使分布式系统看起来好像在单台机器上运行一样。
+- en: 'We would like to achieve both consistency and availability while tolerating
+    network partitions. The network can get split into several parts where processes
+    are not able to communicate with each other: some of the messages sent between
+    partitioned nodes won’t reach their destinations.'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们希望在容忍网络分区的同时实现一致性和可用性。网络可能会分裂成几部分，其中进程无法彼此通信：在分区节点之间发送的一些消息将无法到达其目的地。
+- en: Availability requires any nonfailing node to deliver results, while consistency
+    requires results to be linearizable. CAP conjecture, formulated by Eric Brewer,
+    discusses trade-offs between Consistency, Availability, and Partition tolerance
+    [[BREWER00]](app01.html#BREWER00).
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可用性要求任何非故障节点都能交付结果，而一致性要求结果是可线性化的。由Eric Brewer提出的CAP猜想讨论了一致性、可用性和分区容忍之间的权衡 [[BREWER00]](app01.html#BREWER00)。
+- en: Availability requirement is impossible to satisfy in an asynchronous system,
+    and we cannot implement a system that simultaneously guarantees both *availability*
+    and *consistency* in the presence of *network partitions* [[GILBERT02]](app01.html#GILBERT02).
+    We can build systems that guarantee strong consistency while providing *best effort*
+    availability, or guarantee availability while providing *best effort* consistency
+    [[GILBERT12]](app01.html#GILBERT12). Best effort here implies that if everything
+    works, the system will not *purposefully* violate any guarantees, but guarantees
+    are allowed to be weakened and violated in the case of network partitions.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在异步系统中，满足可用性要求是不可能的，而在存在网络分区的情况下，我们无法实现同时保证*可用性*和*一致性*的系统 [[GILBERT02]](app01.html#GILBERT02)。我们可以构建保证强一致性同时提供*尽力而为*可用性的系统，或者保证可用性同时提供*尽力而为*一致性
+    [[GILBERT12]](app01.html#GILBERT12)。这里的尽力而为意味着如果一切正常，系统将不会*故意*违反任何保证，但在网络分区的情况下允许保证被削弱和违反。
+- en: 'In other words, CAP describes a continuum of potential choices, where on different
+    sides of the spectrum we have systems that are:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 换句话说，CAP 描述了一系列潜在选择，不同的选择会导致系统处于不同的位置：
+- en: Consistent and partition tolerant
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一致和容忍分区
+- en: CP systems prefer failing requests to serving potentially inconsistent data.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CP 系统更倾向于拒绝请求，而不是提供潜在的不一致数据。
+- en: Available and partition tolerant
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可用和容忍分区
+- en: AP systems loosen the consistency requirement and allow serving potentially
+    inconsistent values during the request.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: AP 系统放松了一致性要求，并允许在请求期间提供潜在的不一致值。
+- en: 'An example of a CP system is an implementation of a consensus algorithm, requiring
+    a majority of nodes for progress: always consistent, but might be unavailable
+    in the case of a network partition. A database always accepting writes and serving
+    reads as long as even a single replica is up is an example of an AP system, which
+    may end up losing data or serving inconsistent results.'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CP 系统的一个例子是共识算法的实现，需要大多数节点来进行进展：始终保持一致，但在网络分区的情况下可能不可用。一个数据库总是接受写入并提供读取，只要有一个副本正常，这就是
+    AP 系统的一个例子，可能会丢失数据或提供不一致的结果。
+- en: PACELEC conjecture [[ABADI12]](app01.html#ABADI12), an extension of CAP, states
+    that in presence of network partitions there’s a choice between consistency and
+    availability (PAC). Else (E), even if the system is running normally, we *still*
+    have to make a choice between latency and consistency.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PACELEC 猜想 [[ABADI12]](app01.html#ABADI12)，CAP 的一个延伸，指出在存在网络分区的情况下，我们在一致性和可用性（PAC）之间需要做出选择。否则（E），即使系统正常运行，我们*仍然*必须在延迟和一致性之间做出选择。
+- en: Use CAP Carefully
+  id: totrans-25
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 谨慎使用 CAP
+- en: 'It’s important to note that CAP discusses *network partitions* rather than
+    *node crashes* or any other type of failure (such as crash-recovery). A node,
+    partitioned from the rest of the cluster, can serve inconsistent requests, but
+    a crashed node will not respond at all. On the one hand, this implies that it’s
+    not necessary to have any nodes down to face consistency problems. On the other
+    hand, this isn’t the case in the real world: there are many different failure
+    scenarios (some of which can be simulated with network partitions).'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 需要注意的是，CAP 讨论的是*网络分区*，而不是*节点崩溃*或任何其他类型的故障（比如崩溃恢复）。一个与集群其余部分分隔的节点可能会提供不一致的请求，但是一个崩溃的节点将完全不会响应。一方面，这意味着我们并不需要任何节点宕机才会面临一致性问题。另一方面，在现实世界中情况并非如此：存在许多不同的故障场景（其中一些可以通过网络分区来模拟）。
+- en: CAP implies that we can face consistency problems even if all the nodes are
+    up, but there are connectivity issues between them since we expect every nonfailed
+    node to respond correctly, with no regard to how many nodes may be down.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CAP 表示，即使所有节点都正常运行，我们也可能面临一致性问题，因为节点之间存在连接问题，我们期望每个非故障节点都能正确响应，而不考虑可能有多少节点处于宕机状态。
+- en: CAP conjecture is sometimes illustrated as a triangle, as if we could turn a
+    knob and have more or less of all of the three parameters. However, while we can
+    turn a knob and trade consistency for availability, partition tolerance is a property
+    we cannot realistically tune or trade for anything [[HALE10]](app01.html#HALE10).
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CAP 猜想有时被描述为一个三角形，好像我们可以调节一个旋钮以增加或减少三个参数中的任何一个。然而，虽然我们可以调节一个旋钮来交换一致性和可用性，但容忍分区是一个我们实际上无法调整或交换的属性
+    [[HALE10]](app01.html#HALE10)。
+- en: Tip
+  id: totrans-29
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: 'Consistency in CAP is defined quite differently from what ACID (see [Chapter 5](ch05.html#transaction_processing))
+    defines as consistency. ACID consistency describes transaction consistency: transaction
+    brings the database from one valid state to another, maintaining all the database
+    invariants (such as uniqueness constraints and referential integrity). In CAP,
+    it means that operations are *atomic* (operations succeed or fail in their entirety)
+    and *consistent* (operations never leave the data in an inconsistent state).'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CAP 中的一致性与 ACID（参见 [第五章](ch05.html#transaction_processing)）中定义的一致性有很大不同。ACID
+    的一致性描述了事务一致性：事务将数据库从一个有效状态转换到另一个有效状态，同时保持所有数据库不变性（如唯一性约束和引用完整性）。在 CAP 中，它意味着操作是
+    *原子的*（操作要么完全成功，要么完全失败）和 *一致的*（操作永远不会使数据处于不一致状态）。
+- en: Availability in CAP is also different from the aforementioned *high availability*
+    [[KLEPPMANN15]](app01.html#KLEPPMANN15). The CAP definition puts no bounds on
+    execution latency. Additionally, availability in databases, contrary to CAP, doesn’t
+    require *every* nonfailed node to respond to *every* request.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CAP 中的可用性也不同于上述的 *高可用性* [[KLEPPMANN15]](app01.html#KLEPPMANN15)。CAP 的定义不限制执行延迟。此外，与
+    CAP 相反，数据库中的可用性并不要求 *每个* 非故障节点都响应 *每个* 请求。
+- en: CAP conjecture is used to explain distributed systems, reason about failure
+    scenarios, and evaluate possible situations, but it’s important to remember that
+    there’s a fine line between *giving up* consistency and serving unpredictable
+    results.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CAP 猜想用于解释分布式系统，推理故障场景，并评估可能的情况，但重要的是要记住，在 *放弃* 一致性和提供不可预测的结果之间有一条细微的界线。
+- en: Databases that claim to be on the availability side, when used correctly, are
+    still able to serve consistent results from replicas, given there are enough replicas
+    alive. Of course, there are more complicated failure scenarios and CAP conjecture
+    is just a rule of thumb, and it doesn’t necessarily tell the whole truth.^([1](ch11.html#idm46466886319240))
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 声称属于可用性方面的数据库，在正确使用时，仍然能够从副本中提供一致的结果，只要有足够多的副本存活。当然，还有更复杂的故障情况，CAP 猜想只是一个经验法则，并不一定能说明全部真相。^([1](ch11.html#idm46466886319240))
+- en: Harvest and Yield
+  id: totrans-34
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 收获和收益
+- en: 'CAP conjecture discusses consistency and availability only in their strongest
+    forms: *linearizability* and the ability of the system to eventually respond to
+    every request. This forces us to make a hard trade-off between the two properties.
+    However, some applications can benefit from slightly relaxed assumptions and we
+    can think about these properties in their weaker forms.'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CAP 猜想仅讨论一致性和可用性的最强形式：*线性一致性* 和系统最终能够响应每个请求的能力。这迫使我们在两个属性之间做出艰难的权衡。然而，一些应用程序可以从略微放松的假设中受益，我们可以考虑这些属性的较弱形式。
+- en: 'Instead of being *either* consistent *or* available, systems can provide relaxed
+    guarantees. We can define two tunable metrics: *harvest* and *yield*, choosing
+    between which still constitutes correct behavior [[FOX99]](app01.html#FOX99):'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不是 *一致* 或 *可用*，系统可以提供放宽的保证。我们可以定义两个可调整的指标：*收获* 和 *收益*，在选择其中之间仍然构成正确的行为 [[FOX99]](app01.html#FOX99)。
+- en: Harvest
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 收获
+- en: 'Defines how complete the query is: if the query has to return 100 rows, but
+    can fetch only 99 due to unavailability of some nodes, it still can be better
+    than failing the query completely and returning nothing.'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 定义查询的完成度：如果查询需要返回 100 行，但由于某些节点不可用只能获取 99 行，这仍然比完全失败并返回空值要好。
+- en: Yield
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 收益
+- en: Specifies the number of requests that were completed successfully, compared
+    to the total number of attempted requests. Yield is different from the uptime,
+    since, for example, a busy node is not down, but still can fail to respond to
+    some of the requests.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 指定成功完成的请求数量，与尝试的总请求数进行比较。收益与正常运行时间不同，例如，繁忙的节点可能不是宕机，但仍可能无法响应某些请求。
+- en: This shifts the focus of the trade-off from the absolute to the relative terms.
+    We can trade harvest for yield and allow some requests to return incomplete data.
+    One of the ways to increase yield is to return query results only from the available
+    partitions (see [“Database Partitioning”](ch13.html#database_partitioning)). For
+    example, if a subset of nodes storing records of some users is down, we can still
+    continue serving requests for other users. Alternatively, we can require the critical
+    application data to be returned only in its entirety, but allow some deviations
+    for other requests.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将交易的焦点从绝对术语转移到相对术语。我们可以通过交换收获和产量来增加产量，并允许某些请求返回不完整的数据。增加产量的一种方法是仅从可用分区返回查询结果（见[“数据库分区”](ch13.html#database_partitioning)）。例如，如果存储某些用户记录的节点子集已关闭，我们仍然可以继续为其他用户提供服务请求。或者，我们可以要求将关键应用数据仅完整地返回，但允许其他请求有所偏差。
+- en: Defining, measuring, and making a conscious choice between harvest and yield
+    helps us to build systems that are more resilient to failures.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 定义、衡量并在收获与产量之间做出明智选择，有助于我们构建更具抗击失败能力的系统。
+- en: Shared Memory
+  id: totrans-43
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 共享内存
+- en: For a client, the distributed system storing the data acts as if it has shared
+    storage, similar to a single-node system. Internode communication and message
+    passing are abstracted away and happen behind the scenes. This creates an illusion
+    of a shared memory.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于客户端而言，存储数据的分布式系统表现得就像具有共享存储的单节点系统一样。节点间通信和消息传递被抽象化并在幕后进行。这创造了共享内存的错觉。
+- en: A single unit of storage, accessible by read or write operations, is usually
+    called a *register*. We can view *shared memory* in a distributed database as
+    an array of such registers.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 单个可通过读取或写入操作访问的存储单元通常称为*寄存器*。我们可以将分布式数据库中的*共享内存*视为这些寄存器的数组。
+- en: We identify every operation by its *invocation* and *completion* events. We
+    define an operation as *failed* if the process that invoked it crashes before
+    it completes. If both invocation and completion events for one operation happen
+    before the other operation is invoked, we say that this operation *precedes* the
+    other one, and these two operations are *sequential*. Otherwise, we say that they
+    are *concurrent*.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们通过其*调用*和*完成*事件标识每个操作。如果调用它的进程在完成之前崩溃，则我们将该操作定义为*失败*。如果一个操作的调用和完成事件发生在另一个操作被调用之前，我们称这个操作*先于*另一个操作，并且这两个操作是*顺序*的。否则，我们称它们是*并发*的。
+- en: 'In [Figure 11-1](#shared_memory_1), you can see processes `P[1]` and `P[2]`
+    executing different operations:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[图 11-1](#shared_memory_1)中，您可以看到进程`P[1]`和`P[2]`执行不同操作：
+- en: a) The operation performed by process `P[2]` starts *after* the operation executed
+    by `P[1]` has already finished, and the two operations are *sequential*.
+  id: totrans-48
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: a) 由进程`P[2]`执行的操作在`P[1]`执行的操作结束*之后*开始，并且这两个操作是*顺序*的。
+- en: b) There’s an overlap between the two operations, so these operations are *concurrent*.
+  id: totrans-49
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: b) 这两个操作存在重叠，因此这些操作是*并发*的。
+- en: c) The operation executed by `P[2]` starts *after* and completes *before* the
+    operation executed by `P[1]`. These operations are *concurrent*, too.
+  id: totrans-50
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: c) 由`P[2]`执行的操作在`P[1]`执行的操作之后*开始*并且在其*完成*之前*完成*。这些操作也是*并发*的。
+- en: '![dbin 1101](assets/dbin_1101.png)'
+  id: totrans-51
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 1101](assets/dbin_1101.png)'
+- en: Figure 11-1\. Sequential and concurrent operations
+  id: totrans-52
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 11-1\. 顺序和并发操作
+- en: 'Multiple readers or writers can access the register simultaneously. Read and
+    write operations on registers are *not immediate* and take some time. Concurrent
+    read/write operations performed by different processes are not *serial*: depending
+    on how registers behave when operations overlap, they might be ordered differently
+    and may produce different results. Depending on how the register behaves in the
+    presence of concurrent operations, we distinguish among three types of registers:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 多个读者或写者可以同时访问寄存器。对寄存器的读取和写入操作都*不是即时*的，并需要一些时间。由不同进程执行的并发读写操作并不*串行*：根据操作重叠时寄存器的行为方式，它们的排序可能不同，可能产生不同的结果。根据寄存器在存在并发操作时的行为方式，我们将其区分为三种类型的寄存器：
+- en: Safe
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 安全
+- en: Reads to the safe registers may return *arbitrary* values within the range of
+    the register during a concurrent write operation (which does not sound very practical,
+    but might describe the semantics of an asynchronous system that does not impose
+    the order). Safe registers with binary values might appear to be *flickering*
+    (i.e., returning results alternating between the two values) during reads concurrent
+    to writes.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对安全寄存器的读取可能在并发写入操作期间返回*任意*值（这听起来并不实际，但可能描述了不强制执行顺序的异步系统的语义）。具有二进制值的安全寄存器在读取并发写入期间可能会*闪烁*（即，在读取期间交替返回两个值）。
+- en: Regular
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 常规
+- en: 'For regular registers, we have slightly stronger guarantees: a read operation
+    can return only the value written by the most recent *completed* write or the
+    value written by the write operation that overlaps with the current read. In this
+    case, the system has some notion of order, but write results are not visible to
+    all the readers simultaneously (for example, this may happen in a replicated database,
+    where the master accepts writes and replicates them to workers serving reads).'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于常规寄存器，我们有稍强的保证：读操作只能返回最近*完成*写入的值或与当前读取重叠的写入操作的值。在这种情况下，系统具有某种顺序概念，但写入结果不会同时对所有读取者可见（例如，在复制数据库中可能会发生这种情况，其中主节点接受写入并将其复制给提供读取服务的工作节点）。
+- en: Atomic
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 原子
+- en: 'Atomic registers guarantee linearizability: every write operation has a single
+    moment before which every read operation returns an old value and after which
+    every read operation returns a new one. Atomicity is a fundamental property that
+    simplifies reasoning about the system state.'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 原子寄存器保证了线性化：每个写操作在之前有一个单一时刻，每个读操作都返回旧值，在之后每个读操作都返回新值。原子性是简化系统状态推理的基本属性。
+- en: Ordering
+  id: totrans-60
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 排序
+- en: When we see a sequence of events, we have some intuition about their execution
+    order. However, in a distributed system it’s not always that easy, because it’s
+    hard to know when *exactly* something has happened and have this information available
+    instantly across the cluster. Each participant may have its view of the state,
+    so we have to look at every operation and define it in terms of its *invocation*
+    and *completion* events and describe the operation bounds.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们看到一系列事件时，我们对它们的执行顺序有一些直觉。然而，在分布式系统中，这并不总是那么容易，因为很难准确知道*什么时候*发生了某件事，并且立即在整个集群中可用这些信息。每个参与者可能有自己的状态视图，因此我们必须查看每个操作并以其*调用*和*完成*事件来定义它，并描述操作的边界。
+- en: Let’s define a system in which processes can execute `read(register)` and `write(register,
+    value)` operations on shared registers. Each process executes its own set of operations
+    sequentially (i.e., every invoked operation has to complete before it can start
+    the next one). The combination of sequential process executions forms a global
+    history, in which operations can be executed concurrently.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们定义一个系统，在这个系统中进程可以在共享寄存器上执行`read(register)`和`write(register, value)`操作。每个进程按顺序执行自己的一组操作（即，必须在开始下一个操作之前完成每个调用的操作）。顺序进程执行的组合形成了全局历史，其中操作可以并发执行。
+- en: 'The simplest way to think about consistency models is in terms of read and
+    write operations and ways they can overlap: read operations have no side effects,
+    while writes change the register state. This helps to reason about when exactly
+    data becomes readable after the write. For example, consider a history in which
+    two processes execute the following events concurrently:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 考虑一种历史，其中两个进程同时执行以下事件的最简单方法是考虑一致性模型的读写操作和它们可以重叠的方式：读操作没有副作用，而写操作则更改寄存器状态。这有助于推断在写入之后数据何时确实变得可读。例如，考虑两个进程同时执行以下事件的历史：
+- en: '[PRE0]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'When looking at these events, it’s unclear what is an outcome of the `read(x)`
+    operations in both cases. We have several possible histories:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当观察这些事件时，不清楚在这两种情况下`read(x)`操作的结果是什么。我们有几种可能的历史：
+- en: Write completes before both reads.
+  id: totrans-66
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 写入在两次读取之前完成。
+- en: Write and two reads can get interleaved, and can be executed between the reads.
+  id: totrans-67
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 写入和两次读取可以交错，并且可以在读取之间执行。
+- en: Both reads complete before the write.
+  id: totrans-68
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 两次读取在写入之前完成。
+- en: There’s no simple answer to what should happen if we have just one copy of data.
+    In a replicated system, we have more combinations of possible states, and it can
+    get even more complicated when we have multiple processes reading and writing
+    the data.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们只有一份数据，那么应该发生什么并没有简单的答案。在复制系统中，我们有更多可能状态的组合，当多个进程读写数据时，情况会变得更加复杂。
+- en: 'If all of these operations were executed by the single process, we could enforce
+    a strict order of events, but it’s harder to do so with multiple processes. We
+    can group the potential difficulties into two groups:'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果所有这些操作由单个进程执行，我们可以强制执行事件的严格顺序，但是在多个进程中这样做更难。我们可以将潜在的困难分为两组：
+- en: Operations may overlap.
+  id: totrans-71
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 操作可能重叠。
+- en: Effects of the nonoverlapping calls might not be visible immediately.
+  id: totrans-72
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 非重叠调用的影响可能不会立即可见。
+- en: To reason about the operation order and have nonambiguous descriptions of possible
+    outcomes, we have to define consistency models. We discuss concurrency in distributed
+    systems in terms of shared memory and concurrent systems, since most of the definitions
+    and rules defining consistency still apply. Even though a lot of terminology between
+    concurrent and distributed systems overlap, we can’t directly apply most of the
+    concurrent algorithms, because of differences in communication patterns, performance,
+    and reliability.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了推理操作顺序并提供可能结果的非歧义描述，我们必须定义一致性模型。我们从共享内存和并发系统的角度讨论分布式系统中的并发性，因为大多数定义和规则定义一致性仍然适用。尽管并发和分布式系统之间的术语有很多重叠，但由于通信模式、性能和可靠性的差异，我们不能直接应用大多数并发算法。
+- en: Consistency Models
+  id: totrans-74
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 一致性模型
+- en: 'Since operations on shared memory registers are allowed to overlap, we should
+    define clear semantics: what happens if multiple clients read or modify different
+    copies of data simultaneously or within a short period. There’s no single right
+    answer to that question, since these semantics are different depending on the
+    application, but they are well studied in the context of consistency models.'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于允许在共享内存寄存器上执行操作重叠，我们应该定义清晰的语义：如果多个客户端同时或在短时间内读取或修改不同副本的数据会发生什么。对于这个问题并没有单一的正确答案，因为这些语义根据应用程序不同而不同，但在一致性模型的背景下已经被广泛研究。
+- en: '*Consistency models* provide different semantics and guarantees. You can think
+    of a consistency model as a contract between the participants: what each replica
+    has to do to satisfy the required semantics, and what users can expect when issuing
+    read and write operations.'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*一致性模型* 提供不同的语义和保证。你可以把一致性模型看作是参与者之间的契约：每个副本为满足所需语义必须做的事情，以及用户在发出读写操作时可以期望的内容。'
+- en: Consistency models describe what expectations clients might have in terms of
+    possible returned values despite the existence of multiple copies of data and
+    concurrent accesses to it. In this section, we will discuss *single-operation*
+    consistency models.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一致性模型描述客户可能在多个数据副本和并发访问存在的情况下，对可能返回的值有什么期望。在本节中，我们将讨论*单操作*一致性模型。
+- en: Each model describes how far the behavior of the system is from the behavior
+    we might expect or find natural. It helps us to distinguish between “all possible
+    histories” of interleaving operations and “histories permissible under model X,”
+    which significantly simplifies reasoning about the visibility of state changes.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个模型描述系统行为与我们可能期望或找到自然的行为之间的距离有多远。它帮助我们区分交织操作的“所有可能历史”和在模型X下允许的历史，这显著简化了对状态更改可见性的推理。
+- en: We can think about consistency from the perspective of *state*, describe which
+    state invariants are acceptable, and establish allowable relationships between
+    copies of the data placed onto different replicas. Alternatively, we can consider
+    *operation* consistency, which provides an outside view on the data store, describes
+    operations, and puts constraints on the order in which they occur [[TANENBAUM06]](app01.html#TANENBAUM06)
+    [[AGUILERA16]](app01.html#AGUILERA16).
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以从*状态*的角度考虑一致性，描述哪些状态不变量是可接受的，并建立放置在不同副本上的数据副本之间的允许关系。或者，我们可以考虑*操作*一致性，它提供了对数据存储的外部视图，描述了操作，并对它们发生的顺序施加了约束
+    [[TANENBAUM06]](app01.html#TANENBAUM06) [[AGUILERA16]](app01.html#AGUILERA16)。
+- en: 'Without a global clock, it is difficult to give distributed operations a precise
+    and deterministic order. It’s like a Special Relativity Theory for data: every
+    participant has its own perspective on state and time.'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 没有全局时钟，很难给分布式操作一个精确且确定的顺序。这就像数据的特殊相对论：每个参与者对状态和时间都有自己的视角。
+- en: Theoretically, we could grab a system-wide lock every time we want to change
+    the system state, but it’d be highly impractical. Instead, we use a set of rules,
+    definitions, and restrictions that limit the number of possible histories and
+    outcomes.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理论上，我们可以在每次想要更改系统状态时抓取系统范围的锁，但这将是极不实际的。相反，我们使用一组规则、定义和限制，限制了可能的历史和结果数量。
+- en: Consistency models add another dimension to what we discussed in [“Infamous
+    CAP”](#infamous_cap). Now we have to juggle not only consistency and availability,
+    but also consider consistency in terms of synchronization costs [[ATTIYA94]](app01.html#ATTIYA94).
+    Synchronization costs may include latency, additional CPU cycles spent executing
+    additional operations, disk I/O used to persist recovery information, wait time,
+    network I/O, and everything else that can be prevented by avoiding synchronization.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一致性模型为我们在[“Infamous CAP”](#infamous_cap)中讨论的内容增添了另一个维度。现在，我们不仅需要权衡一致性和可用性，还需要考虑同步成本的一致性[[ATTIYA94]](app01.html#ATTIYA94)。同步成本可能包括延迟、执行额外操作所需的额外CPU周期、用于持久化恢复信息的磁盘I/O、等待时间、网络I/O，以及任何可以通过避免同步来预防的其他问题。
+- en: First, we’ll focus on visibility and propagation of operation results. Coming
+    back to the example with concurrent reads and writes, we’ll be able to limit the
+    number of possible histories by either positioning dependent writes after one
+    another or defining a point at which the new value is propagated.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们将关注操作结果的可见性和传播。回到具有并发读写的例子，我们可以通过将依赖写操作放置在彼此之后或定义传播新值的点来限制可能历史的数量。
+- en: We discuss consistency models in terms of *processes* (clients) issuing `read`
+    and `write` operations against the database state. Since we discuss consistency
+    in the context of replicated data, we assume that the database can have multiple
+    replicas.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们讨论一致性模型，这些模型涉及在数据库状态下发出`read`和`write`操作的*进程*（客户端）。由于我们在复制数据的情况下讨论一致性，我们假设数据库可以有多个副本。
+- en: Strict Consistency
+  id: totrans-85
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 严格一致性
+- en: '*Strict consistency* is the equivalent of complete replication transparency:
+    any write by any process is instantly available for the subsequent reads by any
+    process. It involves the concept of a global clock and, if there was a `write(x,
+    1)` at instant `t[1]`, any `read(x)` will return a newly written value `1` at
+    *any* instant `t[2] > t[1]`.'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*严格一致性*相当于完全复制透明性：任何进程的任何写操作都会立即对任何进程的后续读操作可见。它涉及全局时钟的概念，如果在时刻`t[1]`进行了`write(x,
+    1)`操作，则在*任意*时刻`t[2] > t[1]`，任何`read(x)`操作都将返回新写入的值`1`。'
+- en: Unfortunately, this is just a theoretical model, and it’s impossible to implement,
+    as the laws of physics and the way distributed systems work set limits on how
+    fast things may happen [[SINHA97]](app01.html#SINHA97).
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，这只是一个理论模型，无法实施，因为物理定律和分布式系统工作方式设定了事物发生速度的限制[[SINHA97]](app01.html#SINHA97)。
+- en: Linearizability
+  id: totrans-88
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 线性一致性
+- en: '*Linearizability* is the strongest single-object, single-operation consistency
+    model. Under this model, effects of the write become visible to all readers exactly
+    once at some point in time between its start and end, and no client can observe
+    state transitions or side effects of partial (i.e., unfinished, still in-flight)
+    or incomplete (i.e., interrupted before completion) write operations [[LEE15]](app01.html#LEE15).'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*线性一致性*是最强的单对象、单操作一致性模型。在此模型下，写操作的效果在其开始和结束之间的某个时刻对所有读者可见，没有客户端可以观察到部分（即未完成或未完成前中断）或不完整的写操作的状态转换或副作用[[LEE15]](app01.html#LEE15)。'
+- en: Concurrent operations are represented as one of the possible sequential histories
+    for which visibility properties hold. There is some indeterminism in linearizability,
+    as there may exist more than one way in which the events can be ordered [[HERLIHY90]](app01.html#HERLIHY90).
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并发操作被表示为其中一个可能的顺序历史，其中保持了可见性属性。在线性化中存在一些不确定性，因为事件的顺序可能不止一种[[HERLIHY90]](app01.html#HERLIHY90)。
+- en: If two operations overlap, they may take effect in any order. All read operations
+    that occur after write operation completion can observe the effects of this operation.
+    As soon as a single read operation returns a particular value, all reads that
+    come after it return the value *at least* as recent as the one it returns [[BAILIS14a]](app01.html#BAILIS14a).
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果两个操作重叠，它们可以以任何顺序生效。所有在写操作完成后发生的读操作都可以观察到此操作的效果。一旦单个读操作返回特定值，所有之后的读操作将返回*至少*与其返回的最近值相同[[BAILIS14a]](app01.html#BAILIS14a)。
+- en: There is some flexibility in terms of the order in which concurrent events occur
+    in a global history, but they cannot be reordered arbitrarily. Operation results
+    should not become effective before the operation starts as that would require
+    an oracle able to predict future operations. At the same time, results have to
+    take effect before completion, since otherwise, we cannot define a linearization
+    point.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在全局历史中，并发事件发生的顺序有一定的灵活性，但不能随意重新排序。操作结果不应在操作开始前生效，因为那需要一个能预测未来操作的预言机。同时，结果必须在完成之前生效，否则我们无法定义一个线性化点。
+- en: Linearizability respects both sequential process-local operation order and the
+    order of operations running in parallel relative to other processes, and defines
+    a *total order* of the events.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 线性化性尊重顺序过程本地操作顺序以及相对于其他进程并行运行的操作顺序，并定义了事件的*全序*。
+- en: 'This order should be *consistent*, which means that every read of the shared
+    value should return the latest value written to this shared variable preceding
+    this read, or the value of a write that overlaps with this read. Linearizable
+    write access to a shared variable also implies mutual exclusion: between the two
+    concurrent writes, only one can go first.'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种顺序应当是*一致*的，也就是说，对共享变量的每次读取应当返回在此读取之前写入到该共享变量的最新值，或者与此读取重叠的写入的值。对共享变量的线性化写访问也意味着互斥：在两个并发写入之间，只有一个可以先行。
+- en: Even though operations are concurrent and have some overlap, their effects become
+    visible in a way that makes them appear sequential. No operation happens instantaneously,
+    but still *appears* to be atomic.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管操作是并发的并且有一些重叠，它们的效果以一种使它们看起来是顺序的方式变得可见。没有操作是瞬间发生的，但看起来*像是*原子的。
+- en: 'Let’s consider the following history:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们考虑以下历史记录：
+- en: '[PRE1]'
+  id: totrans-97
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'In [Figure 11-2](#linearizability_1), we have three processes, two of which
+    perform write operations on the register `x`, which has an initial value of `∅`.
+    Read operations can observe these writes in one of the following ways:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[图 11-2](#linearizability_1)中，我们有三个进程，其中两个在寄存器`x`上执行写操作，该寄存器的初始值为`∅`。读操作可以以以下方式观察这些写操作：
+- en: a) The first read operation can return `1`, `2`, or `∅` (the initial value,
+    a state before both writes), since both writes are still in-flight. The first
+    read can get ordered *before* both writes, *between* the first and second writes,
+    and *after* both writes.
+  id: totrans-99
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: a) 第一次读操作可以返回`1`、`2`或`∅`（初始值，在两次写入之前的状态），因为两次写入仍在进行中。第一次读可以在两次写入之前、第一次和第二次写入之间，或两次写入之后被排序。
+- en: b) The second read operation can return only `1` and `2`, since the first write
+    has completed, but the second write didn’t return yet.
+  id: totrans-100
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: b) 第二次读操作只能返回`1`和`2`，因为第一次写入已经完成，但第二次写入尚未返回。
+- en: c) The third read can only return `2`, since the second write is ordered after
+    the first.
+  id: totrans-101
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: c) 第三次读操作只能返回`2`，因为第二次写入在第一次之后被排序。
+- en: '![dbin 1102](assets/dbin_1102.png)'
+  id: totrans-102
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 1102](assets/dbin_1102.png)'
+- en: Figure 11-2\. Example of linearizability
+  id: totrans-103
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 11-2\. 线性化性示例
+- en: Linearization point
+  id: totrans-104
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 线性化点
+- en: 'One of the most important traits of linearizability is visibility: once the
+    operation is complete, everyone must see it, and the system can’t “travel back
+    in time,” reverting it or making it invisible for some participants. In other
+    words, linearization prohibits stale reads and requires reads to be monotonic.'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 线性化性的最重要特征之一是可见性：一旦操作完成，所有人必须看到它，系统不能“倒回时间”，使其对某些参与者不可见或撤销。换句话说，线性化禁止陈旧读取，并要求读取是单调的。
+- en: This consistency model is best explained in terms of atomic (i.e., uninterruptible,
+    indivisible) operations. Operations do not have to *be* instantaneous (also because
+    there’s no such thing), but their *effects* have to become visible at some point
+    in time, making an illusion that they were instantaneous. This moment is called
+    a *linearization point*.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种一致性模型最好通过原子操作（即不可中断、不可分割的操作）来解释。操作不必是*瞬时*的（也因为这种概念并不存在），但它们的*效果*必须在某个时间点变得可见，使其看起来像是瞬时发生的。这一时刻称为*线性化点*。
+- en: Past the linearization point of the write operation (in other words, when the
+    value becomes visible for other processes) every process has to see either the
+    value this operation wrote or some later value, if some additional write operations
+    are ordered after it. A visible value should remain stable until the next one
+    becomes visible after it, and the register should not alternate between the two
+    recent states.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写操作的线性化点之后（换句话说，当值对其他进程可见时），每个进程必须看到此操作写入的值或稍后的某个值，如果有其他写操作在其后被排序。可见值应保持稳定，直到其后的下一个值变为可见，并且寄存器不应在最近两个状态之间交替。
+- en: Note
+  id: totrans-108
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'Most of the programming languages these days offer atomic primitives that allow
+    atomic `write` and `compare-and-swap` (CAS) operations. Atomic `write` operations
+    do not consider current register values, unlike CAS, that move from one value
+    to the next only when the previous value is unchanged [[HERLIHY94]](app01.html#HERLIHY94).
+    Reading the value, modifying it, and then writing it with CAS is more complex
+    than simply checking and setting the value, because of the possible *ABA problem*
+    [[DECHEV10]](app01.html#DECHEV10): if CAS expects the value `A` to be present
+    in the register, it will be installed even if the value `B` was set and then switched
+    back to `A` by the other two concurrent write operations. In other words, the
+    presence of the value `A` alone does not guarantee that the value hasn’t been
+    changed since the last read.'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数编程语言这些天都提供原子原语，允许原子`写`和`比较和交换`（CAS）操作。原子`写`操作不考虑当前寄存器值，不像 CAS，它仅在先前值未更改时才从一个值移动到下一个值
+    [[HERLIHY94]](app01.html#HERLIHY94)。读取值、修改它，然后使用 CAS 写入它比简单检查和设置值更复杂，因为可能存在*ABA问题*
+    [[DECHEV10]](app01.html#DECHEV10)：如果 CAS 期望在寄存器中存在值`A`，即使值`B`已设置并由其他两个并发写入操作切换回`A`，它也会安装。换句话说，仅存在值`A`并不能保证自上次读取以来值未更改。
+- en: The linearization point serves as a cutoff, after which operation effects become
+    visible. We can implement it by using locks to guard a critical section, atomic
+    read/write, or read-modify-write primitives.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 线性化点作为截止点，其后操作效果变得可见。我们可以通过使用锁来保护临界区、原子读/写或读-修改-写原语来实现它。
+- en: '[Figure 11-3](#linearizability_2) shows that linearizability assumes hard time
+    bounds and the clock is *real time*, so the operation effects have to become visible
+    *between* `t[1]`, when the operation request was issued, and `t[2]`, when the
+    process received a response.'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 11-3](#linearizability_2) 显示线性化假定硬时间界限，时钟是*实时*的，因此操作效果必须在`t[1]`（发出操作请求时）和`t[2]`（接收到响应时）之间变得可见。'
+- en: '![dbin 1103](assets/dbin_1103.png)'
+  id: totrans-112
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 1103](assets/dbin_1103.png)'
+- en: Figure 11-3\. Time bounds of a linearizable operation
+  id: totrans-113
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 11-3\. 线性化操作的时间界限
+- en: '[Figure 11-4](#linearizability_3) illustrates that the linearization point
+    *cuts* the history into *before* and *after*. Before the linearization point,
+    the old value is visible, after it, the new value is visible.'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 11-4](#linearizability_3) 显示线性化点*切断*了历史记录，将其分为*之前*和*之后*。线性化点之前，旧值可见；之后，新值可见。'
+- en: '![dbin 1104](assets/dbin_1104.png)'
+  id: totrans-115
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 1104](assets/dbin_1104.png)'
+- en: Figure 11-4\. Linearization point
+  id: totrans-116
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 11-4\. 线性化点
+- en: Cost of linearizability
+  id: totrans-117
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 线性化成本
+- en: Many systems avoid implementing linearizability today. Even CPUs do not offer
+    linearizability when accessing main memory by default. This has happened because
+    synchronization instructions are expensive, slow, and involve cross-node CPU traffic
+    and cache invalidations. However, it is possible to implement linearizability
+    using low-level primitives [[MCKENNEY05a]](app01.html#MCKENNEY05a), [[MCKENNEY05b]](app01.html#MCKENNEY05b).
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当今许多系统避免实现线性化。即使是 CPU 在默认情况下访问主内存时也不提供线性化。这是因为同步指令昂贵、缓慢，并涉及跨节点的 CPU 流量和缓存失效。然而，可以使用低级别的原语实现线性化
+    [[MCKENNEY05a]](app01.html#MCKENNEY05a)，[[MCKENNEY05b]](app01.html#MCKENNEY05b)。
+- en: In concurrent programming, you can use compare-and-swap operations to introduce
+    linearizability. Many algorithms work by *preparing* results and then using CAS
+    for swapping pointers and *publishing* them. For example, we can implement a concurrent
+    queue by creating a linked list node and then atomically appending it to the tail
+    of the list [[KHANCHANDANI18]](app01.html#KHANCHANDANI18).
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在并发编程中，可以使用比较和交换操作引入线性化。许多算法通过*准备*结果，然后使用 CAS 交换指针和*发布*它们来工作。例如，我们可以通过创建链表节点，然后原子地将其附加到列表尾部来实现并发队列
+    [[KHANCHANDANI18]](app01.html#KHANCHANDANI18)。
+- en: 'In distributed systems, linearizability requires coordination and ordering.
+    It can be implemented using *consensus*: clients interact with a replicated store
+    using messages, and the consensus module is responsible for ensuring that applied
+    operations are consistent and identical across the cluster. Each write operation
+    will appear instantaneously, exactly once at some point between its invocation
+    and completion events [[HOWARD14]](app01.html#HOWARD14).'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在分布式系统中，**线性一致性**需要协调和排序。它可以通过*共识*来实现：客户端使用消息与复制存储交互，共识模块负责确保应用的操作在整个集群中是一致且相同的。每个写操作在其调用和完成事件之间的某一时刻将会出现且仅出现一次
+    [[HOWARD14]](app01.html#HOWARD14)。
+- en: Interestingly, linearizability in its traditional understanding is regarded
+    as a *local* property and implies composition of independently implemented and
+    verified elements. Combining linearizable histories produces a history that is
+    also linearizable [[HERLIHY90]](app01.html#HERLIHY90). In other words, a system
+    in which all objects are linearizable, is also linearizable. This is a very useful
+    property, but we should remember that its scope is limited to a single object
+    and, even though operations on two independent objects are linearizable, operations
+    that involve both objects have to rely on additional synchronization means.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有趣的是，传统理解中的线性一致性被视为一个*局部*属性，并且意味着独立实现和验证元素的组合。组合线性化的历史会产生一个同样是线性一致的历史 [[HERLIHY90]](app01.html#HERLIHY90)。换句话说，一个所有对象都是线性一致的系统，也是线性一致的。这是一个非常有用的属性，但我们应该记住，它的适用范围仅限于单个对象，即使在两个独立对象上的操作是线性一致的，涉及两个对象的操作也必须依赖额外的同步手段。
+- en: Sequential Consistency
+  id: totrans-122
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 顺序一致性
+- en: Achieving linearizability might be too expensive, but it is possible to relax
+    the model, while still providing rather strong consistency guarantees. *Sequential
+    consistency* allows ordering operations as if they were executed in *some* sequential
+    order, while requiring operations of each individual process to be executed in
+    the same order they were performed by the process.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然实现线性一致性可能会太昂贵，但可以放宽模型，同时仍提供相当强的一致性保证。*顺序一致性*允许将操作排序，就像它们按照*某种*顺序执行一样，同时要求每个单独进程的操作按照它们由该进程执行的顺序执行。
+- en: Processes can observe operations executed by other participants in the order
+    consistent with their own history, but this view can be arbitrarily stale from
+    the global perspective [[KINGSBURY18a]](app01.html#KINGSBURY18a). Order of execution
+    *between* processes is undefined, as there’s no shared notion of time.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 进程可以观察其他参与者按照与自己历史一致的顺序执行的操作，但这种视图在全局视角下可能会过时无用 [[KINGSBURY18a]](app01.html#KINGSBURY18a)。进程之间的执行顺序*未定义*，因为没有共享的时间概念。
+- en: Sequential consistency was initially introduced in the context of concurrency,
+    describing it as a way to execute multiprocessor programs correctly. The original
+    description required memory requests to the same cell to be ordered in the queue
+    (FIFO, arrival order), did not impose global ordering on the overlapping writes
+    to independent memory cells, and allowed reads to fetch the value from the memory
+    cell, or the latest value from the queue if the queue was nonempty [[LAMPORT79]](app01.html#LAMPORT79).
+    This example helps to understand the semantics of sequential consistency. Operations
+    can be ordered in different ways (depending on the arrival order, or even arbitrarily
+    in case two writes arrive simultaneously), but all processes *observe* the operations
+    in the same order.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 顺序一致性最初在并发上下文中引入，描述它作为正确执行多处理器程序的一种方式。最初的描述要求将对同一单元的内存请求按照队列（FIFO，到达顺序）排序，不对独立内存单元的重叠写入强加全局顺序，并允许读取从内存单元获取值，或者如果队列非空，则从队列获取最新值
+    [[LAMPORT79]](app01.html#LAMPORT79)。这个例子有助于理解顺序一致性的语义。操作可以按不同方式排序（取决于到达顺序，或者在两个写入同时到达时甚至是任意的），但所有进程都*观察*操作以相同的顺序。
+- en: 'Each process can issue read and write requests in an order specified by its
+    own program, which is very intuitive. Any nonconcurrent, single-threaded program
+    executes its steps this way: one after another. All write operations propagating
+    from the same process appear in the order they were submitted by this process.
+    Operations propagating from different sources may be ordered *arbitrarily*, but
+    this order will be consistent from the readers’ perspective.'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个进程可以按照其自己程序指定的顺序发出读取和写入请求，这非常直观。任何非并发的单线程程序都是按照这种方式执行其步骤：一个接着一个。来自同一进程的所有写操作以它们被该进程提交的顺序出现。来自不同源的操作可能被*任意*排序，但是这个顺序对于读者来说是一致的。
+- en: Note
+  id: totrans-127
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注：
+- en: 'Sequential consistency is often confused with linearizability since both have
+    similar semantics. Sequential consistency, just as linearizability, requires operations
+    to be globally ordered, but linearizability requires the local order of each process
+    and global order to be consistent. In other words, linearizability respects a
+    real-time operation order. Under sequential consistency, ordering holds only for
+    the same-origin writes [[VIOTTI16]](app01.html#VIOTTI16). Another important distinction
+    is composition: we can combine linearizable histories and still expect results
+    to be linearizable, while sequentially consistent schedules are not composable
+    [[ATTIYA94]](app01.html#ATTIYA94).'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 顺序一致性经常与线性化混淆，因为两者具有相似的语义。顺序一致性，正如线性化一样，要求操作被全局有序化，但线性化要求每个进程的局部顺序和全局顺序保持一致。换句话说，线性化尊重实时操作顺序。在顺序一致性下，顺序仅适用于同源写操作
+    [[VIOTTI16]](app01.html#VIOTTI16)。另一个重要的区别是组合性：我们可以组合线性化的历史，并期望结果是线性化的，而顺序一致的调度是不可组合的
+    [[ATTIYA94]](app01.html#ATTIYA94)。
+- en: '[Figure 11-5](#sequential_consistency_3) shows how `write(x,1)` and `write(x,2)`
+    can become visible to `P[3]` and `P[4]`. Even though in wall-clock terms, `1`
+    was written *before* `2`, it can get ordered after `2`. At the same time, while
+    `P[3]` already reads the value `1`, `P[4]` can still read `2`. However, *both*
+    orders, `1 → 2` and `2 → 1`, are valid, as long as they’re consistent for different
+    readers. What’s important here is that both `P[3]` and `P[4]` have observed values
+    *in the same order*: first `2`, and then `1` [[TANENBAUM14]](app01.html#TANENBAUM14).'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 11-5](#sequential_consistency_3)展示了`write(x,1)`和`write(x,2)`如何对`P[3]`和`P[4]`可见。尽管在墙上钟的术语中，`1`在`2`之前被写入，但它可能在`2`之后被排序。同时，尽管`P[3]`已经读取了值`1`，`P[4]`仍然可以读取`2`。然而，*两种*顺序，`1
+    → 2`和`2 → 1`，都是有效的，只要它们对不同读者一致即可。重要的是，这里`P[3]`和`P[4]`都观察到的值是*相同的顺序*：首先`2`，然后`1`
+    [[TANENBAUM14]](app01.html#TANENBAUM14)。'
+- en: '![dbin 1105](assets/dbin_1105.png)'
+  id: totrans-130
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 1105](assets/dbin_1105.png)'
+- en: Figure 11-5\. Ordering in sequential consistency
+  id: totrans-131
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 11-5\. 顺序一致性中的排序
+- en: 'Stale reads can be explained, for example, by replica divergence: even though
+    writes propagate to different replicas in the same order, they can arrive there
+    at different times.'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，可以通过副本分歧来解释过时读取：即使写操作以相同顺序传播到不同副本，它们可以在不同时间到达那里。
+- en: The main difference with linearizability is the absence of globally enforced
+    time bounds. Under linearizability, an operation has to become effective within
+    its wall-clock time bounds. By the time the write `W₁` operation completes, its
+    results have to be applied, and every reader should be able to see the value *at
+    least* as recent as one written by `W₁`. Similarly, after a read operation `R₁`
+    returns, any read operation that happens after it should return the value that
+    `R₁` has seen or a later value (which, of course, has to follow the same rule).
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与线性化最大的不同是没有全局强制时间界限。在线性化下，操作必须在其墙上钟时间界限内生效。当写操作`W₁`完成时，其结果必须被应用，并且每个读者应该能够看到*至少*与`W₁`写入的一个值一样新的值。类似地，当读操作`R₁`返回后，任何在其之后发生的读操作应该返回`R₁`看到的值或更晚的值（当然，必须遵循相同规则）。
+- en: 'Sequential consistency relaxes this requirement: an operation’s results can
+    become visible *after* its completion, as long as the order is consistent from
+    the individual processors’ perspective. Same-origin writes can’t “jump” over each
+    other: their program order, relative to their own executing process, has to be
+    preserved. The other restriction is that the order in which operations have appeared
+    must be consistent for *all* readers.'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 顺序一致性放宽了这一要求：操作的结果可以在其完成之后才*对外可见*，只要从各个处理器的角度来看顺序是一致的。同源写操作不能“跳过”彼此：它们的程序顺序在其自身执行过程中必须保持。另一个限制是操作出现的顺序对于*所有*读者必须是一致的。
+- en: Similar to linearizability, modern CPUs do not guarantee sequential consistency
+    by default and, since the processor can reorder instructions, we should use memory
+    barriers (also called fences) to make sure that writes become visible to concurrently
+    running threads in order [[DREPPER07]](app01.html#DREPPER07) [[GEORGOPOULOS16]](app01.html#GEORGOPOULOS16).
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 类似于线性可序性，现代 CPU 默认不保证顺序一致性，由于处理器可以重新排序指令，我们应该使用内存屏障（也称为栅栏），确保写操作按照 [[DREPPER07]](app01.html#DREPPER07)
+    [[GEORGOPOULOS16]](app01.html#GEORGOPOULOS16) 的顺序对同时运行的线程可见。
+- en: Causal Consistency
+  id: totrans-136
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 因果一致性
+- en: 'You see, there is only one constant, one universal, it is the only real truth:
+    causality. Action. Reaction. Cause and effect.'
+  id: totrans-137
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: 你看，只有一个常数，一个普遍的真理，那就是因果关系。动作。反应。因果关系。
+- en: ''
+  id: totrans-138
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: Merovingian from *The Matrix Reloaded*
+  id: totrans-139
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: 《黑客帝国：重装上阵》中的梅罗维奇
+- en: Even though having a global operation order is often unnecessary, it might be
+    necessary to establish order between *some* operations. Under the *causal consistency*
+    model, all processes have to see *causally related* operations in the same order.
+    *Concurrent writes* with no causal relationship can be observed in a different
+    order by different processors.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管全局操作顺序通常是不必要的，但在 *因果一致性* 模型下，所有进程必须按照相同的顺序看到 *有因果关系* 的操作。没有因果关系的并发写操作可能会被不同的处理器以不同的顺序观察到。
+- en: First, let’s take a look at *why* we need causality and how writes that have
+    no causal relationship can propagate. In [Figure 11-6](#causal_consistency_no_order),
+    processes `P[1]` and `P[2]` make writes that *aren’t* causally ordered. The results
+    of these operations can propagate to readers at different times and out of order.
+    Process `P[3]` will see the value `1` before it sees `2`, while `P[4]` will first
+    see `2`, and then `1`.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，让我们看看 *为什么* 需要因果关系，以及没有因果关系的写操作如何传播。在 [图 11-6](#causal_consistency_no_order)
+    中，进程 `P[1]` 和 `P[2]` 进行了 *非* 因果排序的写操作。这些操作的结果可以在不同的时间和顺序传播到读者。进程 `P[3]` 在看到值 `1`
+    之前会先看到 `2`，而 `P[4]` 则会先看到 `2`，然后再看到 `1`。
+- en: '![dbin 1106](assets/dbin_1106.png)'
+  id: totrans-142
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 1106](assets/dbin_1106.png)'
+- en: Figure 11-6\. Write operations with no causal relationship
+  id: totrans-143
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 11-6\. 没有因果关系的写操作
+- en: '[Figure 11-7](#causal_consistency_establishing_order) shows an example of causally
+    related writes. In addition to a written value, we now have to specify a logical
+    clock value that would establish a causal order between operations. `P[1]` starts
+    with a write operation `write(x,∅,1)→t[1]`, which starts from the initial value
+    `∅`. `P[2]` performs another write operation, `write(x, t[1], 2)`, and specifies
+    that it is logically ordered *after* `t[1]`, requiring operations to propagate
+    *only* in the order established by the logical clock.'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 11-7](#causal_consistency_establishing_order) 展示了有因果关系的写操作的示例。除了一个写入的值外，我们现在必须指定一个逻辑时钟值，这将在操作之间建立因果顺序。`P[1]`
+    开始执行写操作 `write(x,∅,1)→t[1]`，从初始值 `∅` 开始。`P[2]` 执行另一个写操作 `write(x, t[1], 2)`，并指定它在
+    `t[1]` 之后逻辑上被排序，要求操作仅按照逻辑时钟建立的顺序传播。'
+- en: '![dbin 1107](assets/dbin_1107.png)'
+  id: totrans-145
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 1107](assets/dbin_1107.png)'
+- en: Figure 11-7\. Causally related write operations
+  id: totrans-146
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 11-7\. 有因果关系的写操作
+- en: This establishes a *causal order* between these operations. Even if the latter
+    write propagates faster than the former one, it isn’t made visible until all of
+    its dependencies arrive, and the event order is reconstructed from their logical
+    timestamps. In other words, a happened-before relationship is established logically,
+    without using physical clocks, and all processes agree on this order.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这在这些操作之间建立了一个 *因果顺序*。即使后一个写操作传播得比前一个更快，它也不会在其所有依赖项到达之前变得可见，并且事件顺序是从它们的逻辑时间戳重新构建的。换句话说，逻辑上建立了一个先于关系，而不使用物理时钟，所有进程都同意这个顺序。
+- en: '[Figure 11-8](#causal_consistency_with_order) shows processes `P[1]` and `P[2]`
+    making causally related writes, which propagate to `P[3]` and `P[4]` in their
+    logical order. This prevents us from the situation shown in [Figure 11-6](#causal_consistency_no_order);
+    you can compare histories of `P[3]` and `P[4]` in both figures.'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 11-8](#causal_consistency_with_order)显示了进程 `P[1]` 和 `P[2]` 进行了有因果关系的写操作，这些写操作按照它们的逻辑顺序传播到了
+    `P[3]` 和 `P[4]`。这可以避免 [图 11-6](#causal_consistency_no_order) 中所示的情况；你可以在这两个图中比较
+    `P[3]` 和 `P[4]` 的历史记录。'
+- en: '![dbin 1108](assets/dbin_1108.png)'
+  id: totrans-149
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 1108](assets/dbin_1108.png)'
+- en: Figure 11-8\. Write operations with causal relationship
+  id: totrans-150
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 11-8\. 有因果关系的写操作
+- en: 'You can think of this in terms of communication on some online forum: you post
+    something online, someone sees your post and responds to it, and a third person
+    sees this response and continues the conversation thread. It is possible for conversation
+    threads to diverge: you can choose to respond to one of the conversations in the
+    thread and continue the chain of events, but some threads will have only a few
+    messages in common, so there might be no single history for all the messages.'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以将这个想象为在线论坛上的通信方式：你在网上发布了一些内容，有人看到了你的帖子并对其做出了回应，第三个人看到这个回应并继续了对话线程。对话线程有可能分叉：你可以选择回应对话线程中的一部分并继续事件链，但有些线程可能只有少数消息是共同的，所以可能没有一个单一的所有消息的历史记录。
+- en: 'In a causally consistent system, we get session guarantees for the application,
+    ensuring the view of the database is consistent with its own actions, even if
+    it executes read and write requests against different, potentially inconsistent,
+    servers [[TERRY94]](app01.html#TERRY94). These guarantees are: monotonic reads,
+    monotonic writes, read-your-writes, writes-follow-reads. You can find more information
+    on these session models in [“Session Models”](#client_centric_consistency).'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在因果一致系统中，我们为应用程序获得会话保证，确保数据库的视图与其自身的操作一致，即使它针对不同的、可能不一致的服务器执行读取和写入请求 [[TERRY94]](app01.html#TERRY94)。这些保证包括：单调读取、单调写入、读取后写入、写入后读取。您可以在
+    [“会话模型”](#client_centric_consistency) 中找到有关这些会话模型的更多信息。
+- en: Causal consistency can be implemented using logical clocks [[LAMPORT78]](app01.html#LAMPORT78)
+    and sending context metadata with every message, summarizing which operations
+    logically precede the current one. When the update is received from the server,
+    it contains the latest version of the context. Any operation can be processed
+    only if all operations preceding it have already been applied. Messages for which
+    contexts do not match are buffered on the server as it is too early to deliver
+    them.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以使用逻辑时钟 [[LAMPORT78]](app01.html#LAMPORT78) 和在每条消息中发送上下文元数据来实现因果一致性，总结了哪些操作在逻辑上先于当前操作。当从服务器接收到更新时，它包含了上下文的最新版本。只有在先前的所有操作已经应用后，任何操作才能被处理。如果上下文不匹配的消息将被缓冲在服务器上，因为现在还太早去交付它们。
+- en: 'The two prominent and frequently cited projects implementing causal consistency
+    are Clusters of Order-Preserving Servers (COPS) [[LLOYD11]](app01.html#LLOYD11)
+    and Eiger [[LLOYD13]](app01.html#LLOYD13). Both projects implement causality through
+    a library (implemented as a frontend server that users connect to) and track dependencies
+    to ensure consistency. COPS tracks dependencies through key versions, while Eiger
+    establishes operation order instead (operations in Eiger can depend on operations
+    executed on the other nodes; for example, in the case of multipartition transactions).
+    Both projects do not expose out-of-order operations like eventually consistent
+    stores might do. Instead, they detect and handle conflicts: in COPS, this is done
+    by checking the key order and using application-specific functions, while Eiger
+    implements the last-write-wins rule.'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 两个突出且经常引用的实现因果一致性的项目是顺序保留服务器集群（COPS） [[LLOYD11]](app01.html#LLOYD11) 和 Eiger
+    [[LLOYD13]](app01.html#LLOYD13)。这两个项目通过库来实现因果关系（作为用户连接的前端服务器）并跟踪依赖以确保一致性。COPS通过关键版本跟踪依赖关系，而Eiger则建立操作顺序（Eiger中的操作可以依赖于在其他节点上执行的操作；例如，在多分区事务的情况下）。这两个项目不会像最终一致存储一样公开无序操作。相反，它们检测并处理冲突：在COPS中，通过检查键顺序和使用特定于应用程序的功能来实现，而Eiger则实现了最后写入者胜利的规则。
+- en: Vector clocks
+  id: totrans-155
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 向量时钟
+- en: Establishing causal order allows the system to reconstruct the sequence of events
+    even if messages are delivered out of order, fill the gaps between the messages,
+    and avoid publishing operation results in case some messages are still missing.
+    For example, if messages `{M1(∅, t1), M2(M1, t2), M3(M2, t3)}`, each specifying
+    their dependencies, are causally related and were propagated out of order, the
+    process buffers them until it can collect all operation dependencies and restore
+    their causal order [[KINGSBURY18b]](app01.html#KINGSBURY18b). Many databases,
+    for example, Dynamo [[DECANDIA07]](app01.html#DECANDIA07) and Riak [[SHEEHY10a]](app01.html#SHEEHY10a),
+    use *vector clocks* [[LAMPORT78]](app01.html#LAMPORT78) [[MATTERN88]](app01.html#MATTERN88)
+    for establishing causal order.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 建立因果顺序使得系统能够在消息传递顺序混乱时重构事件序列，填补消息之间的空白，并在某些消息仍然丢失的情况下避免发布操作结果。例如，如果消息 `{M1(∅,
+    t1), M2(M1, t2), M3(M2, t3)}` 指定它们的依赖关系，并且它们因果相关且以无序方式传播，进程会将它们缓冲，直到收集到所有操作的依赖关系并恢复它们的因果顺序
+    [[KINGSBURY18b]](app01.html#KINGSBURY18b)。许多数据库，例如 Dynamo [[DECANDIA07]](app01.html#DECANDIA07)
+    和 Riak [[SHEEHY10a]](app01.html#SHEEHY10a)，使用*向量时钟* [[LAMPORT78]](app01.html#LAMPORT78)
+    [[MATTERN88]](app01.html#MATTERN88) 来建立因果顺序。
+- en: A *vector clock* is a structure for establishing a *partial order* between the
+    events, detecting and resolving divergence between the event chains. With vector
+    clocks, we can simulate common time, global state, and represent asynchronous
+    events as synchronous ones. Processes maintain vectors of *logical clocks*, with
+    one clock per process. Every clock starts at the initial value and is incremented
+    every time a new event arrives (for example, a write occurs). When receiving clock
+    vectors from other processes, a process updates its local vector to the highest
+    clock values per process from the received vectors (i.e., highest clock values
+    the transmitting node has ever seen).
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*向量时钟* 是一种用于建立事件之间*偏序*关系的结构，检测和解决事件链之间分歧的工具。通过向量时钟，我们可以模拟共同时间，全局状态，并将异步事件表示为同步事件。进程维护*逻辑时钟*向量，每个进程一个时钟。每个时钟从初始值开始，并在每次接收到新事件（例如写操作）时递增。当从其他进程接收到时钟向量时，一个进程会更新其本地向量，以便于从接收到的向量中选择每个进程的最高时钟值（即发送节点曾见过的最高时钟值）。'
+- en: To use vector clocks for conflict resolution, whenever we make a write to the
+    database, we first check if the value for the written key already exists locally.
+    If the previous value already exists, we append a new version to the version vector
+    and establish the causal relationship between the two writes. Otherwise, we start
+    a new chain of events and initialize the value with a single version.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在冲突解决中使用向量时钟时，每当我们向数据库写入数据时，我们首先检查所写键的旧值是否已经存在于本地。如果先前的值已存在，则我们将一个新版本附加到版本向量，并建立两个写操作之间的因果关系。否则，我们将启动一个新的事件链，并使用单个版本初始化该值。
+- en: We were talking about consistency in terms of access to shared memory registers
+    and wall-clock operation ordering, and first mentioned potential replica divergence
+    when talking about sequential consistency. Since only write operations to the
+    same memory location have to be ordered, we cannot end up in a situation where
+    we have a write conflict if values are independent [[LAMPORT79]](app01.html#LAMPORT79).
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在讨论访问共享内存寄存器和墙钟操作顺序的一致性时，我们首次提到了顺序一致性时潜在的副本分歧问题。由于只有对同一内存位置的写操作需要排序，如果数值是独立的，我们就不会陷入写冲突的情况
+    [[LAMPORT79]](app01.html#LAMPORT79)。
+- en: 'Since we’re looking for a consistency model that would improve availability
+    and performance, we have to allow replicas to diverge not only by serving stale
+    reads but also by accepting potentially conflicting writes, so the system is allowed
+    to create two independent chains of events. [Figure 11-9](#causal_consistency_3)
+    shows such a divergence: from the perspective of one replica, we see history as
+    `1, 5, 7, 8` and the other one reports `1, 5, 3`. Riak allows users to see and
+    resolve divergent histories [[DAILY13]](app01.html#DAILY13).'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们正在寻找一致性模型，以提高可用性和性能，我们必须允许副本发生分歧，不仅通过提供过时读取来允许，还通过接受潜在冲突的写入来允许，因此系统可以创建两个独立的事件链。[图 11-9](#causal_consistency_3)展示了这样的分歧：从一个副本的视角，我们看到历史是
+    `1, 5, 7, 8`，而另一个副本报告是 `1, 5, 3`。Riak 允许用户查看和解决分歧的历史 [[DAILY13]](app01.html#DAILY13)。
+- en: '![dbin 1109](assets/dbin_1109.png)'
+  id: totrans-161
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 1109](assets/dbin_1109.png)'
+- en: Figure 11-9\. Divergent histories under causal consistency
+  id: totrans-162
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 11-9\. 因果一致性下的分歧历史
+- en: Note
+  id: totrans-163
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: To implement causal consistency, we have to store causal history, add garbage
+    collection, and ask the user to reconcile divergent histories in case of a conflict.
+    Vector clocks can tell you that the conflict has occurred, but do not propose
+    exactly how to resolve it, since resolution semantics are often application-specific.
+    Because of that, some eventually consistent databases, for example, Apache Cassandra,
+    do not order operations causally and use the last-write-wins rule for conflict
+    resolution instead [[ELLIS13]](app01.html#ELLIS13).
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了实现因果一致性，我们必须存储因果历史，添加垃圾回收，并在冲突发生时要求用户调和不同的历史记录。向量时钟可以告诉你冲突已经发生，但不会准确提出如何解决，因为解决语义通常是应用程序特定的。正因如此，例如
+    Apache Cassandra 这样的一些最终一致性数据库不按因果顺序排序操作，并使用最后写入胜出规则来解决冲突 [[ELLIS13]](app01.html#ELLIS13)。
+- en: Session Models
+  id: totrans-165
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 会话模型
+- en: Thinking about consistency in terms of value propagation is useful for database
+    developers, since it helps to understand and impose required data invariants,
+    but some things are easier understood and explained from the client point of view.
+    We can look at our distributed system from the perspective of a single client
+    instead of multiple clients.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从值传播的角度考虑一致性对数据库开发人员非常有用，因为它有助于理解和强制实施所需的数据不变量，但有些事情从客户端的角度来看更容易理解和解释。我们可以从单个客户端的角度来看待我们的分布式系统，而不是多个客户端。
+- en: '*Session models* [[VIOTTI16]](app01.html#VIOTTI16) (also called client-centric
+    consistency models [[TANENBAUM06]](app01.html#TANENBAUM06)) help to reason about
+    the state of the distributed system from the client perspective: how each client
+    observes the state of the system while issuing read and write operations.'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*会话模型* [[VIOTTI16]](app01.html#VIOTTI16)（也称为客户端中心一致性模型 [[TANENBAUM06]](app01.html#TANENBAUM06)）有助于从客户端的视角推理分布式系统的状态：每个客户端在发出读写操作时如何观察系统的状态。'
+- en: 'If other consistency models we discussed so far focus on explaining operation
+    ordering in the presence of concurrent clients, client-centric consistency focuses
+    on how a single client interacts with the system. We still assume that each client’s
+    operations are sequential: it has to finish one operation before it can start
+    executing the next one. If the client crashes or loses connection to the server
+    before its operation completes, we do not make any assumptions about the state
+    of incomplete operations.'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们讨论的其他一致性模型侧重于解释在并发客户端存在的情况下操作排序，那么客户端中心一致性则侧重于单个客户端如何与系统交互。我们仍然假设每个客户端的操作是顺序执行的：它必须在开始执行下一个操作之前完成一个操作。如果客户端在操作完成之前崩溃或失去与服务器的连接，我们不会对未完成操作的状态做出任何假设。
+- en: In a distributed system, clients often can connect to any available replica
+    and, if the results of the recent write against one replica did not propagate
+    to the other one, the client might not be able to observe the state change it
+    has made.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在分布式系统中，客户端通常可以连接到任何可用的副本，如果最近写入的结果未传播到其他副本，则客户端可能无法观察到它所做的状态更改。
+- en: One of the reasonable expectations is that every write issued by the client
+    is visible to it. This assumption holds under the *read-own-writes* consistency
+    model, which states that every read operation following the write on the same
+    or the other replica has to observe the updated value. For example, `read(x)`
+    that was executed immediately after `write(x,V)` will return the value `V`.
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其中一个合理的期望是每个客户端发出的写操作对其可见。这个假设在*读自写一致性*模型下成立，该模型规定在同一或其他副本上执行写操作后的每个读操作必须观察到更新后的值。例如，立即在`write(x,V)`之后执行的`read(x)`将返回值`V`。
+- en: The *monotonic reads* model restricts the value visibility and states that if
+    the `read(x)` has observed the value `V`, the following reads have to observe
+    a value at least as recent as `V` or some later value.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*单调读*模型限制了值的可见性，并指出如果`read(x)`观察到值`V`，则后续的读操作必须观察到至少与`V`相同或更晚的值。'
+- en: The *monotonic writes* model assumes that values originating from the same client
+    appear in the order this client has executed them. If, according to the client
+    session order, `write(x,V2)` was made *after* `write(x,V1)`, their effects have
+    to become visible in the same order (i.e., `V1` first, and then `V2`) to *all*
+    other processes. Without this assumption, old data can be “resurrected,” resulting
+    in data loss.
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*单调写*模型假设来自同一客户端的值按照该客户端执行它们的顺序出现。如果根据客户端会话顺序，`write(x,V2)`是在`write(x,V1)`之后进行的，则它们的效果必须以相同的顺序（即先`V1`，然后`V2`）对*所有*其他进程可见。如果没有这个假设，旧数据可能会“复活”，导致数据丢失。'
+- en: '*Writes-follow-reads* (sometimes referred as session causality) ensures that
+    writes are ordered after writes that were observed by previous read operations.
+    For example, if `write(x,V2)` is ordered after `read(x)` that has returned `V1`,
+    `write(x,V2)` will be ordered *after* `write(x,V1)`.'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*写后读*（有时称为会话因果性）确保写操作在观察到前面读操作的写操作之后进行排序。例如，如果`write(x,V2)`在返回`V1`的`read(x)`之后进行排序，那么`write(x,V2)`将在`write(x,V1)`之后进行排序。'
+- en: Warning
+  id: totrans-174
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Session models make *no* assumptions about operations made by *different* processes
+    (clients) or from the different logical session [[TANENBAUM14]](app01.html#TANENBAUM14).
+    These models describe operation ordering from the point of view of a single process.
+    However, the same guarantees have to hold for *every* process in the system. In
+    other words, if `P[1]` can read its own writes, `P[2]` should be able to read
+    *its* own writes, too.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 会话模型对由*不同*进程（客户端）或来自不同逻辑会话的操作不做任何假设 [[TANENBAUM14]](app01.html#TANENBAUM14)。这些模型描述了从单个进程的角度来看的操作排序。然而，对于系统中的*每个*进程，都必须具备相同的保证。换句话说，如果`P[1]`可以读取自己的写入，那么`P[2]`也应该能够读取*自己的*写入。
+- en: Combining monotonic reads, monotonic writes, and read-own-writes gives Pipelined
+    RAM (PRAM) consistency [[LIPTON88]](app01.html#LIPTON88) [[BRZEZINSKI03]](app01.html#BRZEZINSKI03),
+    also known as FIFO consistency. PRAM guarantees that write operations originating
+    from one process will propagate in the order they were executed by this process.
+    Unlike under sequential consistency, writes from different processes can be observed
+    in different order.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结合单调读、单调写和读写自己的写入提供了管道式RAM（PRAM）一致性 [[LIPTON88]](app01.html#LIPTON88) [[BRZEZINSKI03]](app01.html#BRZEZINSKI03)，也称为FIFO一致性。PRAM保证了来自一个进程的写操作将按照它们由该进程执行的顺序传播。与顺序一致性不同，来自不同进程的写操作可以以不同的顺序观察到。
+- en: The properties described by client-centric consistency models are desirable
+    and, in the majority of cases, are used by distributed systems developers to validate
+    their systems and simplify their usage.
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 客户端中心一致性模型描述的属性是可取的，并且在大多数情况下，被分布式系统开发者用来验证他们的系统并简化其使用。
+- en: Eventual Consistency
+  id: totrans-178
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 最终一致性
+- en: Synchronization is expensive, both in multiprocessor programming and in distributed
+    systems. As we discussed in [“Consistency Models”](#consistency_models), we can
+    relax consistency guarantees and use models that allow some divergence between
+    the nodes. For example, sequential consistency allows reads to be propagated at
+    different speeds.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同步在多处理器编程和分布式系统中都是昂贵的。正如我们在[“一致性模型”](#consistency_models)中讨论的，我们可以放宽一致性保证并使用允许节点之间存在一定差异的模型。例如，顺序一致性允许读取以不同的速度传播。
+- en: Under *eventual consistency*, updates propagate through the system asynchronously.
+    Formally, it states that if there are no *additional* updates performed against
+    the data item, *eventually* all accesses return the latest written value [[VOGELS09]](app01.html#VOGELS09).
+    In case of a conflict, the notion of *latest* value might change, as the values
+    from diverged replicas are reconciled using a conflict resolution strategy, such
+    as last-write-wins or using vector clocks (see [“Vector clocks”](#vector_clocks)).
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在*最终一致性*下，更新异步传播到整个系统。形式上，它表明如果没有针对数据项执行*额外*的更新，则*最终*所有访问都将返回最新写入的值 [[VOGELS09]](app01.html#VOGELS09)。在冲突的情况下，*最新*值的概念可能会改变，因为从分歧副本中协调使用冲突解决策略，例如最后写入胜出或使用向量时钟（见[“向量时钟”](#vector_clocks)）。
+- en: '*Eventually* is an interesting term to describe value propagation, since it
+    specifies no hard time bound in which it has to happen. If the delivery service
+    provides nothing more than an “eventually” guarantee, it doesn’t sound like it
+    can be relied upon. However, in practice, this works well, and many databases
+    these days are described as *eventually consistent*.'
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*最终* 是一个描述数值传播的有趣术语，因为它没有规定必须在固定的时间范围内完成。如果交付服务只提供“最终”保证，听起来似乎不能够依赖。然而，在实践中，这种方式效果很好，现在许多数据库被描述为*最终一致性*。'
+- en: Tunable Consistency
+  id: totrans-182
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 可调一致性
+- en: 'Eventually consistent systems are sometimes described in CAP terms: you can
+    trade availability for consistency or vice versa (see [“Infamous CAP”](#infamous_cap)).
+    From the server-side perspective, eventually consistent systems usually implement
+    tunable consistency, where data is replicated, read, and written using three variables:'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最终一致性系统有时用CAP术语描述：您可以在可用性和一致性之间进行权衡，或者反过来（参见[“臭名昭著的CAP”](#infamous_cap)）。从服务器端的角度来看，最终一致性系统通常实现可调一致性，其中数据使用三个变量进行复制、读取和写入：
+- en: Replication Factor `N`
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制因子 `N`
+- en: Number of nodes that will store a copy of data.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将存储数据副本的节点数。
+- en: Write Consistency `W`
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写一致性 `W`
+- en: Number of nodes that have to acknowledge a write for it to succeed.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 必须确认写入的节点数。
+- en: Read Consistency `R`
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 读一致性 `R`
+- en: Number of nodes that have to respond to a read operation for it to succeed.
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 需要响应读操作的节点数，以使其成功。
+- en: Choosing consistency levels where (`R + W > N`), the system can guarantee returning
+    the most recent written value, because there’s always an overlap between read
+    and write sets. For example, if `N = 3`, `W = 2`, and `R = 2`, the system can
+    tolerate a failure of just one node. Two nodes out of three must acknowledge the
+    write. In the ideal scenario, the system also asynchronously replicates the write
+    to the third node. If the third node is down, anti-entropy mechanisms (see [Chapter 12](ch12.html#anti_entropy))
+    eventually propagate it.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择一致性级别（其中 `R + W > N`），系统可以保证返回最近写入的值，因为读取集和写入集之间始终存在重叠。例如，如果 `N = 3`，`W =
+    2`，`R = 2`，则系统可以容忍一个节点的故障。三个节点中必须有两个节点确认写入。在理想情况下，系统还会将写入异步复制到第三个节点。如果第三个节点宕机，反熵机制（参见[第12章](ch12.html#anti_entropy)）最终会传播它。
+- en: During the read, two replicas out of three have to be available to serve the
+    request for us to respond with consistent results. Any combination of nodes will
+    give us at least one node that will have the most up-to-date record for a given
+    key.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在读取期间，必须有三个副本中的两个副本可用以响应请求，以便我们能够返回一致的结果。任何节点组合都会给我们至少一个节点，其将具有给定键的最新记录。
+- en: Tip
+  id: totrans-192
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: When performing a write, the coordinator should submit it to `N` nodes, but
+    can wait for only `W` nodes before it proceeds (or `W - 1` in case the coordinator
+    is also a replica). The rest of the write operations can complete asynchronously
+    or fail. Similarly, when performing a read, the coordinator has to collect *at
+    least* `R` responses. Some databases use speculative execution and submit extra
+    read requests to reduce coordinator response latency. This means if one of the
+    originally submitted read requests fails or arrives slowly, speculative requests
+    can be counted toward `R` instead.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在执行写入时，协调者应将其提交给 `N` 个节点，但只能在等待 `W` 个节点之后继续进行（或者在协调者也是副本的情况下为 `W - 1`）。其余的写操作可以异步完成或失败。类似地，执行读取时，协调者必须收集*至少*
+    `R` 个响应。一些数据库使用推测执行并提交额外的读取请求以减少协调者响应延迟。这意味着如果最初提交的某个读取请求失败或到达缓慢，则可以将推测请求计入 `R`。
+- en: 'Write-heavy systems may sometimes pick `W = 1` and `R = N`, which allows writes
+    to be acknowledged by just one node before they succeed, but would require *all*
+    the replicas (even potentially failed ones) to be available for reads. The same
+    is true for the `W = N`, `R = 1` combination: the latest value can be read from
+    any node, as long as writes succeed only after being applied on *all* replicas.'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写入密集型系统有时可能选择 `W = 1` 和 `R = N`，这允许写入仅由一个节点确认后才能成功，但需要*所有*副本（甚至可能失败的副本）在读取时可用。对于
+    `W = N`，`R = 1` 的组合也是如此：只要在*所有*副本上应用写入后，就可以从任何节点读取最新值。
+- en: Increasing read or write consistency levels increases latencies and raises requirements
+    for node availability during requests. Decreasing them improves system availability
+    while sacrificing consistency.
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提高读取或写入一致性级别会增加延迟，并增加请求期间节点可用性的要求。降低它们会提高系统的可用性，但牺牲一致性。
+- en: Witness Replicas
+  id: totrans-196
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 见证副本
+- en: 'Using quorums for read consistency helps to improve availability: even if some
+    of the nodes are down, a database system can still accept reads and serve writes.
+    The majority requirement guarantees that, since there’s an overlap of at least
+    one node in any majority, any quorum read will observe the most recent completed
+    quorum write. However, using replication and majorities increases storage costs:
+    we have to store a copy of the data on each replica. If our replication factor
+    is five, we have to store five copies.'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用分布式一致性机制（如使用“法定人数”进行读取一致性）有助于提高可用性：即使某些节点宕机，数据库系统仍然可以接受读取和提供写入服务。法定人数的要求确保，由于任何法定人数中至少有一个节点的重叠，任何一次法定人数读取都将观察到最近完成的法定人数写入。然而，使用复制和法定人数增加了存储成本：我们必须在每个副本上存储数据的副本。如果我们的复制因子为五，则必须存储五份副本。
+- en: We can improve storage costs by using a concept called *witness replicas*. Instead
+    of storing a copy of the record on each replica, we can split replicas into *copy*
+    and *witness* subsets. Copy replicas still hold data records as previously. Under
+    normal operation, witness replicas merely store the record indicating the fact
+    that the write operation occurred. However, a situation might occur when the number
+    of copy replicas is too low. For example, if we have three copy replicas and two
+    witness ones, and two copy replicas go down, we end up with a quorum of one copy
+    and two witness replicas.
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以通过使用*见证副本*的概念来改进存储成本。与在每个副本上存储记录副本不同，我们可以将副本分为*拷贝*和*见证*子集。拷贝副本仍然像以前一样保存数据记录。在正常操作下，见证副本仅存储指示写操作发生的记录。然而，可能会出现一种情况，即拷贝副本的数量过低。例如，如果我们有三个拷贝副本和两个见证副本，并且两个拷贝副本故障，则我们最终得到一个拷贝和两个见证副本的法定人数。
+- en: In cases of write timeouts or copy replica failures, witness replicas can be
+    *upgraded* to temporarily store the record in place of failed or timed-out copy
+    replicas. As soon as the original copy replicas recover, upgraded replicas can
+    revert to their previous state, or recovered replicas can become witnesses.
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在写入超时或拷贝副本失败的情况下，见证副本可以*升级*以临时存储记录，代替失败或超时的拷贝副本。一旦原始拷贝副本恢复，升级副本可以恢复到先前状态，或者恢复的副本可以成为见证副本。
+- en: 'Let’s consider a replicated system with three nodes, two of which are holding
+    copies of data and the third serves as a witness: `[1c, 2c, 3w]`. We attempt to
+    make a write, but `2c` is temporarily unavailable and cannot complete the operation.
+    In this case, we temporarily store the record on the witness replica `3w`. Whenever
+    `2c` comes back up, repair mechanisms can bring it back up-to-date and remove
+    redundant copies from witnesses.'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们考虑一个具有三个节点的复制系统，其中两个节点持有数据的副本，第三个节点作为见证：`[1c, 2c, 3w]`。我们尝试进行写入，但`2c`暂时不可用，无法完成操作。在这种情况下，我们暂时将记录存储在见证副本`3w`上。每当`2c`恢复时，修复机制可以将其更新，并从见证中删除冗余副本。
+- en: In a different scenario, we can attempt to perform a read, and the record is
+    present on `1c` and `3w`, but not on `2c`. Since any two replicas are enough to
+    constitute a quorum, if any subset of nodes of size two is available, whether
+    it’s two copy replicas `[1c, 2c]`, or one copy replica and one witness `[1c, 3w]`
+    or `[2c, 3w]`, we can guarantee to serve consistent results. If we read from `[1c,
+    2c]`, we fetch the latest record from `1c` and can replicate it to `2c`, since
+    the value is missing there. In case only `[2c, 3w]` are available, the latest
+    record can be fetched from `3w`. To restore the original configuration and bring
+    `2c` up-to-date, the record can be replicated to it, and removed from the witness.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在另一种情景中，我们可以尝试进行读取，记录存在于`1c`和`3w`上，但不存在于`2c`上。由于任何两个副本足以构成法定人数，如果有任何大小为两个的节点子集可用，无论是两个拷贝副本`[1c,
+    2c]`，还是一个拷贝副本和一个见证副本`[1c, 3w]`或`[2c, 3w]`，我们都可以保证提供一致的结果。如果我们从`[1c, 2c]`读取，则从`1c`获取最新记录，并可以将其复制到`2c`，因为该值在那里丢失。如果只有`[2c,
+    3w]`可用，可以从`3w`获取最新记录。为了恢复原始配置并使`2c`更新到最新状态，可以将记录复制到它，并从见证中删除。
+- en: 'More generally, having `n` copy and `m` witness replicas has same availability
+    guarantees as `n + m` copies, given that we follow two rules:'
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更一般地说，拥有`n`个拷贝和`m`个见证副本与拥有`n + m`个拷贝具有相同的可用性保证，只要我们遵循两个规则：
+- en: Read and write operations are performed using majorities (i.e., with `N/2 +
+    1` participants)
+  id: totrans-203
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 读取和写入操作是使用大多数参与者（即`N/2 + 1`）执行的。
+- en: At least one of the replicas in this quorum is *necessarily* a copy one
+  id: totrans-204
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在此法定人数中，至少有一个副本是*必然*是拷贝副本。
+- en: This works because data is guaranteed to be either on the copy or witness replicas.
+    Copy replicas are brought up-to-date by the repair mechanism in case of a failure,
+    and witness replicas store the data in the interim.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是因为数据被保证要么在拷贝副本上，要么在见证副本上。在故障情况下，通过修复机制使拷贝副本保持最新，并在过渡期间见证副本存储数据。
+- en: Using witness replicas helps to reduce storage costs while preserving consistency
+    invariants. There are several implementations of this approach; for example, Spanner
+    [[CORBETT12]](app01.html#CORBETT12) and [Apache Cassandra](https://databass.dev/links/105).
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用见证副本有助于减少存储成本，同时保持一致性不变。有几种实现这种方法的方式；例如，Spanner [[CORBETT12]](app01.html#CORBETT12)
+    和 [Apache Cassandra](https://databass.dev/links/105)。
+- en: Strong Eventual Consistency and CRDTs
+  id: totrans-207
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 强大的最终一致性和CRDTs
+- en: 'We’ve discussed several strong consistency models, such as linearizability
+    and serializability, and a form of weak consistency: eventual consistency. A possible
+    middle ground between the two, offering some benefits of both models, is *strong
+    eventual consistency*. Under this model, updates are allowed to propagate to servers
+    late or out of order, but when all updates finally propagate to target nodes,
+    conflicts between them can be resolved and they can be merged to produce the same
+    valid state [[GOMES17]](app01.html#GOMES17).'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们讨论了几种强一致性模型，如线性化和串行化，以及弱一致性形式：最终一致性。两者之间可能的中间地带，提供了两种模型的一些好处，是*强最终一致性*。在此模型下，允许更新迟到或无序地传播到服务器，但当所有更新最终传播到目标节点时，可以解决它们之间的冲突，并可以合并以产生相同的有效状态[[GOMES17]](app01.html#GOMES17)。
+- en: Under some conditions, we can relax our consistency requirements by allowing
+    operations to preserve additional state that allows the diverged states to be
+    reconciled (in other words, merged) after execution. One of the most prominent
+    examples of such an approach is *Conflict-Free Replicated Data Types* (CRDTs,
+    [[SHAPIRO11a]](app01.html#SHAPIRO11a)) implemented, for example, in Redis [[BIYIKOGLU13]](app01.html#BIYIKOGLU13).
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某些情况下，我们可以通过允许操作保留额外状态来放宽一致性要求，该状态允许在执行后调和（换句话说，合并）不同的状态。其中最显著的例子之一是*无冲突复制数据类型*（CRDTs，[[SHAPIRO11a]](app01.html#SHAPIRO11a)），例如在Redis中实现[[BIYIKOGLU13]](app01.html#BIYIKOGLU13)。
+- en: CRDTs are specialized data structures that preclude the existence of conflict
+    and allow operations on these data types to be applied in any order without changing
+    the result. This property can be extremely useful in a distributed system. For
+    example, in a multinode system that uses conflict-free replicated counters, we
+    can increment counter values on each node independently, even if they cannot communicate
+    with one another due to a network partition. As soon as communication is restored,
+    results from all nodes can be reconciled, and none of the operations applied during
+    the partition will be lost.
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CRDTs是专门的数据结构，排除了冲突的存在，并允许在这些数据类型上执行操作，无论顺序如何都不会改变结果。在分布式系统中，这种属性可能非常有用。例如，在一个使用无冲突复制计数器的多节点系统中，即使由于网络分区节点之间无法通信，每个节点也可以独立地增加计数器值。一旦通信恢复，所有节点的结果可以调和，并且在分区期间应用的操作不会丢失。
+- en: This makes CRDTs useful in eventually consistent systems, since replica states
+    in such systems are allowed to temporarily diverge. Replicas can execute operations
+    locally, without prior synchronization with other nodes, and operations eventually
+    propagate to all other replicas, potentially out of order. CRDTs allow us to reconstruct
+    the complete system state from local individual states or operation sequences.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这使得CRDTs在最终一致系统中非常有用，因为在这种系统中，副本状态允许暂时发散。副本可以在本地执行操作，无需与其他节点先同步，操作最终传播到所有其他副本，可能是无序的。CRDTs允许我们从本地个体状态或操作序列重建完整的系统状态。
+- en: 'The simplest example of CRDTs is operation-based Commutative Replicated Data
+    Types (CmRDTs). For CmRDTs to work, we need the allowed operations to be:'
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CRDTs的最简单示例是基于操作的可交换复制数据类型（CmRDTs）。为了使CmRDTs正常工作，我们需要允许的操作是：
+- en: Side-effect free
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无副作用
+- en: Their application does not change the system state.
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它们的应用不会改变系统状态。
+- en: Commutative
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可交换
+- en: 'Argument order does not matter: `x • y = y • x`. In other words, it doesn’t
+    matter whether `x` is merged with `y`, or `y` is merged with `x`.'
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 参数顺序不重要：`x • y = y • x`。换句话说，无论`x`与`y`合并，还是`y`与`x`合并，都无关紧要。
+- en: Causally ordered
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因果排序
+- en: Their successful delivery depends on the precondition, which ensures that the
+    system has reached the state the operation can be applied to.
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它们的成功交付取决于前提条件，该条件确保系统已达到可以应用操作的状态。
+- en: For example, we could implement a *grow-only counter*. Each server can hold
+    a state vector consisting of last known counter updates from all other participants,
+    initialized with zeros. Each server is only allowed to modify its own value in
+    the vector. When updates are propagated, the function `merge(state1, state2)`
+    merges the states from the two servers.
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，我们可以实现一个*只增长计数器*。每个服务器可以持有一个状态向量，其中包含来自所有其他参与者的最后已知计数器更新，初始化为零。每个服务器只允许修改向量中自己的值。在传播更新时，函数`merge(state1,
+    state2)`会合并来自两个服务器的状态。
+- en: 'For example, we have three servers, with initial state vectors initialized:'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，我们有三个服务器，初始状态向量初始化为：
+- en: '[PRE2]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'If we update counters on the first and third nodes, their states change as
+    follows:'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们更新第一个和第三个节点上的计数器，则它们的状态会如下变化：
+- en: '[PRE3]'
+  id: totrans-223
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'When updates propagate, we use a merge function to combine the results by picking
+    the maximum value for each slot:'
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当更新传播时，我们使用合并函数通过选择每个槽位的最大值来组合结果：
+- en: '[PRE4]'
+  id: totrans-225
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'To determine the current vector state, the sum of values in all slots is computed:
+    `sum([1, 0, 1]) = 2`. The merge function is commutative. Since servers are only
+    allowed to update their own values and these values are independent, no additional
+    coordination is required.'
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定当前向量状态，需要计算所有槽位中的值之和：`sum([1, 0, 1]) = 2`。合并函数是可交换的。由于服务器只允许更新自己的数值，并且这些数值是独立的，因此不需要额外的协调。
+- en: 'It is possible to produce a *Positive-Negative-Counter* (PN-Counter) that supports
+    both increments and decrements by using payloads consisting of two vectors: `P`,
+    which nodes use for increments, and `N`, where they store decrements. In a larger
+    system, to avoid propagating huge vectors, we can use *super-peers*. Super-peers
+    replicate counter states and help to avoid constant peer-to-peer chatter [[SHAPIRO11b]](app01.html#SHAPIRO11b).'
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以通过使用由两个向量组成的有效负计数器（PN-Counter）的有效负载来支持增量和减量：`P` 用于增量，`N` 用于存储减量。在更大的系统中，为了避免传播庞大的向量，我们可以使用超级对等体（*super-peers*）。超级对等体复制计数器状态并帮助避免不断的点对点交流
+    [[SHAPIRO11b]](app01.html#SHAPIRO11b)。
+- en: To save and replicate values, we can use *registers*. The simplest version of
+    the register is the *last-write-wins* register (LWW register), which stores a
+    unique, globally ordered timestamp attached to each value to resolve conflicts.
+    In case of a conflicting write, we preserve only the one with the larger timestamp.
+    The merge operation (picking the value with the largest timestamp) here is also
+    commutative, since it relies on the timestamp. If we cannot allow values to be
+    discarded, we can supply application-specific merge logic and use a *multivalue*
+    register, which stores all values that were written and allows the application
+    to pick the right one.
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要保存和复制值，我们可以使用*寄存器*。寄存器的最简单版本是*最后写入者胜*寄存器（LWW 寄存器），它存储与每个值关联的唯一全局排序时间戳，以解决冲突。在冲突写入的情况下，我们仅保留具有较大时间戳的值。这里的合并操作（选择具有较大时间戳的值）也是可交换的，因为它依赖于时间戳。如果我们不能允许值被丢弃，我们可以提供应用程序特定的合并逻辑，并使用*多值*寄存器，它存储所有写入的值并允许应用程序选择正确的值。
+- en: 'Another example of CRDTs is an unordered *grow-only* set (G-Set). Each node
+    maintains its local state and can append elements to it. Adding elements produces
+    a valid set. Merging two sets is also a commutative operation. Similar to counters,
+    we can use two sets to support both additions and removals. In this case, we have
+    to preserve an invariant: only the values contained in the addition set can be
+    added into the removal set. To reconstruct the current state of the set, all elements
+    contained in the removal set are subtracted from the addition set [[SHAPIRO11b]](app01.html#SHAPIRO11b).'
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CRDTs 的另一个例子是无序的增长型集合（G-Set）。每个节点维护其本地状态并可以向其追加元素。添加元素会生成一个有效的集合。合并两个集合也是一个可交换的操作。与计数器类似，我们可以使用两个集合来支持增加和删除。在这种情况下，我们必须保持一个不变式：只有包含在增加集合中的值才能添加到移除集合中。为了重建集合的当前状态，从增加集合中减去包含在移除集合中的所有元素
+    [[SHAPIRO11b]](app01.html#SHAPIRO11b)。
+- en: An example of a conflict-free type that combines more complex structures is
+    a conflict-free replicated JSON data type, allowing modifications such as insertions,
+    deletions, and assignments on deeply nested JSON documents with list and map types.
+    This algorithm performs merge operations on the client side and does not require
+    operations to be propagated in any specific order [[KLEPPMANN14]](app01.html#KLEPPMANN14).
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结合更复杂结构的无冲突类型的一个例子是无冲突复制的 JSON 数据类型，允许在深度嵌套的 JSON 文档中进行插入、删除和赋值等修改。此算法在客户端执行合并操作，不需要按特定顺序传播操作
+    [[KLEPPMANN14]](app01.html#KLEPPMANN14)。
+- en: There are quite a few possibilities CRDTs provide us with, and we can see more
+    data stores using this concept to provide Strong Eventual Consistency (SEC). This
+    is a powerful concept that we can add to our arsenal of tools for building fault-tolerant
+    distributed systems.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CRDTs 提供了相当多的可能性，我们可以看到更多使用此概念提供强最终一致性（SEC）的数据存储。这是一个强大的概念，我们可以将其加入到我们构建容错分布式系统的工具库中。
+- en: Summary
+  id: totrans-232
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: 'Fault-tolerant systems use replication to improve availability: even if some
+    processes fail or are unresponsive, the system as a whole can continue functioning
+    correctly. However, keeping multiple copies in sync requires additional coordination.'
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 容错系统使用复制来提高可用性：即使某些进程失败或无响应，系统整体仍然可以正确运行。但是，保持多个副本同步需要额外的协调。
+- en: We’ve discussed several single-operation consistency models, ordered from the
+    one with the most guarantees to the one with the least:^([2](ch11.html#idm46466885870904))
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们讨论了几种单操作一致性模型，按照提供的保证最多到提供的保证最少的顺序排列：^([2](ch11.html#idm46466885870904))
+- en: Linearizability
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 线性化
+- en: Operations appear to be applied instantaneously, and the real-time operation
+    order is maintained.
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 操作似乎是瞬时应用的，并且保持了实时操作顺序。
+- en: Sequential consistency
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 顺序一致性
+- en: Operation effects are propagated in *some* total order, and this order is consistent
+    with the order they were executed by the individual processes.
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 操作效果按照*某些*总体顺序传播，并且这个顺序与它们由各个进程执行的顺序一致。
+- en: Causal consistency
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因果一致性
+- en: Effects of the causally related operations are visible in the same order to
+    all processes.
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与因果相关的操作的效果对所有进程都以相同的顺序可见。
+- en: PRAM/FIFO consistency
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PRAM/FIFO一致性
+- en: Operation effects become visible in the same order they were executed by individual
+    processes. Writes from different processes can be observed in different orders.
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 操作效果按照它们由各个进程执行的顺序变得可见。来自不同进程的写入可以观察到不同的顺序。
+- en: 'After that, we discussed multiple session models:'
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 之后，我们讨论了多个会话模型：
+- en: Read-own-writes
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 读取自己的写入
+- en: Read operations reflect the previous writes. Writes propagate through the system
+    and become available for later reads that come from the same client.
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 读取操作反映先前的写入。写入通过系统传播，并在后续来自同一客户端的读取可用。
+- en: Monotonic reads
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 单调读
+- en: Any read that has observed a value cannot observe a value that is older that
+    the observed one.
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 任何读取已观察到的值不能观察到比观察到的值更旧的值。
+- en: Monotonic writes
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 单调写
+- en: Writes coming from the same client propagate to other clients in the order they
+    were made by this client.
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 来自同一客户端的写入按照这个客户端进行的顺序传播到其他客户端。
+- en: Writes-follow-reads
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写入跟随读取
+- en: Write operations are ordered after the writes whose effects were observed by
+    the previous reads executed by the same client.
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写入操作在同一客户端执行的先前读取观察到的写入效果之后进行排序。
+- en: Knowing and understanding these concepts can help you to understand the guarantees
+    of the underlying systems and use them for application development. Consistency
+    models describe rules that operations on data have to follow, but their scope
+    is limited to a specific system. Stacking systems with weaker guarantees on top
+    of ones with stronger guarantees or ignoring consistency implications of underlying
+    systems may lead to unrecoverable inconsistencies and data loss.
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 知道和理解这些概念可以帮助您理解底层系统的保证并将其用于应用开发。一致性模型描述了数据操作必须遵循的规则，但其范围仅限于特定系统。在更弱保证的系统上堆叠更强保证的系统或忽视底层系统的一致性影响可能导致不可恢复的不一致和数据丢失。
+- en: We also discussed the concept of *eventual* and *tunable* consistency. Quorum-based
+    systems use majorities to serve consistent data. *Witness replicas* can be used
+    to reduce storage costs.
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还讨论了*最终一致*和*可调节*一致性的概念。基于法定人数的系统使用多数派来提供一致的数据。*见证副本*可用于降低存储成本。
+- en: ^([1](ch11.html#idm46466886319240-marker)) Quorum reads and writes in the context
+    of eventually consistent stores, which are discussed in more detail in [“Eventual
+    Consistency”](#eventual_consistency).
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch11.html#idm46466886319240-marker)) 在“最终一致性”一节中更详细地讨论了最终一致存储中的法定人数读取和写入。
+- en: ^([2](ch11.html#idm46466885870904-marker)) These short definitions are given
+    for recap only, the reader is advised to refer to the complete definitions for
+    context.
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch11.html#idm46466885870904-marker)) 这些简短的定义仅用于回顾，建议读者参考完整的定义以获取上下文。

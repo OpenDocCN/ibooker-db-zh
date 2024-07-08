@@ -1,0 +1,1147 @@
+- en: Chapter 1\. Introduction and Overview
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第1章介绍与概述
+- en: 'Database management systems can serve different purposes: some are used primarily
+    for temporary *hot* data, some serve as a long-lived *cold* storage, some allow
+    complex analytical queries, some only allow accessing values by the key, some
+    are optimized to store time-series data, and some store large blobs efficiently.
+    To understand differences and draw distinctions, we start with a short classification
+    and overview, as this helps us to understand the scope of further discussions.'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库管理系统可以服务不同的目的：有些主要用于临时的*热*数据，有些作为长期存储的*冷*存储，有些允许复杂的分析查询，有些仅允许通过键访问值，有些优化用于存储时间序列数据，还有些高效存储大型二进制数据块。为了理解这些差异并进行区分，我们首先进行简要分类和概述，这有助于我们理解进一步讨论的范围。
+- en: Terminology can sometimes be ambiguous and hard to understand without a complete
+    context. For example, distinctions between *column* and *wide column* stores that
+    have little or nothing to do with each other, or how *clustered* and *nonclustered
+    indexes* relate to *index-organized tables*. This chapter aims to disambiguate
+    these terms and find their precise definitions.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 术语有时可能不明确，并且在没有完整上下文的情况下很难理解。例如，*列*存储和*宽列*存储之间的区别几乎没有或没有关联，或者*聚集*索引和*非聚集*索引如何与*索引组织表*相关联。本章旨在消除这些术语的歧义，并找出它们的精确定义。
+- en: We start with an overview of database management system architecture (see [“DBMS
+    Architecture”](#dbms_architecture)), and discuss system components and their responsibilities.
+    After that, we discuss the distinctions among the database management systems
+    in terms of a storage medium (see [“Memory- Versus Disk-Based DBMS”](#memory_vs_disk_based_stores)),
+    and layout (see [“Column- Versus Row-Oriented DBMS”](#columnar_vs_row_oriented)).
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们首先概述数据库管理系统的架构（参见[“DBMS 架构”](#dbms_architecture)），并讨论系统组件及其责任。接着，我们讨论数据库管理系统在存储介质（参见[“基于内存与基于磁盘的
+    DBMS”](#memory_vs_disk_based_stores)）和布局（参见[“列式与行式 DBMS”](#columnar_vs_row_oriented)）方面的区别。
+- en: 'These two groups do not present a full taxonomy of database management systems
+    and there are many other ways they’re classified. For example, some sources group
+    DBMSs into three major categories:'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这两组内容并未提供数据库管理系统的完整分类法，而且还有许多其他分类方式。例如，一些来源将 DBMS 分为三大类：
+- en: Online transaction processing (OLTP) databases
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在线事务处理（OLTP）数据库
+- en: These handle a large number of user-facing requests and transactions. Queries
+    are often predefined and short-lived.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些处理大量用户请求和事务。查询通常是预定义的且短暂存在。
+- en: Online analytical processing (OLAP) databases
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在线分析处理（OLAP）数据库
+- en: These handle complex aggregations. OLAP databases are often used for analytics
+    and data warehousing, and are capable of handling complex, long-running ad hoc
+    queries.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些处理复杂的聚合。OLAP 数据库通常用于分析和数据仓库，能够处理复杂的、长时间运行的特定查询。
+- en: Hybrid transactional and analytical processing (HTAP)
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 混合事务和分析处理（HTAP）
+- en: These databases combine properties of both OLTP and OLAP stores.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些数据库结合了 OLTP 和 OLAP 存储的特性。
+- en: 'There are many other terms and classifications: key-value stores, relational
+    databases, document-oriented stores, and graph databases. These concepts are not
+    defined here, since the reader is assumed to have a high-level knowledge and understanding
+    of their functionality. Because the concepts we discuss here are widely applicable
+    and are used in most of the mentioned types of stores in some capacity, complete
+    taxonomy is not necessary or important for further discussion.'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还有许多其他术语和分类：键值存储、关系型数据库、文档导向存储和图数据库。由于假定读者已对它们的功能有高层次的知识和理解，因此这些概念在此不做定义。因为我们讨论的概念在大多数提到的存储类型中以某种方式广泛适用，所以完整的分类法对进一步讨论来说并不必要或重要。
+- en: Since Part I of this book focuses on the storage and indexing structures, we
+    need to understand the high-level data organization approaches, and the relationship
+    between the data and index files (see [“Data Files and Index Files”](#data_and_index)).
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本书第一部分专注于存储和索引结构，我们需要理解高级数据组织方法，以及数据与索引文件之间的关系（参见[“数据文件和索引文件”](#data_and_index)）。
+- en: Finally, in [“Buffering, Immutability, and Ordering”](#in_place_update_vs_immutable),
+    we discuss three techniques widely used to develop efficient storage structures
+    and how applying these techniques influences their design and implementation.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，在[“缓冲、不可变性和排序”](#in_place_update_vs_immutable)中，我们讨论了三种广泛使用的开发高效存储结构的技术，以及应用这些技术如何影响它们的设计和实施。
+- en: DBMS Architecture
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: DBMS架构
+- en: There’s no common blueprint for database management system design. Every database
+    is built slightly differently, and component boundaries are somewhat hard to see
+    and define. Even if these boundaries exist on paper (e.g., in project documentation),
+    in code seemingly independent components may be coupled because of performance
+    optimizations, handling edge cases, or architectural decisions.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 没有关于数据库管理系统设计的通用蓝图。每个数据库都稍有不同，并且组件边界有些难以看到和定义。即使这些边界在纸上存在（例如，在项目文档中），在代码中看似独立的组件可能由于性能优化、处理边缘情况或架构决策而耦合在一起。
+- en: Sources that describe database management system architecture (for example,
+    [[HELLERSTEIN07]](app01.html#HELLERSTEIN07), [[WEIKUM01]](app01.html#WEIKUM01),
+    [[ELMASRI11]](app01.html#ELMASRI11), and [[GARCIAMOLINA08]](app01.html#GARCIAMOLINA08)),
+    define components and relationships between them differently. The architecture
+    presented in [Figure 1-1](#architecutre_of_dmbs_001) demonstrates some of the
+    common themes in these representations.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 描述数据库管理系统架构的来源（例如[[HELLERSTEIN07]](app01.html#HELLERSTEIN07)、[[WEIKUM01]](app01.html#WEIKUM01)、[[ELMASRI11]](app01.html#ELMASRI11)和[[GARCIAMOLINA08]](app01.html#GARCIAMOLINA08)），不同地定义组件及其之间的关系。在图 1-1中展示的架构展示了这些表现中的一些共同主题。
+- en: Database management systems use a *client/server model*, where database system
+    instances (*nodes*) take the role of servers, and application instances take the
+    role of clients.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库管理系统采用*客户端/服务器模型*，其中数据库系统实例（*节点*）扮演服务器角色，应用程序实例扮演客户端角色。
+- en: Client requests arrive through the *transport* subsystem. Requests come in the
+    form of queries, most often expressed in some query language. The transport subsystem
+    is also responsible for communication with other nodes in the database cluster.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 客户端请求通过*传输*子系统到达。请求以查询形式出现，通常用某种查询语言表达。传输子系统还负责与数据库集群中的其他节点进行通信。
+- en: '![dbin 0101](assets/dbin_0101.png)'
+  id: totrans-19
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0101](assets/dbin_0101.png)'
+- en: Figure 1-1\. Architecture of a database management system
+  id: totrans-20
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 1-1\. 数据库管理系统的架构
+- en: Upon receipt, the transport subsystem hands the query over to a *query processor*,
+    which parses, interprets, and validates it. Later, access control checks are performed,
+    as they can be done fully only after the query is interpreted.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 收到请求后，传输子系统将查询交给*查询处理器*，后者解析、解释并验证它。稍后进行访问控制检查，因为只有在解释查询之后才能完全进行。
+- en: The parsed query is passed to the *query optimizer*, which first eliminates
+    impossible and redundant parts of the query, and then attempts to find the most
+    efficient way to execute it based on internal statistics (index cardinality, approximate
+    intersection size, etc.) and data placement (which nodes in the cluster hold the
+    data and the costs associated with its transfer). The optimizer handles both relational
+    operations required for query resolution, usually presented as a dependency tree,
+    and optimizations, such as index ordering, cardinality estimation, and choosing
+    access methods.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 解析后的查询被传递给*查询优化器*，它首先消除查询中不可能和冗余的部分，然后尝试根据内部统计数据（索引基数、近似交集大小等）和数据位置（集群中哪些节点保存数据及其传输成本）找到最有效的执行方式。优化器处理查询解析所需的关系操作，通常呈现为依赖树，并进行优化，如索引排序、基数估计和选择访问方法等。
+- en: 'The query is usually presented in the form of an *execution plan* (or *query
+    plan*): a sequence of operations that have to be carried out for its results to
+    be considered complete. Since the same query can be satisfied using different
+    execution plans that can vary in efficiency, the optimizer picks the best available
+    plan.'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询通常以*执行计划*（或*查询计划*）的形式呈现：必须执行的操作序列，以使其结果被认为是完整的。由于可以使用不同的执行计划来满足相同的查询，这些计划在效率上可能有所不同，优化器选择最佳可用计划。
+- en: The execution plan is carried out by the *execution engine*, which aggregates
+    the results of local and remote operations. *Remote execution* can involve writing
+    and reading data to and from other nodes in the cluster, and replication.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 执行计划由*执行引擎*执行，该引擎汇总了本地和远程操作的结果。*远程执行*可能涉及向集群中的其他节点写入和读取数据，以及复制。
+- en: 'Local queries (coming directly from clients or from other nodes) are executed
+    by the *storage engine*. The storage engine has several components with dedicated
+    responsibilities:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本地查询（直接来自客户端或其他节点）由*存储引擎*执行。存储引擎具有几个负责的组件：
+- en: Transaction manager
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务管理器
+- en: This manager schedules transactions and ensures they cannot leave the database
+    in a logically inconsistent state.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该管理器调度事务并确保它们不会使数据库处于逻辑不一致状态。
+- en: Lock manager
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 锁管理器
+- en: This manager locks on the database objects for the running transactions, ensuring
+    that concurrent operations do not violate physical data integrity.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该管理器在运行事务时锁定数据库对象，确保并发操作不会违反物理数据完整性。
+- en: Access methods (storage structures)
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存取方法（存储结构）
+- en: These manage access and organizing data on disk. Access methods include heap
+    files and storage structures such as B-Trees (see [“Ubiquitous B-Trees”](ch02.html#b_trees))
+    or LSM Trees (see [“LSM Trees”](ch07.html#lsm_trees)).
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些管理器管理访问和组织磁盘上的数据。存取方法包括堆文件和诸如B树（参见[“无处不在的B树”](ch02.html#b_trees)）或LSM树（参见[“LSM树”](ch07.html#lsm_trees)）等存储结构。
+- en: Buffer manager
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 缓冲管理器
+- en: This manager caches data pages in memory (see [“Buffer Management”](ch05.html#buffer_pool)).
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该管理器在内存中缓存数据页面（参见[“缓冲管理”](ch05.html#buffer_pool)）。
+- en: Recovery manager
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 恢复管理器
+- en: This manager maintains the operation log and restoring the system state in case
+    of a failure (see [“Recovery”](ch05.html#write_ahead_log)).
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该管理器维护操作日志并在发生故障时恢复系统状态（参见[“恢复”](ch05.html#write_ahead_log)）。
+- en: 'Together, transaction and lock managers are responsible for concurrency control
+    (see [“Concurrency Control”](ch05.html#b_tree_concurrency)): they guarantee logical
+    and physical data integrity while ensuring that concurrent operations are executed
+    as efficiently as possible.'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务管理器和锁管理器共同负责并发控制（参见[“并发控制”](ch05.html#b_tree_concurrency)）：它们确保逻辑和物理数据完整性，同时尽可能高效地执行并发操作。
+- en: Memory- Versus Disk-Based DBMS
+  id: totrans-37
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 基于内存与磁盘的数据库管理系统
+- en: Database systems store data in memory and on disk. *In-memory database management
+    systems* (sometimes called *main memory DBMS*) store data *primarily* in memory
+    and use the disk for recovery and logging. *Disk-based* DBMS hold *most* of the
+    data on disk and use memory for caching disk contents or as a temporary storage.
+    Both types of systems use the disk to a certain extent, but main memory databases
+    store their contents almost exclusively in RAM.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库系统在内存和磁盘上存储数据。*内存数据库管理系统*（有时称为*主存储器DBMS*）主要将数据存储在内存中，并使用磁盘进行恢复和日志记录。*基于磁盘的*
+    DBMS将*大多数*数据存储在磁盘上，并使用内存缓存磁盘内容或作为临时存储。两种类型的系统在一定程度上使用磁盘，但主存储器数据库几乎完全将内容存储在RAM中。
+- en: Accessing memory has been and remains several orders of magnitude faster than
+    accessing disk,^([1](ch01.html#idm46466889770440)) so it is compelling to use
+    memory as the primary storage, and it becomes more economically feasible to do
+    so as memory prices go down. However, RAM prices still remain high compared to
+    persistent storage devices such as SSDs and HDDs.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 访问内存比访问磁盘快几个数量级，^([1](ch01.html#idm46466889770440))因此将内存用作主要存储是非常合理的，在内存价格下降时，这样做也变得更经济实惠。但是，与SSD和HDD等持久存储设备相比，RAM价格仍然较高。
+- en: Main memory database systems are different from their disk-based counterparts
+    not only in terms of a primary storage medium, but also in which data structures,
+    organization, and optimization techniques they use.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 主存储器数据库系统与基于磁盘的系统不仅在主要存储介质上有所不同，还在使用的数据结构、组织和优化技术上有所不同。
+- en: Databases using memory as a primary data store do this mainly because of performance,
+    comparatively low access costs, and access granularity. Programming for main memory
+    is also significantly simpler than doing so for the disk. Operating systems abstract
+    memory management and allow us to think in terms of allocating and freeing arbitrarily
+    sized memory chunks. On disk, we have to manage data references, serialization
+    formats, freed memory, and fragmentation manually.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库使用内存作为主要数据存储的主要原因是性能更好，访问成本较低，并且访问粒度更细。相比之下，为磁盘编程要简单得多。操作系统抽象了内存管理，允许我们考虑分配和释放任意大小的内存块。在磁盘上，我们必须手动管理数据引用、序列化格式、释放的内存和碎片化。
+- en: The main limiting factors on the growth of in-memory databases are RAM volatility
+    (in other words, lack of durability) and costs. Since RAM contents are not persistent,
+    software errors, crashes, hardware failures, and power outages can result in data
+    loss. There are ways to ensure durability, such as uninterrupted power supplies
+    and battery-backed RAM, but they require additional hardware resources and operational
+    expertise. In practice, it all comes down to the fact that disks are easier to
+    maintain and have significantly lower prices.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 内存数据库增长的主要限制因素是RAM的易失性（即缺乏持久性）和成本。由于RAM内容不是持久的，软件错误、崩溃、硬件故障和电源中断可能导致数据丢失。有方法可以确保持久性，如不间断电源和电池备份RAM，但它们需要额外的硬件资源和运营经验。实际上，这一切都归结为磁盘更易于维护且价格显著较低的事实。
+- en: The situation is likely to change as the availability and popularity of Non-Volatile
+    Memory (NVM) [[ARULRAJ17]](app01.html#ARULRAJ17) technologies grow. NVM storage
+    reduces or completely eliminates (depending on the exact technology) asymmetry
+    between read and write latencies, further improves read and write performance,
+    and allows byte-addressable access.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 非易失性存储器（Non-Volatile Memory，NVM）技术的可用性和流行度增长后，情况可能会发生变化（参见[[ARULRAJ17]](app01.html#ARULRAJ17)）。NVM
+    存储减少或完全消除（具体取决于技术）读写延迟的不对称性，进一步提高了读写性能，并允许按字节寻址访问。
+- en: Durability in Memory-Based Stores
+  id: totrans-44
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 内存存储的持久性
+- en: In-memory database systems maintain backups on disk to provide durability and
+    prevent loss of the volatile data. Some databases store data exclusively in memory,
+    without any durability guarantees, but we do not discuss them in the scope of
+    this book.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 内存数据库系统通过在磁盘上保留备份来提供持久性，并防止易失性数据的丢失。一些数据库将数据完全存储在内存中，没有任何持久性保证，但我们不在本书的范围内讨论它们。
+- en: Before the operation can be considered complete, its results have to be written
+    to a sequential log file. We discuss write-ahead logs in more detail in [“Recovery”](ch05.html#write_ahead_log).
+    To avoid replaying complete log contents during startup or after a crash, in-memory
+    stores maintain a *backup copy*. The backup copy is maintained as a sorted disk-based
+    structure, and modifications to this structure are often asynchronous (decoupled
+    from client requests) and applied in batches to reduce the number of I/O operations.
+    During recovery, database contents can be restored from the backup and logs.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在操作可以被视为完成之前，其结果必须写入顺序日志文件。我们在[“恢复”](ch05.html#write_ahead_log)中详细讨论预写式日志。为了在启动或崩溃后避免重放完整的日志内容，内存存储保留一个*备份副本*。备份副本作为一个有序的基于磁盘的结构进行维护，并且对该结构的修改通常是异步的（与客户端请求解耦），并批量应用以减少
+    I/O 操作的数量。在恢复过程中，可以从备份和日志中恢复数据库内容。
+- en: Log records are usually applied to backup in batches. After the batch of log
+    records is processed, backup holds a database *snapshot* for a specific point
+    in time, and log contents up to this point can be discarded. This process is called
+    *checkpointing*. It reduces recovery times by keeping the disk-resident database
+    most up-to-date with log entries without requiring clients to block until the
+    backup is updated.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 日志记录通常会批量应用于备份。在处理完日志记录批次后，备份会保持一个特定时间点的数据库*快照*，并且可以丢弃到此时间点的日志内容。这个过程称为*检查点*。通过使磁盘上的数据库保持最新的日志条目，而不需要客户端阻塞等待备份更新，检查点减少了恢复时间。
+- en: Note
+  id: totrans-48
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: It is unfair to say that the in-memory database is the equivalent of an on-disk
+    database with a huge page cache (see [“Buffer Management”](ch05.html#buffer_pool)).
+    Even though pages are *cached* in memory, serialization format and data layout
+    incur additional overhead and do not permit the same degree of optimization that
+    in-memory stores can achieve.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不能说内存数据库等同于具有大页缓存的磁盘数据库（参见[“缓冲管理”](ch05.html#buffer_pool)）。尽管页面在内存中被*缓存*，但序列化格式和数据布局会产生额外开销，并且不允许内存存储可以实现的同样程度的优化。
+- en: Disk-based databases use specialized storage structures, optimized for disk
+    access. In memory, pointers can be followed comparatively quickly, and random
+    memory access is significantly faster than the random disk access. Disk-based
+    storage structures often have a form of wide and short trees (see [“Trees for
+    Disk-Based Storage”](ch02.html#trees_for_disk_based_storage)), while memory-based
+    implementations can choose from a larger pool of data structures and perform optimizations
+    that would otherwise be impossible or difficult to implement on disk [[GARCIAMOLINA92]](app01.html#GARCIAMOLINA92).
+    Similarly, handling variable-size data on disk requires special attention, while
+    in memory it’s often a matter of referencing the value with a pointer.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于磁盘的数据库使用专门的存储结构，优化了磁盘访问。在内存中，可以相对较快地跟随指针，并且随机内存访问比随机磁盘访问快得多。基于磁盘的存储结构通常采用宽而短的树形结构（参见[“用于基于磁盘存储的树”](ch02.html#trees_for_disk_based_storage)），而基于内存的实现可以从更大的数据结构池中选择，并执行在磁盘上否则不可能或难以实现的优化[[GARCIAMOLINA92]](app01.html#GARCIAMOLINA92)。类似地，在磁盘上处理可变大小数据需要特别注意，而在内存中通常只需通过指针引用该值。
+- en: For some use cases, it is reasonable to assume that an entire dataset is going
+    to fit in memory. Some datasets are bounded by their real-world representations,
+    such as student records for schools, customer records for corporations, or inventory
+    in an online store. Each record takes up not more than a few Kb, and their number
+    is limited.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于某些用例，可以合理假设整个数据集将放入内存中。某些数据集受其真实世界表示的限制，例如学校的学生记录、公司的客户记录或在线商店的库存。每条记录占用的空间不超过几
+    KB，并且其数量是有限的。
+- en: Column- Versus Row-Oriented DBMS
+  id: totrans-52
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 列式与行式数据库管理系统
+- en: 'Most database systems store a set of *data records*, consisting of *columns*
+    and *rows* in *tables*. *Field* is an intersection of a column and a row: a single
+    value of some type. Fields belonging to the same column usually have the same
+    data type. For example, if we define a table holding user records, all names would
+    be of the same type and belong to the same column. A collection of values that
+    belong logically to the same record (usually identified by the key) constitutes
+    a row.'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数数据库系统存储一组*数据记录*，由*表*中的*列*和*行*组成。*字段*是列和行的交集：某种类型的单个值。属于同一列的字段通常具有相同的数据类型。例如，如果我们定义一个表来存储用户记录，所有姓名都将是相同类型且属于同一列。属于同一记录的逻辑上属于同一集合的值（通常由键标识）构成了一行。
+- en: 'One of the ways to classify databases is by how the data is stored on disk:
+    row- or column-wise. Tables can be partitioned either horizontally (storing values
+    belonging to the same row together), or vertically (storing values belonging to
+    the same column together). [Figure 1-2](#column_vs_row_store) depicts this distinction:
+    (a) shows the values partitioned column-wise, and (b) shows the values partitioned
+    row-wise.'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库分类的一种方法是根据数据在磁盘上的存储方式：行式或列式。表可以水平分区（将属于同一行的值存储在一起），也可以垂直分区（将属于同一列的值存储在一起）。[图 1-2](#column_vs_row_store)展示了这种区别：(a)展示了按列分区的值，(b)展示了按行分区的值。
+- en: '![dbin 0102](assets/dbin_0102.png)'
+  id: totrans-55
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0102](assets/dbin_0102.png)'
+- en: Figure 1-2\. Data layout in column- and row-oriented stores
+  id: totrans-56
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 1-2\. 列向和行向存储中的数据布局
+- en: 'Examples of row-oriented database management systems are abundant: [MySQL](https://dev.mysql.com),
+    [PostgreSQL](https://www.postgresql.org), and most of the traditional relational
+    databases. The two pioneer open source column-oriented stores are [MonetDB](https://databass.dev/links/109)
+    and [C-Store](https://databass.dev/links/110) (C-Store is an open source predecessor
+    to [Vertica](https://databass.dev/links/111)).'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 举例说明行向数据库管理系统非常丰富：[MySQL](https://dev.mysql.com)、[PostgreSQL](https://www.postgresql.org)以及大多数传统关系数据库。两个开创性的开源列式存储系统是[MonetDB](https://databass.dev/links/109)和[C-Store](https://databass.dev/links/110)（C-Store是[Vertica](https://databass.dev/links/111)的开源前身）。
+- en: Row-Oriented Data Layout
+  id: totrans-58
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 行向数据布局
+- en: '*Row-oriented database management systems* store data in records or *rows*.
+    Their layout is quite close to the tabular data representation, where every row
+    has the same set of fields. For example, a row-oriented database can efficiently
+    store user entries, holding names, birth dates, and phone numbers:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*面向行的数据库管理系统*将数据存储在记录或*行*中。它们的布局与表格数据表示非常接近，其中每行具有相同的字段集合。例如，面向行的数据库可以有效地存储用户条目，包括姓名、出生日期和电话号码：'
+- en: '[PRE0]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: This approach works well for cases where several fields constitute the record
+    (name, birth date, and a phone number) uniquely identified by the key (in this
+    example, a monotonically incremented number). All fields representing a single
+    user record are often read together. When creating records (for example, when
+    the user fills out a registration form), we write them together as well. At the
+    same time, each field can be modified individually.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种方法非常适用于多个字段构成记录（例如，姓名、出生日期和电话号码），由键（在此示例中为单调递增的数字）唯一标识。表示单个用户记录的所有字段通常一起读取。创建记录时（例如，用户填写注册表单时），我们也会一起写入它们。同时，每个字段也可以单独修改。
+- en: Since row-oriented stores are most useful in scenarios when we have to access
+    data by row, storing entire rows together improves spatial locality^([2](ch01.html#idm46466889716792))
+    [[DENNING68]](app01.html#DENNING68).
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于面向行的存储在需要按行访问数据时最为有用，将整行存储在一起可以提高空间局部性^([2](ch01.html#idm46466889716792))
+    [[DENNING68]](app01.html#DENNING68)。
+- en: Because data on a persistent medium such as a disk is typically accessed block-wise
+    (in other words, a minimal unit of disk access is a block), a single block will
+    contain data for all columns. This is great for cases when we’d like to access
+    an entire user record, but makes queries accessing individual fields of multiple
+    user records (for example, queries fetching only the phone numbers) more expensive,
+    since data for the other fields will be paged in as well.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为在磁盘等持久介质上访问数据通常是以块为单位进行的（换句话说，磁盘访问的最小单位是块），单个块将包含所有列的数据。这对于希望访问整个用户记录的情况非常有利，但使得访问多个用户记录的单个字段（例如，仅获取电话号码的查询）的查询变得更加昂贵，因为也会调入其他字段的数据。
+- en: Column-Oriented Data Layout
+  id: totrans-64
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 列式数据布局
+- en: '*Column-oriented database management systems* partition data *vertically* (i.e.,
+    by column) instead of storing it in rows. Here, values for the same column are
+    stored contiguously on disk (as opposed to storing rows contiguously as in the
+    previous example). For example, if we store historical stock market prices, price
+    quotes are stored together. Storing values for different columns in separate files
+    or file segments allows efficient queries by column, since they can be read in
+    one pass rather than consuming entire rows and discarding data for columns that
+    weren’t queried.'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*列向数据库管理系统* 将数据按*列*（即按列）分区，而不是按行存储。在这种方法中，同一列的值在磁盘上被连续存储（与前面的例子中连续存储行相对）。例如，如果我们存储历史股票市场价格，报价将被一起存储。将不同列的值存储在单独的文件或文件段中，可以通过列高效地进行查询，因为可以一次性读取，而不是消耗整行并丢弃未查询的列的数据。'
+- en: Column-oriented stores are a good fit for analytical workloads that compute
+    aggregates, such as finding trends, computing average values, etc. Processing
+    complex aggregates can be used in cases when logical records have multiple fields,
+    but some of them (in this case, price quotes) have different importance and are
+    often consumed together.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 列向存储非常适合分析工作负载，如查找趋势、计算平均值等。在处理复杂聚合时，逻辑记录可以包含多个字段，但其中一些字段（在此示例中为价格报价）具有不同的重要性，并经常一起使用。
+- en: 'From a logical perspective, the data representing stock market price quotes
+    can still be expressed as a table:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从逻辑角度来看，代表股票市场报价的数据仍然可以表示为表格：
+- en: '[PRE1]'
+  id: totrans-68
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'However, the physical column-based database layout looks entirely different.
+    Values belonging to the same column are stored closely together:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，物理基于列的数据库布局看起来完全不同。属于同一列的值被紧密地放在一起：
+- en: '[PRE2]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: To reconstruct data tuples, which might be useful for joins, filtering, and
+    multirow aggregates, we need to preserve some metadata on the column level to
+    identify which data points from other columns it is associated with. If you do
+    this explicitly, each value will have to hold a key, which introduces duplication
+    and increases the amount of stored data. Some column stores use implicit identifiers
+    (*virtual IDs*) instead and use the position of the value (in other words, its
+    offset) to map it back to the related values [[ABADI13]](app01.html#ABADI13).
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了重构数据元组，这对于连接、过滤和多行聚合可能很有用，我们需要在列级别保留一些元数据，以确定它与其他列的数据点相关联。如果您明确执行此操作，每个值将必须保存一个键，这会引入重复并增加存储数据量。一些列存储使用隐式标识符（*虚拟ID*）并使用值的位置（换句话说，它的偏移量）将其映射回相关值
+    [[ABADI13]](app01.html#ABADI13)。
+- en: During the last several years, likely due to a rising demand to run complex
+    analytical queries over growing datasets, we’ve seen many new column-oriented
+    file formats such as [Apache Parquet](https://databass.dev/links/112), [Apache
+    ORC](https://databass.dev/links/113), [RCFile](https://databass.dev/links/114),
+    as well as column-oriented stores, such as [Apache Kudu](https://databass.dev/links/115),
+    [ClickHouse](https://databass.dev/links/116), and many others [[ROY12]](app01.html#ROY12).
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在过去几年中，可能由于对在不断增长的数据集上运行复杂分析查询的需求日益增加，我们看到了许多新的面向列的文件格式，例如[Apache Parquet](https://databass.dev/links/112)，[Apache
+    ORC](https://databass.dev/links/113)，[RCFile](https://databass.dev/links/114)，以及诸如[Apache
+    Kudu](https://databass.dev/links/115)，[ClickHouse](https://databass.dev/links/116)等面向列的存储系统。
+- en: Distinctions and Optimizations
+  id: totrans-73
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 区别和优化
+- en: It is not sufficient to say that distinctions between row and column stores
+    are only in the way the data is stored. Choosing the data layout is just one of
+    the steps in a series of possible optimizations that columnar stores are targeting.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不能简单地说行存储和列存储之间的区别仅在于数据存储方式。选择数据布局只是列式存储优化步骤中的一步。
+- en: Reading multiple values for the same column in one run significantly improves
+    cache utilization and computational efficiency. On modern CPUs, vectorized instructions
+    can be used to process multiple data points with a single CPU instruction^([3](ch01.html#idm46466889691416))
+    [[DREPPER07]](app01.html#DREPPER07).
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在一次运行中读取同一列的多个值显著提高了缓存利用率和计算效率。在现代 CPU 上，可以使用矢量化指令来处理多个数据点，每个 CPU 指令^([3](ch01.html#idm46466889691416))
+    [[DREPPER07]](app01.html#DREPPER07)。
+- en: Storing values that have the same data type together (e.g., numbers with other
+    numbers, strings with other strings) offers a better compression ratio. We can
+    use different compression algorithms depending on the data type and pick the most
+    effective compression method for each case.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将相同数据类型的值存储在一起（例如，数字与其他数字，字符串与其他字符串）可以获得更好的压缩比。我们可以根据数据类型使用不同的压缩算法，并针对每种情况选择最有效的压缩方法。
+- en: To decide whether to use a column- or a row-oriented store, you need to understand
+    your *access patterns*. If the read data is consumed in records (i.e., most or
+    all of the columns are requested) and the workload consists mostly of point queries
+    and range scans, the row-oriented approach is likely to yield better results.
+    If scans span many rows, or compute aggregate over a subset of columns, it is
+    worth considering a column-oriented approach.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要决定是使用列式存储还是行式存储，您需要了解您的*访问模式*。如果读取的数据以记录形式消耗（即请求大部分或所有列），并且工作负载主要由点查询和范围扫描组成，则行式方法可能会产生更好的结果。如果扫描跨多行，或者计算部分列的聚合，考虑列式方法是值得的。
+- en: Wide Column Stores
+  id: totrans-78
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 宽列存储
+- en: Column-oriented databases should not be mixed up with *wide column stores*,
+    such as [BigTable](https://databass.dev/links/117) or [HBase](https://databass.dev/links/118),
+    where data is represented as a multidimensional map, columns are grouped into
+    *column* *families* (usually storing data of the same type), and inside each column
+    family, data is stored row-wise. This layout is best for storing data retrieved
+    by a key or a sequence of keys.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 列式数据库不应与*宽列存储*混淆，例如[BigTable](https://databass.dev/links/117)或[HBase](https://databass.dev/links/118)，在这些系统中，数据表示为多维映射，列分组为*列族*（通常存储相同类型的数据），并且在每个列族内，数据以行方式存储。这种布局最适合存储通过键或键序列检索的数据。
+- en: A canonical example from the Bigtable paper [[CHANG06]](app01.html#CHANG06)
+    is a Webtable. A Webtable stores snapshots of web page contents, their attributes,
+    and the relations among them at a specific timestamp. Pages are identified by
+    the reversed URL, and all attributes (such as page *content* and *anchors*, representing
+    links between pages) are identified by the timestamps at which these snapshots
+    were taken. In a simplified way, it can be represented as a nested map, as [Figure 1-3](#webtable_1)
+    shows.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 来自 Bigtable 论文的一个典型例子[[CHANG06]](app01.html#CHANG06)是 Webtable。Webtable 存储网页内容的快照，它们的属性以及特定时间戳下它们之间的关系。页面由反向
+    URL 标识，并且所有属性（如页面*内容*和*锚点*，表示页面之间的链接）都由这些快照的时间戳标识。简化起见，可以将其表示为嵌套映射，正如[图 1-3](#webtable_1)所示。
+- en: '![dbin 0103](assets/dbin_0103.png)'
+  id: totrans-81
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0103](assets/dbin_0103.png)'
+- en: Figure 1-3\. Conceptual structure of a Webtable
+  id: totrans-82
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 1-3\. Webtable 的概念结构
+- en: 'Data is stored in a multidimensional sorted map with hierarchical indexes:
+    we can locate the data related to a specific web page by its reversed URL and
+    its contents or anchors by the timestamp. Each row is indexed by its *row key*.
+    Related columns are grouped together in *column families*—`contents` and `anchor`
+    in this example—which are stored on disk separately. Each column inside a column
+    family is identified by the *column key*, which is a combination of the column
+    family name and a qualifier (`html`, `cnnsi.com`, `my.look.ca` in this example).
+    Column families store multiple versions of data by timestamp. This layout allows
+    us to quickly locate the higher-level entries (web pages, in this case) and their
+    parameters (versions of content and links to the other pages).'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据存储在多维排序映射中，具有分层索引：我们可以通过其反向 URL 和其内容或锚文本的时间戳来定位与特定网页相关的数据。每一行由其*行键*索引。相关列被分组在一起，例如本例中的*列族*—`contents`
+    和 `anchor`—它们分别存储在磁盘上。列族内的每个列由*列键*标识，它是列族名称和限定符的组合（例如本例中的 `html`、`cnnsi.com`、`my.look.ca`）。列族通过时间戳存储多个数据版本。此布局使我们能够快速定位更高级别的条目（在本例中为网页）及其参数（内容版本和链接到其他页面）。
+- en: 'While it is useful to understand the conceptual representation of wide column
+    stores, their physical layout is somewhat different. A schematic representation
+    of the data layout in column families is shown in [Figure 1-4](#bigtable_1): column
+    families are stored separately, but in each column family, the data belonging
+    to the same key is stored together.'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然理解宽列存储的概念表示非常有用，但它们的物理布局有所不同。列族数据布局的示意图显示在[图 1-4](#bigtable_1)中：列族分开存储，但在每个列族中，属于同一键的数据存储在一起。
+- en: '![dbin 0104](assets/dbin_0104.png)'
+  id: totrans-85
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0104](assets/dbin_0104.png)'
+- en: Figure 1-4\. Physical structure of a Webtable
+  id: totrans-86
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 1-4\. Webtable 的物理结构
+- en: Data Files and Index Files
+  id: totrans-87
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据文件和索引文件
+- en: The primary goal of a database system is to store data and to allow quick access
+    to it. But how is the data organized? Why do we need a database management system
+    and not just a bunch of files? How does file organization improve efficiency?
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库系统的主要目标是存储数据并快速访问它。但是数据是如何组织的？为什么我们需要数据库管理系统而不只是一堆文件？文件组织如何提高效率？
+- en: 'Database systems do use files for storing the data, but instead of relying
+    on filesystem hierarchies of directories and files for locating records, they
+    compose files using implementation-specific formats. The main reasons to use specialized
+    file organization over flat files are:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库系统确实使用文件来存储数据，但不依赖于文件系统目录和文件的层次结构来定位记录，而是使用特定于实现的格式组成文件。使用专门的文件组织而不是平面文件的主要原因是：
+- en: Storage efficiency
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储效率
+- en: Files are organized in a way that minimizes storage overhead per stored data
+    record.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文件组织的方式最小化了每个存储数据记录的存储开销。
+- en: Access efficiency
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 访问效率
+- en: Records can be located in the smallest possible number of steps.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记录可以在尽可能少的步骤中找到。
+- en: Update efficiency
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更新效率
+- en: Record updates are performed in a way that minimizes the number of changes on
+    disk.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记录更新以最小化磁盘上的更改次数进行。
+- en: 'Database systems store *data records*, consisting of multiple fields, in tables,
+    where each table is usually represented as a separate file. Each record in the
+    table can be looked up using a *search key*. To locate a record, database systems
+    use *indexes*: auxiliary data structures that allow it to efficiently locate data
+    records without scanning an entire table on every access. Indexes are built using
+    a subset of fields identifying the record.'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库系统将由多个字段组成的*数据记录*存储在表中，每个表通常表示为一个单独的文件。可以使用*搜索键*查找表中的每条记录。为了定位记录，数据库系统使用*索引*：辅助数据结构，允许在每次访问时有效地定位数据记录，而无需扫描整个表。索引是使用识别记录的字段子集构建的。
+- en: 'A database system usually separates *data files* and *index files*: data files
+    store data records, while index files store record metadata and use it to locate
+    records in data files. Index files are typically smaller than the data files.
+    Files are partitioned into *pages*, which typically have the size of a single
+    or multiple disk blocks. Pages can be organized as sequences of records or as
+    a *slotted pages* (see [“Slotted Pages”](ch03.html#slotted_pages)).'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库系统通常将*数据文件*和*索引文件*分开：数据文件存储数据记录，而索引文件存储记录元数据，并用它来定位数据文件中的记录。索引文件通常比数据文件小。文件被划分为*页*，通常每页大小为单个或多个磁盘块。页可以组织为记录序列或*插槽页*（参见[“插槽页”](ch03.html#slotted_pages)）。
+- en: New records (insertions) and updates to the existing records are represented
+    by key/value pairs. Most modern storage systems *do not* delete data from pages
+    explicitly. Instead, they use *deletion markers* (also called *tombstones*), which
+    contain deletion metadata, such as a key and a timestamp. Space occupied by the
+    records *shadowed* by their updates or deletion markers is reclaimed during garbage
+    collection, which reads the pages, writes the live (i.e., nonshadowed) records
+    to the new place, and discards the shadowed ones.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 新记录（插入）和对现有记录的更新由键/值对表示。大多数现代存储系统*不会*显式地从页面中删除数据。相反，它们使用*删除标记*（也称为*墓碑*），其中包含删除元数据，例如键和时间戳。通过垃圾收集回收由其更新或删除标记阴影的记录所占用的空间，该过程读取页面，将活动（即非阴影）记录写入新位置，并丢弃阴影记录。
+- en: Data Files
+  id: totrans-99
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 数据文件
+- en: Data files (sometimes called *primary files*) can be implemented as *index-organized
+    tables* (IOT), *heap-organized tables* (heap files), or *hash-organized tables*
+    (hashed files).
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据文件（有时称为*主文件*）可以作为*索引组织表*（IOT）、*堆组织表*（堆文件）或*哈希组织表*（哈希文件）实现。
+- en: Records in heap files are not required to follow any particular order, and most
+    of the time they are placed in a write order. This way, no additional work or
+    file reorganization is required when new pages are appended. Heap files require
+    additional index structures, pointing to the locations where data records are
+    stored, to make them searchable.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 堆文件中的记录不需要遵循任何特定顺序，大多数情况下它们按写入顺序排列。这样做的好处是，当附加新页面时，不需要额外的工作或文件重新组织。堆文件需要额外的索引结构，指向存储数据记录的位置，以使它们可以被搜索。
+- en: In hashed files, records are stored in buckets, and the hash value of the key
+    determines which bucket a record belongs to. Records in the bucket can be stored
+    in append order or sorted by key to improve lookup speed.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在哈希文件中，记录存储在存储桶中，键的哈希值确定记录属于哪个存储桶。存储桶中的记录可以按追加顺序存储，或者按键排序以提高查找速度。
+- en: Index-organized tables (IOTs) store data records in the index itself. Since
+    records are stored in key order, range scans in IOTs can be implemented by sequentially
+    scanning its contents.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引组织表（IOT）在索引本身中存储数据记录。由于记录按键顺序存储，因此可以通过顺序扫描其内容来实现范围扫描。
+- en: Storing data records in the index allows us to reduce the number of disk seeks
+    by at least one, since after traversing the index and locating the searched key,
+    we do not have to address a separate file to find the associated data record.
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在索引中存储数据记录使我们可以至少减少一次磁盘查找，因为在遍历索引并定位搜索的键后，我们不必访问单独的文件以查找相关的数据记录。
+- en: When records are stored in a separate file, index files hold *data entries*,
+    uniquely identifying data records and containing enough information to locate
+    them in the data file. For example, we can store file *offsets* (sometimes called
+    *row locators*), locations of data records in the data file, or bucket IDs in
+    the case of hash files. In index-organized tables, data entries hold actual data
+    records.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当记录存储在单独的文件中时，索引文件保存*数据条目*，唯一标识数据记录并包含足够的信息以定位它们在数据文件中的位置。例如，我们可以存储文件*偏移量*（有时称为*行定位器*）、数据文件中数据记录的位置，或者在哈希文件的情况下存储的存储桶
+    ID。在索引组织表中，数据条目包含实际的数据记录。
+- en: Index Files
+  id: totrans-106
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 索引文件
+- en: An index is a structure that organizes data records on disk in a way that facilitates
+    efficient retrieval operations. Index files are organized as specialized structures
+    that map keys to locations in data files where the records identified by these
+    keys (in the case of heap files) or primary keys (in the case of index-organized
+    tables) are stored.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引是一种在磁盘上组织数据记录的结构，有助于进行高效的检索操作。索引文件以专门的结构组织，将键映射到数据文件中记录的位置，这些位置是由这些键（在堆文件的情况下）或主键（在索引组织表的情况下）标识的记录所存储的位置。
+- en: An index on a *primary* (data) file is called the *primary index*. In most cases
+    we can also assume that the primary index is built over a primary key or a set
+    of keys identified as primary. All other indexes are called *secondary*.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在*主要*（数据）文件上的索引称为*主索引*。在大多数情况下，我们还可以假设主索引是建立在主键或一组标识为主键的键上的。所有其他索引称为*次要*。
+- en: Secondary indexes can point directly to the data record, or simply store its
+    primary key. A pointer to a data record can hold an offset to a heap file or an
+    index-organized table. Multiple secondary indexes can point to the same record,
+    allowing a single data record to be identified by different fields and located
+    through different indexes. While primary index files hold a unique entry per search
+    key, secondary indexes may hold several entries per search key [[GARCIAMOLINA08]](app01.html#GARCIAMOLINA08).
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 次要索引可以直接指向数据记录，也可以仅存储其主键。指向数据记录的指针可以保存到堆文件或索引组织表的偏移量。多个次要索引可以指向同一记录，允许通过不同的字段标识单个数据记录并通过不同的索引定位。虽然主索引文件每个搜索键只保存一个唯一条目，但次要索引可能会保存多个搜索键的条目
+    [[GARCIAMOLINA08]](app01.html#GARCIAMOLINA08)。
+- en: If the order of data records follows the search key order, this index is called
+    *clustered* (also known as clustering). Data records in the clustered case are
+    usually stored in the same file or in a *clustered file*, where the key order
+    is preserved. If the data is stored in a separate file, and its order does not
+    follow the key order, the index is called *nonclustered* (sometimes called unclustered).
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果数据记录的顺序遵循搜索键的顺序，则称此索引为*聚集*（也称为聚簇）。在聚集的情况下，数据记录通常存储在同一文件中或在*聚集文件*中，其中键的顺序被保留。如果数据存储在单独的文件中，并且其顺序不遵循键的顺序，则称索引为*非聚集*（有时称为非聚簇）。
+- en: '[Figure 1-5](#storing_data_separately_1) shows the difference between the two
+    approaches:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 1-5](#storing_data_separately_1) 展示了这两种方法之间的区别：'
+- en: a) An index-organized table, where data records are stored directly in the index
+    file.
+  id: totrans-112
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: a) 一个索引组织的表，其中数据记录直接存储在索引文件中。
+- en: b) An index file storing the offsets and a separate file storing data records.
+  id: totrans-113
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: b) 一个存储偏移量的索引文件和一个单独存储数据记录的文件。
+- en: '![dbin 0105](assets/dbin_0105.png)'
+  id: totrans-114
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0105](assets/dbin_0105.png)'
+- en: Figure 1-5\. Storing data records in an index file versus storing offsets to
+    the data file (index segments shown in white; segments holding data records shown
+    in gray)
+  id: totrans-115
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 1-5\. 将数据记录存储在索引文件中与存储数据文件偏移量之间的比较（索引段显示为白色；存储数据记录的段显示为灰色）
+- en: Note
+  id: totrans-116
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Index-organized tables store information in index order and are clustered by
+    definition. Primary indexes are *most often* clustered. Secondary indexes are
+    nonclustered by definition, since they’re used to facilitate access by keys other
+    than the primary one. Clustered indexes can be both index-organized or have separate
+    index and data files.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引组织的表按索引顺序存储信息，并且定义上是聚集的。主索引通常是*大多数*聚集的。次要索引定义上是非聚集的，因为它们用于通过非主键键来访问。聚集索引可以是索引组织的或具有单独的索引和数据文件。
+- en: Many database systems have an inherent and explicit *primary key*, a set of
+    columns that uniquely identify the database record. In cases when the primary
+    key is not specified, the storage engine can create an *implicit* primary key
+    (for example, MySQL InnoDB adds a new auto-increment column and fills in its values
+    automatically).
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多数据库系统具有固有且显式的*主键*，即一组唯一标识数据库记录的列。在未指定主键时，存储引擎可以创建*隐式*主键（例如，MySQL InnoDB添加一个新的自增列并自动填充其值）。
+- en: 'This terminology is used in different kinds of database systems: relational
+    database systems (such as MySQL and PostgreSQL), Dynamo-based NoSQL stores (such
+    as [Apache Cassandra](https://databass.dev/links/119) and in [Riak](https://databass.dev/links/120)),
+    and document stores (such as MongoDB). There can be some project-specific naming,
+    but most often there’s a clear mapping to this terminology.'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此术语在不同类型的数据库系统中使用：关系数据库系统（如MySQL和PostgreSQL）、基于Dynamo的NoSQL存储（如[Apache Cassandra](https://databass.dev/links/119)和[Riak](https://databass.dev/links/120)）、以及文档存储（如MongoDB）。可能会有一些项目特定的命名，但大多数情况下都能明确映射到这些术语。
+- en: Primary Index as an Indirection
+  id: totrans-120
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 主索引作为间接引用
+- en: There are different opinions in the database community on whether data records
+    should be referenced directly (through file offset) or via the primary key index.^([4](ch01.html#idm46466889581384))
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库社区对于数据记录是直接引用（通过文件偏移量）还是通过主键索引引用存在不同意见。^([4](ch01.html#idm46466889581384))
+- en: Both approaches have their pros and cons and are better discussed in the scope
+    of a complete implementation. By referencing data directly, we can reduce the
+    number of disk seeks, but have to pay a cost of updating the pointers whenever
+    the record is updated or relocated during a maintenance process. Using indirection
+    in the form of a primary index allows us to reduce the cost of pointer updates,
+    but has a higher cost on a read path.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这两种方法都有各自的优缺点，并且最好在完整实现的范围内进行讨论。通过直接引用数据，我们可以减少磁盘寻址次数，但在维护过程中更新记录或重新定位时必须付出更新指针的成本。使用主索引作为间接方式可以减少指针更新的成本，但在读取路径上有更高的成本。
+- en: 'Updating just a couple of indexes might work if the workload mostly consists
+    of reads, but this approach does not work well for write-heavy workloads with
+    multiple indexes. To reduce the costs of pointer updates, instead of payload offsets,
+    some implementations use primary keys for indirection. For example, MySQL InnoDB
+    uses a primary index and performs two lookups: one in the secondary index, and
+    one in a primary index when performing a query [[TARIQ11]](app01.html#TARIQ11).
+    This adds an overhead of a primary index lookup instead of following the offset
+    directly from the secondary index.'
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更新仅仅几个索引可能适用于大部分读取工作负载，但是对于写入密集型工作负载和多个索引，这种方法效果不佳。为了减少指针更新的成本，一些实现采用主键进行间接寻址，而不是使用载荷偏移。例如，MySQL
+    InnoDB 使用主索引，并执行两次查找：在次要索引中进行一次查找，在主索引中进行一次查询 [[TARIQ11]](app01.html#TARIQ11)。这样做会增加主索引查找的开销，而不是直接从次要索引的偏移量出发。
+- en: '[Figure 1-6](#storing_data_separately_2) shows how the two approaches are different:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 1-6](#storing_data_separately_2) 显示了这两种方法的不同之处：'
+- en: a) Two indexes reference data entries directly from secondary index files.
+  id: totrans-125
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: a) 两个索引直接引用次要索引文件中的数据条目。
+- en: b) A secondary index goes through the indirection layer of a primary index to
+    locate the data entries.
+  id: totrans-126
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: b) 次要索引通过主索引的间接层定位数据条目。
+- en: '![dbin 0106](assets/dbin_0106.png)'
+  id: totrans-127
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0106](assets/dbin_0106.png)'
+- en: Figure 1-6\. Referencing data tuples directly (a) versus using a primary index
+    as indirection (b)
+  id: totrans-128
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 1-6\. 直接引用数据元组（a）与使用主索引作为间接寻址（b）
+- en: It is also possible to use a hybrid approach and store both data file offsets
+    and primary keys. First, you check if the data offset is still valid and pay the
+    extra cost of going through the primary key index if it has changed, updating
+    the index file after finding a new offset.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还可以采用混合方法，同时存储数据文件偏移量和主键。首先，检查数据偏移量是否仍然有效，如果已更改，则通过主键索引支付额外的成本，并在找到新偏移量后更新索引文件。
+- en: Buffering, Immutability, and Ordering
+  id: totrans-130
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 缓冲、不可变性和顺序
+- en: A storage engine is based on some data structure. However, these structures
+    do not describe the semantics of caching, recovery, transactionality, and other
+    things that storage engines add on top of them.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储引擎基于某些数据结构。然而，这些结构并未描述缓存、恢复、事务性以及存储引擎在其上添加的其他功能的语义。
+- en: In the next chapters, we will start the discussion with B-Trees (see [“Ubiquitous
+    B-Trees”](ch02.html#b_trees)) and try to understand why there are so many B-Tree
+    variants, and why new database storage structures keep emerging.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的章节中，我们将从 B-Tree 开始讨论（见 [“普遍存在的 B-Tree”](ch02.html#b_trees)），并尝试理解为什么会有这么多
+    B-Tree 的变体，以及为什么新的数据库存储结构不断出现。
+- en: 'Storage structures have three common variables: they use *buffering* (or avoid
+    using it), use *immutable* (or mutable) files, and store values *in order* (or
+    out of order). Most of the distinctions and optimizations in storage structures
+    discussed in this book are related to one of these three concepts.'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储结构具有三个常见变量：它们使用 *缓冲*（或避免使用），使用 *不可变*（或可变）文件，以及 *有序*（或无序）存储值。本书讨论的大多数存储结构的区别和优化与这三个概念之一相关。
+- en: Buffering
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 缓冲
+- en: This defines whether or not the storage structure chooses to collect a certain
+    amount of data in memory before putting it on disk. Of course, every on-disk structure
+    has to use buffering to *some* degree, since the smallest unit of data transfer
+    to and from the disk is a *block*, and it is desirable to write full blocks. Here,
+    we’re talking about avoidable buffering, something storage engine implementers
+    *choose* to do. One of the first optimizations we discuss in this book is adding
+    in-memory buffers to B-Tree nodes to amortize I/O costs (see [“Lazy B-Trees”](ch06.html#lazy_b_trees)).
+    However, this is not the only way we can apply buffering. For example, two-component
+    LSM Trees (see [“Two-component LSM Tree”](ch07.html#two_component_lsm_tree)),
+    despite their similarities with B-Trees, use buffering in an entirely different
+    way, and combine buffering with immutability.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这定义了存储结构是否选择在将一定量的数据写入磁盘之前在内存中收集它。当然，每种磁盘结构都必须以*某种*程度使用缓冲，因为从磁盘传输和传出的最小数据单元是一个*块*，最好写入完整的块。在这里，我们讨论的是可避免的缓冲，存储引擎实施者*选择*这样做。本书讨论的第一个优化之一是向B-Tree节点添加内存缓冲区，以分摊I/O成本（见[“延迟加载B-Tree”](ch06.html#lazy_b_trees)）。然而，这不是我们可以应用缓冲的唯一方式。例如，两部分组成的LSM树（见[“两部分组成的LSM树”](ch07.html#two_component_lsm_tree)），尽管与B-Tree相似，但以完全不同的方式使用缓冲，并结合了缓冲与不可变性。
+- en: Mutability (or immutability)
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可变性（或不可变性）
+- en: 'This defines whether or not the storage structure reads parts of the file,
+    updates them, and writes the updated results at the same location in the file.
+    Immutable structures are *append-only*: once written, file contents are not modified.
+    Instead, modifications are appended to the end of the file. There are other ways
+    to implement immutability. One of them is *copy-on-write* (see [“Copy-on-Write”](ch06.html#copy_on_write_b_tree)),
+    where the modified page, holding the updated version of the record, is written
+    to the *new* location in the file, instead of its original location. Often the
+    distinction between LSM and B-Trees is drawn as immutable against in-place update
+    storage, but there are structures (for example, [“Bw-Trees”](ch06.html#bw_tree))
+    that are inspired by B-Trees but are immutable.'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这定义了存储结构是否读取文件的部分内容，更新它们，并将更新后的结果写回文件中相同位置。不可变结构是*追加式*的：一旦写入，文件内容就不再修改。相反，修改被追加到文件末尾。实现不可变性还有其他方式。其中一种是*写时复制*（见[“写时复制B-Tree”](ch06.html#copy_on_write_b_tree)），其中修改的页，持有记录的更新版本，写入到文件的*新*位置，而不是原始位置。通常，LSM与B-Tree之间的区别被描述为不可变对抗就地更新存储，但也有一些结构（例如，[“Bw-Tree”](ch06.html#bw_tree)）受到B-Tree启发却是不可变的。
+- en: Ordering
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 排序
+- en: This is defined as whether or not the *data records* are stored in the key order
+    in the pages on disk. In other words, the keys that sort closely are stored in
+    contiguous segments on disk. Ordering often defines whether or not we can efficiently
+    scan the *range* of records, not only locate the individual data records. Storing
+    data out of order (most often, in insertion order) opens up for some write-time
+    optimizations. For example, Bitcask (see [“Bitcask”](ch07.html#bitcask)) and WiscKey
+    (see [“WiscKey”](ch07.html#wisc_key)) store data records directly in append-only
+    files.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这定义了*数据记录*是否按照键顺序存储在磁盘页中。换句话说，排序紧密的键存储在磁盘上的连续段中。排序通常决定我们是否能高效地扫描记录的*范围*，而不仅仅是定位单个数据记录。无序存储数据（通常按插入顺序），为某些写入时优化打开了可能性。例如，Bitcask（见[“Bitcask”](ch07.html#bitcask)）和WiscKey（见[“WiscKey”](ch07.html#wisc_key)）直接将数据记录存储在追加只文件中。
+- en: Of course, a brief discussion of these three concepts is not enough to show
+    their power, and we’ll continue this discussion throughout the rest of the book.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当然，简要讨论这三个概念是不足以展示它们的力量的，我们将在本书的其余部分继续讨论这些内容。
+- en: Summary
+  id: totrans-141
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: In this chapter, we’ve discussed the architecture of a database management system
+    and covered its primary components.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们讨论了数据库管理系统的架构并介绍了其主要组件。
+- en: To highlight the importance of disk-based structures and their difference from
+    in-memory ones, we discussed memory- and disk-based stores. We came to the conclusion
+    that disk-based structures are important for both types of stores, but are used
+    for different purposes.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了突显基于磁盘的结构及其与基于内存的结构的区别，我们讨论了基于内存和基于磁盘的存储。我们得出结论，磁盘结构对两种存储类型都很重要，但用途不同。
+- en: To understand how access patterns influence database system design, we discussed
+    column- and row-oriented database management systems and the primary factors that
+    set them apart from each other. To start a conversation about *how the data is
+    stored*, we covered data and index files.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了理解访问模式如何影响数据库系统设计，我们讨论了基于列和基于行的数据库管理系统以及区分它们的主要因素。为了开启一场关于*数据存储方式*的讨论，我们涵盖了数据和索引文件。
+- en: 'Lastly, we introduced three core concepts: buffering, immutability, and ordering.
+    We will use them throughout this book to highlight properties of the storage engines
+    that use them.'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们介绍了三个核心概念：缓冲、不变性和顺序。在本书中，我们将使用它们来突出使用这些概念的存储引擎的特性。
+- en: ^([1](ch01.html#idm46466889770440-marker)) You can find a visualization and
+    comparison of disk, memory access latencies, and many other relevant numbers over
+    the years at [*https://people.eecs.berkeley.edu/~rcs/research/interactive_latency.html*](https://people.eecs.berkeley.edu/~rcs/research/interactive_latency.html).
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch01.html#idm46466889770440-marker)) 您可以在[*https://people.eecs.berkeley.edu/~rcs/research/interactive_latency.html*](https://people.eecs.berkeley.edu/~rcs/research/interactive_latency.html)找到多年来磁盘、内存访问延迟以及许多其他相关数字的可视化和比较。
+- en: ^([2](ch01.html#idm46466889716792-marker)) Spatial locality is one of the Principles
+    of Locality, stating that if a memory location is accessed, its nearby memory
+    locations will be accessed in the near future.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch01.html#idm46466889716792-marker)) 空间局部性是局部性原则之一，指出如果访问了一个内存位置，则将来会访问其附近的内存位置。
+- en: ^([3](ch01.html#idm46466889691416-marker)) Vectorized instructions, or Single
+    Instruction Multiple Data (SIMD), describes a class of CPU instructions that perform
+    the same operation on multiple data points.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([3](ch01.html#idm46466889691416-marker)) 矢量化指令，或称单指令多数据（SIMD），描述了一类CPU指令，可对多个数据点执行相同操作。
+- en: ^([4](ch01.html#idm46466889581384-marker)) The original post that has stirred
+    up the discussion was controversial and one-sided, but you can refer to the [presentation
+    comparing MySQL and PostgreSQL index and storage formats](https://databass.dev/links/121),
+    which references the original source as well.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([4](ch01.html#idm46466889581384-marker)) 引发讨论的原始帖子颇具争议且偏颇，但您可以参考[比较 MySQL
+    和 PostgreSQL 索引与存储格式的演示](https://databass.dev/links/121)，该演示也引用了原始来源。

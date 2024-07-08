@@ -1,1 +1,6 @@
++   [数据库内部原理](docs/db-intn/README.md)
++   [Python 高性能指南](docs/eff-mysql-perf/README.md)
 +   [高性能 MySQL 第四版（GPT 重译）](docs/hiperf-mysql-4e/README.md)
++   [MySQL 学习指南第二版](docs/lrn-mysql-2e/README.md)
++   [MongoDB 权威指南第三版](docs/mongo-dfngd-3e/README.md)
++   [MySQL 秘籍第四版](docs/mysql-cb-4e/README.md)

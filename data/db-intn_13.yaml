@@ -1,0 +1,623 @@
+- en: Chapter 10\. Leader Election
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第10章 领导者选举
+- en: 'Synchronization can be quite costly: if each algorithm step involves contacting
+    each other participant, we can end up with a significant communication overhead.
+    This is particularly true in large and geographically distributed networks. To
+    reduce synchronization overhead and the number of message round-trips required
+    to reach a decision, some algorithms rely on the existence of the *leader* (sometimes
+    called *coordinator*) process, responsible for executing or coordinating steps
+    of a distributed algorithm.'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同步可能非常昂贵：如果每个算法步骤都涉及与每个其他参与者联系，我们可能会遇到显著的通信开销。这在大型和地理分布网络中尤为真实。为了减少同步开销和达成决策所需的消息往返次数，一些算法依赖于**领导者**（有时称为**协调器**）进程的存在，负责执行或协调分布式算法的步骤。
+- en: Generally, processes in distributed systems are uniform, and any process can
+    take over the leadership role. Processes assume leadership for long periods of
+    time, but this is not a permanent role. Usually, the process remains a leader
+    until it crashes. After the crash, any other process can start a new election
+    round, assume leadership, if it gets elected, and continue the failed leader’s
+    work.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，分布式系统中的进程是均匀的，任何进程都可以接管领导角色。进程可能长时间担任领导角色，但这并不是永久角色。通常情况下，进程会保持领导者角色直到它崩溃。崩溃后，任何其他进程都可以开始新的选举轮次，如果被选中就会担任领导角色，并继续失败领导者的工作。
+- en: The *liveness* of the election algorithm guarantees that *most of the time*
+    there will be a leader, and the election will eventually complete (i.e., the system
+    should not be in the election state indefinitely).
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选举算法的**活跃性**保证了大部分时间都会有一个领导者，并且选举最终会完成（即系统不应无限期处于选举状态）。
+- en: Ideally, we’d like to assume *safety*, too, and guarantee there may be *at most
+    one* leader at a time, and completely eliminate the possibility of a *split brain*
+    situation (when two leaders serving the same purpose are elected but unaware of
+    each other). However, in practice, many leader election algorithms violate this
+    agreement.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理想情况下，我们希望还能假设**安全性**，并保证同时最多只能有一个领导者，并完全消除**分裂大脑**情况的可能性（当两个服务于相同目的的领导者被选举但彼此不知情时）。然而，在实践中，许多领导者选举算法违反了这一约定。
+- en: Leader processes can be used, for example, to achieve a total order of messages
+    in a broadcast. The leader collects and holds the global state, receives messages,
+    and disseminates them among the processes. It can also be used to coordinate system
+    reorganization after the failure, during initialization, or when important state
+    changes happen.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 领导进程可以用来实现消息广播的总排序，例如。领导者收集并持有全局状态，接收消息，并在进程之间传播它们。它还可以用于协调系统在故障后的重新组织，在初始化期间或重要状态变化发生时。
+- en: 'Election is triggered when the system initializes, and the leader is elected
+    for the first time, or when the previous leader crashes or fails to communicate.
+    Election has to be deterministic: exactly one leader has to emerge from the process.
+    This decision needs to be effective for all participants.'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当系统初始化时触发选举，并且首次选出领导者，或者以前的领导者崩溃或无法通信时会触发选举。选举必须是确定性的：过程中必须精确产生一个领导者。这个决定必须对所有参与者有效。
+- en: Even though leader election and distributed locking (i.e., exclusive ownership
+    over a shared resource) might look alike from a theoretical perspective, they
+    are slightly different. If one process holds a lock for executing a critical section,
+    it is unimportant for other processes to know who exactly is holding a lock right
+    now, as long as the liveness property is satisfied (i.e., the lock will be eventually
+    released, allowing others to acquire it). In contrast, the elected process has
+    some special properties and has to be known to all other participants, so the
+    newly elected leader has to notify its peers about its role.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管从理论上看，领导者选举和分布式锁定（即对共享资源的独占权）可能看起来相似，但它们略有不同。如果一个进程持有锁来执行临界区，那么其他进程知道目前究竟是谁持有锁并不重要，只要满足活跃性属性（即锁最终会被释放，允许其他进程获取）。相比之下，选举出的进程具有一些特殊属性，并且必须为所有其他参与者所知，因此新选出的领导者必须通知其同行其角色。
+- en: If a distributed locking algorithm has any sort of preference toward some process
+    or group of processes, it will eventually starve nonpreferred processes from the
+    shared resource, which contradicts the liveness property. In contrast, the leader
+    can remain in its role until it stops or crashes, and long-lived leaders are preferred.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果分布式锁算法对某个进程或一组进程有偏好，它最终会将非首选进程从共享资源中饿死，这与活性属性相矛盾。相反，领导者可以保持其角色直到停止或崩溃，并且长寿命的领导者更受欢迎。
+- en: Having a stable leader in the system helps to avoid state synchronization between
+    remote participants, reduce the number of exchanged messages, and drive execution
+    from a single process instead of requiring peer-to-peer coordination. One of the
+    potential problems in systems with a notion of leadership is that the leader can
+    become a bottleneck. To overcome that, many systems partition data in non-intersecting
+    independent replica sets (see [“Database Partitioning”](ch13.html#database_partitioning)).
+    Instead of having a single system-wide leader, each replica set has its own leader.
+    One of the systems that uses this approach is Spanner (see [“Distributed Transactions
+    with Spanner”](ch13.html#spanner)).
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在系统中拥有稳定的领导者有助于避免远程参与者之间的状态同步，减少交换消息的数量，并从单个进程驱动执行，而不需要对等协调。在具有领导概念的系统中的一个潜在问题是，领导者可能成为瓶颈。为了克服这一问题，许多系统将数据分区为非交叉独立的副本集（参见
+    [“数据库分区”](ch13.html#database_partitioning)）。每个副本集都有自己的领导者。采用这种方法的系统之一是 Spanner（参见
+    [“Spanner分布式事务”](ch13.html#spanner)）。
+- en: 'Because every leader process will eventually fail, failure has to be detected,
+    reported, and reacted upon: a system has to elect another leader to replace the
+    failed one.'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为每个领导进程最终会失败，必须检测、报告并对其做出反应：系统必须选举另一位领导者来取代失败的领导者。
+- en: Some algorithms, such as ZAB (see [“Zookeeper Atomic Broadcast (ZAB)”](ch14.html#zab)),
+    Multi-Paxos (see [“Multi-Paxos”](ch14.html#multi_paxos)), or Raft (see [“Raft”](ch14.html#raft)),
+    use temporary leaders to reduce the number of messages required to reach an agreement
+    between the participants. However, these algorithms use their own algorithm-specific
+    means for leader election, failure detection, and resolving conflicts between
+    the competing leader processes.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些算法，例如 ZAB（参见 [“Zookeeper原子广播（ZAB）”](ch14.html#zab)）、Multi-Paxos（参见 [“多数派决策（Multi-Paxos）”](ch14.html#multi_paxos)）或
+    Raft（参见 [“Raft”](ch14.html#raft)），使用临时领导者来减少达成参与者间协议所需的消息数。然而，这些算法使用各自特定的算法手段进行领导者选举、失败检测和解决竞争领导进程之间的冲突。
+- en: Bully Algorithm
+  id: totrans-12
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 霸者算法
+- en: One of the leader election algorithms, known as the *bully algorithm*, uses
+    process ranks to identify the new leader. Each process gets a unique rank assigned
+    to it. During the election, the process with the highest rank becomes a leader
+    [[GARCIAMOLINA82]](app01.html#GARCIAMOLINA82).
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一种领导选举算法称为*霸者算法*，利用进程排名来确定新的领导者。每个进程都被分配了一个唯一的排名。在选举期间，排名最高的进程成为领导者 [[GARCIAMOLINA82]](app01.html#GARCIAMOLINA82)。
+- en: 'This algorithm is known for its simplicity. The algorithm is named *bully*
+    because the highest-ranked node “bullies” other nodes into accepting it. It is
+    also known as *monarchial* leader election: the highest-ranked sibling becomes
+    a monarch after the previous one ceases to exist.'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个算法以其简单性而闻名。该算法被命名为*霸者*，因为排名最高的节点“霸占”其他节点接受它。它也被称为*君主制*领导选举：排名最高的兄弟在前任停止存在后成为君主。
+- en: Election starts if one of the processes notices that there’s no leader in the
+    system (it was never initialized) or the previous leader has stopped responding
+    to requests, and proceeds in three steps:^([1](ch10.html#idm46466886504056))
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果其中一个进程注意到系统中没有领导者（从未初始化过）或者之前的领导者停止响应请求，选举将开始，并按三个步骤进行：^([1](ch10.html#idm46466886504056))
+- en: The process sends election messages to processes with higher identifiers.
+  id: totrans-16
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 进程向具有较高标识符的进程发送选举消息。
+- en: The process waits, allowing higher-ranked processes to respond. If no higher-ranked
+    process responds, it proceeds with step 3\. Otherwise, the process notifies the
+    highest-ranked process it has heard from, and allows it to proceed with step 3.
+  id: totrans-17
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 进程等待，允许排名更高的进程做出响应。如果没有排名更高的进程响应，则继续执行第三步。否则，进程会通知它听到的排名最高的进程，并允许它继续执行第三步。
+- en: The process assumes that there are no active processes with a higher rank, and
+    notifies all lower-ranked processes about the new leader.
+  id: totrans-18
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 这个过程假设没有比它更高排名的活动进程，并通知所有排名较低的进程新领导人的消息。
+- en: '[Figure 10-1](#leader_election_1) illustrates the bully leader election algorithm:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 10-1](#leader_election_1) 展示了霸王领导者选举算法：'
+- en: a) Process `3` notices that the previous leader `6` has crashed and starts a
+    new election by sending `Election` messages to processes with higher identifiers.
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: a) 进程 `3` 注意到之前的领导者 `6` 崩溃，并通过向具有更高标识符的进程发送 `Election` 消息来开始新的选举。
+- en: b) `4` and `5` respond with `Alive`, as they have a higher rank than `3`.
+  id: totrans-21
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: b) `4` 和 `5` 回复 `Alive`，因为它们比 `3` 有更高的等级。
+- en: c) `3` notifies the highest-ranked process `5` that has responded during this
+    round.
+  id: totrans-22
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: c) `3` 通知本轮响应最高等级的进程 `5`。
+- en: d) `5` is elected as a new leader. It broadcasts `Elected` messages, notifying
+    lower-ranked processes about the election results.
+  id: totrans-23
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: d) `5` 被选为新的领导者。它广播 `Elected` 消息，通知低级进程选举结果。
+- en: '![dbin 1001](assets/dbin_1001.png)'
+  id: totrans-24
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 1001](assets/dbin_1001.png)'
+- en: 'Figure 10-1\. Bully algorithm: previous leader (6) fails and process 3 starts
+    the new election'
+  id: totrans-25
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 10-1\. 霸王算法：先前的领导者 (6) 失败，进程 3 启动新的选举
+- en: One of the apparent problems with this algorithm is that it violates the safety
+    guarantee (that at most one leader can be elected at a time) in the presence of
+    network partitions. It is quite easy to end up in the situation where nodes get
+    split into two or more independently functioning subsets, and each subset elects
+    its leader. This situation is called *split brain*.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该算法的一个明显问题是在网络分区存在的情况下违反了安全保证（即最多同时选出一个领导者）。很容易出现节点分为两个或更多独立运行的子集的情况，每个子集选出自己的领导者。这种情况称为
+    *分裂大脑*。
+- en: Another problem with this algorithm is a strong preference toward high-ranked
+    nodes, which becomes an issue if they are unstable and can lead to a permanent
+    state of reelection. An unstable high-ranked node proposes itself as a leader,
+    fails shortly thereafter, wins reelection, fails again, and the whole process
+    repeats. This problem can be solved by distributing host quality metrics and taking
+    them into consideration during the election.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该算法的另一个问题是对高排名节点的强烈偏好，如果它们不稳定可能会导致永久的重新选举状态。一个不稳定的高排名节点提议自己作为领导者，随后失败，重新赢得选举，再次失败，整个过程重复。这个问题可以通过分发主机质量指标并在选举过程中考虑它们来解决。
+- en: Next-In-Line Failover
+  id: totrans-28
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 下一个备用故障转移
+- en: There are many versions of the bully algorithm that improve its various properties.
+    For example, we can use multiple next-in-line alternative processes as a failover
+    to shorten reelections [[GHOLIPOUR09]](app01.html#GHOLIPOUR09).
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 霸王算法有许多改进版本，以提高其各种属性。例如，我们可以使用多个备用的下一个排队进程作为故障转移，以缩短重新选举的时间 [[GHOLIPOUR09]](app01.html#GHOLIPOUR09)。
+- en: Each elected leader provides a list of failover nodes. When one of the processes
+    detects a leader failure, it starts a new election round by sending a message
+    to the highest-ranked *alternative* from the list provided by the failed leader.
+    If one of the proposed alternatives is up, it becomes a new leader without having
+    to go through the complete election round.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个选出的领导者提供一个故障转移节点列表。当其中一个进程检测到领导者故障时，它通过向由失败领导者提供的备用列表中的最高等级的进程发送消息来启动新的选举轮次。如果建议的备选进程之一正常，它将立即成为新的领导者，无需进行完整的选举轮次。
+- en: If the process that has detected the leader failure is itself the highest ranked
+    process from the list, it can notify the processes about the new leader right
+    away.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果检测到领导者故障的进程本身是备选列表中的最高等级进程，则可以立即通知进程有关新领导者的情况。
+- en: '[Figure 10-2](#leader_election_2) shows the process with this optimization
+    in place:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 10-2](#leader_election_2) 展示了采用此优化措施的过程：'
+- en: a) `6`, a leader with designated alternatives `{5,4}`, crashes. `3` notices
+    this failure and contacts `5`, the alternative from the list with the highest
+    rank.
+  id: totrans-33
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: a) `6`，一个具有指定备选 `{5,4}` 的领导者，崩溃。`3` 注意到这个故障并联系具有最高等级的备选 `5`。
+- en: b) `5` responds to `3` that it’s alive to prevent it from contacting other nodes
+    from the alternatives list.
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: b) `5` 响应 `3` 它是活动的，以防止其与备选列表中的其他节点联系。
+- en: c) `5` notifies other nodes that it’s a new leader.
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: c) `5` 通知其他节点它是新的领导者。
+- en: '![dbin 1002](assets/dbin_1002.png)'
+  id: totrans-36
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 1002](assets/dbin_1002.png)'
+- en: 'Figure 10-2\. Bully algorithm with failover: previous leader (6) fails and
+    process 3 starts the new election by contacting the highest-ranked alternative'
+  id: totrans-37
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 10-2\. 具有故障转移的霸王算法：先前的领导者 (6) 失败，进程 3 启动新的选举，联系最高等级的备选进程。
+- en: As a result, we require fewer steps during the election if the next-in-line
+    process is alive.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，如果下一个排队的进程是活动的，我们在选举过程中需要更少的步骤。
+- en: Candidate/Ordinary Optimization
+  id: totrans-39
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 候选人/普通优化
+- en: Another algorithm attempts to lower requirements on the number of messages by
+    splitting the nodes into two subsets, *candidate* and *ordinary*, where only one
+    of the candidate nodes can eventually become a leader [[MURSHED12]](app01.html#MURSHED12).
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个算法试图通过将节点分为两个子集 *candidate* 和 *ordinary* 来降低消息数量的要求，只有一个候选节点最终能成为领导者 [[MURSHED12]](app01.html#MURSHED12)。
+- en: The ordinary process initiates election by contacting candidate nodes, collecting
+    responses from them, picking the highest-ranked alive candidate as a new leader,
+    and then notifying the rest of the nodes about the election results.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 普通进程通过联系候选节点启动选举，从中收集响应，选择排名最高的活动候选节点作为新领导者，然后通知其余节点有关选举结果。
+- en: To solve the problem with multiple simultaneous elections, the algorithm proposes
+    to use a tiebreaker variable `δ`, a process-specific delay, varying significantly
+    between the nodes, that allows one of the nodes to initiate the election before
+    the other ones. The tiebreaker time is generally greater than the message round-trip
+    time. Nodes with higher priorities have a lower `δ`, and vice versa.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了解决多个同时选举的问题，该算法建议使用一个决胜变量 `δ`，即一个进程特定的延迟，节点之间的延迟显著不同，允许其中一个节点在其他节点之前启动选举。决胜时间通常大于消息的往返时间。优先级较高的节点具有较低的
+    `δ`，反之亦然。
+- en: '[Figure 10-3](#leader_election_4) shows the steps of the election process:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 10-3](#leader_election_4) 展示了选举过程的步骤：'
+- en: a) Process `4` from the ordinary set notices the failure of leader process `6`.
+    It starts a new election round by contacting all remaining processes from the
+    candidate set.
+  id: totrans-44
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: a) 来自普通集的进程 `4` 察觉到领导进程 `6` 的故障。它通过联系候选集中的所有剩余进程启动新的选举轮次。
+- en: b) Candidate processes respond to notify `4` that they’re still alive.
+  id: totrans-45
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: b) 候选进程响应通知 `4` 他们仍然存活。
+- en: 'c) `4` notifies all processes about the new leader: `2`.'
+  id: totrans-46
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: c) `4` 通知所有进程有关新领导者 `2` 的信息。
+- en: '![dbin 1003](assets/dbin_1003.png)'
+  id: totrans-47
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 1003](assets/dbin_1003.png)'
+- en: 'Figure 10-3\. Candidate/ordinary modification of the bully algorithm: previous
+    leader (6) fails and process 4 starts the new election'
+  id: totrans-48
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 10-3\. bully 算法的候选/普通修改：之前的领导者（6）失败，进程 4 开始新的选举
+- en: Invitation Algorithm
+  id: totrans-49
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 邀请算法
+- en: An *invitation algorithm* allows processes to “invite” other processes to join
+    their groups instead of trying to outrank them. This algorithm allows multiple
+    leaders *by definition*, since each group has its own leader.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一种 *邀请算法* 允许进程“邀请”其他进程加入其组，而不是试图超越它们。根据定义，该算法允许多个领导者，因为每个组都有自己的领导者。
+- en: Each process starts as a leader of a new group, where the only member is the
+    process itself. Group leaders contact peers that do not belong to their groups,
+    inviting them to join. If the peer process is a leader itself, two groups are
+    merged. Otherwise, the contacted process responds with a group leader ID, allowing
+    two group leaders to establish contact and merge groups in fewer steps.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个进程从一个新组的领导者开始，其中唯一成员是进程本身。组领导者联系不属于其组的同行，邀请他们加入。如果同行进程本身是领导者，则两个组合并。否则，接触到的进程以组领导者ID作为响应，允许两个组领导者建立联系并在更少的步骤中合并组。
+- en: '[Figure 10-4](#leader_election_3) shows the execution steps of the invitation
+    algorithm:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 10-4](#leader_election_3) 展示了邀请算法的执行步骤：'
+- en: a) Four processes start as leaders of groups containing one member each. `1`
+    invites `2` to join its group, and `3` invites `4` to join its group.
+  id: totrans-53
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: a) 四个进程作为各自只包含一个成员的组的领导者启动。`1` 邀请 `2` 加入其组，`3` 邀请 `4` 加入其组。
+- en: b) `2` joins a group with process `1`, and `4` joins a group with process `3`.
+    `1`, the leader of the first group, contacts `3`, the leader of the other group.
+    Remaining group members (`4`, in this case) are notified about the new group leader.
+  id: totrans-54
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: b) `2` 加入与进程 `1` 的组，`4` 加入与进程 `3` 的组。第一个组的领导者 `1` 联系另一个组的领导者 `3`。剩余的组成员（在这种情况下是
+    `4`）被告知新的组领导者。
+- en: c) Two groups are merged and `1` becomes a leader of an extended group.
+  id: totrans-55
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: c) 两个组合并，`1` 成为扩展组的领导者。
+- en: '![dbin 1004](assets/dbin_1004.png)'
+  id: totrans-56
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 1004](assets/dbin_1004.png)'
+- en: Figure 10-4\. Invitation algorithm
+  id: totrans-57
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 10-4\. 邀请算法
+- en: Since groups are merged, it doesn’t matter whether the process that suggested
+    the group merge becomes a new leader or the other one does. To keep the number
+    of messages required to merge groups to a minimum, a leader of a larger group
+    can become a leader for a new group. This way only the processes from the smaller
+    group have to be notified about the change of leader.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于组被合并，建议组合并的过程无论是成为新领导者还是另一个领导者都无关紧要。为了将合并组所需的消息数量最小化，较大组的领导者可以成为新组的领导者。这样只需通知较小组的进程有关领导变更即可。
+- en: Similar to the other discussed algorithms, this algorithm allows processes to
+    settle in multiple groups and have multiple leaders. The invitation algorithm
+    allows creating process groups and merging them without having to trigger a new
+    election from scratch, reducing the number of messages required to finish the
+    election.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 类似于其他讨论过的算法，该算法允许进程安定在多个组中并且有多个领导者。邀请算法允许创建进程组并合并它们，而不必从头开始触发新的选举，从而减少完成选举所需的消息数量。
+- en: Ring Algorithm
+  id: totrans-60
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Ring 算法
+- en: 'In the ring algorithm [[CHANG79]](app01.html#CHANG79), all nodes in the system
+    form a ring and are aware of the ring topology (i.e., their predecessors and successors
+    in the ring). When the process detects the leader failure, it starts the new election.
+    The election message is forwarded across the ring: each process contacts its successor
+    (the next node closest to it in the ring). If this node is unavailable, the process
+    skips the unreachable node and attempts to contact the nodes after it in the ring,
+    until eventually one of them responds.'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在环形算法[[CHANG79]](app01.html#CHANG79)中，系统中的所有节点形成一个环，并且意识到环的拓扑结构（即环中的前任和后继）。当进程检测到领导者失效时，它启动新的选举。选举消息沿环传递：每个进程联系其后继（环中离它最近的下一个节点）。如果此节点不可用，则进程跳过不可达节点并尝试联系它之后的节点，直到最终有一个响应。
+- en: Nodes contact their siblings, following around the ring and collecting the live
+    node set, adding themselves to the set before passing it over to the next node,
+    similar to the failure-detection algorithm described in [“Timeout-Free Failure
+    Detector”](ch09.html#timeout_free_failure_detector), where nodes append their
+    identifiers to the path before passing it to the next node.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 节点与它们的兄弟节点联系，沿着环形移动并收集活跃节点集合，在将其传递给下一个节点之前将自己添加到集合中，类似于[“无超时失效检测器”](ch09.html#timeout_free_failure_detector)中描述的故障检测算法，其中节点在传递给下一个节点之前会将其标识符附加到路径中。
+- en: 'The algorithm proceeds by fully traversing the ring. When the message comes
+    back to the node that started the election, the highest-ranked node from the live
+    set is chosen as a leader. In [Figure 10-5](#leader_election_5), you can see an
+    example of such a traversal:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该算法通过完全遍历环来进行。当消息返回到启动选举的节点时，从活跃集合中选择排名最高的节点作为领导者。在[图 10-5](#leader_election_5)中，您可以看到这样一个遍历的示例：
+- en: a) Previous leader `6` has failed and each process has a view of the ring from
+    its perspective.
+  id: totrans-64
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: a) 前领导者 `6` 失效，每个进程都从其视角看到环的视图。
+- en: b) `3` initiates an election round by starting traversal. On each step, there’s
+    a set of nodes traversed on the path so far. `5` can’t reach `6`, so it skips
+    it and goes straight to `1`.
+  id: totrans-65
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: b) `3` 通过启动遍历来启动选举轮次。在每一步中，沿途遍历的节点集合。`5` 无法到达 `6`，所以跳过它直接到 `1`。
+- en: c) Since `5` was the node with the highest rank, `3` initiates another round
+    of messages, distributing the information about the new leader.
+  id: totrans-66
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: c) 由于 `5` 是具有最高排名的节点，`3` 再次启动消息轮次，分发有关新领导者的信息。
+- en: '![dbin 1005](assets/dbin_1005.png)'
+  id: totrans-67
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 1005](assets/dbin_1005.png)'
+- en: 'Figure 10-5\. Ring algorithm: previous leader (6) fails and 3 starts the election
+    process'
+  id: totrans-68
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 10-5\. 环形算法：前领导者（6）失效，3 开始选举过程
+- en: 'Variants of this algorithm include collecting a single highest-ranked identifier
+    instead of a set of active nodes to save space: since the `max` function is commutative,
+    it is enough to know a current maximum. When the algorithm comes back to the node
+    that has started the election, the last known highest identifier is circulated
+    across the ring once again.'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该算法的变体包括收集单个最高排名标识符而不是活跃节点集合以节省空间：由于 `max` 函数是可交换的，知道当前的最大值就足够了。当算法回到启动选举的节点时，最后已知的最高标识符再次在环中传播。
+- en: Since the ring can be partitioned in two or more parts, with each part potentially
+    electing its own leader, this approach doesn’t hold a safety property, either.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于环可能被分割成两个或更多部分，并且每部分可能选择自己的领导者，因此这种方法也不具备安全属性。
+- en: As you can see, for a system with a leader to function correctly, we need to
+    know the status of the current leader (whether it is alive or not), since to keep
+    processes organized and for execution to continue, the leader has to be alive
+    and reachable to perform its duties. To detect leader crashes, we can use failure-detection
+    algorithms (see [Chapter 9](ch09.html#failure_detection)).
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如您所见，要使带有领导者的系统正常运行，我们需要了解当前领导者的状态（无论其是否存活），因为为了保持流程有序并继续执行，领导者必须是活跃的并且可达的，以执行其职责。为了检测领导者的崩溃，我们可以使用故障检测算法（参见[第9章](ch09.html#failure_detection)）。
+- en: Summary
+  id: totrans-72
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: Leader election is an important subject in distributed systems, since using
+    a designated leader helps to reduce coordination overhead and improve the algorithm’s
+    performance. Election rounds might be costly but, since they’re infrequent, they
+    do not have a negative impact on the overall system performance. A single leader
+    can become a bottleneck, but most of the time this is solved by partitioning data
+    and using per-partition leaders or using different leaders for different actions.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 领导者选举是分布式系统中的重要课题，因为使用指定的领导者有助于减少协调开销并提高算法性能。选举轮可能会昂贵，但由于它们不经常发生，对整体系统性能没有负面影响。单个领导者可能成为瓶颈，但大多数情况下可以通过数据分区和使用每个分区的领导者或者针对不同操作使用不同的领导者来解决。
+- en: 'Unfortunately, all the algorithms we’ve discussed in this chapter are prone
+    to the split brain problem: we can end up with two leaders in independent subnets
+    that are not aware of each other’s existence. To avoid split brain, we have to
+    obtain a cluster-wide majority of votes.'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，本章讨论的所有算法都容易出现脑裂问题：我们可能会在不相互感知的独立子网中出现两个领导者。为了避免脑裂，我们必须获得整个集群的多数投票。
+- en: Many consensus algorithms, including Multi-Paxos and Raft, rely on a leader
+    for coordination. But isn’t leader election the same as consensus? To elect a
+    leader, we need to reach a consensus about its identity. If we can reach consensus
+    about the leader identity, we can use the same means to reach consensus on anything
+    else [[ABRAHAM13]](app01.html#ABRAHAM13).
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多共识算法，包括Multi-Paxos和Raft，依赖于领导者进行协调。但领导者选举难道不就是共识吗？要选举领导者，我们需要就其身份达成共识。如果我们能就领导者身份达成共识，我们就可以使用相同的手段在任何其他事务上达成共识
+    [[ABRAHAM13]](app01.html#ABRAHAM13)。
+- en: The identity of a leader may change without processes knowing about it, so the
+    question is whether the process-local knowledge about the leader is still valid.
+    To achieve that, we need to combine leader election with failure detection. For
+    example, the *stable leader election* algorithm uses rounds with a unique stable
+    leader and timeout-based failure detection to guarantee that the leader can retain
+    its position for as long as it doesn’t crash and is accessible [[AGUILERA01]](app01.html#AGUILERA01).
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 领导者的身份可能会在进程不知情的情况下发生变化，因此问题是进程对领导者的本地知识是否仍然有效。为了实现这一点，我们需要将领导者选举与故障检测结合起来。例如，*稳定领导者选举*
+    算法使用带有唯一稳定领导者的轮次和基于超时的故障检测来保证领导者在不崩溃且可访问的情况下保持其位置 [[AGUILERA01]](app01.html#AGUILERA01)。
+- en: Algorithms that rely on leader election often *allow* the existence of multiple
+    leaders and attempt to resolve conflicts between the leaders as quickly as possible.
+    For example, this is true for Multi-Paxos (see [“Multi-Paxos”](ch14.html#multi_paxos)),
+    where only one of the two conflicting leaders (proposers) can proceed, and these
+    conflicts are resolved by collecting a second quorum, guaranteeing that the values
+    from two different proposers won’t be accepted.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 依赖领导者选举的算法通常*允许*存在多个领导者，并尽快解决领导者之间的冲突。例如，在Multi-Paxos中（参见[“Multi-Paxos”](ch14.html#multi_paxos)），只有两个冲突的领导者（提议者）中的一个可以继续进行，这些冲突通过收集第二个法定人数来解决，确保来自两个不同提议者的值不会被接受。
+- en: In Raft (see [“Raft”](ch14.html#raft)), a leader can discover that its term
+    is out-of-date, which implies the presence of a different leader in the system,
+    and update its term to the more recent one.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Raft中（参见[“Raft”](ch14.html#raft)），一个领导者可以发现其任期过时，这意味着系统中存在不同的领导者，并更新其任期为更近的一个。
+- en: 'In both cases, having a leader is a way to ensure *liveness* (if the current
+    leader has failed, we need a new one), and processes should not take indefinitely
+    long to understand whether or not it has really failed. Lack of *safety* and allowing
+    multiple leaders is a performance optimization: algorithms can proceed with a
+    replication phase, and *safety* is guaranteed by detecting and resolving the conflicts.'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这两种情况下，拥有一个领导者是确保*liveness*（如果当前领导者失败了，我们需要一个新的领导者）的一种方式，并且进程不应该无限长时间地去理解它是否真的失败了。缺乏*safety*和允许多个领导者是一种性能优化：算法可以继续进行复制阶段，并通过检测和解决冲突来保证*safety*。
+- en: We discuss consensus and leader election in the context of consensus in more
+    detail in [Chapter 14](ch14.html#consensus).
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将在[第 14 章](ch14.html#consensus)中更详细地讨论共识和领导者选举的背景下的共识。
+- en: ^([1](ch10.html#idm46466886504056-marker)) These steps describe the *modified*
+    bully election algorithm [[KORDAFSHARI05]](app01.html#KORDAFSHARI05) as it’s more
+    compact and clear.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch10.html#idm46466886504056-marker)) 这些步骤描述了*modified* bully 选举算法[[KORDAFSHARI05]](app01.html#KORDAFSHARI05)，因为它更简洁和清晰。

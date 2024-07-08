@@ -1,0 +1,106 @@
+- en: Part I Conclusion
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第I部分总结
+- en: In Part I, we’ve been talking about storage engines. We started from high-level
+    database system architecture and classification, learned how to implement on-disk
+    storage structures, and how they fit into the full picture with other components.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在第I部分，我们讨论了存储引擎。我们从高级数据库系统架构和分类开始，学习了如何在磁盘上实现存储结构，并了解它们如何与其他组件完美配合。
+- en: 'We’ve seen several storage structures, starting from B-Trees. The discussed
+    structures do not represent an entire field, and there are many other interesting
+    developments. However, these examples are still a good illustration of the three
+    properties we identified at the beginning of this part: *buffering*, *immutability*,
+    and *ordering*. These properties are useful for describing, memorizing, and expressing
+    different aspects of the storage structures.'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们看到了几种存储结构，从B-树开始。讨论的结构并不代表整个领域，还有许多其他有趣的发展。然而，这些示例仍然很好地说明了我们在本部分开始时确定的三个属性：*缓冲*、*不可变性*和*排序*。这些属性有助于描述、记忆和表达存储结构的不同方面。
+- en: '[Figure I-1](#buffering_immutability_ordering_img) summarizes the discussed
+    storage structures and shows whether or not they’re using these properties.'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 I-1](#buffering_immutability_ordering_img) 总结了讨论过的存储结构，并显示它们是否使用了这些属性。'
+- en: Adding in-memory buffers always has a positive impact on write amplification.
+    In in-place update structures like WiredTiger and LA-Trees, in-memory buffering
+    helps to amortize the cost of multiple same-page writes by combining them. In
+    other words, buffering helps to reduce write amplification.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 添加内存缓冲区始终对减少写放大有积极影响。在像WiredTiger和LA-Trees这样的原地更新结构中，内存缓冲有助于通过合并多个同页写操作来摊销成本。换句话说，缓冲有助于减少写放大。
+- en: In immutable structures, such as multicomponent LSM Trees and FD-Trees, buffering
+    has a similar positive effect, but at a cost of future rewrites when moving data
+    from one immutable level to the other. In other words, using immutability may
+    lead to deferred write amplification. At the same time, using immutability has
+    a positive impact on concurrency and space amplification, since most of the discussed
+    immutable structures use fully occupied pages.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在不可变结构中，例如多组件LSM树和FD-树，缓冲也具有类似的积极影响，但会导致将数据从一个不可变级别移动到另一个级别时未来重写的成本。换句话说，使用不可变性可能会导致延迟写放大。同时，使用不可变性对并发性和空间放大有积极影响，因为大多数讨论过的不可变结构使用完全占用的页面。
+- en: When using immutability, unless we *also* use buffering, we end up with unordered
+    storage structures like Bitcask and WiscKey (with the exception of copy-on-write
+    B-Trees, which copy, re-sort, and relocate their pages). WiscKey stores *only
+    keys* in sorted LSM Trees and allows retrieving records in key order using the
+    key index. In Bw-Trees, *some* of the nodes (ones that were consolidated) hold
+    data records in key order, while the rest of the logical Bw-Tree nodes may have
+    their delta updates scattered across different pages.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当使用不可变性时，除非我们*同时*使用缓冲，否则我们最终得到的是像Bitcask和WiscKey这样的无序存储结构（除了写时复制的B-树，它会复制、重新排序和重新定位它们的页）。WiscKey仅在排序的LSM树中存储*键*，并允许使用键索引按键顺序检索记录。在Bw-树中，*某些*节点（已经合并的节点）按键顺序保存数据记录，而逻辑Bw-树的其余节点可能在不同页上散布它们的增量更新。
+- en: '![dbin 0001](assets/dbin_0001.png)'
+  id: totrans-7
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0001](assets/dbin_0001.png)'
+- en: Figure I-1\. Buffering, immutability, and ordering properties of discussed storage
+    structures. (1) WiscKey uses buffering only for keeping keys sorted order. (2)
+    Only consolidated nodes in Bw-Trees hold ordered records.
+  id: totrans-8
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图I-1。讨论的存储结构的缓冲、不可变性和排序属性。（1）WiscKey仅用于保持键的排序顺序的缓冲。 （2）在Bw-树中，仅合并的节点保存有序记录。
+- en: 'You see that these three properties can be mixed and matched in order to achieve
+    the desired characteristics. Unfortunately, storage engine design usually involves
+    trade-offs: you increase the cost of one operation in favor of the other.'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以看到，这三个属性可以混合搭配以实现所需的特性。不幸的是，存储引擎设计通常涉及权衡：您增加一种操作的成本，以换取另一种操作的优势。
+- en: Using this knowledge, you should be able to start looking closer at the code
+    of most modern database systems. Some of the code references and starting points
+    can be found across the entire book. Knowing and understanding the terminology
+    will make this process easier for you.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 利用这些知识，您应该能够更仔细地查看大多数现代数据库系统的代码。书中可以找到一些代码引用和起始点。了解和理解术语将使这一过程对您更加容易。
+- en: Many modern database systems are powered by probabilistic data structures [[FLAJOLET12]](app01.html#FLAJOLET12)
+    [[CORMODE04]](app01.html#CORMODE04), and there’s new research being done on bringing
+    ideas from machine learning into database systems [[KRASKA18]](app01.html#KRASKA18).
+    We’re about to experience further changes in research and industry as nonvolatile
+    and byte-addressable storage becomes more prevalent and widely available [[VENKATARAMAN11]](app01.html#VENKATARAMAN11).
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多现代数据库系统采用概率数据结构 [[FLAJOLET12]](app01.html#FLAJOLET12) [[CORMODE04]](app01.html#CORMODE04)，并且正在将机器学习的思想引入数据库系统中进行新的研究
+    [[KRASKA18]](app01.html#KRASKA18)。随着非易失性和字节可寻址存储变得更加普及和广泛可用，我们将会看到研究和产业进一步发生变化
+    [[VENKATARAMAN11]](app01.html#VENKATARAMAN11)。
+- en: Knowing the fundamental concepts described in this book should help you to understand
+    and implement newer research, since it borrows from, builds upon, and is inspired
+    by the same concepts. The major advantage of knowing the theory and history is
+    that there’s nothing entirely new and, as the narrative of this book shows, progress
+    is incremental.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 了解本书描述的基本概念应该有助于你理解和实施新的研究，因为它借鉴、构建和受到相同概念的启发。了解理论和历史的主要优势在于，并没有完全新的东西，正如本书的叙述所示，进步是逐步的。

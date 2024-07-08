@@ -1,0 +1,1084 @@
+- en: Chapter 6\. B-Tree Variants
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第6章 B树的变体
+- en: 'B-Tree variants have a few things in common: tree structure, balancing through
+    splits and merges, and lookup and delete algorithms. Other details, related to
+    concurrency, on-disk page representation, links between sibling nodes, and maintenance
+    processes, may vary between implementations.'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: B树的变体有几个共同点：树结构、通过分裂和合并来平衡、查找和删除算法。其他细节，例如并发性、磁盘页面表示、兄弟节点之间的链接以及维护过程，可能因实现而异。
+- en: 'In this chapter, we’ll discuss several techniques that can be used to implement
+    efficient B-Trees and structures that employ them:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将讨论几种可以用于实现高效B树及其相关结构的技术：
+- en: '*Copy-on-write B-Trees* are structured like B-Trees, but their nodes are immutable
+    and are not updated in place. Instead, pages are copied, updated, and written
+    to new locations.'
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*写时复制B树*的结构类似于B树，但它们的节点是不可变的，不会原地更新。相反，页面被复制、更新并写入新位置。'
+- en: '*Lazy B-Trees* reduce the number of I/O requests from subsequent same-node
+    writes by *buffering* updates to nodes. In the next chapter, we also cover two-component
+    LSM trees (see [“Two-component LSM Tree”](ch07.html#two_component_lsm_tree)),
+    which take buffering a step further to implement fully immutable B-Trees.'
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*懒惰B树*通过对节点进行*缓冲*更新来减少对后续相同节点写入的I/O请求数量。在下一章中，我们还将介绍两组件LSM树（见[“两组件LSM树”](ch07.html#two_component_lsm_tree)），它们通过将缓冲推进一步来实现完全不可变的B树。'
+- en: '*FD-Trees* take a different approach to buffering, somewhat similar to LSM
+    Trees (see [“LSM Trees”](ch07.html#lsm_trees)). FD-Trees buffer updates in a small
+    B-Tree. As soon as this tree fills up, its contents are written into an immutable
+    run. Updates propagate between *levels* of immutable runs in a cascading manner,
+    from higher levels to lower ones.'
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*FD-树*采用一种与LSM树（见[“LSM树”](ch07.html#lsm_trees)）类似的缓冲方式，对更新在一个小型B树中进行缓冲。一旦该树填满，其内容就会被写入一个不可变的运行中。更新以级联方式传播在不同*级别*的不可变运行之间，从更高级别到更低级别。'
+- en: '*Bw-Trees* separate B-Tree nodes into several smaller parts that are written
+    in an append-only manner. This reduces costs of small writes by batching updates
+    to the different nodes together.'
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*Bw-树*将B树节点分成几个较小的部分，以追加方式写入。这通过批处理更新到不同节点来降低小写成本。'
+- en: '*Cache-oblivious B-Trees* allow treating on-disk data structures in a way that
+    is very similar to how we build in-memory ones.'
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*缓存无关B树*允许以非常类似于构建内存中数据结构的方式来处理磁盘上的数据结构。'
+- en: Copy-on-Write
+  id: totrans-8
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 写时复制
+- en: Some databases, rather than building complex latching mechanisms, use the *copy-on-write*
+    technique to guarantee data integrity in the presence of concurrent operations.
+    In this case, whenever the page is about to be modified, its contents are copied,
+    the copied page is modified instead of the original one, and a parallel tree hierarchy
+    is created.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有些数据库并不构建复杂的锁定机制，而是使用*写时复制*技术来在并发操作中保证数据完整性。在这种情况下，每当页面即将被修改时，其内容就会被复制，修改的是复制的页面而不是原始页面，并创建了一个并行的树层次结构。
+- en: Old tree versions remain accessible for readers that run concurrently to the
+    writer, while writers accessing modified pages have to wait until preceding write
+    operations are complete. After the new page hierarchy is created, the pointer
+    to the topmost page is atomically updated. In [Figure 6-1](#copy_on_write_1),
+    you can see a new tree being created parallel to the old one, reusing the untouched
+    pages.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 旧的树版本对于同时运行的读者仍然可访问，而访问修改后页面的写者必须等待前面的写操作完成。创建新页面层次结构后，顶层页面指针被原子地更新。在[图6-1](#copy_on_write_1)中，您可以看到一个新树与旧树并行创建，重复使用未触及的页面。
+- en: '![dbin 0601](assets/dbin_0601.png)'
+  id: totrans-11
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0601](assets/dbin_0601.png)'
+- en: Figure 6-1\. Copy-on-write B-Trees
+  id: totrans-12
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图6-1 写时复制B树
+- en: An obvious downside of this approach is that it requires more space (even though
+    old versions are retained only for brief time periods, since pages can be reclaimed
+    immediately after concurrent operations using the old pages complete) and processor
+    time, as entire page contents have to be copied. Since B-Trees are generally shallow,
+    the simplicity and advantages of this approach often still outweigh the downsides.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种方法的一个明显缺点是它需要更多的空间（尽管旧版本仅保留了很短的时间，因为在并发操作使用旧页面完成后，页面可以立即被回收），以及处理器时间，因为必须复制整个页面内容。由于B树通常很浅，这种方法的简单性和优势通常仍然超过了缺点。
+- en: The biggest advantage of this approach is that readers require no synchronization,
+    because written pages are immutable and can be accessed without additional latching.
+    Since writes are performed against copied pages, readers do not block writers.
+    No operation can observe a page in an incomplete state, and a system crash cannot
+    leave pages in a corrupted state, since the topmost pointer is switched only when
+    all page modifications are done.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种方法的最大优势在于读者无需同步，因为写入的页面是不可变的，并且可以在不需要额外锁定的情况下访问。由于写操作针对复制的页面执行，因此读者不会阻塞写入者。没有操作可以观察到页面处于不完整状态，系统崩溃也不会使页面处于损坏状态，因为只有在所有页面修改完成后才会切换顶部指针。
+- en: 'Implementing Copy-on-Write: LMDB'
+  id: totrans-15
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 实现写时复制：LMDB
+- en: One of the storage engines using copy-on-write is the Lightning Memory-Mapped
+    Database ([LMDB](https://databass.dev/links/85)), which is a key-value store used
+    by the OpenLDAP project. Due to its design and architecture, LMDB doesn’t require
+    a page cache, a write-ahead log, checkpointing, or compaction.^([1](ch06.html#idm46466887946808))
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个使用写时复制的存储引擎是Lightning Memory-Mapped Database ([LMDB](https://databass.dev/links/85))，它是OpenLDAP项目使用的键值存储。由于其设计和架构，LMDB不需要页面缓存、预写式日志、检查点或压缩。^([1](ch06.html#idm46466887946808))
+- en: 'LMDB is implemented as a single-level data store, which means that read and
+    write operations are satisfied directly through the memory map, without additional
+    application-level caching in between. This also means that pages require no additional
+    materialization and reads can be served directly from the memory map without copying
+    data to the intermediate buffer. During the update, every branch node on the path
+    from the root to the target leaf is copied and potentially modified: nodes for
+    which updates propagate are changed, and the rest of the nodes remain intact.'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: LMDB被实现为单级数据存储，这意味着读写操作直接通过内存映射满足，无需在中间应用级缓存。这也意味着页面不需要额外的实体化，读取可以直接从内存映射中提供数据，无需将数据复制到中间缓冲区。在更新期间，从根到目标叶子的路径上的每个分支节点都将被复制并可能被修改：传播更新的节点被更改，其余节点保持不变。
+- en: 'LMDB holds only [two versions](https://databass.dev/links/88) of the root node:
+    the latest version, and the one where new changes are going to be committed. This
+    is sufficient since all writes have to go through the root node. After the new
+    root is created, the old one becomes unavailable for new reads and writes. As
+    soon as the reads referencing old tree sections complete, their pages are reclaimed
+    and can be reused. Because of LMDB’s append-only design, it does not use sibling
+    pointers and has to ascend back to the parent node during sequential scans.'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: LMDB仅保存[两个版本](https://databass.dev/links/88)的根节点：最新版本和即将提交新更改的版本。这已经足够，因为所有写操作都必须经过根节点。创建新根节点后，旧节点将不再可用于新的读写操作。一旦完成引用旧树部分的读取，它们的页面将被回收并可重用。由于LMDB的追加设计，它不使用兄弟指针，并且在顺序扫描期间必须向父节点上升。
+- en: 'With this design, leaving stale data in copied nodes is impractical: there
+    is already a copy that can be used for MVCC and satisfy ongoing read transactions.
+    The database structure is inherently multiversioned, and readers can run without
+    any locks as they do not interfere with writers in any way.'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 采用这种设计，保留复制节点中的陈旧数据是不切实际的：已经存在一份可用于MVCC的副本，并满足正在进行的读取事务。数据库结构本质上是多版本的，读者可以在没有任何锁的情况下运行，因为它们不会以任何方式干扰写入者。
+- en: Abstracting Node Updates
+  id: totrans-20
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 抽象节点更新
+- en: 'To update the page on disk, one way or the other, we have to first update its
+    in-memory representation. However, there are a few ways to represent a node in
+    memory: we can access the cached version of the node directly, do it through the
+    wrapper object, or create its in-memory representation native to the implementation
+    language.'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要更新磁盘上的页面，无论如何，我们都必须首先更新其内存表示。然而，有几种表示节点的方法：我们可以直接访问节点的缓存版本，通过包装对象进行访问，或者创建其在实现语言中本地的内存表示。
+- en: In languages with an unmanaged memory model, raw binary data stored in B-Tree
+    nodes can be reinterpreted and native pointers can be used to manipulate it. In
+    this case, the node is defined in terms of structures, which use raw binary data
+    behind the pointer and runtime casts. Most often, they point to the memory area
+    managed by the page cache or use memory mapping.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用非托管内存模型的语言中，存储在B-Tree节点中的原始二进制数据可以被重新解释，原生指针可以用于操作它。在这种情况下，节点被定义为使用结构的术语，该结构在指针和运行时转换后使用原始二进制数据。它们通常指向由页面缓存管理的内存区域或使用内存映射。
+- en: Alternatively, B-Tree nodes can be materialized into objects or structures native
+    to the language. These structures can be used for inserts, updates, and deletes.
+    During flush, changes are applied to pages in memory and, subsequently, on disk.
+    This approach has the advantage of simplifying concurrent accesses since changes
+    to underlying raw pages are managed separately from accesses to intermediate objects,
+    but results in a higher memory overhead, since we have to store two versions (raw
+    binary and language-native) of the same page in memory.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，B树节点可以实现为语言本地的对象或结构。这些结构可用于插入、更新和删除。在刷新期间，更改将应用于内存中的页面，然后持久化到磁盘上。这种方法简化了并发访问，因为对底层原始页面的更改与对中间对象的访问分开管理，但会导致更高的内存开销，因为我们必须在内存中存储同一页面的两个版本（原始二进制版本和语言本地版本）。
+- en: The third approach is to provide access to the buffer backing the node through
+    the wrapper object that materializes changes in the B-Tree as soon as they’re
+    performed. This approach is most often used in languages with a managed memory
+    model. Wrapper objects apply the changes to the backing buffers.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第三种方法是通过包装对象提供对节点后备缓冲区的访问，该对象在执行更改时立即实现B树中的更改。这种方法通常在具有托管内存模型的语言中使用。包装对象将更改应用于后备缓冲区。
+- en: Managing on-disk pages, their cached versions, and their in-memory representations
+    separately allows them to have different life cycles. For example, we can buffer
+    insert, update, and delete operations, and reconcile changes made in memory with
+    the original on-disk versions during reads.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将磁盘页面、它们的缓存版本及其内存表示分开管理允许它们具有不同的生命周期。例如，我们可以缓冲插入、更新和删除操作，并在读取期间将内存中所做的更改与原始磁盘版本协调。
+- en: Lazy B-Trees
+  id: totrans-26
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 懒B树
+- en: Some algorithms (in the scope of this book, we call them lazy B-Trees^([2](ch06.html#idm46466887932776)))
+    reduce costs of updating the B-Tree and use more lightweight, concurrency- and
+    update-friendly in-memory structures to buffer updates and propagate them with
+    a delay.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些算法（在本书的范围内，我们称之为懒B树^([2](ch06.html#idm46466887932776)））降低了更新B树的成本，并使用更轻量级、并发友好和更新友好的内存结构来缓冲更新并延迟传播。
+- en: WiredTiger
+  id: totrans-28
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: WiredTiger
+- en: Let’s take a look at how we can use buffering to implement a lazy B-Tree. For
+    that, we can materialize B-Tree nodes in memory as soon as they are paged in and
+    use this structure to store updates until we’re ready to flush them.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看如何使用缓冲区来实现懒B树。为此，我们可以在页面调入内存时立即实现B树节点，并使用这种结构存储更新，直到我们准备好刷新它们。
+- en: A similar approach is used by [WiredTiger](https://databass.dev/links/89), a
+    now-default MongoDB storage engine. Its row store B-Tree implementation uses different
+    formats for in-memory and on-disk pages. Before in-memory pages are persisted,
+    they have to go through the reconciliation process.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[WiredTiger](https://databass.dev/links/89)采用类似的方法，这是现在默认的MongoDB存储引擎。其行存储B树实现在内存和磁盘页面上使用不同的格式。在内存页面持久化之前，它们必须经过协调过程。'
+- en: In [Figure 6-2](#wired_tiger_1), you can see a schematic representation of WiredTiger
+    pages and their composition in a B-Tree. A *clean* page consists of just an index,
+    initially constructed from the on-disk page image. Updates are first saved into
+    the *update buffer*.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[图6-2](#wired_tiger_1)中，您可以看到WiredTiger页面的示意图表示及其在B树中的组成。*干净*页面仅包含索引，最初由磁盘页面图像构建。更新首先保存到*更新缓冲区*中。
+- en: '![dbin 0602](assets/dbin_0602.png)'
+  id: totrans-32
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0602](assets/dbin_0602.png)'
+- en: 'Figure 6-2\. WiredTiger: high-level overview'
+  id: totrans-33
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图6-2\. WiredTiger：高级概述
+- en: 'Update buffers are accessed during reads: their contents are merged with the
+    original on-disk page contents to return the most recent data. When the page is
+    flushed, update buffer contents are reconciled with page contents and persisted
+    on disk, overwriting the original page. If the size of the reconciled page is
+    greater than the maximum, it is split into multiple pages. Update buffers are
+    implemented using skiplists, which have a complexity similar to search trees [[PAPADAKIS93]](app01.html#PAPADAKIS93)
+    but have a better concurrency profile [[PUGH90a]](app01.html#PUGH90a).'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在读取期间访问更新缓冲区：它们的内容与原始磁盘页面内容合并，以返回最新数据。当刷新页面时，将更新缓冲区内容与页面内容协调，并将其持久化到磁盘上，覆盖原始页面。如果协调页面的大小大于最大大小，则将其拆分为多个页面。更新缓冲区使用跳表实现，其复杂度类似于搜索树[[PAPADAKIS93]](app01.html#PAPADAKIS93)，但具有更好的并发性能[[PUGH90a]](app01.html#PUGH90a)。
+- en: '[Figure 6-3](#wired_tiger_2) shows that both clean and dirty pages in WiredTiger
+    have in-memory versions, and reference a base image on disk. Dirty pages have
+    an update buffer in addition to that.'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 6-3](#wired_tiger_2)显示，WiredTiger 中的干净页面和脏页面都有内存版本，并引用磁盘上的基本映像。脏页面除此之外还有一个更新缓冲区。'
+- en: The main advantage here is that the page updates and structural modifications
+    (splits and merges) are performed by the background thread, and read/write processes
+    do not have to wait for them to complete.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里的主要优势在于页面更新和结构修改（拆分和合并）由后台线程执行，读写进程不必等待它们完成。
+- en: '![dbin 0603](assets/dbin_0603.png)'
+  id: totrans-37
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0603](assets/dbin_0603.png)'
+- en: Figure 6-3\. WiredTiger pages
+  id: totrans-38
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 6-3\. WiredTiger 页面
+- en: Lazy-Adaptive Tree
+  id: totrans-39
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 惰性自适应树
+- en: Rather than buffering updates to individual nodes, we can group nodes into subtrees,
+    and attach an update buffer for batching operations *to each subtree*. Update
+    buffers in this case will track all operations performed against the subtree top
+    node and its descendants. This algorithm is called *Lazy-Adaptive Tree* (LA-Tree)
+    [[AGRAWAL09]](app01.html#AGRAWAL09).
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与将更新缓冲到单个节点不同，我们可以将节点分组成子树，并为每个子树附加一个批处理操作的更新缓冲区。在这种情况下，更新缓冲区将跟踪针对子树顶部节点及其后代执行的所有操作。这种算法称为*Lazy-Adaptive
+    Tree*（LA-Tree）[[AGRAWAL09]](app01.html#AGRAWAL09)。
+- en: When inserting a data record, a new entry is first added to the root node update
+    buffer. When this buffer becomes full, it is emptied by copying and propagating
+    the changes to the buffers in the lower tree levels. This operation can continue
+    recursively if the lower levels fill up as well, until it finally reaches the
+    leaf nodes.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 插入数据记录时，首先将新条目添加到根节点更新缓冲区。当该缓冲区变满时，通过复制和将更改传播到更低级别树的缓冲区来清空它。如果下层也填满，则此操作可以递归继续，直到最终达到叶节点。
+- en: In [Figure 6-4](#la_tree_1), you see an LA-Tree with cascaded buffers for nodes
+    grouped in corresponding subtrees. Gray boxes represent changes that propagated
+    from the root buffer.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 [图 6-4](#la_tree_1) 中，您可以看到一个具有对应子树中节点级联缓冲区的LA-Tree。灰色框表示从根缓冲区传播的更改。
+- en: '![dbin 0604](assets/dbin_0604.png)'
+  id: totrans-43
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0604](assets/dbin_0604.png)'
+- en: Figure 6-4\. LA-Tree
+  id: totrans-44
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 6-4\. LA-Tree
+- en: 'Buffers have hierarchical dependencies and are *cascaded*: all the updates
+    propagate from higher-level buffers to the lower-level ones. When the updates
+    reach the leaf level, batched insert, update, and delete operations are performed
+    there, applying all changes to the tree contents and its structure at once. Instead
+    of performing subsequent updates on pages separately, pages can be updated in
+    a single run, requiring fewer disk accesses and structural changes, since splits
+    and merges propagate to the higher levels in batches as well.'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 缓冲区具有层次依赖关系，并且是*级联*的：所有更新都从高级缓冲区传播到低级缓冲区。当更新达到叶级别时，在那里执行批量插入、更新和删除操作，一次应用所有对树内容及其结构的更改。与单独在页面上执行后续更新不同，页面也可以在单次运行中更新，这样需要的磁盘访问和结构更改更少，因为拆分和合并也会以批处理方式传播到更高级别。
+- en: The buffering approaches described here optimize tree update time by batching
+    write operations, but in slightly different ways. Both algorithms require additional
+    lookups in in-memory buffering structures and merge/reconciliation with stale
+    disk data.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里描述的缓冲区方法通过批量写操作优化了树的更新时间，但方式略有不同。这两种算法都需要在内存中的缓冲结构中进行额外查找，并与陈旧的磁盘数据进行合并/调和。
+- en: FD-Trees
+  id: totrans-47
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: FD-Trees
+- en: 'Buffering is one of the ideas that is widely used in database storage: it helps
+    to avoid many small random writes and performs a single larger write instead.
+    On HDDs, random writes are slow because of the head positioning. On SSDs, there
+    are no moving parts, but the extra write I/O imposes an additional garbage collection
+    penalty.'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 缓冲是数据库存储中广泛使用的理念之一：它有助于避免许多小的随机写入，而是执行单个较大的写入。在HDD上，由于磁头定位，随机写入速度较慢。在SSD上，没有移动部件，但额外的写入I/O会施加额外的垃圾收集惩罚。
+- en: Maintaining a B-Tree requires a lot of random writes—leaf-level writes, splits,
+    and merges propagating to the parents—but what if we could avoid random writes
+    and node updates altogether?
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 维护B-Tree需要大量随机写入——叶级别写入、拆分和合并向父级传播——但如果我们能完全避免随机写入和节点更新呢？
+- en: 'So far we’ve discussed buffering updates to individual nodes or groups of nodes
+    by creating auxiliary buffers. An alternative approach is to group updates targeting
+    *different nodes* together by using append-only storage and merge processes, an
+    idea that has also inspired LSM Trees (see [“LSM Trees”](ch07.html#lsm_trees)).
+    This means that any write we perform does not require locating a target node for
+    the write: all updates are simply appended. One of the examples of using this
+    approach for indexing is called Flash Disk Tree (FD-Tree) [[LI10]](app01.html#LI10).'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们已经讨论了通过创建辅助缓冲区来缓冲单个节点或节点组的更新。另一种方法是通过使用追加存储和合并过程将目标节点*不同的更新*分组在一起，这个想法也启发了LSM树（见[“LSM树”](ch07.html#lsm_trees)）。这意味着我们执行的任何写操作都不需要定位写入的目标节点：所有更新都简单地追加。使用此方法进行索引的一个示例称为闪存磁盘树（FD-Tree）[[LI10]](app01.html#LI10)。
+- en: 'An FD-Tree consists of a small mutable *head tree* and multiple immutable sorted
+    runs. This approach limits the surface area, where random write I/O is required,
+    to the head tree: a small B-Tree buffering the updates. As soon as the head tree
+    fills up, its contents are transferred to the immutable *run*. If the size of
+    the newly written run exceeds the threshold, its contents are merged with the
+    next level, gradually propagating data records from upper to lower levels.'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: FD-树由一个小型可变的*头树*和多个不可变的排序运行组成。这种方法将需要随机写I/O的表面积限制在头树中：一个小型的B树缓冲更新。一旦头树填满，其内容就会转移到不可变的*运行*中。如果新写入的运行大小超过阈值，则其内容与下一级别合并，逐渐将数据记录从上层传播到下层。
+- en: Fractional Cascading
+  id: totrans-52
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 分数级联
+- en: 'To maintain pointers between the levels, FD-Trees use a technique called *fractional
+    cascading* [[CHAZELLE86]](app01.html#CHAZELLE86). This approach helps to reduce
+    the cost of locating an item in the cascade of sorted arrays: you perform `log
+    n` steps to find the searched item in the first array, but subsequent searches
+    are significantly cheaper, since they start the search from the closest match
+    from the previous level.'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了维护不同级别之间的指针，FD-树使用一种称为*分数级联*的技术 [[CHAZELLE86]](app01.html#CHAZELLE86)。这种方法有助于减少在排序数组级联中定位项的成本：在第一个数组中查找所需项需要`log
+    n`步，但随后的搜索要便宜得多，因为它们从前一级的最接近匹配开始搜索。
+- en: 'Shortcuts between the levels are made by building *bridges* between the neighbor-level
+    arrays to minimize the *gaps*: element groups without pointers from higher levels.
+    Bridges are built by *pulling* elements from lower levels to the higher ones,
+    if they don’t already exist there, and pointing to the location of the pulled
+    element in the lower-level array.'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过在邻居级别数组之间构建*桥梁*来缩小*间隙*，即没有来自更高级别的指针的元素组。通过从较低级别拉取元素到较高级别来建立桥梁，如果在那里还不存在这些元素，则指向拉取元素在较低级别数组中的位置。
+- en: Since [[CHAZELLE86]](app01.html#CHAZELLE86) solves a search problem in computational
+    geometry, it describes bidirectional bridges, and an algorithm for restoring the
+    gap size invariant that we won’t be covering here. We describe only the parts
+    that are applicable to database storage and FD-Trees in particular.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为[[CHAZELLE86]](app01.html#CHAZELLE86)解决了计算几何中的搜索问题，描述了双向桥梁，并且还有一种算法用于恢复我们不会在此讨论的间隙大小不变量。我们仅描述适用于数据库存储和特定于FD-树的部分。
+- en: We could create a mapping from every element of the higher-level array to the
+    closest element on the next level, but that would cause too much overhead for
+    pointers and their maintenance. If we were to map only the items that already
+    exist on a higher level, we could end up in a situation where the gaps between
+    the elements are too large. To solve this problem, we pull every `N`th item from
+    the lower-level array to the higher one.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以创建从较高级别数组的每个元素到下一级别最接近元素的映射，但这会导致指针及其维护的开销过大。如果我们只映射已经存在于更高级别的项目，我们可能会出现元素之间间隙过大的情况。为了解决这个问题，我们从较低级别数组中拉取每第`N`个项到更高级别。
+- en: 'For example, if we have multiple sorted arrays:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，如果我们有多个排序数组：
+- en: '[PRE0]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'We can bridge the gaps between elements by pulling every other element from
+    the array with a higher index to the one with a lower index in order to simplify
+    searches:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以通过从具有较高索引的数组中的每个其他元素到具有较低索引的数组中的元素，以简化搜索来弥合元素之间的间隙：
+- en: '[PRE1]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Now, we can use these pulled elements to create *bridges* (or *fences* as the
+    FD-Tree paper calls them): pointers from higher-level elements to their counterparts
+    on the lower levels, as [Figure 6-5](#fractional_cascading_1) shows.'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们可以使用这些提取的元素创建*桥梁*（或FD-树论文称为*栅栏*）：从更高级别元素到它们在较低级别的对应项的指针，如[图 6-5](#fractional_cascading_1)所示。
+- en: '![dbin 0605](assets/dbin_0605.png)'
+  id: totrans-62
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0605](assets/dbin_0605.png)'
+- en: Figure 6-5\. Fractional cascading
+  id: totrans-63
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 6-5. 分数级联
+- en: To search for elements in *all* these arrays, we perform a binary search on
+    the highest level, and the search space on the next level is reduced significantly,
+    since now we are forwarded to the approximate location of the searched item by
+    following a bridge. This allows us to connect multiple sorted runs and reduce
+    the costs of searching in them.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在*所有*这些数组中搜索元素，我们在最高级别上执行二进制搜索，下一级别的搜索空间显著减少，因为现在我们通过跟随桥梁被转到所搜索项的近似位置。这使我们能够连接多个排序的运行并降低在其中搜索的成本。
+- en: Logarithmic Runs
+  id: totrans-65
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 对数运行
+- en: 'An FD-Tree combines fractional cascading with creating *logarithmically sized
+    sorted runs*: immutable sorted arrays with sizes increasing by a factor of `k`,
+    created by merging the previous level with the current one.'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: FD-树结合了分数级联与创建*对数大小的排序运行*：通过将前一级与当前级别合并而创建的不断增长因子`k`的不可变排序数组。
+- en: 'The highest-level run is created when the head tree becomes full: its leaf
+    contents are written to the first level. As soon as the head tree fills up again,
+    its contents are merged with the first-level items. The merged result replaces
+    the old version of the first run. The lower-level runs are created when the sizes
+    of the higher-level ones reach a threshold. If a lower-level run already exists,
+    it is replaced by the result of merging its contents with the contents of a higher
+    level. This process is quite similar to compaction in LSM Trees, where immutable
+    table contents are merged to create larger tables.'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当头部树变满时，最高级别的运行被创建：其叶内容被写入第一级。一旦头部树再次填满，其内容将与第一级项目合并。合并后的结果替换了第一次运行的旧版本。当更高级别的大小达到阈值时，将创建较低级别的运行。如果已经存在较低级别的运行，则用其内容与更高级别的内容合并的结果替换。这个过程与LSM树中的压缩非常相似，其中不可变表内容被合并以创建更大的表。
+- en: '[Figure 6-6](#fd_tree) shows a schematic representation of an FD-Tree, with
+    a head B-Tree on the top, two logarithmic runs `L1` and `L2`, and bridges between
+    them.'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 6-6](#fd_tree)显示了FD-树的示意图，顶部是一个头B-树，两个对数运行`L1`和`L2`，以及它们之间的桥梁。'
+- en: '![dbin 0606](assets/dbin_0606.png)'
+  id: totrans-69
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0606](assets/dbin_0606.png)'
+- en: Figure 6-6\. Schematic FD-Tree overview
+  id: totrans-70
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 6-6. FD-树概述图
+- en: To keep items in all sorted runs addressable, FD-Trees use an adapted version
+    of fractional cascading, where *head elements* from lower-level pages are propagated
+    as pointers to the higher levels. Using these pointers, the cost of searching
+    in lower-level trees is reduced, since the search was already partially done on
+    a higher level and can continue from the closest match.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了保持所有排序的运行项可以寻址，FD-树使用了分数级联的改进版本，其中来自低级页的*头元素*被传播为指向更高级别的指针。利用这些指针，降低了在较低级别树中搜索的成本，因为在更高级别上已经部分完成了搜索，可以从最接近的匹配继续。
+- en: Since FD-Trees do not update pages in place, and it may happen that data records
+    for the same key are present on several levels, the FD-Trees delete work by inserting
+    tombstones (the FD-Tree paper calls them *filter entries*) that indicate that
+    the data record associated with a corresponding key is marked for deletion, and
+    all data records for that key in the lower levels have to be discarded. When tombstones
+    propagate all the way to the lowest level, they can be discarded, since it is
+    guaranteed that there are no items they can shadow anymore.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于FD-树不会就地更新页面，并且可能发生同一键的数据记录同时存在于几个级别的情况，FD-树的删除工作通过插入墓碑（FD-树论文称为*过滤条目*）来完成，指示与相应键关联的数据记录已标记为删除，并且所有较低级别中该键的数据记录都必须被丢弃。当墓碑传播到最低级别时，它们可以被丢弃，因为可以保证它们不再会隐藏任何项。
+- en: Bw-Trees
+  id: totrans-73
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Bw-树
+- en: 'Write amplification is one of the most significant problems with in-place update
+    implementations of B-Trees: subsequent updates to a B-Tree page may require updating
+    a disk-resident page copy on every update. The second problem is space amplification:
+    we reserve extra space to make updates possible. This also means that for each
+    transferred *useful* byte carrying the requested data, we have to transfer some
+    empty bytes and the rest of the page. The third problem is complexity in solving
+    concurrency problems and dealing with latches.'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写入扩增是B-Tree原地更新实现中最重要的问题之一：对B-Tree页面的后续更新可能需要在每次更新时更新磁盘上的页面副本。第二个问题是空间扩增：我们预留额外空间以实现更新。这也意味着，对于每个传输的*有用*字节携带请求的数据，我们必须传输一些空字节和页面的其余部分。第三个问题是解决并发问题和处理闩锁的复杂性。
+- en: To solve all three problems at once, we have to take an approach entirely different
+    from the ones we’ve discussed so far. Buffering updates helps with write and space
+    amplification, but offers no solution to concurrency issues.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要同时解决这三个问题，我们必须采取一种完全不同于我们迄今讨论过的方法。缓冲更新有助于写入和空间扩增，但对并发问题没有解决方案。
+- en: We can batch updates to different nodes by using append-only storage, link nodes
+    together into chains, and use an in-memory data structure that allows *installing*
+    pointers between the nodes with a single compare-and-swap operation, making the
+    tree lock-free. This approach is called a *Buzzword-Tree* (Bw-Tree) [[LEVANDOSKI14]](app01.html#LEVANDOSKI14)
+    .
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以通过使用仅追加存储来批处理对不同节点的更新，将节点链接到链表中，并使用允许在节点之间*安装*指针的内存数据结构，使用单个比较交换操作使树无锁。这种方法被称为*Buzzword-Tree*（Bw-Tree）[[LEVANDOSKI14]](app01.html#LEVANDOSKI14)。
+- en: Update Chains
+  id: totrans-77
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 更新链
+- en: 'A Bw-Tree writes a *base node* separately from its modifications. Modifications
+    (*delta nodes*) form a chain: a linked list from the newest modification, through
+    older ones, with the base node in the end. Each update can be stored separately,
+    without needing to rewrite the existing node on disk. Delta nodes can represent
+    inserts, updates (which are indistinguishable from inserts), or deletes.'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Bw-Tree将*基节点*和其修改分开写入。修改（*增量节点*）形成一个链表：从最新的修改到较旧的修改，最后是基节点。每个更新可以单独存储，无需重写磁盘上的现有节点。增量节点可以表示插入、更新（与插入不可区分）或删除。
+- en: Since the sizes of base and delta nodes are unlikely to be page aligned, it
+    makes sense to store them contiguously, and because neither base nor delta nodes
+    are modified during update (all modifications just prepend a node to the existing
+    linked list), we do not need to reserve any extra space.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于基节点和增量节点的大小不太可能对齐页面，因此将它们连续存储是有意义的，并且因为在更新期间既不修改基节点也不修改增量节点（所有修改仅在现有链接列表的基础上前置一个节点），我们不需要保留任何额外的空间。
+- en: 'Having a node as a logical, rather than physical, entity is an interesting
+    paradigm change: we do not need to pre-allocate space, require nodes to have a
+    fixed size, or even keep them in contiguous memory segments. This certainly has
+    a downside: during a read, all deltas have to be traversed and applied to the
+    base node to reconstruct the actual node state. This is somewhat similar to what
+    LA-Trees do (see [“Lazy-Adaptive Tree”](#la_trees)): keeping updates separate
+    from the main structure and replaying them on read.'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将一个节点视为逻辑实体而非物理实体是一个有趣的范式变化：我们不需要预先分配空间，也不需要节点有固定的大小，甚至不需要将它们保留在连续的内存段中。这显然有一个缺点：在读取过程中，必须遍历所有增量并将它们应用于基节点以重建实际的节点状态。这在某种程度上类似于LA-Trees所做的事情（见[“惰性自适应树”](#la_trees)）：将更新保持与主结构分离，并在读取时重新应用它们。
+- en: Taming Concurrency with Compare-and-Swap
+  id: totrans-81
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用比较交换（Compare-and-Swap）驯服并发性
+- en: 'It would be quite costly to maintain an on-disk tree structure that allows
+    prepending items to child nodes: it would require us to constantly update parent
+    nodes with pointers to the freshest delta. This is why Bw-Tree nodes, consisting
+    of a chain of deltas and the base node, have logical identifiers and use an in-memory
+    *mapping table* from the identifiers to their locations on disk. Using this mapping
+    also helps us to get rid of latches: instead of having exclusive ownership during
+    write time, the Bw-Tree uses compare-and-swap operations on physical offsets in
+    the mapping table.'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 维护一个允许向子节点前置项的磁盘树结构将是非常昂贵的：这将要求我们不断更新父节点，使其指向最新的增量。这就是为什么Bw-Tree节点由增量链和基节点组成，并具有逻辑标识符，并使用内存中的*映射表*从标识符到它们在磁盘上的位置。使用此映射还有助于我们摆脱闩锁：不再需要在写入时独占所有权，Bw-Tree使用比较交换操作物理偏移在映射表中。
+- en: '[Figure 6-7](#bw_trees_1) shows a simple Bw-Tree. Each logical node consists
+    of a single base node and multiple linked delta nodes.'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[Figure 6-7](#bw_trees_1) 显示了一个简单的Bw-Tree。每个逻辑节点包含单个基本节点和多个链接的增量节点。'
+- en: '![dbin 0607](assets/dbin_0607.png)'
+  id: totrans-84
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0607](assets/dbin_0607.png)'
+- en: Figure 6-7\. Bw-Tree. Dotted lines represent *virtual* links between the nodes,
+    resolved using the mapping table. Solid lines represent actual data pointers between
+    the nodes.
+  id: totrans-85
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 6-7\. Bw-Tree。虚线表示节点之间的*虚拟*链接，通过映射表解析。实线表示节点之间的实际数据指针。
+- en: 'To update a Bw-Tree node, the algorithm executes the following steps:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要更新Bw-Tree节点，算法执行以下步骤：
+- en: The target logical *leaf* node is located by traversing the tree from root to
+    leaf. The mapping table contains virtual links to target base nodes or the latest
+    delta nodes in the update chain.
+  id: totrans-87
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过从根到叶子节点遍历树来定位目标逻辑*叶*节点。映射表包含指向目标基本节点或更新链中最新增量节点的虚拟链接。
+- en: A new delta node is created with a pointer to the base node (or to the latest
+    delta node) located during step 1.
+  id: totrans-88
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在步骤1中定位基本节点（或最新增量节点）后，创建一个新的增量节点。
+- en: The mapping table is updated with a pointer to the new delta node created during
+    step 2.
+  id: totrans-89
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 映射表已更新，指向在步骤2中创建的新增量节点的指针。
+- en: An update operation during step 3 can be done using compare-and-swap, which
+    is an atomic operation, so all reads, concurrent to the pointer update, are ordered
+    either *before* or *after* the write, without blocking either the readers or the
+    writer. Reads ordered *before* follow the old pointer and do not see the new delta
+    node, since it was not yet installed. Reads ordered *after* follow the new pointer,
+    and observe the update. If two threads attempt to install a new delta node to
+    the same logical node, only one of them can succeed, and the other one has to
+    retry the operation.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在第3步期间的更新操作可以使用比较和交换来完成，这是一个原子操作，因此所有与指针更新并发的读取都被排序为*之前*或*之后*写入，而不会阻塞读取者或写入者。排序为*之前*的读取遵循旧指针，并且看不到尚未安装的新增量节点。排序为*之后*的读取遵循新指针，并观察更新。如果两个线程尝试向同一逻辑节点安装新增量节点，则只有一个线程能成功，另一个必须重试操作。
+- en: Structural Modification Operations
+  id: totrans-91
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结构修改操作
+- en: A Bw-Tree is logically structured like a B-Tree, which means that nodes still
+    might grow to be too large (overflow) or shrink to be almost empty (underflow)
+    and require structure modification operations (SMOs), such as splits and merges.
+    The semantics of splits and merges here are similar to those of B-Trees (see [“B-Tree
+    Node Splits”](ch02.html#b_tree_splits) and [“B-Tree Node Merges”](ch02.html#b_tree_merges)),
+    but their implementation is different.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Bw-Tree在逻辑上结构化为B-Tree，这意味着节点仍然可能会变得过大（溢出）或缩小到几乎为空（下溢），并且需要结构修改操作（SMOs），如分裂和合并。这里的分裂和合并语义类似于B-Tree（参见[“B-Tree
+    Node Splits”](ch02.html#b_tree_splits)和[“B-Tree Node Merges”](ch02.html#b_tree_merges)），但其实现方式不同。
+- en: 'Split SMOs start by consolidating the logical contents of the splitting node,
+    applying deltas to its base node, and creating a new page containing elements
+    to the right of the split point. After this, the process proceeds in two steps
+    [[WANG18]](app01.html#WANG18):'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分裂SMO以整合分裂节点的逻辑内容，应用增量到其基本节点，并创建一个包含分裂点右侧元素的新页面。完成此操作后，进程分为两个步骤[[WANG18]](app01.html#WANG18)：
+- en: '*Split*—A special *split delta* node is appended to the splitting node to notify
+    the readers about the ongoing split. The split delta node holds a midpoint separator
+    key to invalidate records in the splitting node, and a link to the new logical
+    sibling node.'
+  id: totrans-94
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*分裂* — 特殊的*分裂增量*节点附加到分裂节点，通知读者关于正在进行的分裂。分裂增量节点包含一个中点分隔键，用于使分裂节点中的记录无效，并且有一个指向新逻辑兄弟节点的链接。'
+- en: '*Parent update*—At this point, the situation is similar to that of the B^(link)-Tree
+    *half-split* (see [“Blink-Trees”](ch05.html#b_link_trees)), since the node is
+    available through the split delta node pointer, but is not yet referenced by the
+    parent, and readers have to go through the old node and then traverse the sibling
+    pointer to reach the newly created sibling node. A new node is added as a child
+    to the parent node, so that readers can directly reach it instead of being redirected
+    through the splitting node, and the split completes.'
+  id: totrans-95
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*父节点更新* — 此时的情况类似于B^(link)-Tree的*半分裂*（参见[“Blink-Trees”](ch05.html#b_link_trees)），因为节点通过分裂增量节点指针可用，但尚未被父节点引用，读者必须通过旧节点然后遍历兄弟指针以达到新创建的兄弟节点。将新节点添加为父节点的子节点，以便读者可以直接访问它，而不是通过分裂节点重定向，从而完成分裂。'
+- en: 'Updating the parent pointer is a performance optimization: all nodes and their
+    elements remain accessible even if the parent pointer is never updated. Bw-Trees
+    are latch-free, so any thread can encounter an incomplete SMO. The thread is required
+    to cooperate by picking up and finishing a multistep SMO before proceeding. The
+    next thread will follow the installed parent pointer and won’t have to go through
+    the sibling pointer.'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更新父指针是一种性能优化：即使从未更新父指针，所有节点及其元素仍然可以访问。Bw-Tree 是无锁的，因此任何线程可能会遇到不完整的 SMO。线程需要合作，先处理完一个多步骤的
+    SMO，然后再继续。下一个线程将跟随已安装的父指针，无需通过兄弟指针。
+- en: 'Merge SMOs work in a similar way:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 合并 SMO 以类似的方式工作：
+- en: '*Remove sibling*—A special *remove delta* node is created and appended to the
+    *right* sibling, indicating the start of the merge SMO and marking the right sibling
+    for deletion.'
+  id: totrans-98
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*移除兄弟* — 创建一个特殊的 *移除增量* 节点，并将其附加到 *右* 兄弟，指示合并 SMO 的开始，并标记右兄弟以删除。'
+- en: '*Merge*—A *merge delta* node is created on the *left* sibling to point to the
+    contents of the right sibling and making it a logical part of the left sibling.'
+  id: totrans-99
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*合并* — 在 *左* 兄弟上创建一个 *合并增量* 节点，指向右兄弟的内容，并使其成为左兄弟的逻辑部分。'
+- en: '*Parent update*—At that point, the right sibling node contents are accessible
+    from the left one. To finish the merge process, the link to the right sibling
+    has to be removed from the parent.'
+  id: totrans-100
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*父更新* — 在这一点上，右兄弟节点的内容可以从左兄弟节点访问到。为了完成合并过程，必须从父节点中移除到右兄弟的链接。'
+- en: 'Concurrent SMOs require an additional *abort delta* node to be installed on
+    the parent to prevent concurrent splits and merges [[WANG18]](app01.html#WANG18).
+    An abort delta works similarly to a write lock: only one thread can have write
+    access at a time, and any thread that attempts to append a new record to this
+    delta node will abort. On SMO completion, the abort delta can be removed from
+    the parent.'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并发 SMO 需要在父节点上安装额外的 *中止增量* 节点，以防止并发拆分和合并 [[WANG18]](app01.html#WANG18)。中止增量的工作方式类似于写锁：一次只有一个线程可以访问写权限，并且任何尝试向此增量节点追加新记录的线程将中止。在
+    SMO 完成后，可以从父节点中删除中止增量。
+- en: The Bw-Tree height grows during the root node splits. When the root node gets
+    too big, it is split in two, and a new root is created in place of the old one,
+    with the old root and a newly created sibling as its children.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Bw-Tree 的高度在根节点拆分期间增长。当根节点变得太大时，它被分成两部分，并在旧根的位置创建一个新的根，以旧根和新创建的兄弟节点作为其子节点。
+- en: Consolidation and Garbage Collection
+  id: totrans-103
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 合并和垃圾收集
+- en: Delta chains can get arbitrarily long without any additional action. Since reads
+    are getting more expensive as the delta chain gets longer, we need to try to keep
+    the delta chain length within reasonable bounds. When it reaches a configurable
+    threshold, we rebuild the node by merging the base node contents with all of the
+    deltas, consolidating them to one new base node. The new node is then written
+    to the new location on disk and the node pointer in the mapping table is updated
+    to point to it. We discuss this process in more detail in [“LLAMA and Mindful
+    Stacking”](ch07.html#llama), as the underlying log-structured storage is responsible
+    for garbage collection, node consolidation, and relocation.
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 增量链可以任意延长而无需任何额外操作。由于随着增量链的延长读操作变得更加昂贵，我们需要尽量保持增量链长度在合理范围内。当达到可配置的阈值时，我们通过将基节点内容与所有增量合并来重建节点，将它们合并为一个新的基节点。然后将新节点写入磁盘上的新位置，并更新映射表中的节点指针。我们在
+    [“LLAMA and Mindful Stacking”](ch07.html#llama) 中详细讨论了这一过程，因为底层的日志结构化存储负责垃圾收集、节点合并和重定位。
+- en: As soon as the node is consolidated, its old contents (the base node and all
+    of the delta nodes) are no longer addressed from the mapping table. However, we
+    cannot free the memory they occupy right away, because some of them might be still
+    used by ongoing operations. Since there are no latches held by readers (readers
+    did not have to pass through or register at any sort of barrier to access the
+    node), we need to find other means to track live pages.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦节点被合并，它的旧内容（基节点和所有的增量节点）将不再从映射表中寻址。然而，我们不能立即释放它们占用的内存，因为其中一些可能仍然被正在进行的操作使用。由于读者没有持有锁（读者不必经过或在任何类型的屏障处注册以访问节点），我们需要找到其他方法来跟踪活动页。
+- en: To separate threads that might have encountered a specific node from those that
+    couldn’t have possibly seen it, Bw-Trees use a technique known as *epoch-based
+    reclamation*. If some nodes and deltas are removed from the mapping table due
+    to consolidations that replaced them during some epoch, original nodes are preserved
+    until every reader that started during the same epoch or the earlier one is finished.
+    After that, they can be safely garbage collected, since later readers are guaranteed
+    to have never seen those nodes, as they were not addressable by the time those
+    readers started.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了区分可能遇到特定节点的线程与不可能看到它的线程，Bw-Tree使用一种称为*基于时期的回收*技术。如果由于替换它们的合并而从映射表中移除了一些节点和增量，在某个时期开始的每个读者完成之前，原始节点会被保留。之后，它们可以安全地进行垃圾回收，因为后续的读者保证从未看到那些节点，因为它们在那些读者开始之前就不可寻址了。
+- en: 'The Bw-Tree is an interesting B-Tree variant, making improvements on several
+    important aspects: write amplification, nonblocking access, and cache friendliness.
+    A modified version was implemented in [Sled](https://databass.dev/links/90), an
+    experimental storage engine. The CMU Database Group has developed an in-memory
+    version of the Bw-Tree called [OpenBw-Tree](https://databass.dev/links/91) and
+    released a practical implementation guide [[WANG18]](app01.html#WANG18).'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Bw-Tree是一种有趣的B树变体，在几个重要方面进行了改进：写放大、非阻塞访问和缓存友好性。在一个实验性存储引擎中实现了修改版，名为[Sled](https://databass.dev/links/90)。CMU数据库组开发了一个内存版本的Bw-Tree，称为[OpenBw-Tree](https://databass.dev/links/91)，并发布了一个实用的实现指南
+    [[WANG18]](app01.html#WANG18)。
+- en: We’ve only touched on higher-level Bw-Tree concepts related to B-Trees in this
+    chapter, and we continue the discussion about them in [“LLAMA and Mindful Stacking”](ch07.html#llama),
+    including the discussion about the underlying log-structured storage.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在本章仅涉及了与B树相关的更高级别的Bw-Tree概念，并且我们在[“LLAMA和Mindful Stacking”](ch07.html#llama)中继续讨论它们，包括关于底层日志结构存储的讨论。
+- en: Cache-Oblivious B-Trees
+  id: totrans-109
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 缓存无感知B树
+- en: Block size, node size, cache line alignments, and other configurable parameters
+    influence B-Tree performance. A new class of data structures called *cache-oblivious
+    structures* [[DEMAINE02]](app01.html#DEMAINE02) give asymptotically optimal performance
+    regardless of the underlying memory hierarchy and a need to tune these parameters.
+    This means that the algorithm is not required to know the sizes of the cache lines,
+    filesystem blocks, and disk pages. Cache-oblivious structures are designed to
+    perform well without modification on multiple machines with different configurations.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 块大小、节点大小、缓存行对齐以及其他可配置参数都会影响B树的性能。一种名为*缓存无感知结构*的新型数据结构 [[DEMAINE02]](app01.html#DEMAINE02)
+    在不考虑底层内存层次结构和需要调整这些参数的情况下，提供了渐近最优的性能。这意味着算法无需知道缓存行、文件系统块和磁盘页的大小。缓存无感知结构设计用于在具有不同配置的多台机器上无需修改即可表现良好。
+- en: So far, we’ve been mostly looking at B-Trees from a two-level memory hierarchy
+    (with the exception of LMDB described in [“Copy-on-Write”](#copy_on_write_b_tree)).
+    B-Tree nodes are stored in disk-resident pages, and the page cache is used to
+    allow efficient access to them in main memory.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们大多数时间都在从双层内存层次结构的角度（LMDB除外，详见[“写时复制”](#copy_on_write_b_tree)）来看B树。B树节点存储在磁盘驻留页中，并且页缓存用于在主存中有效访问它们。
+- en: The two levels of this hierarchy are *page cache* (which is faster, but is limited
+    in space) and *disk* (which is generally slower, but has a larger capacity) [[AGGARWAL88]](app01.html#AGGARWAL88).
+    Here, we have only two parameters, which makes it rather easy to design algorithms
+    as we only have to have two level-specific code modules that take care of all
+    the details relevant to that level.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个层次结构的两个级别是*页缓存*（速度较快，但空间有限）和*磁盘*（通常速度较慢，但容量更大） [[AGGARWAL88]](app01.html#AGGARWAL88)。在这里，我们只有两个参数，这使得设计算法相对简单，因为我们只需有两个特定于级别的代码模块来处理与该级别相关的所有细节。
+- en: 'The disk is partitioned into blocks, and data is transferred between disk and
+    cache in blocks: even when the algorithm has to locate a single item within the
+    block, an entire block has to be loaded. This approach is *cache-aware*.'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 磁盘被分成块，数据在磁盘和缓存之间以块传输：即使算法必须在块内定位单个项，也必须加载整个块。这种方法是*缓存感知*的。
+- en: When developing performance-critical software, we often program for a more complex
+    model, taking into consideration CPU caches, and sometimes even disk hierarchies
+    (like hot/cold storage or build HDD/SSD/NVM hierarchies, and phase off data from
+    one level to the other). Most of the time such efforts are difficult to generalize.
+    In [“Memory- Versus Disk-Based DBMS”](ch01.html#memory_vs_disk_based_stores),
+    we talked about the fact that accessing disk is several orders of magnitude slower
+    than accessing main memory, which has motivated database implementers to optimize
+    for this difference.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在开发性能关键软件时，我们通常为更复杂的模型编程，考虑 CPU 缓存，并有时甚至考虑磁盘层次结构（如热/冷存储或构建 HDD/SSD/NVM 层次结构，并从一级到另一级逐渐淘汰数据）。大多数情况下，这类工作很难推广化。在[“基于内存与基于磁盘的数据库管理系统”](ch01.html#memory_vs_disk_based_stores)中，我们谈到了访问磁盘比访问主存慢几个数量级，这促使数据库实施者优化这种差异。
+- en: Cache-oblivious algorithms allow reasoning about data structures in terms of
+    a two-level memory model while providing the benefits of a multilevel hierarchy
+    model. This approach allows having no platform-specific parameters, yet guarantees
+    that the number of transfers between the two levels of the hierarchy is within
+    a constant factor. If the data structure is optimized to perform optimally for
+    any two levels of memory hierarchy, it also works optimally for the two *adjacent*
+    hierarchy levels. This is achieved by working at the highest cache level as much
+    as possible.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无缓存感知算法允许通过双级内存模型来推理数据结构，同时提供多级层次模型的好处。此方法允许没有特定于平台的参数，同时保证层次结构之间的传输次数在一个常数因子内。如果数据结构被优化以在任何两级内存层次中表现最佳，则对于两个*相邻*的层次结构层次也会表现最佳。通过尽可能在最高缓存级别上工作来实现这一点。
+- en: van Emde Boas Layout
+  id: totrans-116
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: van Emde Boas 布局
+- en: A cache-oblivious B-Tree consists of a static B-Tree and a packed array structure
+    [[BENDER05]](app01.html#BENDER05). A static B-Tree is built using the *van Emde
+    Boas* layout. It splits the tree at the middle level of the edges. Then each subtree
+    is split recursively in a similar manner, resulting in subtrees of `sqr(N)` size.
+    The key idea of this layout is that any recursive tree is stored in a contiguous
+    block of memory.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无缓存感知 B 树由静态 B 树和紧凑数组结构组成[[BENDER05]](app01.html#BENDER05)。静态 B 树使用*van Emde
+    Boas*布局构建。它在边的中间级别分割树。然后每个子树以类似的方式递归分割，导致大小为`sqr(N)`的子树。这种布局的关键思想是，任何递归树都存储在连续的内存块中。
+- en: In [Figure 6-8](#van_emde_boas), you can see an example of a van Emde Boas layout.
+    Nodes, logically grouped together, are placed closely together. On top, you can
+    see a logical layout representation (i.e., how nodes form a tree), and on the
+    bottom you can see how tree nodes are laid out in memory and on disk.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[图 6-8](#van_emde_boas)中，您可以看到 van Emde Boas 布局的示例。逻辑上分组在一起的节点紧密放置在一起。在顶部，您可以看到逻辑布局表示（即节点如何形成树），在底部您可以看到树节点在内存和磁盘上的布局。
+- en: '![dbin 0608](assets/dbin_0608.png)'
+  id: totrans-119
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0608](assets/dbin_0608.png)'
+- en: Figure 6-8\. van Emde Boas layout
+  id: totrans-120
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 6-8\. van Emde Boas 布局
+- en: To make the data structure dynamic (i.e., allow inserts, updates, and deletes),
+    cache-oblivious trees use a *packed array* data structure, which uses contiguous
+    memory segments for storing elements, but contains gaps reserved for future inserted
+    elements. Gaps are spaced based on the *density threshold*. [Figure 6-9](#packed_array)
+    shows a packed array structure, where elements are spaced to create gaps.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使数据结构动态化（即允许插入、更新和删除），无缓存感知树使用*紧凑数组*数据结构，该结构使用连续的内存段存储元素，但包含为未来插入元素保留的间隙。间隙基于*密度阈值*进行间隔设置。[图 6-9](#packed_array)显示了紧凑数组结构，其中元素间隔开来以创建间隙。
+- en: '![dbin 0609](assets/dbin_0609.png)'
+  id: totrans-122
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0609](assets/dbin_0609.png)'
+- en: Figure 6-9\. Packed array
+  id: totrans-123
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 6-9\. 紧凑数组
+- en: This approach allows inserting items into the tree with fewer relocations. Items
+    have to be relocated just to create a gap for the newly inserted element, if the
+    gap is not already present. When the packed array becomes too densely or sparsely
+    populated, the structure has to be rebuilt to grow or shrink the array.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此方法允许在树中插入项目时进行较少的重定位。项目只需重新定位以为新插入的元素创建间隙，如果间隙尚不存在。当紧凑数组变得过于密集或过于稀疏时，必须重建结构以扩展或收缩数组。
+- en: The static tree is used as an index for the bottom-level packed array, and has
+    to be updated in accordance with relocated elements to point to correct elements
+    on the bottom level.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 静态树用作底层紧凑数组的索引，并且必须根据重新定位的元素更新以指向底层的正确元素。
+- en: This is an interesting approach, and ideas from it can be used to build efficient
+    B-Tree implementations. It allows constructing on-disk structures in ways that
+    are very similar to how main memory ones are constructed. However, as of the date
+    of writing, I’m not aware of any nonacademic cache-oblivious B-Tree implementations.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一种有趣的方法，它的想法可以用来构建高效的 B-Tree 实现。它允许以非常类似于主内存结构的方式构建磁盘结构。然而，截至撰写日期，我不知道有任何非学术的对缓存不敏感的
+    B-Tree 实现。
+- en: A possible reason for that is an assumption that when cache loading is abstracted
+    away, while data is loaded and written back in blocks, paging and eviction still
+    have a negative impact on the result. Another possible reason is that in terms
+    of block transfers, the complexity of cache-oblivious B-Trees is the same as their
+    cache-aware counterpart. This may change when more efficient nonvolatile byte-addressable
+    storage devices become more widespread.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个可能的原因是，当抽象加载缓存时，尽管数据加载和写回以块的方式进行，分页和驱逐仍对结果产生负面影响。另一个可能的原因是，在块传输方面，缓存不敏感 B-Tree
+    的复杂性与其缓存感知的对应物相同。当更有效的非易失性字节寻址存储设备变得更为普及时，情况可能会改变。
+- en: Summary
+  id: totrans-128
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: The original B-Tree design has several shortcomings that might have worked well
+    on spinning disks, but make it less efficient when used on SSDs. B-Trees have
+    high *write amplification* (caused by page rewrites) and high *space overhead*
+    since B-Trees have to reserve space in nodes for future writes.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 原始 B-Tree 设计存在几个缺点，可能在旋转硬盘上运行良好，但在 SSD 上使用时效率较低。B-Tree 具有高*写放大*（由页面重写引起）和高*空间开销*，因为
+    B-Tree 必须在节点中保留未来写入的空间。
+- en: Write amplification can be reduced by using *buffering*. Lazy B-Trees, such
+    as WiredTiger and LA-Trees, attach in-memory buffers to individual nodes or groups
+    of nodes to reduce the number of required I/O operations by buffering subsequent
+    updates to pages in memory.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用*缓冲*可以减少写放大。像 WiredTiger 和 LA-Trees 这样的惰性 B-Tree，将内存缓冲器附加到单个节点或节点组，通过缓冲后续页面更新来减少所需的
+    I/O 操作次数。
+- en: 'To reduce space amplification, FD-Trees use *immutability*: data records are
+    stored in the immutable sorted *runs*, and the size of a mutable B-Tree is limited.'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了减少空间放大，FD-Tree 使用*不可变性*：数据记录存储在不可变的有序*运行*中，并且可变 B-Tree 的大小是有限的。
+- en: Bw-Trees solve space amplification by using immutability, too. B-Tree nodes
+    and updates to them are stored in separate on-disk locations and persisted in
+    the log-structured store. Write amplification is reduced compared to the original
+    B-Tree design, since reconciling contents that belong to a single logical node
+    is relatively infrequent. Bw-Trees do not require latches for protecting pages
+    from concurrent accesses, as the virtual pointers between the logical nodes are
+    stored in memory.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Bw-Tree 通过使用不可变性来解决空间放大问题。B-Tree 节点及其更新存储在不同的磁盘位置，并在日志结构存储中持久化。与原始 B-Tree 设计相比，写放大减少了，因为相对不经常调和属于单个逻辑节点的内容。Bw-Tree
+    不需要保护页面免受并发访问的插销，因为逻辑节点之间的虚拟指针存储在内存中。
+- en: ^([1](ch06.html#idm46466887946808-marker)) To learn more about LMDB, see the
+    [code comments](https://databass.dev/links/86) and the [presentation](https://databass.dev/links/87).
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch06.html#idm46466887946808-marker)) 要了解更多关于 LMDB 的信息，请参阅 [代码注释](https://databass.dev/links/86)
+    和 [演示](https://databass.dev/links/87)。
+- en: ^([2](ch06.html#idm46466887932776-marker)) This is not a commonly recognized
+    name, but since the B-Tree variants we’re discussing here share one property—buffering
+    B-Tree updates in intermediate structures instead of applying them to the tree
+    directly—we’ll use the term *lazy*, which rather precisely defines this property.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch06.html#idm46466887932776-marker)) 这不是一个常认可的名称，但由于我们在这里讨论的 B-Tree 变体共享一个特性——将
+    B-Tree 更新缓冲到中间结构而不是直接应用到树上——我们将使用术语*惰性*，这相当精确地定义了这个属性。

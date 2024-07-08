@@ -1,0 +1,1112 @@
+- en: Chapter 3\. File Formats
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第三章 文件格式
+- en: 'With the basic semantics of B-Trees covered, we are now ready to explore how
+    exactly B-Trees and other structures are implemented on disk. We access the disk
+    in a way that is different from how we access main memory: from an application
+    developer’s perspective, memory accesses are mostly transparent. Because of virtual
+    memory [[BHATTACHARJEE17]](app01.html#BHATTACHARJEE17), we do not have to manage
+    offsets manually. Disks are accessed using system calls (see [*https://databass.dev/links/54*](https://databass.dev/links/54)).
+    We usually have to specify the offset inside the target file, and then interpret
+    on-disk representation into a form suitable for main memory.'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在涵盖B-Tree的基本语义后，我们现在可以探讨B-Tree及其他结构在磁盘上的具体实现方式。我们访问磁盘的方式与访问主存的方式不同：从应用程序开发者的角度来看，内存访问大多是透明的。由于虚拟内存[[BHATTACHARJEE17]](app01.html#BHATTACHARJEE17)，我们不必手动管理偏移量。磁盘访问是通过系统调用完成的（参见[*https://databass.dev/links/54*](https://databass.dev/links/54)）。通常我们需要指定目标文件内的偏移量，然后将磁盘上的表示解释为适合主存的形式。
+- en: This means that efficient on-disk structures have to be designed with this distinction
+    in mind. To do that, we have to come up with a file format that’s easy to construct,
+    modify, and interpret. In this chapter, we’ll discuss general principles and practices
+    that help us to design all sorts of on-disk structures, not only B-Trees.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这意味着高效的磁盘结构必须考虑到这种区别。为此，我们必须设计一个易于构建、修改和解释的文件格式。在本章中，我们将讨论通用原则和实践，帮助我们设计各种类型的磁盘结构，不仅限于B-Tree。
+- en: There are numerous possibilities for B-Tree implementations, and here we discuss
+    several useful techniques. Details may vary between implementations, but the general
+    principles remain the same. Understanding the basic mechanics of B-Trees, such
+    as splits and merges, is necessary, but they are insufficient for the actual implementation.
+    There are many things that have to play together for the final result to be useful.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: B-Tree 有许多实现可能性，这里我们讨论几种有用的技术。细节可能在实现之间有所不同，但一般原则保持不变。理解B-Tree的基本机制，如分裂和合并，是必要的，但对于实际实现来说是不够的。有许多因素必须共同作用，才能使最终结果有用。
+- en: 'The semantics of pointer management in on-disk structures are somewhat different
+    from in-memory ones. It is useful to think of on-disk B-Trees as a page management
+    mechanism: algorithms have to compose and navigate *pages*. Pages and pointers
+    to them have to be calculated and placed accordingly.'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在磁盘结构中管理指针的语义与内存中的有所不同。将磁盘B-Tree视为页面管理机制是很有用的：算法必须组合和导航*页面*。页面及其指针必须相应计算和放置。
+- en: Since most of the complexity in B-Trees comes from mutability, we discuss details
+    of page layouts, splitting, relocations, and other concepts applicable to mutable
+    data structures. Later, when talking about LSM Trees (see [“LSM Trees”](ch07.html#lsm_trees)),
+    we focus on sorting and maintenance, since that’s where most LSM complexity comes
+    from.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于B-Tree大部分复杂性来自可变性，我们讨论了页面布局、分裂、重定位和其他适用于可变数据结构的概念的细节。稍后，在讨论LSM树时（见[“LSM Trees”](ch07.html#lsm_trees)），我们侧重于排序和维护，因为这是LSM复杂性的主要来源。
+- en: Motivation
+  id: totrans-6
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 动机
+- en: Creating a file format is in many ways similar to how we create data structures
+    in languages with an unmanaged memory model. We allocate a block of data and slice
+    it any way we like, using fixed-size primitives and structures. If we want to
+    reference a larger chunk of memory or a structure with variable size, we use pointers.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建文件格式在许多方面与我们在具有无管理内存模型的语言中创建数据结构类似。我们分配一个数据块并按照需要切割它，使用固定大小的原语和结构。如果我们想引用较大的内存块或具有可变大小的结构，我们使用指针。
+- en: Languages with an unmanaged memory model allow us to allocate more memory any
+    time we need (within reasonable bounds) without us having to think or worry about
+    whether or not there’s a contiguous memory segment available, whether or not it
+    is fragmented, or what happens after we free it. On disk, we have to take care
+    of garbage collection and fragmentation ourselves.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 具有无管理内存模型的语言允许我们在需要时分配更多内存（在合理范围内），而无需考虑是否有可用的连续内存段，是否碎片化，或释放后会发生什么。在磁盘上，我们必须自己处理垃圾收集和碎片化问题。
+- en: Data layout is much less important in memory than on disk. For a disk-resident
+    data structure to be efficient, we need to lay out data on disk in ways that allow
+    quick access to it, and consider the specifics of a persistent storage medium,
+    come up with binary data formats, and find a means to serialize and deserialize
+    data efficiently.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在内存中，数据布局远比在磁盘上重要得多。为了使驻留在磁盘上的数据结构高效，我们需要以能够快速访问数据的方式布局数据，并考虑持久存储介质的特性，设计二进制数据格式，并找到有效地序列化和反序列化数据的方法。
+- en: Anyone who has ever used a low-level language such as C without additional libraries
+    knows the constraints. Structures have a predefined size and are allocated and
+    freed explicitly. Manually implementing memory allocation and tracking is even
+    more challenging, since it is only possible to operate with memory segments of
+    predefined size, and it is necessary to track which segments are already released
+    and which ones are still in use.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 任何曾经使用过像C这样的低级语言而没有额外库的人都知道它的限制。结构体有预定义的大小，并且必须显式分配和释放。手动实现内存分配和跟踪更加困难，因为只能操作预定义大小的内存段，并且必须跟踪哪些段已经释放，哪些还在使用中。
+- en: When storing data in main memory, most of the problems with memory layout do
+    not exist, are easier to solve, or can be solved using third-party libraries.
+    For example, handling variable-length fields and oversize data is much more straightforward,
+    since we can use memory allocation and pointers, and do not need to lay them out
+    in any special way. There still are cases when developers design specialized main
+    memory data layouts to take advantage of CPU cache lines, prefetching, and other
+    hardware-related specifics, but this is mainly done for optimization purposes
+    [[FOWLER11]](app01.html#FOWLER11).
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将数据存储在主内存中时，大多数关于内存布局的问题不存在，更容易解决，或者可以使用第三方库解决。例如，处理可变长度字段和超大数据要简单得多，因为我们可以使用内存分配和指针，而不需要以任何特殊方式布局它们。尽管开发人员有时会设计专门的主内存数据布局来利用CPU缓存行、预取等硬件相关特性，但这主要是为了优化目的而已[[FOWLER11]](app01.html#FOWLER11)。
+- en: Even though the operating system and filesystem take over some of the responsibilities,
+    implementing on-disk structures requires attention to more details and has more
+    pitfalls.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管操作系统和文件系统会承担部分责任，但实现在磁盘上的数据结构需要注意更多细节，并有更多陷阱。
+- en: Binary Encoding
+  id: totrans-13
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 二进制编码
+- en: To store data on disk efficiently, it needs to be encoded using a format that
+    is compact and easy to serialize and deserialize. When talking about binary formats,
+    you hear the word *layout* quite often. Since we do not have primitives such as
+    `malloc` and `free`, but only `read` and `write`, we have to think of accesses
+    differently and prepare data accordingly.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要高效地将数据存储在磁盘上，需要使用紧凑且易于序列化和反序列化的格式进行编码。谈到二进制格式时，您经常听到*布局*这个词。因为我们没有像`malloc`和`free`这样的原语，只有`read`和`write`，我们必须以不同的方式考虑访问并相应地准备数据。
+- en: 'Here, we discuss the main principles used to create efficient page layouts.
+    These principles apply to any binary format: you can use similar guidelines to
+    create file and serialization formats or communication protocols.'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们讨论了创建高效页面布局所使用的主要原则。这些原则适用于任何二进制格式：您可以使用类似的指导原则创建文件和序列化格式或通信协议。
+- en: Before we can organize records into pages, we need to understand how to represent
+    keys and data records in binary form, how to combine multiple values into more
+    complex structures, and how to implement variable-size types and arrays.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们能将记录组织成页面之前，我们需要了解如何用二进制形式表示键和数据记录，如何将多个值组合成更复杂的结构，以及如何实现可变大小类型和数组。
+- en: Primitive Types
+  id: totrans-17
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 原始类型
+- en: Keys and values have a *type*, such as `integer`, `date`, or `string`, and can
+    be represented (serialized to and deserialized from) in their raw binary forms.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 键和值具有*类型*，如`整数`、`日期`或`字符串`，可以用它们的原始二进制形式表示（序列化和反序列化）。
+- en: 'Most numeric data types are represented as fixed-size values. When working
+    with multibyte numeric values, it is important to use the same *byte-order* (*endianness*)
+    for both encoding and decoding. Endianness determines the sequential order of
+    bytes:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数数值数据类型都表示为固定大小的值。在处理多字节数值时，使用相同的*字节顺序*（*字节序*）进行编码和解码非常重要。字节序决定字节的顺序：
+- en: Big-endian
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大端序
+- en: The order starts from the most-significant byte (MSB), followed by the bytes
+    in *decreasing* significance order. In other words, MSB has the *lowest* address.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 顺序从最高有效字节（MSB）开始，然后是按*降序*重要性顺序的字节。换句话说，MSB具有*最低*地址。
+- en: Little-endian
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 小端序
+- en: The order starts from the least-significant byte (LSB), followed by the bytes
+    in *increasing* significance order.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 字节序从最不显著字节（LSB）开始，按 *增加的* 重要性顺序排列。
+- en: '[Figure 3-1](#endianness_1) illustrates this. The hexadecimal 32-bit integer
+    `0xAABBCCDD`, where `AA` is the MSB, is shown using both big- and little-endian
+    byte order.'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图3-1](#endianness_1) 阐明了这一点。十六进制的32位整数 `0xAABBCCDD`，其中 `AA` 是最高有效字节，使用大端序和小端序字节顺序显示。'
+- en: '![dbin 0301](assets/dbin_0301.png)'
+  id: totrans-25
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0301](assets/dbin_0301.png)'
+- en: Figure 3-1\. Big- and little-endian byte order. The most significant byte is
+    shown in gray. Addresses, denoted by `a`, grow from left to right.
+  id: totrans-26
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图3-1\. 大端序和小端序字节顺序。最高有效字节显示为灰色。地址 `a` 从左向右增长。
+- en: For example, to reconstruct a 64-bit integer with a corresponding byte order,
+    RocksDB has platform-specific definitions that help to identify target [platform
+    byte order](https://databass.dev/links/55).^([1](ch03.html#idm46466889139032))
+    If the target platform endianness does not match value endianness ([`EncodeFixed64WithEndian`](https://databass.dev/links/56)
+    looks up `kLittleEndian` value and compares it with value endianness), it reverses
+    the bytes using [`EndianTransform`](https://databass.dev/links/57), which reads
+    values byte-wise in reverse order and appends them to the result.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，为了根据相应的字节顺序重建64位整数，RocksDB 使用特定于平台的定义来帮助识别目标[平台字节顺序](https://databass.dev/links/55)。^([1](ch03.html#idm46466889139032))
+    如果目标平台的字节顺序与值的字节顺序不匹配（[`EncodeFixed64WithEndian`](https://databass.dev/links/56)
+    查找 `kLittleEndian` 值并将其与值的字节顺序进行比较），它将使用 [`EndianTransform`](https://databass.dev/links/57)
+    反向逐字节读取值，并将其追加到结果中。
+- en: Records consist of primitives like numbers, strings, booleans, and their combinations.
+    However, when transferring data over the network or storing it on disk, we can
+    only use byte sequences. This means that, in order to send or write the record,
+    we have to *serialize* it (convert it to an interpretable sequence of bytes) and,
+    before we can use it after receiving or reading, we have to *deserialize* it (translate
+    the sequence of bytes back to the original record).
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记录由诸如数字、字符串、布尔值及其组合之类的原始类型组成。但是，在通过网络传输或将其存储到磁盘时，我们只能使用字节序列。这意味着为了发送或写入记录，我们必须对其进行
+    *序列化*（将其转换为可解释的字节序列），并在接收或读取后使用之前，必须对其进行 *反序列化*（将字节序列转换回原始记录）。
+- en: In binary data formats, we always start with primitives that serve as building
+    blocks for more complex structures. Different numeric types may vary in size.
+    `byte` value is 8 bits, `short` is 2 bytes (16 bits), `int` is 4 bytes (32 bits),
+    and `long` is 8 bytes (64 bits).
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在二进制数据格式中，我们总是从原始类型开始，作为构建更复杂结构的基础。不同的数值类型在大小上可能有所不同。`byte` 值为8位，`short` 是2字节（16位），`int`
+    是4字节（32位），`long` 是8字节（64位）。
+- en: Floating-point numbers (such as `float` and `double`) are represented by their
+    *sign*, *fraction*, and *exponent*. The [IEEE Standard for Binary Floating-Point
+    Arithmetic](https://ieeexplore.ieee.org/document/30711) (IEEE 754) standard describes
+    widely accepted floating-point number representation. A 32-bit `float` represents
+    a single-precision value. For example, a floating-point number `0.15652` has a
+    binary representation, as shown in [Figure 3-2](#single_precision_float). The
+    first 23 bits represent a fraction, the following 8 bits represent an exponent,
+    and 1 bit represents a sign (whether or not the number is negative).
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 浮点数（例如 `float` 和 `double`）由它们的 *符号*、*分数* 和 *指数* 表示。[IEEE 二进制浮点数算术标准](https://ieeexplore.ieee.org/document/30711)（IEEE
+    754）标准描述了广泛接受的浮点数表示。32位 `float` 表示单精度值。例如，浮点数 `0.15652` 的二进制表示如图[3-2](#single_precision_float)所示。前23位表示分数，接下来的8位表示指数，1位表示符号（表示数是否为负）。
+- en: '![dbin 0302](assets/dbin_0302.png)'
+  id: totrans-31
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0302](assets/dbin_0302.png)'
+- en: Figure 3-2\. Binary representation of single-precision float number
+  id: totrans-32
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图3-2\. 单精度浮点数的二进制表示
+- en: Since a floating-point value is calculated using fractions, the number this
+    representation yields is just an approximation. Discussing a complete conversion
+    algorithm is out of the scope of this book, and we only cover representation basics.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于浮点数值是通过分数计算得出的，所以该表示得出的数字只是一个近似值。讨论完整的转换算法超出本书的范围，我们只涵盖表示的基础知识。
+- en: The `double` represents a double-precision floating-point value [[SAVARD05]](app01.html#SAVARD05).
+    Most programming languages have means for encoding and decoding floating-point
+    values to and from their binary representation in their standard libaries.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`double` 表示双精度浮点值 [[SAVARD05]](app01.html#SAVARD05)。大多数编程语言都有用于将浮点值编码和解码为它们的二进制表示的方法。'
+- en: Strings and Variable-Size Data
+  id: totrans-35
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 字符串和可变大小数据
+- en: All primitive numeric types have a fixed size. Composing more complex values
+    together is much like `struct`^([2](ch03.html#idm46466889107080)) in C. You can
+    combine primitive values into structures and use fixed-size arrays or pointers
+    to other memory regions.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有基本数值类型都有固定大小。将更复杂的值组合在一起很像 C 语言中的`struct`^([2](ch03.html#idm46466889107080))。您可以将基本值组合成结构，并使用固定大小数组或指向其他内存区域的指针。
+- en: 'Strings and other variable-size data types (such as arrays of fixed-size data)
+    can be serialized as a number, representing the length of the array or string,
+    followed by `size` bytes: the actual data. For strings, this representation is
+    often called *UCSD String* or [*Pascal String*](https://databass.dev/links/59),
+    named after the popular implementation of the Pascal programming language. We
+    can express it in pseudocode as follows:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 字符串和其他可变大小数据类型（例如固定大小数据的数组）可以序列化为一个数字，表示数组或字符串的长度，然后是 `size` 字节：实际数据。对于字符串，这种表示通常称为*UCSD
+    字符串*或[*Pascal 字符串*](https://databass.dev/links/59)，以流行的 Pascal 编程语言实现命名。我们可以用伪代码表示如下：
+- en: '[PRE0]'
+  id: totrans-38
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'An alternative to Pascal strings is *null-terminated strings*, where the reader
+    consumes the string byte-wise until the end-of-string symbol is reached. The Pascal
+    string approach has several advantages: it allows finding out a length of a string
+    in constant time, instead of iterating through string contents, and a language-specific
+    string can be composed by slicing `size` bytes from memory and passing the byte
+    array to a string constructor.'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 替代 Pascal 字符串的是*空终止字符串*，读者以字节为单位逐字节消耗字符串，直到达到字符串结束符号为止。Pascal 字符串方法有几个优点：它允许在常数时间内找到字符串的长度，而不是通过字符串内容迭代，而且可以通过从内存中切片
+    `size` 字节并将字节数组传递给字符串构造函数来组成特定于语言的字符串。
+- en: 'Bit-Packed Data: Booleans, Enums, and Flags'
+  id: totrans-40
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 位压缩数据：布尔值、枚举和标志
+- en: Booleans can be represented either by using a single byte, or encoding `true`
+    and `false` as `1` and `0` values. Since a boolean has only two values, using
+    an entire byte for its representation is wasteful, and developers often batch
+    boolean values together in groups of eight, each boolean occupying just one bit.
+    We say that every `1` bit is *set* and every `0` bit is *unset* or *empty*.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 布尔值可以通过使用单个字节表示，或者将 `true` 和 `false` 编码为 `1` 和 `0` 值来表示。由于布尔值只有两个值，因此将整个字节用于其表示是浪费的，开发人员经常将布尔值批量组合在一起，每个布尔值仅占据一个位。我们说每个
+    `1` 位被*设置*，每个 `0` 位被*未设置*或*空*。
+- en: '[Enums](https://databass.dev/links/60), short for *enumerated types*, can be
+    represented as integers and are often used in binary formats and communication
+    protocols. Enums are used to represent often-repeated low-cardinality values.
+    For example, we can encode a B-Tree node type using an enum:'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[枚举](https://databass.dev/links/60)，简称为*枚举类型*，可以表示为整数，并且经常用于二进制格式和通信协议中。枚举用于表示经常重复的低基数值。例如，我们可以使用枚举来编码
+    B-Tree 节点类型：'
+- en: '[PRE1]'
+  id: totrans-43
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Another closely related concept is *flags*, kind of a combination of packed
+    booleans and enums. Flags can represent nonmutually exclusive named boolean parameters.
+    For example, we can use flags to denote whether or not the page holds value cells,
+    whether the values are fixed-size or variable-size, and whether or not there are
+    overflow pages associated with this node. Since every bit represents a flag value,
+    we can only use power-of-two values for masks (since powers of two in binary always
+    have a single set bit; for example, `2³ == 8 == 1000b`, `2⁴ == 16 == 0001 0000b`,
+    etc.):'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个密切相关的概念是*标志*，类似于压缩布尔值和枚举的组合。标志可以表示非互斥的命名布尔参数。例如，我们可以使用标志来表示页面是否包含值单元格，值是否固定大小或可变大小，以及此节点是否关联有溢出页面。因为每个位代表一个标志值，所以我们只能使用二的幂值作为掩码（因为二的幂在二进制中始终只有一个设置位；例如，`2³
+    == 8 == 1000b`，`2⁴ == 16 == 0001 0000b`等）：
+- en: '[PRE2]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Just like packed booleans, flag values can be read and written from the packed
+    value using *bitmasks* and bitwise operators. For example, in order to set a bit
+    responsible for one of the flags, we can use bitwise `OR` (`|`) and a bitmask.
+    Instead of a bitmask, we can use *bitshift* (`<<`) and a bit index. To unset the
+    bit, we can use bitwise `AND` (`&`) and the bitwise negation operator (`~`). To
+    test whether or not the bit `n` is set, we can compare the result of a bitwise
+    `AND` with `0`:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就像紧凑布尔值一样，可以使用位掩码和位操作符从打包值中读取和写入标志值。例如，为了设置负责其中一个标志的位，我们可以使用位或(`|`)和位掩码。除了位掩码，还可以使用位移(`<<`)和位索引。要取消设置位，可以使用位与(`&`)和位取反运算符(`~`)。要测试位`n`是否设置，可以将位与的结果与`0`进行比较：
+- en: '[PRE3]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: General Principles
+  id: totrans-48
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 一般原则
+- en: 'Usually, you start designing a file format by deciding how the addressing is
+    going to be done: whether the file is going to be split into same-sized pages,
+    which are represented by a single block or multiple contiguous blocks. Most in-place
+    update storage structures use pages of the same size, since it significantly simplifies
+    read and write access. Append-only storage structures often write data page-wise,
+    too: records are appended one after the other and, as soon as the page fills up
+    in memory, it is flushed on disk.'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常情况下，设计文件格式时，首先决定如何进行寻址：文件是否将被分割成相同大小的页面，这些页面由单个或多个连续的块表示。大多数就地更新存储结构使用相同大小的页面，因为这显著简化了读取和写入访问。追加写存储结构通常也按页面方式写入数据：记录一个接一个地追加，一旦页面在内存中填满，就会被刷新到磁盘上。
+- en: The file usually starts with a fixed-size *header* and may end with a fixed-size
+    *trailer*, which hold auxiliary information that should be accessed quickly or
+    is required for decoding the rest of the file. The rest of the file is split into
+    pages. [Figure 3-3](#file_organization_image) shows this file organization schematically.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文件通常以固定大小的*头部*开始，并且可能以固定大小的*尾部*结束，这些部分包含了应该快速访问的辅助信息，或者是解码文件剩余部分所需的信息。文件的其余部分被分割成页面。[图 3-3](#file_organization_image)
+    简要显示了这种文件组织方式。
+- en: '![dbin 0303](assets/dbin_0303.png)'
+  id: totrans-51
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0303](assets/dbin_0303.png)'
+- en: Figure 3-3\. File organization
+  id: totrans-52
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 3-3\. 文件组织
+- en: 'Many data stores have a fixed schema, specifying the number, order, and type
+    of fields the table can hold. Having a fixed schema helps to reduce the amount
+    of data stored on disk: instead of repeatedly writing field names, we can use
+    their positional identifiers.'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多数据存储都有固定的模式，指定表格可以容纳的字段数量、顺序和类型。采用固定模式有助于减少存储在磁盘上的数据量：我们可以使用它们的位置标识符，而不是重复写入字段名称。
+- en: 'If we wanted to design a format for the company directory, storing names, birth
+    dates, tax numbers, and genders for each employee, we could use several approaches.
+    We could store the fixed-size fields (such as birth date and tax number) in the
+    head of the structure, followed by the variable-size ones:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们想为公司目录设计一个格式，存储每位员工的姓名、出生日期、税号和性别，我们可以采用几种方法。我们可以将固定大小的字段（如出生日期和税号）存储在结构的开头，然后是可变大小的字段：
+- en: '[PRE4]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: Now, to access `first_name`, we can slice `first_name_length` bytes after the
+    fixed-size area. To access `last_name`, we can locate its starting position by
+    checking the sizes of the variable-size fields that precede it. To avoid calculations
+    involving multiple fields, we can encode both *offset* and *length* to the fixed-size
+    area. In this case, we can locate any variable-size field separately.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，要访问`first_name`，我们可以在固定大小区域之后切片`first_name_length`字节。要访问`last_name`，可以通过检查其前面的可变大小字段的大小来定位其起始位置。为了避免涉及多个字段的计算，我们可以将*偏移量*和*长度*编码到固定大小区域。在这种情况下，可以单独定位任何可变大小字段。
+- en: 'Building more complex structures usually involves building hierarchies: fields
+    composed out of primitives, cells composed of fields, pages composed of cells,
+    sections composed of pages, regions composed of sections, and so on. There are
+    no strict rules you have to follow here, and it all depends on what kind of data
+    you need to create a format for.'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 构建更复杂的结构通常涉及构建层次结构：由原始数据组成的字段，由字段组成的单元格，由单元格组成的页面，由页面组成的部分，由部分组成的区域等等。在这里没有必须遵循的严格规则，一切都取决于您需要为其创建格式的数据类型。
+- en: Database files often consist of multiple parts, with a lookup table aiding navigation
+    and pointing to the start offsets of these parts written either in the file header,
+    trailer, or in the separate file.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库文件通常由多个部分组成，查找表帮助导航并指向这些部分的起始偏移量，这些偏移量可以写入文件头部、尾部或者单独的文件中。
+- en: Page Structure
+  id: totrans-59
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 页面结构
+- en: Database systems store data records in data and index files. These files are
+    partitioned into fixed-size units called *pages*, which often have a size of multiple
+    filesystem blocks. Page sizes usually range from 4 to 16 Kb.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库系统将数据记录存储在数据和索引文件中。这些文件被划分为称为*页*的固定大小单元，通常每个页的大小为多个文件系统块。页的大小通常介于4到16 KB之间。
+- en: Let’s take a look at the example of an on-disk B-Tree node. From a structure
+    perspective, in B-Trees, we distinguish between the *leaf nodes* that hold keys
+    and data records pairs, and *nonleaf nodes* that hold keys and pointers to other
+    nodes. Each B-Tree node occupies one page or multiple pages linked together, so
+    in the context of B-Trees the terms *node* and *page* (and even *block*) are often
+    used interchangeably.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看一个关于磁盘上B-Tree节点的例子。从结构的角度来看，在B-树中，我们区分*叶节点*（包含键和数据记录对）和*非叶节点*（包含键和指向其他节点的指针）。每个B-树节点占据一个或多个链接在一起的页，因此在B-树的上下文中，术语*节点*、*页*（甚至*块*）通常是可以互换使用的。
+- en: 'The original B-Tree paper [[BAYER72]](app01.html#BAYER72) describes a simple
+    page organization for fixed-size data records, where each page is just a concatenation
+    of triplets, as shown in [Figure 3-4](#organisation_of_b_tree_page): keys are
+    denoted by `k`, associated values are denoted by `v`, and pointers to child pages
+    are denoted by `p`.'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最初的B-Tree论文[[BAYER72]](app01.html#BAYER72)描述了一种简单的固定大小数据记录页组织，其中每个页仅仅是三元组的串联，如[图 3-4](#organisation_of_b_tree_page)所示：键由`k`表示，相关值由`v`表示，指向子页面的指针由`p`表示。
+- en: '![dbin 0304](assets/dbin_0304.png)'
+  id: totrans-63
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0304](assets/dbin_0304.png)'
+- en: Figure 3-4\. Page organization for fixed-size records
+  id: totrans-64
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 3-4\. 固定大小记录的页面组织
+- en: 'This approach is easy to follow, but has some downsides:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种方法易于理解，但也有一些缺点：
+- en: Appending a key anywhere but the right side requires relocating elements.
+  id: totrans-66
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在右侧以外的任何位置添加键都需要重新定位元素。
+- en: It doesn’t allow managing or accessing variable-size records efficiently and
+    works only for fixed-size data.
+  id: totrans-67
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它不允许高效地管理或访问变大小的记录，并且仅适用于固定大小的数据。
+- en: Slotted Pages
+  id: totrans-68
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 利用槽页
+- en: 'When storing variable-size records, the main problem is free space management:
+    reclaiming the space occupied by removed records. If we attempt to put a record
+    of size `n` into the space previously occupied by the record of size `m`, unless
+    `m == n` or we can find another record that has a size exactly `m – n`, this space
+    will remain unused. Similarly, a segment of size `m` cannot be used to store a
+    record of size `k` if `k` is larger than `m`, so it will be inserted without reclaiming
+    the unused space.'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在存储变大小记录时，主要问题是自由空间的管理：回收已删除记录占用的空间。如果尝试将大小为`n`的记录放入以前占用大小为`m`的空间中，除非`m == n`或者我们可以找到另一个大小恰好为`m
+    - n`的记录，否则这个空间将保持未使用状态。类似地，如果大小为`m`的段不能用于存储大小为`k`的记录（如果`k`大于`m`），那么它将在不回收未使用空间的情况下插入。
+- en: To simplify space management for variable-size records, we can split the page
+    into fixed-size segments. However, we end up wasting space if we do that, too.
+    For example, if we use a segment size of 64 bytes, unless the record size is a
+    multiple of 64, we waste `64 - (n modulo 64)` bytes, where `n` is the size of
+    the inserted record. In other words, unless the record is a multiple of 64, one
+    of the blocks will be only partially filled.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了简化变大小记录的空间管理，我们可以将页面分割为固定大小的段。但是，如果这样做，我们也会浪费空间。例如，如果使用的段大小为64字节，除非记录大小是64的倍数，否则我们会浪费`64
+    - (n取模64)`字节，其中`n`是插入记录的大小。换句话说，除非记录大小是64的倍数，其中一个块将只部分填充。
+- en: Space reclamation can be done by simply rewriting the page and moving the records
+    around, but we need to preserve record offsets, since out-of-page pointers might
+    be using these offsets. It is desirable to do that while minimizing space waste,
+    too.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 简单地重写页面并移动记录可以进行空间回收，但是我们需要保留记录偏移量，因为超出页面指针可能正在使用这些偏移量。在尽量减少空间浪费的同时执行这些操作是非常可取的。
+- en: 'To summarize, we need a page format that allows us to:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总结一下，我们需要一个页面格式，允许我们：
+- en: Store variable-size records with a minimal overhead.
+  id: totrans-73
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 以最小的开销存储变大小记录。
+- en: Reclaim space occupied by the removed records.
+  id: totrans-74
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 回收已删除记录占用的空间。
+- en: Reference records in the page without regard to their exact locations.
+  id: totrans-75
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 引用页面中的记录时，不考虑它们的确切位置。
+- en: To efficiently store variable-size records such as strings, binary large objects
+    (BLOBs), etc., we can use an organization technique called *slotted page* (i.e.,
+    a page with slots) [[SILBERSCHATZ10]](app01.html#SILBERSCHATZ10) or *slot directory*
+    [[RAMAKRISHNAN03]](app01.html#RAMAKRISHNAN03). This approach is used by many databases,
+    for example, [PostgreSQL](https://databass.dev/links/61).
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了高效存储诸如字符串、二进制大对象（BLOBs）等可变大小记录，我们可以使用一种称为*插槽页面*（即带有插槽的页面）的组织技术[[SILBERSCHATZ10]](app01.html#SILBERSCHATZ10)或*插槽目录*[[RAMAKRISHNAN03]](app01.html#RAMAKRISHNAN03)。这种方法被许多数据库使用，例如，[PostgreSQL](https://databass.dev/links/61)。
+- en: We organize the page into a collection of *slots* or *cells* and split out pointers
+    and cells in two independent memory regions residing on different sides of the
+    page. This means that we only need to reorganize pointers addressing the cells
+    to preserve the order, and deleting a record can be done either by nullifying
+    its pointer or removing it.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将页面组织成一组*插槽*或*单元*，并将指针和单元拆分为两个独立的内存区域，分别位于页面的不同侧。这意味着我们只需要重新组织指向单元的指针以保留顺序，删除记录可以通过将其指针置空或删除它来完成。
+- en: 'A slotted page has a fixed-size header that holds important information about
+    the page and cells (see [“Page Header”](ch04.html#page_header)). Cells may differ
+    in size and can hold arbitrary data: keys, pointers, data records, etc. [Figure 3-5](#slotted_page_1)
+    shows a slotted page organization, where every page has a maintenance region (header),
+    cells, and pointers to them.'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 插槽页面有一个固定大小的页眉，其中包含页面和单元的重要信息（请参阅[“页面页眉”](ch04.html#page_header)）。单元的大小可能不同，并且可以包含任意数据：键、指针、数据记录等。[图 3-5](#slotted_page_1)显示了插槽页面的组织方式，其中每个页面都有一个维护区域（页眉）、单元和指向它们的指针。
+- en: '![dbin 0305](assets/dbin_0305.png)'
+  id: totrans-79
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0305](assets/dbin_0305.png)'
+- en: Figure 3-5\. Slotted page
+  id: totrans-80
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 3-5\. 插槽页面
+- en: 'Let’s see how this approach fixes the problems we stated in the beginning of
+    this section:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看这种方法如何解决我们在本节开头提到的问题：
+- en: 'Minimal overhead: the only overhead incurred by slotted pages is a pointer
+    array holding offsets to the exact positions where the records are stored.'
+  id: totrans-82
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 最小的开销：插槽页面所产生的唯一开销是一个指针数组，用于存储记录的确切位置的偏移量。
+- en: 'Space reclamation: space can be reclaimed by defragmenting and rewriting the
+    page.'
+  id: totrans-83
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 空间回收：可以通过碎片整理和重写页面来回收空间。
+- en: 'Dynamic layout: from outside the page, slots are referenced only by their IDs,
+    so the exact location is internal to the page.'
+  id: totrans-84
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 动态布局：从页面外部，插槽只通过其ID进行引用，因此确切位置是页面内部的。
+- en: Cell Layout
+  id: totrans-85
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 单元布局
+- en: Using flags, enums, and primitive values, we can start designing the cell layout,
+    then combine cells into pages, and compose a tree out of the pages. On a cell
+    level, we have a distinction between key and key-value cells. Key cells hold a
+    separator key and a pointer to the page *between* two neighboring pointers. Key-value
+    cells hold keys and data records associated with them.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用标志、枚举和原始值，我们可以开始设计单元布局，然后将单元组合成页面，并从页面组成树。在单元级别上，我们区分键单元和键值单元。键单元包含一个分隔键和指向页面之间两个相邻指针之间的指针。键值单元包含与它们相关联的键和数据记录。
+- en: We assume that all cells within the page are uniform (for example, all cells
+    can hold either just keys or both keys and values; similarly, all cells hold either
+    fixed-size or variable-size data, but not a mix of both). This means we can store
+    metadata describing cells once on the page level, instead of duplicating it in
+    every cell.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们假设页面中的所有单元都是统一的（例如，所有单元只能保存键或键和值；同样，所有单元保存的数据要么是固定大小的，要么是可变大小的，但不会混合）。这意味着我们可以在页面级别上存储一次描述单元的元数据，而不是在每个单元中重复它。
+- en: 'To compose a key cell, we need to know:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要组成一个键单元，我们需要知道：
+- en: Cell type (can be inferred from the page metadata)
+  id: totrans-89
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 单元类型（可以从页面元数据中推断出）
+- en: Key size
+  id: totrans-90
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 键的大小
+- en: ID of the child page this cell is pointing to
+  id: totrans-91
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 指向此单元指向的子页面的ID
+- en: Key bytes
+  id: totrans-92
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 键的字节数
+- en: 'A variable-size key cell layout might look something like this (a fixed-size
+    one would have no size specifier on the cell level):'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 变长键单元布局可能看起来像这样（固定大小的键单元在单元级别上没有大小指定符号）：
+- en: '[PRE5]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: We have grouped fixed-size data fields together, followed by `key_size` bytes.
+    This is not strictly necessary but can simplify offset calculation, since all
+    fixed-size fields can be accessed by using static, precomputed offsets, and we
+    need to calculate the offsets only for the variable-size data.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将固定大小的数据字段组合在一起，后跟`key_size`字节。这不是绝对必要的，但可以简化偏移量计算，因为所有固定大小的字段可以通过使用静态的、预先计算的偏移量进行访问，并且我们只需要为可变大小的数据计算偏移量。
+- en: 'The key-value cells hold data records instead of the child page IDs. Otherwise,
+    their structure is similar:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 键-值单元格存储数据记录，而不是子页面ID。否则，它们的结构类似：
+- en: Cell type (can be inferred from page metadata)
+  id: totrans-97
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 单元格类型（可从页面元数据推断）
+- en: Key size
+  id: totrans-98
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 密钥大小
+- en: Value size
+  id: totrans-99
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 值大小
+- en: Key bytes
+  id: totrans-100
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 键字节
+- en: Data record bytes
+  id: totrans-101
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据记录字节
+- en: '[PRE6]'
+  id: totrans-102
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'You might have noticed the distinction between the *offset* and *page ID* here.
+    Since pages have a fixed size and are managed by the page cache (see [“Buffer
+    Management”](ch05.html#buffer_pool)), we only need to store the page ID, which
+    is later translated to the actual offset in the file using the lookup table. *Cell
+    offsets* are page-local and are relative to the page start offset: this way we
+    can use a smaller cardinality integer to keep the representation more compact.'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可能已经注意到这里的*偏移*和*页面ID*之间的区别。由于页面具有固定大小，并由页面缓存管理（参见[“缓冲管理”](ch05.html#buffer_pool)），我们只需存储页面ID，稍后再使用查找表将其转换为文件中实际偏移量。*单元格偏移*是页面本地的，并且相对于页面起始偏移量：这样我们可以使用更小基数的整数来保持表示更紧凑。
+- en: Combining Cells into Slotted Pages
+  id: totrans-104
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将单元格组合成插槽页
+- en: To organize cells into pages, we can use the *slotted page* technique that we
+    discussed in [“Page Structure”](#page_structure). We append cells to the right
+    side of the page (toward its end) and keep cell offsets/pointers in the left side
+    of the page, as shown in [Figure 3-6](#offset_and_cell_growth_direction).
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将单元格组织成页面，我们可以使用我们在[“页面结构”](#page_structure)中讨论的*插槽页*技术。我们将单元格追加到页面的右侧（朝其末端），并在页面的左侧保留单元格偏移/指针，如[图
+    3-6](#offset_and_cell_growth_direction)所示。
+- en: '![dbin 0306](assets/dbin_0306.png)'
+  id: totrans-106
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0306](assets/dbin_0306.png)'
+- en: Figure 3-6\. Offset and cell growth direction
+  id: totrans-107
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 3-6\. 偏移和单元格增长方向
+- en: Keys can be inserted out of order and their logical sorted order is kept by
+    sorting cell offset pointers in key order. This design allows appending cells
+    to the page with minimal effort, since cells don’t have to be relocated during
+    insert, update, or delete operations.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 键可以无序插入，并且通过按键顺序对单元格偏移指针进行排序保持其逻辑排序顺序。这种设计允许以最小的努力追加单元格到页面，因为在插入、更新或删除操作期间无需重新定位单元格。
+- en: 'Let’s consider an example of a page that holds names. Two names are added to
+    the page, and their insertion order is: *Tom* and *Leslie*. As you can see in
+    [Figure 3-7](#sorting_offsets_1), their *logical* order (in this case, alphabetical),
+    does *not* match *insertion* order (order in which they were appended to the page).
+    Cells are laid out in insertion order, but offsets are re-sorted to allow using
+    binary search.'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们举一个页面保存名称的例子。向页面添加了两个名称，它们的插入顺序是：*汤姆* 和 *莱斯利*。如您在[图 3-7](#sorting_offsets_1)中所见，它们的*逻辑*顺序（在本例中为字母顺序）与*插入*顺序（它们追加到页面的顺序）*不*匹配。单元格按插入顺序排列，但偏移量被重新排序以允许使用二进制搜索。
+- en: '![dbin 0307](assets/dbin_0307.png)'
+  id: totrans-110
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0307](assets/dbin_0307.png)'
+- en: 'Figure 3-7\. Records appended in random order: Tom, Leslie'
+  id: totrans-111
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 3-7\. 随机顺序追加记录：汤姆，莱斯利
+- en: 'Now, we’d like to add one more name to this page: *Ron*. New data is appended
+    at the upper boundary of the free space of the page, but cell offsets have to
+    preserve the lexicographical key order: *Leslie*, *Ron*, *Tom*. To do that, we
+    have to reorder cell offsets: pointers after the *insertion point* are shifted
+    to the right to make space for the new pointer to the Ron cell, as you can see
+    in [Figure 3-8](#sorting_offsets_2).'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们想在此页面上再添加一个名字：*罗恩*。新数据被追加到页面空闲空间的上边界，但单元格偏移必须保持词典排序键顺序：*莱斯利*，*罗恩*，*汤姆*。为此，我们必须重新排序单元格偏移量：在*插入点*之后的指针被向右移动，以为罗恩单元格腾出空间，如[图
+    3-8](#sorting_offsets_2)所示。
+- en: '![dbin 0308](assets/dbin_0308.png)'
+  id: totrans-113
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0308](assets/dbin_0308.png)'
+- en: 'Figure 3-8\. Appending one more record: Ron'
+  id: totrans-114
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 3-8\. 追加一个记录：罗恩
+- en: Managing Variable-Size Data
+  id: totrans-115
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 管理可变大小数据
+- en: Removing an item from the page does not have to remove the actual cell and shift
+    other cells to reoccupy the freed space. Instead, the cell can be marked as deleted
+    and an in-memory *availability list* can be updated with the amount of freed memory
+    and a pointer to the freed value. The availability list stores offsets of freed
+    segments and their sizes. When inserting a new cell, we first check the availability
+    list to find if there’s a segment where it may fit. You can see an example of
+    the fragmented page with available segments in [Figure 3-9](#page_fragmentation).
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从页面中删除一个项目不必删除实际的单元格并移动其他单元格以重新占用已释放的空间。相反，可以将单元格标记为已删除，并在内存中更新一个*可用性列表*，包括释放的内存量和指向已释放值的指针。可用性列表存储释放段的偏移量及其大小。在插入新单元格时，我们首先检查可用性列表，查找是否有一个可以容纳它的段。您可以在
+    [图 3-9](#page_fragmentation) 中看到带有可用段的碎片页面示例。
+- en: '![dbin 0309](assets/dbin_0309.png)'
+  id: totrans-117
+  prefs: []
+  type: TYPE_IMG
+  zh: '![dbin 0309](assets/dbin_0309.png)'
+- en: Figure 3-9\. Fragmented page and availability list. Occupied pages are shown
+    in gray. Dotted lines represent pointers to unoccupied memory regions from the
+    availability list.
+  id: totrans-118
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 3-9\. 碎片页面和可用性列表。已占用的页面显示为灰色。虚线表示来自可用性列表的未占用内存区域的指针。
+- en: SQLite calls unoccupied segments *freeblocks* and stores a pointer to the first
+    [freeblock in the page header](https://databass.dev/links/62). Additionally, it
+    stores a total number of available bytes within the page to quickly check whether
+    or not we can fit a new element into the page after defragmenting it.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQLite 将未占用的段称为*freeblocks*，并在页面头部存储指向第一个[页面头部的freeblock](https://databass.dev/links/62)的指针。此外，它还存储页面内可用字节的总数，以快速检查是否可以在碎片整理后将新元素放入页面中。
+- en: 'Fit is calculated based on the *strategy*:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 适合度是基于*策略*计算的：
+- en: First fit
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首次适配
+- en: This might cause a larger overhead, since the space remaining after reusing
+    the first suitable segment might be too small to fit any other cell, so it will
+    be effectively wasted.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这可能会导致更大的开销，因为重用第一个合适的片段后剩余的空间可能太小，无法容纳其他任何单元，因此会被浪费。
+- en: Best fit
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最佳适配
+- en: For best fit, we try to find a segment for which insertion leaves the smallest
+    remainder.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了最佳适配，我们试图找到一个片段，插入后留下的余量最小。
+- en: If we cannot find enough consecutive bytes to fit the new cell but there are
+    enough fragmented bytes available, live cells are read and rewritten, defragmenting
+    the page and reclaiming space for new writes. If there’s not enough free space
+    even after defragmentation, we have to create an overflow page (see [“Overflow
+    Pages”](ch04.html#overflow_pages)).
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们找不到足够的连续字节来放置新单元格，但有足够的碎片字节可用，将读取和重写活动单元格，对页面进行碎片整理，并为新写入回收空间。如果即使碎片整理后仍然没有足够的空闲空间，我们必须创建一个溢出页面（参见[“溢出页面”](ch04.html#overflow_pages)）。
+- en: Note
+  id: totrans-126
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: To improve locality (especially when keys are small in size), some implementations
+    store keys and values separately on the leaf level. Keeping keys together can
+    improve the locality during the search. After the searched key is located, its
+    value can be found in a value cell with a corresponding index. With variable-size
+    keys, this requires us to calculate and store an additional value cell pointer.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了改善局部性（特别是在键的大小较小时），一些实现在叶级别上分别存储键和值。将键保持在一起可以提高搜索期间的局部性。找到搜索的键后，可以在相应索引的值单元格中找到其值。对于可变大小的键，这要求我们计算并存储额外的值单元格指针。
+- en: 'In summary, to simplify B-Tree layout, we assume that each node occupies a
+    single page. A page consists of a fixed-size header, cell pointer block, and cells.
+    Cells hold keys and pointers to the pages representing child nodes or associated
+    data records. B-Trees use simple pointer hierarchies: page identifiers to locate
+    the child nodes in the tree file, and cell offsets to locate cells within the
+    page.'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总之，为了简化 B-Tree 布局，我们假设每个节点占用单个页面。页面包括固定大小的页头、单元格指针块和单元格。单元格包含键和指向子节点或关联数据记录页面的指针。B-Tree
+    使用简单的指针层次结构：页面标识符用于定位树文件中的子节点，单元格偏移量用于定位页面内的单元格。
+- en: Versioning
+  id: totrans-129
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 版本控制
+- en: Database systems constantly evolve, and developers work to add features, and
+    to fix bugs and performance issues. As a result of that, the binary file format
+    can change. Most of the time, any storage engine version has to support more than
+    one serialization format (e.g., current and one or more legacy formats for backward
+    compatibility). To support that, we have to be able to find out which version
+    of the file we’re up against.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库系统不断发展，开发人员努力添加功能，并修复错误和性能问题。因此，二进制文件格式可能会发生变化。大多数情况下，任何存储引擎版本都必须支持多种序列化格式（例如，当前版本和一个或多个向后兼容性的旧格式）。为了支持这一点，我们必须能够找出所面对的文件版本。
+- en: 'This can be done in several ways. For example, Apache Cassandra is using version
+    prefixes in filenames. This way, you can tell which version the file has without
+    even opening it. As of version 4.0, a data file name has the `na` prefix, such
+    as *na-1-big-Data.db*. Older files have different prefixes: files written in version
+    3.0 have the `ma` prefix.'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以通过几种方式实现这一点。例如，Apache Cassandra在文件名中使用版本前缀。这样，您甚至可以在不打开文件的情况下知道文件的版本。从4.0版本开始，数据文件名具有`na`前缀，例如*na-1-big-Data.db*。旧文件具有不同的前缀：以3.0版本编写的文件具有`ma`前缀。
+- en: Alternatively, the version can be stored in a separate file. For example, [PostgreSQL](https://databass.dev/links/63)
+    stores the version in the *PG_VERSION* file.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，版本可以存储在单独的文件中。例如，[PostgreSQL](https://databass.dev/links/63)将版本存储在*PG_VERSION*文件中。
+- en: The version can also be stored directly in the index file header. In this case,
+    a part of the header (or an entire header) has to be encoded in a format that
+    does not change between versions. After finding out which version the file is
+    encoded with, we can create a version-specific reader to interpret the contents.
+    Some file formats identify the version using magic numbers, which we discuss in
+    more detail in [“Magic Numbers”](ch04.html#magic_numbers).
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 版本还可以直接存储在索引文件头中。在这种情况下，头部的一部分（或整个头部）必须以不随版本更改的格式进行编码。找出文件使用的版本后，我们可以创建一个版本特定的读取器来解释内容。一些文件格式使用魔术数字来识别版本，我们将在[“魔术数字”](ch04.html#magic_numbers)中详细讨论。
+- en: Checksumming
+  id: totrans-134
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 校验
+- en: Files on disk may get damaged or corrupted by software bugs and hardware failures.
+    To identify these problems preemptively and avoid propagating corrupt data to
+    other subsystems or even nodes, we can use checksums and cyclic redundancy checks
+    (CRCs).
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 磁盘上的文件可能会因软件错误和硬件故障而损坏或损坏。为了预防这些问题并避免将损坏的数据传播到其他子系统甚至节点，我们可以使用校验和和循环冗余检查（CRC）。
+- en: Some sources make no distinction between cryptographic and noncryptographic
+    hash functions, CRCs, and checksums. What they all have in common is that they
+    reduce a large chunk of data to a small number, but their use cases, purposes,
+    and guarantees are different.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些来源没有区分加密和非加密哈希函数、CRC和校验和。它们的共同点是将大量数据减少到一个小数字，但它们的用途、目的和保证不同。
+- en: Checksums provide the weakest form of guarantee and aren’t able to detect corruption
+    in multiple bits. They’re usually computed by using `XOR` with parity checks or
+    summation [[KOOPMAN15]](app01.html#KOOPMAN15).
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 校验和提供了最弱的保证形式，并且无法检测多位数据的损坏。它们通常通过使用XOR与奇偶校验或求和来计算 [[KOOPMAN15]](app01.html#KOOPMAN15)。
+- en: CRCs can help detect burst errors (e.g., when multiple consecutive bits got
+    corrupted) and their implementations usually use lookup tables and polynomial
+    division [[STONE98]](app01.html#STONE98). Multibit errors are crucial to detect,
+    since a significant percentage of failures in communication networks and storage
+    devices manifest this way.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CRC可以帮助检测突发错误（例如，当多个连续位被损坏时）。它们的实现通常使用查找表和多项式除法 [[STONE98]](app01.html#STONE98)。检测多位错误至关重要，因为通信网络和存储设备中的大部分故障表现为这种方式。
+- en: Warning
+  id: totrans-139
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Noncryptographic hashes and CRCs should not be used to verify whether or not
+    the data has been tampered with. For this, you should always use strong cryptographic
+    hashes designed for security. The main goal of CRC is to make sure that there
+    were no unintended and accidental changes in data. These algorithms are not designed
+    to resist attacks and intentional changes in data.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 非加密哈希和CRC不应用于验证数据是否被篡改。为此，您应始终使用专为安全而设计的强加密哈希。CRC的主要目标是确保数据没有意外和偶然的更改。这些算法并非旨在抵抗对数据的攻击和有意的更改。
+- en: Before writing the data on disk, we compute its checksum and write it together
+    with the data. When reading it back, we compute the checksum again and compare
+    it with the written one. If there’s a checksum mismatch, we know that corruption
+    has occurred and we should not use the data that was read.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在将数据写入磁盘之前，我们会计算其校验和并与数据一起写入。在读取时，我们再次计算校验和并与写入的校验和进行比较。如果校验和不匹配，则表示数据已损坏，我们不应使用读取的数据。
+- en: Since computing a checksum over the whole file is often impractical and it is
+    unlikely we’re going to read the entire content every time we access it, page
+    checksums are usually computed on pages and placed in the page header. This way,
+    checksums can be more robust (since they are performed on a small subset of the
+    data), and the whole file doesn’t have to be discarded if corruption is contained
+    in a single page.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于在整个文件上计算校验和通常是不切实际的，并且我们不太可能每次访问时都读取整个内容，因此页面校验和通常是在页面上计算并放置在页面头部。这样一来，校验和可以更加健壮（因为它们是在数据的一个小子集上执行的），并且如果损坏仅限于单个页面，则不必丢弃整个文件。
+- en: Summary
+  id: totrans-143
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: 'In this chapter, we learned about binary data organization: how to serialize
+    primitive data types, combine them into cells, build slotted pages out of cells,
+    and navigate these structures.'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们学习了关于二进制数据组织的知识：如何序列化原始数据类型，将它们组合成单元，将这些单元构建成分槽页，并导航这些结构。
+- en: We learned how to handle variable-size data types such as strings, byte sequences,
+    and arrays, and compose special cells that hold a size of values contained in
+    them.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们学习了如何处理变长数据类型，如字符串、字节序列和数组，并组成特殊的单元来保存其中包含的值的大小。
+- en: We discussed the slotted page format, which allows us to reference individual
+    cells from outside the page by cell ID, store records in the insertion order,
+    and preserve the key order by sorting cell offsets.
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们讨论了分槽页格式，这种格式允许我们通过单元ID从页外引用单个单元，按插入顺序存储记录，并通过排序单元偏移保留键顺序。
+- en: These principles can be used to compose binary formats for on-disk structures
+    and network protocols.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些原则可以用于组成用于磁盘结构和网络协议的二进制格式。
+- en: ^([1](ch03.html#idm46466889139032-marker)) Depending on the platform (macOS,
+    Solaris, Aix, or one of the BSD flavors, or Windows), the `kLittleEndian` variable
+    is set to whether or not the platform supports little-endian.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch03.html#idm46466889139032-marker)) 根据平台（macOS、Solaris、Aix 或其中一个 BSD
+    变体或 Windows），`kLittleEndian` 变量设置为平台是否支持小端序。
+- en: '^([2](ch03.html#idm46466889107080-marker)) It’s worth noting that compilers
+    can add padding to structures, which is also architecture dependent. This may
+    break the assumptions about the exact byte offsets and locations. You can read
+    more about structure packing here: [*https://databass.dev/links/58*](https://databass.dev/links/58).'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch03.html#idm46466889107080-marker)) 值得注意的是，编译器可以在结构体中添加填充，这也依赖于架构。这可能会破坏对确切字节偏移和位置的假设。您可以在这里阅读更多关于结构体填充的信息：[*https://databass.dev/links/58*](https://databass.dev/links/58)。

@@ -1,0 +1,742 @@
+- en: Chapter 22\. Monitoring MongoDB
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第22章。监控 MongoDB
+- en: 'Before you deploy, it is important to set up some type of monitoring. Monitoring
+    should allow you to track what your server is doing and alert you if something
+    goes wrong. This chapter will cover:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在部署之前，设置某种类型的监控非常重要。监控应该允许您追踪服务器正在做什么，并在出现问题时提醒您。本章将涵盖：
+- en: How to track MongoDB’s memory usage
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何追踪 MongoDB 的内存使用情况
+- en: How to track application performance metrics
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何跟踪应用程序性能指标
+- en: How to diagnose replication issues
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何诊断复制问题
+- en: We’ll use example graphs from MongoDB Ops Manager to demonstrate what to look
+    for when monitoring (see [installation instructions for Ops Manager](https://oreil.ly/D4751)).
+    The monitoring capabilities of MongoDB Atlas (MongoDB’s cloud database service)
+    are very similar. MongoDB also offers a free monitoring service that monitors
+    standalones and replica sets. It keeps the monitoring data for 24 hours after
+    it has been uploaded and provides coarse-grained statistics on operation execution
+    times, memory usage, CPU usage, and operation counts.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将使用 MongoDB Ops Manager 的示例图表来演示监控时要查找的内容（请参阅[Ops Manager 的安装说明](https://oreil.ly/D4751)）。MongoDB
+    Atlas（MongoDB 的云数据库服务）的监控能力非常类似。MongoDB 还提供了一个免费的监控服务，用于监控独立节点和副本集。它将监控数据保留 24
+    小时，并提供有关操作执行时间、内存使用情况、CPU 使用情况和操作计数的粗略统计信息。
+- en: If you do not want to use Ops Manager, Atlas, or MongoDB’s free monitoring service,
+    please use some type of monitoring. It will help you detect potential issues before
+    they cause problems and diagnose issues when they occur.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您不想使用 Ops Manager、Atlas 或 MongoDB 的免费监控服务，请使用某种类型的监控。它将帮助您在问题造成之前检测潜在问题，并在出现问题时进行诊断。
+- en: Monitoring Memory Usage
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 监控内存使用情况
+- en: Accessing data in memory is fast, and accessing data on disk is slow. Unfortunately,
+    memory is expensive (and disk is cheap), and typically MongoDB uses up memory
+    before any other resource. This section covers how to monitor MongoDB’s interactions
+    with the CPU, disk, and memory, and what to watch for.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 访问内存中的数据速度很快，而访问磁盘上的数据速度很慢。不幸的是，内存很昂贵（而磁盘很便宜），通常 MongoDB 在使用其他资源之前就会用完内存。本节介绍如何监控
+    MongoDB 与 CPU、磁盘和内存的交互，并要注意什么。
+- en: Introduction to Computer Memory
+  id: totrans-9
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 计算机内存介绍
+- en: Computers tend to have a small amount of fast-to-access memory and a large amount
+    of slow-to-access disk. When you request a page of data that is stored on disk
+    (and not yet in memory), your system page faults and copies the page from disk
+    into memory. It can then access the page in memory extremely quickly. If your
+    program stops regularly using the page and your memory fills up with other pages,
+    the old page will be evicted from memory and only live on disk again.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 计算机通常具有少量快速访问的内存和大量慢速访问的磁盘。当您请求存储在磁盘上（尚未在内存中）的数据页时，系统会发生页面错误，并将该页面从磁盘复制到内存中。然后，它可以非常快速地访问内存中的页面。如果您的程序停止定期使用该页面，并且内存填满了其他页面，那么旧页面将从内存中逐出，并且仅在磁盘上再次存在。
+- en: Copying a page from disk into memory takes a lot longer than reading a page
+    from memory. Thus, the less MongoDB has to copy data from disk, the better. If
+    MongoDB can operate almost entirely in memory, it will be able to access data
+    much faster. Thus, MongoDB’s memory usage is one of the most important stats to
+    track.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将页面从磁盘复制到内存比从内存读取页面需要更长时间。因此，MongoDB 能够尽可能地减少从磁盘复制数据，它将能够更快地访问数据。因此，MongoDB
+    的内存使用是需要追踪的最重要的统计数据之一。
+- en: Tracking Memory Usage
+  id: totrans-12
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 跟踪内存使用情况
+- en: 'MongoDB reports on three “types” of memory in Ops Manager: resident memory,
+    virtual memory, and mapped memory. Resident memory is the memory that MongoDB
+    explicitly owns in RAM. For example, if you query for a document and it is paged
+    into memory, that page is added to MongoDB’s resident memory.'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 在 Ops Manager 报告了三种“类型”的内存：驻留内存、虚拟内存和映射内存。驻留内存是 MongoDB 明确拥有的 RAM 中的内存。例如，如果您查询一个文档并将其换入内存，则该页将添加到
+    MongoDB 的驻留内存中。
+- en: MongoDB is given an address for that page. This address isn’t the literal address
+    of the page in RAM; it’s a virtual address. MongoDB can pass it to the kernel
+    and the kernel will look up where the page really lives. This way, if the kernel
+    needs to evict the page from memory, MongoDB can still use the address to access
+    it. MongoDB will request the memory from the kernel, the kernel will look at its
+    page cache, see that the page is not there, page fault to copy the page into memory,
+    and return it to MongoDB.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB为该页面分配了一个地址。这个地址并不是页面在RAM中的真实地址；它是一个虚拟地址。MongoDB可以将其传递给内核，内核将查找页面的真实位置。这样，如果内核需要从内存中驱逐页面，MongoDB仍然可以使用该地址访问它。MongoDB将向内核请求内存，内核将查看其页面缓存，发现页面不在其中时，会发生页面错误以将页面复制到内存中，并返回给MongoDB。
+- en: If your data fits entirely in memory, the resident memory should be approximately
+    the size of your data. When we talk about data being “in memory,” we’re always
+    talking about the data being in RAM.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的数据完全适合内存，驻留内存应该大致等于您的数据大小。当我们谈论数据“在内存中”时，我们总是指数据在RAM中。
+- en: MongoDB’s mapped memory includes all of the data MongoDB has ever accessed (all
+    the pages of data it has addresses for). It will usually be about the size of
+    your dataset.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB映射的内存包括MongoDB曾经访问过的所有数据（它拥有地址的所有数据页）。它通常会接近您的数据集大小。
+- en: Virtual memory is an abstraction provided by the operating system that hides
+    the physical storage details from the software process. Each process sees a contiguous
+    address space of memory that it can use. In Ops Manager, the virtual memory use
+    of MongoDB is typically twice the size of the mapped memory.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虚拟内存是操作系统提供的一个抽象，隐藏了软件进程对物理存储细节的直接访问。每个进程看到的是一个连续的内存地址空间，可以使用。在Ops Manager中，MongoDB的虚拟内存使用通常是映射内存大小的两倍。
+- en: '[Figure 22-1](#monitor-mem) shows the Ops Manager graph for memory information,
+    which describes how much virtual, resident, and mapped memory MongoDB is using.
+    Mapped memory is relevant only for older (pre-4.0) deployments using the MMAP
+    storage engine. Now that MongoDB uses the WiredTiger storage engine, you should
+    see zero usage for mapped memory. On a machine dedicated to MongoDB, resident
+    memory should be a little less than the total memory size (assuming your working
+    set is as large or larger than memory). Resident memory is the statistic that
+    actually tracks how much data is in physical RAM, but by itself this does not
+    tell you much about how MongoDB is using memory.'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 22-1](#monitor-mem)显示了Ops Manager关于内存信息的图表，描述了MongoDB使用的虚拟、驻留和映射内存量。映射内存仅适用于使用MMAP存储引擎的较旧（4.0之前）的部署。现在MongoDB使用WiredTiger存储引擎，您应该看到映射内存的使用量为零。在专用于MongoDB的机器上，驻留内存应该略小于总内存大小（假设您的工作集大小与内存一样大或更大）。驻留内存是实际跟踪物理RAM中数据量的统计数据，但仅凭这一点不能告诉您MongoDB如何使用内存。'
+- en: '![](Images/mdb3_2201.png)'
+  id: totrans-19
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_2201.png)'
+- en: 'Figure 22-1\. From the top line to the bottom: virtual, resident, and mapped
+    memory'
+  id: totrans-20
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 22-1从顶部到底部依次是：虚拟、驻留和映射内存
+- en: If your data fits entirely in memory, resident should be approximately the size
+    of your data. When we talk about data being “in memory,” we’re always talking
+    about the data being in RAM.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的数据完全适合内存，驻留内存应该大致等于您的数据大小。当我们谈论数据“在内存中”时，我们总是指数据在RAM中。
+- en: As you can see from [Figure 22-1](#monitor-mem), memory metrics tend to be fairly
+    steady, but as your dataset grows virtual memory (top line) will grow with it.
+    Resident memory (middle line) will grow to the size of your available RAM and
+    then hold steady.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如您可以从[图 22-1](#monitor-mem)看到的那样，内存指标通常保持相对稳定，但随着数据集的增长，虚拟内存（顶部线）也会随之增长。驻留内存（中间线）将增长到可用RAM的大小，然后保持稳定。
+- en: Tracking Page Faults
+  id: totrans-23
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 跟踪页面错误
+- en: You can use other statistics to find out how MongoDB is using memory, not just
+    how much of each type it has. One useful stat is the number of page faults, which
+    tells you how often the data MongoDB is looking for is not in RAM. Figures [22-2](#monitor-fault-1)
+    and [22-3](#monitor-fault-2) are graphs that show page faults over time. [Figure 22-3](#monitor-fault-2)
+    is page faulting less than [Figure 22-2](#monitor-fault-1), but by itself this
+    information is not very useful. If the disk in [Figure 22-2](#monitor-fault-1)
+    can handle that many faults and the application can handle the delay of the disk
+    seeks, there is no particular problem with having so many faults (or more). On
+    the other hand, if your application cannot handle the increased latency of reading
+    data from disk, you have no choice but to store all of your data in memory (or
+    use SSDs).
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用其他统计信息来了解 MongoDB 如何使用内存，而不仅仅是每种类型有多少。一个有用的统计数据是页面错误的数量，它告诉您 MongoDB 查找的数据在
+    RAM 中不在的频率。图 [22-2](#monitor-fault-1) 和 [22-3](#monitor-fault-2) 是显示随时间变化的页面错误的图表。[图
+    22-3](#monitor-fault-2) 的页面错误少于 [图 22-2](#monitor-fault-1)，但单独来看这些信息并不是很有用。如果
+    [图 22-2](#monitor-fault-1) 的磁盘能够处理那么多的错误，并且应用程序可以处理磁盘寻址的延迟，那么拥有这么多错误（或更多）就没有特别的问题。另一方面，如果您的应用程序无法处理从磁盘读取数据的增加延迟，您别无选择，只能将所有数据存储在内存中（或使用
+    SSD）。
+- en: '![](Images/mdb3_2202.png)'
+  id: totrans-25
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_2202.png)'
+- en: Figure 22-2\. A system that is page faulting hundreds of times a minute
+  id: totrans-26
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 22-2\. 一个每分钟发生数百次页面错误的系统
+- en: '![](Images/mdb3_2203.png)'
+  id: totrans-27
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_2203.png)'
+- en: Figure 22-3\. A system that is page faulting a few times a minute
+  id: totrans-28
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 22-3\. 每分钟发生几次页面错误的系统
+- en: 'Regardless of how forgiving the application is, page faults become a problem
+    when the disk is overloaded. The amount of load a disk can handle isn’t linear:
+    once a disk begins getting overloaded, each operation must queue for a longer
+    and longer period of time, creating a chain reaction. There is usually a tipping
+    point where disk performance begins degrading quickly. Thus, it is a good idea
+    to stay away from the maximum load that your disk can handle.'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不管应用程序有多宽容，当磁盘负载过重时，页面错误就会成为一个问题。磁盘可以处理的负载量并非线性：一旦磁盘开始过载，每个操作都必须等待更长的时间，从而产生连锁反应。通常存在一个临界点，磁盘性能会迅速下降。因此，最好避免接近磁盘能处理的最大负载。
+- en: Note
+  id: totrans-30
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Track your page fault numbers over time. If your application is behaving well
+    with a certain number of page faults, you have a baseline for how many page faults
+    the system can handle. If page faults begin to creep up and performance deteriorates,
+    you have a threshold to alert on.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着时间推移跟踪您的页面错误数量。如果您的应用程序在某个页面错误数上表现良好，则对系统可以处理多少页面错误有一个基准。如果页面错误开始逐渐增加并导致性能下降，则有一个警报的阈值。
+- en: 'You can see page fault stats per database by looking at the `"page_faults"`
+    field of `serverStatus`’s output:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过查看 `serverStatus` 输出的 `"page_faults"` 字段来查看每个数据库的页面错误统计：
+- en: '[PRE0]'
+  id: totrans-33
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: '`"page_faults"` gives you a count of how many times MongoDB has had to go to
+    disk (since startup).'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"page_faults"` 提供了自启动以来 MongoDB 必须访问磁盘的次数。'
+- en: I/O Wait
+  id: totrans-35
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: I/O 等待
+- en: Page faults in general are closely tied to how long the CPU is idling waiting
+    for the disk, called `I/O wait`. Some I/O wait is normal; MongoDB has to go to
+    disk sometimes, and although it tries not to block anything when it does, it cannot
+    completely avoid it. The important thing is that I/O wait is not increasing or
+    near 100%, as shown in [Figure 22-4](#figure21-5). This indicates that the disk
+    is getting overloaded.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总的来说，页面错误通常与 CPU 空闲等待磁盘的时间密切相关，称为 `I/O 等待`。某些 I/O 等待是正常的；MongoDB 有时必须访问磁盘，尽管它在这样做时试图不阻塞任何操作，但无法完全避免。重要的是，I/O
+    等待没有增加或接近 100%，如 [图 22-4](#figure21-5) 所示。这表示磁盘负载过重。
+- en: '![](Images/mdb3_2204.png)'
+  id: totrans-37
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_2204.png)'
+- en: Figure 22-4\. I/O wait hovering around 100%
+  id: totrans-38
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 22-4\. I/O 等待约为 100%
+- en: Calculating the Working Set
+  id: totrans-39
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 计算工作集
+- en: 'In general, the more data you have in memory, the faster MongoDB will perform.
+    Thus, in order from fastest to slowest, an application could have:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，内存中的数据越多，MongoDB 的性能越快。因此，应用程序可能按以下顺序从快到慢具有：
+- en: The entire dataset in memory. This is nice to have but is often too expensive
+    or infeasible. It may be necessary for applications that depend on fast response
+    times.
+  id: totrans-41
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 整个数据集在内存中。这虽然很好，但通常太昂贵或不可行。对于依赖快速响应时间的应用程序可能是必需的。
+- en: The working set in memory. This is the most common choice.
+  id: totrans-42
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在内存中的工作集。这是最常见的选择。
+- en: 'Your working set is the data and indexes that your application uses. This may
+    be everything, but generally there’s a core dataset (e.g., the *users* collection
+    and the last month of activity) that covers 90% of requests. If this working set
+    fits in RAM, MongoDB will generally be fast: it only has to go to disk for a few
+    “unusual” requests.'
+  id: totrans-43
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 你的工作集是应用程序使用的数据和索引。这可能是全部数据，但通常有一个核心数据集（例如，*用户*集合和最近一个月的活动），涵盖了90%的请求。如果这个工作集适合于RAM，MongoDB通常会很快：它只需为少数“不寻常”的请求访问磁盘。
+- en: The indexes in memory.
+  id: totrans-44
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 内存中的索引。
+- en: The working set of indexes in memory.
+  id: totrans-45
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 内存中的索引工作集。
+- en: No useful subset of data in memory. If possible, avoid this. It will be slow.
+  id: totrans-46
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 内存中没有有用的数据子集。如果可能，请避免这种情况。这会很慢。
+- en: You must know what your working set is (and how large it is) to know if you
+    can keep it in memory. The best way to calculate the size of the working set is
+    to track common operations to find out how much your application is reading and
+    writing. For example, suppose your application creates 2 GB of new data per week
+    and 800 MB of that data is regularly accessed. Users tend to access data up to
+    a month old, and data that’s older than that is mostly unused. Your working set
+    size is probably about 3.2 GB (800 MB/week × 4 weeks), plus a fudge factor for
+    indexes, so call it 5 GB.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您必须知道您的工作集是什么（以及有多大），才能知道是否可以将其保留在内存中。计算工作集大小的最佳方法是跟踪常见操作，以了解您的应用程序读取和写入的数据量。例如，假设您的应用程序每周创建2
+    GB的新数据，其中800 MB经常访问。用户倾向于访问最多一个月的数据，超过这个时间的数据基本上不用了。您的工作集大小可能约为3.2 GB（每周800 MB
+    × 4周），再加上索引的余地，因此称之为5 GB。
+- en: One way to think about this is to track data accessed over time, as shown in
+    [Figure 22-5](#monitor-calc). If you choose a cutoff where 90% of your requests
+    fall, like in [Figure 22-6](#monitor-calc2), then the data (and indexes) generated
+    in that period of time form your working set. You can measure for that amount
+    of time to figure out how much your dataset grows. Note that this example uses
+    time, but it’s possible that there’s another access pattern that makes more sense
+    for your application (time being the most common one).
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有一种思考方式是跟踪随时间访问的数据，如[图 22-5](#monitor-calc)所示。如果选择一个包括90%请求的截止时间，例如[图 22-6](#monitor-calc2)，那么在该时间段内生成的数据（和索引）形成了您的工作集。您可以测量该时间段以确定数据集增长的情况。请注意，此示例使用时间，但可能存在另一种更适合您的应用程序的访问模式（时间是最常见的一种）。
+- en: '![](Images/mdb3_2205.png)'
+  id: totrans-49
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_2205.png)'
+- en: Figure 22-5\. A plot of data accesses by age of data
+  id: totrans-50
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 22-5\. 数据访问按数据年龄的图形绘制
+- en: '![](Images/mdb3_2206.png)'
+  id: totrans-51
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_2206.png)'
+- en: Figure 22-6\. The working set is data used in the requests before the cutoff
+    of “frequent requests” (indicated by the vertical line in the graph)
+  id: totrans-52
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 22-6\. 工作集是在“频繁请求”截止之前使用的数据（在图中用垂直线标示）
+- en: Some Working Set Examples
+  id: totrans-53
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 一些工作集示例
+- en: Suppose that you have a 40 GB working set. A total of 90% of requests hit the
+    working set, and 10% hit other data. If you have 500 GB of data and 50 GB of RAM,
+    your working set fits entirely in RAM. Once your application has accessed the
+    data it usually accesses (a process called *preheating*), it should never have
+    to go to disk again for the working set. It then has 10 GB of space available
+    for the 460 GB of less-frequently-accessed data. Obviously, MongoDB will almost
+    always have to go to disk for the nonworking set data.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您有一个40 GB的工作集。90%的请求命中工作集，10%命中其他数据。如果您有500 GB的数据和50 GB的RAM，则您的工作集完全适合RAM。一旦应用程序访问了通常访问的数据（称为*预热*过程），它就不应再为工作集访问磁盘。然后，您有10
+    GB的空间可用于460 GB的不经常访问的数据。显然，MongoDB几乎总是需要访问非工作集数据才能访问磁盘。
+- en: 'On the other hand, suppose your working set does not fit in RAM—say, if you
+    have only 35 GB of RAM. Then the working set will generally take up most of the
+    RAM. The working set has a higher probability of staying in RAM because it’s accessed
+    more frequently, but at some point the less-frequently-accessed data will have
+    to be paged in, evicting the working set (or other less-frequently-accessed data).
+    Thus, there is a constant churn back and forth from disk: accessing the working
+    set does not have predictable performance anymore.'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一方面，假设您的工作集不适合RAM——例如，如果您只有35 GB的RAM。那么工作集通常会占用大部分RAM。工作集更有可能留在RAM中，因为它被更频繁地访问，但在某个时刻，不经常访问的数据将被分页进入，驱逐工作集（或其他不经常访问的数据）。因此，从磁盘访问工作集没有可预测的性能。
+- en: Tracking Performance
+  id: totrans-56
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 性能跟踪
+- en: Performance of queries is often important to track and keep consistent. There
+    are several ways to track if MongoDB is having trouble with the current request
+    load.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询性能通常是需要跟踪和保持一致的重要指标。有几种方法可以跟踪 MongoDB 是否在处理当前请求负载时遇到问题。
+- en: CPU can be I/O bound with MongoDB (indicated by a high I/O wait). The WiredTiger
+    storage engine is multithreaded and can take advantage of additional CPU cores.
+    This can be seen in a higher level of usage across CPU metrics when compared with
+    the older MMAP storage engine. However, if user or system time is approaching
+    100% (or 100% multiplied by the number of CPUs you have), the most common cause
+    is that you’re missing an index on a frequently used query. It is a good idea
+    to track CPU usage (particularly after deploying a new version of your application)
+    to ensure that all your queries are behaving as they should.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 可能会因为 CPU 受 I/O 限制（通过高 I/O 等待指示）。WiredTiger 存储引擎是多线程的，并且可以利用额外的 CPU
+    核心。与较旧的 MMAP 存储引擎相比，这可以在 CPU 指标的更高使用水平中看出。然而，如果用户或系统时间接近 100%（或者是您拥有的 CPU 数量乘以
+    100%），最常见的原因是您在频繁使用的查询上缺少索引。跟踪 CPU 使用率（特别是在部署应用程序的新版本后）是一个好主意，以确保所有查询都表现如预期。
+- en: 'Note that the graph shown in [Figure 22-7](#monitor-cpu) is fine: if there
+    is a low number of page faults, I/O wait may be dwarfed by other CPU activities.
+    It is only when the other activities creep up that bad indexes may be a culprit.'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，图表显示在 [图 22-7](#monitor-cpu) 中是正常的：如果页面故障数较少，I/O 等待可能会被其他 CPU 活动所掩盖。只有当其他活动开始增加时，坏的索引可能是罪魁祸首。
+- en: '![](Images/mdb3_2207.png)'
+  id: totrans-60
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_2207.png)'
+- en: 'Figure 22-7\. A CPU with minimal I/O wait: the top line is user and the lower
+    line is system; the other stats are very close to 0%'
+  id: totrans-61
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 22-7\. 具有最小 I/O 等待时间的 CPU：顶部线为用户，底部线为系统；其他统计数据非常接近 0%
+- en: 'A similar metric is queuing: how many requests are waiting to be processed
+    by MongoDB. A request is considered queued when it is waiting for the lock it
+    needs to do a read or a write. [Figure 22-8](#monitor-queue) shows a graph of
+    read and write queues over time. No queues are preferred (basically an empty graph),
+    but this graph is nothing to be alarmed about. In a busy system, it isn’t unusual
+    for an operation to have to wait a bit for the correct lock to be available.'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个类似的度量标准是排队：MongoDB 等待处理的请求数量。当请求等待其需要的锁进行读取或写入时，请求被视为排队。[图 22-8](#monitor-queue)显示了随时间变化的读取和写入队列的图表。没有队列是首选（基本上是一个空图表），但这个图表并不值得担忧。在一个繁忙的系统中，一个操作不得不等待正确的锁变得可用是很正常的事情。
+- en: '![](Images/mdb3_2208.png)'
+  id: totrans-63
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_2208.png)'
+- en: Figure 22-8\. Read and write queues over time
+  id: totrans-64
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 22-8\. 随时间变化的读取和写入队列
+- en: 'The WiredTiger storage engine provides document-level concurrency, which allows
+    for multiple simultaneous writes to the same collection. This has drastically
+    improved the performance of concurrent operations. The ticketing system used controls
+    the number of threads in use to avoid starvation: it issues tickets for read and
+    write operations (128 of each, by default), after which point new read or write
+    operations will queue. The `wiredTiger.concurrentTransactions.read.available`
+    and `wire⁠d​Tiger.concurrentTransactions.write.available` fields of `serverStatus`
+    can be used to track when the number of available tickets reaches zero, indicating
+    the respective operations are now queuing up.'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: WiredTiger 存储引擎提供文档级并发，允许对同一集合进行多个同时写入。这显著提高了并发操作的性能。所使用的票务系统控制正在使用的线程数，以避免饥饿：它为读取和写入操作分配票据（默认情况下，每种操作分配128个），在此之后新的读取或写入操作将排队。`serverStatus`
+    的 `wiredTiger.concurrentTransactions.read.available` 和 `wiredTiger.concurrentTransactions.write.available`
+    字段可用于跟踪可用票据数量何时降至零，表示相应的操作现在正在排队。
+- en: You can see if requests are piling up by looking at the number of requests enqueued.
+    Generally, the queue size should be low. A large and ever-present queue is an
+    indication that *mongod* cannot keep up with its load. You should decrease the
+    load on that server as fast as possible.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过查看排队的请求数量，您可以看出请求是否在堆积。通常情况下，队列大小应该很小。一个大且长期存在的队列表明 *mongod* 无法跟上其负载。您应该尽快减少该服务器上的负载。
+- en: Tracking Free Space
+  id: totrans-67
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 跟踪剩余空间
+- en: One other metric that is basic but important to monitor is disk usage. Sometimes
+    users wait until their disk runs out of space before they think about how they
+    want to handle it. By monitoring your disk usage and tracking free disk space,
+    you can predict how long your current drive will be sufficient and plan in advance
+    what to do when it is not.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个基本但重要的监控指标是磁盘使用情况。有时用户会等到磁盘空间用完才考虑如何处理。通过监控磁盘使用情况并跟踪剩余磁盘空间，你可以预测当前驱动器足够使用的时间，并提前计划在不足时的处理方法。
+- en: 'As you run out of space, there are several options:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你的空间用完时，有几个选项：
+- en: If you are using sharding, add another shard.
+  id: totrans-70
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果你正在使用分片，请添加另一个分片。
+- en: If you have unused indexes, remove them. These can be identified using the aggregation
+    `$indexStats` for a specific collection.
+  id: totrans-71
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果有未使用的索引，删除它们。可以使用特定集合的聚合`$indexStats`来识别它们。
+- en: If you have not run a compaction operation, then do so on a secondary to see
+    if it assists. This is normally only useful in cases where a large amount of data
+    or indexes have been removed from a collection and will not be replaced.
+  id: totrans-72
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果你还没有在从节点上运行压缩操作，那么在这方面尝试一下。这通常只在从集合中删除大量数据或索引并且不会被替换时才有用。
+- en: Shut down each member of the replica set (one at a time) and copy its data to
+    a larger disk, which can then be mounted. Restart the member and proceed to the
+    next.
+  id: totrans-73
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 关闭副本集的每个成员（逐个），将其数据复制到较大的磁盘上，然后可以挂载该磁盘。重新启动成员并继续下一个。
+- en: 'Replace members of your replica set with members with a larger drive: remove
+    an old member and add a new member, and allow that one to catch up with the rest
+    of the set. Repeat for each member of the set.'
+  id: totrans-74
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 用具有较大驱动器的成员替换副本集的成员：删除一个旧成员并添加一个新成员，让它赶上其余成员。对副本集的每个成员重复此操作。
+- en: If you are using the `directoryperdb` option and you have a particularly fast-growing
+    database, move it to its own drive. Then mount the volume as a directory in your
+    data directory. This way the rest of your data doesn’t have to be moved.
+  id: totrans-75
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果你使用了`directoryperdb`选项，并且你有一个特别快速增长的数据库，将其移到独立的驱动器上。然后在你的数据目录中将该卷挂载为一个目录。这样可以避免移动其余数据。
+- en: Regardless of the technique you choose, plan ahead to minimize the impact on
+    your application. You need time to take backups, modify each member of your set
+    in turn, and copy your data from place to place.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论你选择哪种技术，都要提前计划以最小化对你的应用程序的影响。你需要时间来备份数据，逐个修改副本集的每个成员，并将数据从一个地方复制到另一个地方。
+- en: Monitoring Replication
+  id: totrans-77
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 监控复制
+- en: 'Replication lag and oplog length are important metrics to track. Lag is when
+    the secondaries cannot keep up with the primary. It’s calculated by subtracting
+    the time of the last op applied on a secondary from the time of the last op on
+    the primary. For example, if a secondary just applied an op with the timestamp
+    3:26:00 p.m. and the primary just applied an op with the timestamp 3:29:45 p.m.,
+    the secondary is lagging by 3 minutes and 45 seconds. You want lag to be as close
+    to 0 as possible, and it is generally on the order of milliseconds. If a secondary
+    is keeping up with the primary, the replication lag should look something like
+    the graph shown in [Figure 22-9](#monitor-no-lag): basically 0 all the time.'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制滞后和操作日志长度是重要的监控指标。滞后是指从节点不能跟上主节点的情况。它的计算方法是从从节点上应用的最后一个操作的时间减去主节点上最后一个操作的时间。例如，如果从节点刚刚应用了一个时间戳为下午3:26:00的操作，而主节点刚刚应用了一个时间戳为下午3:29:45的操作，则从节点滞后了3分钟45秒。你希望滞后尽可能接近0，通常是毫秒级的。如果从节点跟上主节点，复制滞后应该看起来像[图 22-9](#monitor-no-lag)中显示的那样：基本上始终为0。
+- en: '![](Images/mdb3_2209.png)'
+  id: totrans-79
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_2209.png)'
+- en: Figure 22-9\. A replica set with no lag; this is what you want to see
+  id: totrans-80
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 22-9\. 一个没有滞后的副本集；这是你希望看到的情况
+- en: 'If a secondary cannot replicate writes as fast as the primary can write, you’ll
+    start seeing a nonzero lag. The most extreme case of this is when replication
+    is stuck: the secondary cannot apply any more operations for some reason. At this
+    point, lag will grow by one second per second, creating the steep slope shown
+    in [Figure 22-10](#monitor-repl-stuck). This could be caused by network issues
+    or a missing `"_id"` index, which is required on every collection for replication
+    to function properly.'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果一个从节点不能像主节点写入那样快速地复制写操作，你会开始看到一个非零的滞后。这种情况的极端情形是复制卡住了：从节点由于某些原因不能再应用任何操作。此时，滞后将每秒增长一秒，形成[图 22-10](#monitor-repl-stuck)中显示的陡峭斜坡。这可能是由网络问题或缺少`"_id"`索引引起的，后者在每个集合上都是复制正常运行所必需的。
+- en: Tip
+  id: totrans-82
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 小贴士
+- en: If a collection is missing an `"_id"` index, take the server out of the replica
+    set, start it as a standalone server, and build the `"_id"` index. Make sure you
+    create the `"_id"` index as a *unique* index. Once created, the `"_id"` index
+    cannot be dropped or changed (other than by dropping the whole collection).
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果一个集合缺少 `"_id"` 索引，请将服务器从副本集中移出，作为独立服务器启动，并构建 `"_id"` 索引。确保将 `"_id"` 索引创建为*唯一*索引。一旦创建，`"_id"`
+    索引不能被删除或更改（除非删除整个集合）。
+- en: If a system is overloaded, a secondary may gradually fall behind. Some replication
+    will still be happening, so you generally won’t see the characteristic “one second
+    per second” slope in the graph. Still, it’s important to be aware if the secondaries
+    cannot keep up with peak traffic or are gradually falling further behind.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果系统过载，次要节点可能逐渐落后。一些复制仍在进行，因此通常不会在图表中看到典型的“每秒一秒”的斜坡。不过，如果次要节点无法跟上高峰期的流量或者逐渐落后，这一点非常重要。
+- en: '![](Images/mdb3_2210.png)'
+  id: totrans-85
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_2210.png)'
+- en: Figure 22-10\. Replication getting stuck and, just before February 10, beginning
+    to recover; the vertical lines are server restarts
+  id: totrans-86
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 22-10\. 复制出现故障，并在2月10日前开始恢复；垂直线代表服务器重新启动。
+- en: Primaries do not throttle writes to “help” secondaries catch up, so it’s common
+    for secondaries to fall behind on overloaded systems (particularly as MongoDB
+    tends to prioritize writes over reads, which means replication can be starved
+    on the primary). You can force throttling of the primary to some extent by using
+    `"w"` with your write concern. You also might want to try removing load from the
+    secondary by routing any requests it was handling to another member.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 主节点不会限制写入速度来“帮助”次要节点追赶，因此在过载系统上次要节点落后是常见的（特别是因为MongoDB倾向于优先处理写入而不是读取，这意味着复制可能会在主节点上饿死）。你可以通过在写入关注中使用
+    `"w"` 来在一定程度上强制主节点限制。你也可能希望尝试将次要节点上处理的任何请求路由到另一个成员。
+- en: 'If you are on an extremely *underloaded* system, you may see another interesting
+    pattern: sudden spikes in replication lag, as shown in [Figure 22-11](#monitor-low-write).
+    The spikes shown are not actually lag—they are caused by variations in sampling.
+    The *mongod* is processing one write every couple of minutes. Because lag is measured
+    as the difference between timestamps on the primary and secondary, measuring the
+    timestamp of the secondary right before a write on the primary makes it look minutes
+    behind. If you increase the write rate, these spikes should disappear.'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你的系统极度**负载不足**，你可能会看到另一种有趣的模式：复制延迟突然上升，如[图 22-11](#monitor-low-write)所示。所显示的突然上升实际上不是延迟，而是由于采样变化引起的。*mongod*
+    处理每隔几分钟写入一次。因为延迟是通过主节点和次要节点时间戳之间的差值来衡量的，所以在主节点写入之前，测量次要节点的时间戳看起来会晚几分钟。如果增加写入速率，这些突然上升应该会消失。
+- en: '![](Images/mdb3_2211.png)'
+  id: totrans-89
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_2211.png)'
+- en: Figure 22-11\. A low-write system can cause “phantom” lag
+  id: totrans-90
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 22-11\. 低写入系统可能导致“虚假”延迟。
+- en: 'The other important replication metric to track is the length of each member’s
+    oplog. Every member that might become primary should have an oplog longer than
+    a day. If a member may be a sync source for another member, it should have an
+    oplog longer than the time an initial sync takes to complete. [Figure 22-12](#monitor-repl-1)
+    shows what a standard oplog-length graph looks like. This oplog has an excellent
+    length: 1,111 hours is over a month of data! In general, oplogs should be as long
+    as you can afford the disk space to make them. Given the way they’re used, they
+    take up basically no memory, and a long oplog can mean the difference between
+    a painful ops experience and an easy one.'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 跟踪的另一个重要复制指标是每个成员的操作日志（oplog）长度。可能成为主节点的每个成员都应该有超过一天的操作日志。如果一个成员可能成为另一个成员的同步源，它应该有超过初始同步完成所需时间的操作日志。[图 22-12](#monitor-repl-1)展示了一个标准的操作日志长度图表。这个操作日志长度很好：1,111小时相当于一个月的数据！一般来说，操作日志应该尽可能长，只要你负担得起磁盘空间。考虑到它们的使用方式，它们基本上不占用内存，而长操作日志可能意味着在运维体验上的巨大差异，从痛苦到轻松。
+- en: '![](Images/mdb3_2212.png)'
+  id: totrans-92
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_2212.png)'
+- en: Figure 22-12\. A typical oplog-length graph
+  id: totrans-93
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 22-12\. 典型的操作日志长度图表。
+- en: '[Figure 22-13](#monitor-repl-2) shows a slightly unusual variation caused by
+    a fairly short oplog and variable traffic. This is still healthy, but the oplog
+    on this machine is probably too short (between 6 and 11 hours of maintenance).
+    The administrator may want to make the oplog longer when they get a chance.'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 22-13](#monitor-repl-2)展示了由于操作日志较短和流量变化导致的稍微不寻常的变化。这仍然是健康的，但是这台机器上的操作日志可能太短了（维护期间为6到11小时）。管理员可能希望有机会时将操作日志长度延长。'
+- en: '![](Images/mdb3_2213.png)'
+  id: totrans-95
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_2213.png)'
+- en: Figure 22-13\. Oplog-length graph of an application with daily traffic peaks
+  id: totrans-96
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 第 22-13 图。一个每天流量高峰的应用程序的操作日志长度图表。

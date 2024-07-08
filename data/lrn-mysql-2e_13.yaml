@@ -1,0 +1,1917 @@
+- en: Chapter 13\. High Availability
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第13章\. 高可用性
+- en: In the IT context, the term *high availability* defines a state of continuous
+    operation for a specified length of time. The goal is not eliminating the risk
+    of failure—that would be impossible. Rather, we are trying to guarantee that in
+    a failure situation, the system remains available so that operation can continue.
+    We often measure availability against a 100% operational or never-fails standard.
+    A common standard of availability is known as *five 9s*, or 99.999% availability.
+    Two 9s would be a system that guarantees 99% availability, allowing up to 1% downtime.
+    Over the course of a year, this would translate to 3.65 days of unavailability.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在IT上下文中，术语*高可用性*定义了在指定时间内持续运行的状态。目标不是消除失败的风险——那是不可能的。相反，我们试图保证在故障情况下系统仍然可用，以便操作可以继续进行。我们经常根据100%运行或永不失败的标准来衡量可用性。一个常见的可用性标准被称为*五个9*，或99.999%的可用性。两个9表示保证99%的可用性，允许高达1%的停机时间。在一年的时间内，这将转化为3.65天的不可用时间。
+- en: '*Reliability engineering* uses three principles of systems design to help achieve
+    high availability: elimination of single points of failure (SPOFs), reliable crossover
+    or failover points, and failure detection capabilities (including monitoring,
+    discussed in [Chapter 12](ch12.xhtml#CH12_MONITORING)).'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*可靠性工程*使用系统设计的三个原则来帮助实现高可用性：消除单点故障（SPOF）、可靠的交叉或故障转移点，以及故障检测能力（包括监控，在[第12章](ch12.xhtml#CH12_MONITORING)中讨论）。'
+- en: Redundancy is required for many components to achieve high availability. A simple
+    example is an airplane with two engines. If one engine fails while flying, the
+    aircraft can still land at an airport. A more complex example is a nuclear power
+    plant, where there are numerous redundant protocols and components to avoid catastrophic
+    failures. Similarly, to achieve high availability of a database we need network
+    redundancy, disk redundancy, different power supplies, multiple application and
+    database servers, and much more.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了实现高可用性，许多组件都需要冗余。一个简单的例子是具有两个引擎的飞机。如果一台引擎在飞行过程中故障，飞机仍然可以降落在机场。更复杂的例子是核电站，那里有大量冗余的协议和组件，以避免灾难性故障。类似地，为了实现数据库的高可用性，我们需要网络冗余、磁盘冗余、不同的电源供应、多个应用程序和数据库服务器等等。
+- en: This chapter will focus on the options to achieve high availability that MySQL
+    databases offer.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章将重点介绍MySQL数据库提供的实现高可用性的选项。
+- en: Asynchronous Replication
+  id: totrans-5
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 异步复制
+- en: '*Replication* enables data from one MySQL database server (known as a *source*)
+    to be copied to one or more other MySQL database servers (known as *replicas*).
+    MySQL replication by default is asynchronous. With asynchronous replication, the
+    source writes events to its binary log, and replicas request them when ready.
+    There is no guarantee that any event will ever reach any replica. It’s a loosely
+    coupled source/replica relationship, where the following are true:'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*复制*使得一个MySQL数据库服务器（称为*源*）的数据可以复制到一个或多个其他MySQL数据库服务器（称为*复制端*）。MySQL复制默认是异步的。在异步复制中，源服务器将事件写入其二进制日志，复制端在准备好时请求这些事件。不能保证任何事件会到达任何复制端。这是一种松耦合的源/复制端关系，其中以下内容为真：'
+- en: The source does not wait for the replica to catch up.
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 源端不等待复制端追赶。
+- en: The replica determines how much to read and from which point in the binary log.
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 复制端决定从二进制日志中读取多少数据及从哪个点开始读取。
+- en: The replica can be arbitrarily far behind the source in reading or applying
+    changes. This issue is known as *replication lag*, and we will look at ways of
+    minimizing it.
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 复制端在读取或应用更改时可以任意落后于源端。这个问题称为*复制延迟*，我们将探讨减少它的方法。
+- en: Asynchronous replication provides lower write latency since a write is acknowledged
+    locally by a source before being written to the replicas.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 异步复制提供较低的写入延迟，因为写入在被复制端确认之前由源端本地确认。
+- en: 'MySQL implements its replication capabilities using three main threads, one
+    on the source server and two on the replicas:'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL通过三个主要线程来实现其复制功能，一个在源服务器上，两个在复制端上：
+- en: '*Binary log dump thread*'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*二进制日志转储线程*'
+- en: The source creates a thread to send the binary log contents to a replica when
+    the replica connects. We can identify this thread in the output of `SHOW PROCESSLIST`
+    on the source as the `Binlog Dump` thread.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 源端创建一个线程，在复制端连接时将二进制日志内容发送到复制端。我们可以在源端的`SHOW PROCESSLIST`输出中识别这个线程为`Binlog Dump`线程。
+- en: The binary log dump thread acquires a lock on the source’s binary log for reading
+    each event sent to the replica. When the source reads the event, the lock is released,
+    even before the source sends the event to the replica.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二进制日志传输线程在读取每个发送到副本的事件时会在源的二进制日志上获取锁定。当源读取事件时，锁定会被释放，甚至在源将事件发送到副本之前。
+- en: '*Replication I/O thread*'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*复制I/O线程*'
+- en: When we execute the `START SLAVE` statement on a replica server, the replica
+    creates an I/O thread connected to the source and asks it to send the updates
+    recorded in its binary logs.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们在副本服务器上执行`START SLAVE`语句时，副本创建一个I/O线程连接到源，并请求它发送其二进制日志中记录的更新。
+- en: The replication I/O thread reads the updates that the source’s `Binlog Dump`
+    thread sends (see the previous item) and copies them to local files that comprise
+    the replica’s relay log.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制I/O线程读取源的`Binlog Dump`线程发送的更新（见上一项）并将其复制到本地文件，组成副本的中继日志。
+- en: MySQL shows the state of this thread as `Slave_IO_running` in the output of
+    `SHOW SLAVE STATUS`.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL在`SHOW SLAVE STATUS`的输出中显示这个线程的状态为`Slave_IO_running`。
+- en: '*Replication SQL thread*'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*复制SQL线程*'
+- en: The replica creates a SQL thread to read the relay log written by the replication
+    I/O thread and execute the transactions contained in it.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 副本创建一个SQL线程来读取由复制I/O线程写入的中继日志，并执行其中包含的事务。
+- en: Note
+  id: totrans-21
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: As mentioned in Chapter 1, Oracle, Percona, and Maria DB are working to remove
+    legacy terminology with negative connotations from their products. The documentation
+    already uses the terms *source* and *replica*, as we do in this book, but because
+    of the need to maintain backward compatibility and support for older versions,
+    it would be impossible to completely change the terminology in one release. This
+    is an ongoing effort.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如在第1章中提到的，Oracle、Percona和Maria DB正在努力删除其产品中带有负面含义的传统术语。文档已经使用了像本书中一样的*源*和*副本*术语，但由于需要保持向后兼容性和对旧版本的支持，不可能在一个发布版中完全更改术语。这是一个持续进行的工作。
+- en: There are ways to improve replication parallelization, as you’ll see later in
+    this chapter.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章后面您将看到提高复制并行性的方法。
+- en: '[Figure 13-1](#FIG-ASYNC_REPL) shows what the MySQL replication architecture
+    looks like.'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 13-1](#FIG-ASYNC_REPL)展示了MySQL复制架构的外观。'
+- en: '![lm2e 1301](Images/lm2e_1301.png)'
+  id: totrans-25
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1301](Images/lm2e_1301.png)'
+- en: Figure 13-1\. Asynchronous replication architecture flow
+  id: totrans-26
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 13-1\. 异步复制架构流程
+- en: 'Replication works because events written to the binary log are read from the
+    source and then processed on the replica, as shown in [Figure 13-1](#FIG-ASYNC_REPL).
+    The events are recorded within the binary log in different formats according to
+    the type of event. MySQL replication has three kinds of binary logging formats:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制工作是因为写入二进制日志的事件从源读取并在副本上处理，如[图 13-1](#FIG-ASYNC_REPL)所示。根据事件类型，事件以不同的格式记录在二进制日志中。MySQL复制有三种二进制日志格式：
+- en: Row-based replication (RBR)
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于行的复制（RBR）
+- en: The source writes events to the binary log that indicate how individual table
+    rows are changed. Replication of the source to the replica works by copying the
+    events representing the replica’s table rows’ changes. For MySQL 5.7 and 8.0,
+    this is the default replication format.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 源将事件写入二进制日志，指示如何更改单个表行。将源复制到副本的复制通过复制代表副本表行变更的事件来进行。对于MySQL 5.7和8.0，默认的复制格式如下。
+- en: Statement-based replication (SBR)
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于语句的复制（SBR）
+- en: The source writes SQL statements to the binary log. Replication of the source
+    to the replica works by executing the SQL statements on the replica.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 源将SQL语句写入二进制日志。将源复制到副本的复制通过在副本上执行SQL语句来进行。
+- en: Mixed replication
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 混合复制
+- en: 'You can also configure MySQL to use a mix of both statement-based and row-based
+    logging, depending on which one is most appropriate to log the changes. With mixed-format
+    logging, MySQL uses a statement-based log by default but switches to a row-based
+    log for certain unsafe statements that have a nondeterministic behavior. For example,
+    suppose we have the following statement:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以配置MySQL以使用基于语句和基于行的混合日志记录，具体取决于哪种日志记录更适合记录更改。使用混合格式日志记录时，默认情况下MySQL使用基于语句的日志，但对于某些具有不确定行为的不安全语句，会切换到基于行的日志。例如，假设我们有以下语句：
+- en: '[PRE0]'
+  id: totrans-34
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: We know that the function `NOW()` returns the current date and time. Imagine
+    that the source replicates the statement with 1 second of delay (there could be
+    various reasons for this, such as the replica being on a different continent than
+    the source). When the replica receives the statement and executes it, there will
+    be a 1-second difference in the date and time returned by the function, leading
+    to data inconsistency between the source and replica. When the mixed replication
+    format is used, whenever MySQL parses a nondeterministic function like this, it
+    will convert the statement to row-based replication. You can find a list of other
+    functions that MySQL considers unsafe in the [documentation](https://oreil.ly/RGyxB).
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们知道函数`NOW()`返回当前日期和时间。想象一下，源服务器延迟1秒复制该语句（可能有各种原因，比如副本位于与源不同的大陆）。当副本接收并执行该语句时，函数返回的日期和时间将有1秒的差异，导致源和副本之间的数据不一致。在使用混合复制格式时，每当MySQL解析类似这样的非确定性函数时，它将将语句转换为基于行的复制。您可以在[文档](https://oreil.ly/RGyxB)中找到MySQL认为不安全的其他函数列表。
+- en: Basic Parameters to Set on the Source and the Replica
+  id: totrans-36
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 在源和副本上设置基本参数
+- en: There are some basic settings that we need to set on both the source server
+    and the replica server in order to make replication work. They are required for
+    all methods explained in this section.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有一些基本设置我们需要在源服务器和副本服务器上设置，以使复制工作。这些设置对本节中介绍的所有方法都是必需的。
+- en: On the source server, you must enable binary logging and define a unique server
+    ID. You’ll need to restart the server after making these changes (if you haven’t
+    already) because these parameters are not dynamic.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在源服务器上，您必须启用二进制日志记录并定义唯一的服务器ID。在进行这些更改后（如果尚未完成），您需要重新启动服务器，因为这些参数不是动态的。
+- en: Tip
+  id: totrans-39
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: The server ID does not need to be incremental or be in any order, like having
+    the source server ID be smaller than the replica server ID. The only requirement
+    is that it be unique in each server that is part of the replication topology.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务器ID无需按顺序递增或处于任何顺序中，例如源服务器ID小于副本服务器ID。唯一的要求是在复制拓扑中的每个服务器中都是唯一的。
+- en: 'Here’s what this will look like in the *my.cnf* file:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这在*my.cnf*文件中的效果如下：
+- en: '[PRE1]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'You also need to establish a unique server ID for each replica. Like with the
+    source, if you haven’t done this yet, you’ll need to restart the replica server
+    after assigning it its ID. It is not mandatory to enable the binary log in the
+    replica server, although it is a recommended practice:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还需要为每个副本分配一个唯一的服务器ID。与源服务器一样，如果尚未执行此操作，则需要在为其分配ID后重新启动副本服务器。在副本服务器中启用二进制日志不是强制性的，尽管这是一个建议的实践：
+- en: '[PRE2]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Using the `log_slave_updates` option tells the replica server that commands
+    from a source server should be logged to the replica’s own binary log. Again,
+    this is not mandatory, but it is recommended as a good practice.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`log_slave_updates`选项告诉副本服务器，来自源服务器的命令应记录到副本自己的二进制日志中。再次强调，这不是强制性的，但作为一个良好的实践建议使用。
+- en: 'Each replica connects to the source using a MySQL username and password, so
+    you’ll also need to create a user account on the source server that the replica
+    can use to connect (for a refresher on this, see “Creating and Using New Users”
+    on page 317). Any account can be used for this operation, provided it has been
+    granted the `REPLICATION SLAVE` privilege. Here’s an example of how to create
+    the user on the source server:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个副本使用MySQL用户名和密码连接到源服务器，因此您还需要在源服务器上创建一个用户账号，副本可以使用该账号进行连接（有关此操作的详细信息，请参阅第317页的“创建和使用新用户”）。任何账户都可以用于此操作，只要已授予`REPLICATION
+    SLAVE`权限。以下是在源服务器上创建用户的示例：
+- en: '[PRE3]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Tip
+  id: totrans-48
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: 'If you are using an automation tool like Ansible to deploy MySQL, you can use
+    the following bash command to create server IDs:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您正在使用像Ansible这样的自动化工具部署MySQL，您可以使用以下bash命令创建服务器ID：
+- en: '[PRE4]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: '[PRE5]'
+  id: totrans-51
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: The command converts the current date and time to an integer value, so it increases
+    monotonically. Note that the `date` command does not guarantee the values’ uniqueness,
+    but you may find it convenient to use as it provides a relatively good uniqueness
+    level.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该命令将当前日期和时间转换为整数值，因此它是单调递增的。请注意，`date`命令不能保证值的唯一性，但您可能会发现它很方便，因为它提供了相对较好的唯一性水平。
+- en: In the next sections, you will see different options to create a replica server.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的章节中，您将看到创建复制服务器的不同选项。
+- en: Creating a Replica Using PerconaXtraBackup
+  id: totrans-54
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用PerconaXtraBackup创建副本
+- en: As we saw in Chapter 10, the Percona XtraBackup tool provides a method of performing
+    a hot backup of your MySQL data while the system is running. It also offers advanced
+    capabilities like parallelization, compression, and encryption.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在第10章中看到的，Percona XtraBackup工具提供了在系统运行时执行MySQL数据热备份的方法。它还提供了诸如并行化、压缩和加密等高级功能。
+- en: 'The first step is taking a copy of the current source so we can start our replica.
+    The XtraBackup tool performs a physical backup of the source (see “Physical and
+    Logical Backups” on page 376). We will use the commands provided in [“Percona
+    XtraBackup”](ch10.xhtml#PERCONA_PXB):'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一步是复制当前源的副本，以便开始我们的复制。XtraBackup工具执行源的物理备份（参见第376页的“物理和逻辑备份”）。我们将使用提供在[“Percona
+    XtraBackup”](ch10.xhtml#PERCONA_PXB)中的命令：
+- en: '[PRE6]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Alternatively, you can use `rsync`, NFS, or any other method that you feel comfortable
+    with.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，您可以使用`rsync`、NFS或您感觉舒适的任何其他方法。
+- en: 'Once XtraBackup finishes the backup, we will send the files to a backup directory
+    on the replica server. In this example, we will send the files using the `scp`
+    command:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦XtraBackup完成备份，我们将使用`scp`命令将文件发送到副本服务器上的备份目录。在本例中，我们将使用以下命令发送文件：
+- en: '[PRE7]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'At this point we’re finished with the source. The following steps will run
+    only on the replica server. The next step is to prepare our backup:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此时，我们已经完成了源的操作。接下来的步骤将仅在副本服务器上运行。下一步是准备我们的备份：
+- en: '[PRE8]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'With everything set, we are going to move the backup to the data directory:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一切准备就绪后，我们将移动备份到数据目录：
+- en: '[PRE9]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: Note
+  id: totrans-65
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Before proceeding, verify that your replica server does not have the same `server_id`
+    as your source. If you followed the steps outlined in the previous section, you
+    should have taken care of this already; if not, do so now.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在继续之前，请验证您的副本服务器的`server_id`与源不相同。如果您按照前一节中概述的步骤操作，应该已经处理过这个问题；如果没有，请立即处理。
+- en: 'On the replica, the content of the file *xtrabackup_binlog_info* will look
+    something like this:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在副本上，文件*xtrabackup_binlog_info*的内容将看起来像这样：
+- en: '[PRE10]'
+  id: totrans-68
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: This information is essential because it tells us where to start replicating.
+    Remember that the source was still receiving operations when we took the backup,
+    so we need to know what position MySQL was at in the binary log file when the
+    backup finished.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些信息至关重要，因为它告诉我们从哪里开始复制。请记住，当我们进行备份时，源仍在接收操作，因此我们需要知道备份完成时MySQL在二进制日志文件中的位置。
+- en: 'With that information, we can run the command to start the replication. It
+    will look something like this:'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有了这些信息，我们可以运行命令来启动复制。它会看起来像这样：
+- en: '[PRE11]'
+  id: totrans-71
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'Once you’ve started, you can run the `SHOW SLAVE STATUS` command to check if
+    the replication is working:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦开始，您可以运行`SHOW SLAVE STATUS`命令来检查复制是否正在工作：
+- en: '[PRE12]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: '[PRE13]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: It is important to check that both threads are running (`Slave_IO_Running` and
+    `Slave_SQL_Running`), whether there have been any errors (`Last_Error`), and how
+    many seconds the replica is behind the source. For large databases with an intensive
+    write workload, the replica may take a while to catch up.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重要的是要检查两个线程是否正在运行（`Slave_IO_Running`和`Slave_SQL_Running`），是否有任何错误（`Last_Error`），以及副本落后源的秒数。对于具有密集写入工作负载的大型数据库，副本可能需要一些时间来追赶。
+- en: Creating a Replica Using the Clone Plugin
+  id: totrans-76
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用克隆插件创建副本
+- en: MySQL 8.0.17 introduced the [clone plugin](https://oreil.ly/fBWth), which can
+    be used to make one MySQL server instance a *clone* of another. We refer to the
+    server instance where the `CLONE` statement is executed as the *recipient* and
+    to the source server instance from which the recipient will clone the data as
+    the *donor*. The donor instance can be local or remote. The cloning process works
+    by creating a physical snapshot of the data and metadata stored in the InnoDB
+    storage engine on the donor, and transferring it to the recipient. Both local
+    and remote instances perform the same clone operation; there is no difference
+    related to the data between the two options.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 8.0.17引入了[克隆插件](https://oreil.ly/fBWth)，它可以用来使一个MySQL服务器实例成为另一个的*克隆*。我们将执行`CLONE`语句的服务器实例称为*接收者*，并将接收者将从中克隆数据的源服务器实例称为*捐赠者*。捐赠者实例可以是本地的或远程的。克隆过程通过在捐赠者上创建InnoDB存储引擎中存储的数据和元数据的物理快照，并将其传输到接收者来工作。本地和远程实例执行相同的克隆操作；两种选项之间与数据相关的差异。
+- en: Let’s walk through a real example. We’ll show you some additional details along
+    the way, like how to monitor the progress of a long-running `CLONE` command, the
+    privileges required to clone, and more. The following example uses the classic
+    shell. We’ll talk about MySQL Shell, introduced in MySQL 8.0, in Chapter 16.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们通过一个真实的例子来详细介绍。我们将沿途向您展示一些额外的细节，例如如何监视长时间运行的`CLONE`命令的进度，克隆所需的权限等等。以下示例使用经典Shell。我们将在第16章介绍MySQL
+    Shell，这是MySQL 8.0中引入的。
+- en: 'Choose the MySQL server to clone from and connect to it as the `root` user.
+    Then install the clone plugin, create a user to transfer the data from the donor
+    server, and grant that user the `BACKUP_ADMIN` privilege:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择要从中克隆的MySQL服务器，并以`root`用户身份连接到它。然后安装克隆插件，创建一个用户以从捐赠服务器传输数据，并授予该用户`BACKUP_ADMIN`权限：
+- en: '[PRE14]'
+  id: totrans-80
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'Next, to observe the progress of the cloning operation, we need to grant that
+    user privileges to view the `performance_schema` database and execute functions:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，为了观察克隆操作的进度，我们需要授予该用户权限以查看`performance_schema`数据库和执行函数：
+- en: '[PRE15]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: Now we will move to the recipient server. If you are provisioning a new node,
+    first initialize a data directory and start the server.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们将转向接收服务器。如果您正在配置一个新节点，首先初始化数据目录并启动服务器。
+- en: 'Connect to the recipient server as the `root` user. Then install the clone
+    plugin, create a user to replace the current instance data with the cloned data,
+    and grant that user the `CLONE_ADMIN` privilege. We’ll also provide a list of
+    valid donors that the recipient can clone (here, just one):'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以`root`用户身份连接到接收服务器。然后安装克隆插件，创建一个用户以替换当前实例数据，并授予该用户`CLONE_ADMIN`权限。我们还将提供接收方可以克隆的有效捐赠者列表（这里只有一个）：
+- en: '[PRE16]'
+  id: totrans-85
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'We’ll grant this user the same privileges we did on the donor side, to observe
+    the progress on the recipient side:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将授予此用户与捐赠方相同的权限，以便在接收方观察进度：
+- en: '[PRE17]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'We now have everything we need in place, so it’s time to start the cloning
+    process. Note that the donor server must be reachable from the recipient. The
+    recipient will connect to the donor with the address and credentials provided
+    and start cloning:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经准备就绪，是时候开始克隆过程了。请注意，接收方必须能够从捐赠服务器访问。接收方将使用提供的地址和凭据连接到捐赠者并开始克隆：
+- en: '[PRE18]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'The recipient must shut down and restart itself for the clone operation to
+    succeed. We can monitor the progress with the following query:'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使克隆操作成功，接收方必须关闭并重新启动自身。我们可以使用以下查询监视进度：
+- en: '[PRE19]'
+  id: totrans-91
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'This will allow us to observe each state of the cloning process. The output
+    will be similar to this:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将允许我们观察克隆过程的每个状态。输出将类似于这样：
+- en: '[PRE20]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: As mentioned previously, there is a restart at the end. Note that replication
+    has not started yet.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如前面提到的，在最后会有一个重启。请注意，复制尚未启动。
+- en: 'In addition to cloning the data, the cloning operation extracts the binary
+    log position and GTID from the donor server and transfers them to the recipient.
+    We can execute the following queries on the donor to view the binary log position
+    or the GTID of the last transaction that was applied:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了克隆数据之外，克隆操作还会从捐赠服务器提取二进制日志位置和GTID，并将它们传输给接收方。我们可以在捐赠服务器上执行以下查询，以查看最后一次应用的二进制日志位置或GTID：
+- en: '[PRE21]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: '[PRE22]'
+  id: totrans-97
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: '[PRE23]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: '[PRE24]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'In this example we are not using GTIDs, so the query does not return anything.
+    Next, we will run the command to start the replication:'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本例中，我们未使用GTID，因此该查询不会返回任何内容。接下来，我们将运行命令以启动复制：
+- en: '[PRE25]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: As in the previous section, we can check that replication is working correctly
+    by running the `SHOW SLAVE STATUS` command.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，我们可以通过运行`SHOW SLAVE STATUS`命令来检查复制是否正常工作。
+- en: The advantage of this approach is that the clone plugin automates the whole
+    process, and only at the end is it necessary to execute the `CHANGE MASTER` command.
+    The disadvantage is that the plugin is available only for MySQL 8.0.17 and higher.
+    While it’s still relatively new, we believe that in years to come, this process
+    may become the default.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种方法的优点是克隆插件自动化整个过程，只有在最后需要执行`CHANGE MASTER`命令。缺点是该插件仅适用于MySQL 8.0.17及更高版本。虽然它仍然相对较新，但我们相信在未来几年，这个过程可能会成为默认设置。
+- en: Creating a Replica Using mysqldump
+  id: totrans-104
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用mysqldump创建一个副本
+- en: This is what we might call the classic approach. It’s the typical option for
+    those who are getting started with MySQL and still learning about the ecosystem.
+    As usual, we assume here that you have performed the necessary setup in [“Basic
+    Parameters to Set on the Source and the Replica”](#basicparameters).
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是我们可能称之为经典方法。对于那些刚开始使用MySQL并且仍在学习生态系统的人来说，这是一个典型的选择。通常情况下，我们假设您已经在[“在源和复制品上设置基本参数”](#basicparameters)中执行了必要的设置。
+- en: 'Let’s see an example of using `mysqldump` to create a new replica. We will
+    execute the backup from the source server:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看一个使用`mysqldump`创建新复制品的示例。我们将从源服务器执行备份：
+- en: '[PRE26]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'The dump succeeded if the message `Dump completed` appears at the end:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果在结尾出现`Dump completed`消息，则备份成功：
+- en: '[PRE27]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: '[PRE28]'
+  id: totrans-110
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'With the backup taken, we need to import it in the replica server. For example,
+    you can use this command:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完成备份后，我们需要在复制服务器中导入它。例如，您可以使用以下命令：
+- en: '[PRE29]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'Once that’s done, you’ll need to execute the `CHANGE MASTER` command with the
+    coordinates extracted from the dump (for more details about `mysqldump`, revisit
+    [“The mysqldump Program”](ch10.xhtml#CH10_BACKUP_MYSQLDUMP)). Because we used
+    the `--master-data=2` option, the information will be written at the beginning
+    of the dump. For example:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完成后，您需要使用从备份中提取的坐标执行`CHANGE MASTER`命令（有关`mysqldump`的更多详细信息，请重访[“mysqldump程序”](ch10.xhtml#CH10_BACKUP_MYSQLDUMP)）。因为我们使用了`--master-data=2`选项，信息将写入备份的开头。例如：
+- en: '[PRE30]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'Or, if you’re using GTIDs:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，如果您使用GTIDs：
+- en: '[PRE31]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'Next, we are going to execute the command to start the replication. For the
+    GTID scenario, it looks like this:'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将执行启动复制的命令。对于GTID场景，它看起来像这样：
+- en: '[PRE32]'
+  id: totrans-118
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'For traditional replication, you can start replication from the previously
+    extracted binary log file position as follows:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于传统复制，您可以从先前提取的二进制日志文件位置开始复制，如下所示：
+- en: '[PRE33]'
+  id: totrans-120
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: To verify that replication is working, execute the `SHOW SLAVE STATUS` command.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要验证复制是否正常工作，请执行`SHOW SLAVE STATUS`命令。
+- en: Creating a Replica Using mydumper and myloader
+  id: totrans-122
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用mydumper和myloader创建复制品
+- en: '`mysqldump` is the most common tool used by beginners for performing backups
+    and building replicas. But there is a more efficient method: `mydumper`. Like
+    `mysqldump`, this tool generates a logical backup and can be used to create a
+    consistent backup of your database. The main difference between `mydumper` and
+    `mysqldump` is that `mydumper`, when paired with `myloader`, can dump and restore
+    data in parallel, improving the dump and, especially, restore time. Imagine a
+    scenario where your database has a dump of 500 GB. Using `mysqldump`, you will
+    have a single huge file. With `mydumper`, you will have one file per table, allowing
+    the restore process to be executed in parallel later.'
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`mysqldump`是初学者执行备份和构建复制品最常用的工具。但是有一种更有效的方法：`mydumper`。与`mysqldump`类似，这个工具生成逻辑备份，并可用于创建数据库的一致备份。`mydumper`与`mysqldump`的主要区别在于，配合`myloader`使用时，`mydumper`可以并行进行数据的导出和导入，从而提高了备份和特别是恢复的时间。想象一下，如果您的数据库有500GB的备份。使用`mysqldump`，您将得到一个巨大的单一文件。而使用`mydumper`，您将得到每个表一个文件，允许稍后并行执行恢复过程。'
+- en: Setting up the mydumper and myloader utilities
+  id: totrans-124
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 设置mydumper和myloader实用工具
+- en: You can run `mydumper` directly on the source server or from another server,
+    which in general is better since it will avoid the overhead in the storage system
+    of writing the backup files on the same server.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以直接在源服务器上或从另一台服务器上运行`mydumper`，通常后者更好，因为它会避免在同一服务器上写入备份文件的存储系统开销。
+- en: 'To install `mydumper`, download the package specific to the operating system
+    version you are using. You can find the releases in the [`mydumper` GitHub repository](https://oreil.ly/7hakG).
+    Let’s see an example for CentOS:'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要安装`mydumper`，请下载适用于您正在使用的操作系统版本的软件包。您可以在[`mydumper` GitHub仓库](https://oreil.ly/7hakG)中找到发布版本。我们来看一个CentOS的例子：
+- en: '[PRE34]'
+  id: totrans-127
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'Now you should have both the `mydumper` and `myloader` commands installed on
+    the server. You can validate this with:'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在您应该在服务器上安装了`mydumper`和`myloader`命令。您可以通过以下方式验证：
+- en: '[PRE35]'
+  id: totrans-129
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: Extracting data from the source
+  id: totrans-130
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 从源中提取数据
+- en: 'The following command will execute a dump of all databases (except `mysql`,
+    `test`, and the `sys` schema) with 15 simultaneous threads and will also include
+    triggers, views, and functions:'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面的命令将执行所有数据库（除了`mysql`、`test`和`sys`模式）的备份，使用15个并发线程，还将包括触发器、视图和函数：
+- en: '[PRE36]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: Tip
+  id: totrans-133
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: You will need to grant at least the `SELECT` and `RELOAD` permissions to the
+    `mydumper` user.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要至少授予`mydumper`用户`SELECT`和`RELOAD`权限。
+- en: 'If you check the output directory (`outputdir`), you will see the compressed
+    files. Here’s the output on one of the authors’ machines:'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果检查输出目录（`outputdir`），你会看到压缩文件。以下是作者其中一台机器上的输出：
+- en: '[PRE37]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: Tip
+  id: totrans-137
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Decide the number of threads based on the CPU cores of the database server and
+    server load. Doing a parallel dump can consume a lot of server resources.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据数据库服务器和服务器负载的CPU核心数来决定线程数量。并行转储可能会消耗大量服务器资源。
+- en: Restoring data in a replica server
+  id: totrans-139
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 在副本服务器中恢复数据
+- en: 'Like with `mysqldump`, we need to have the replica MySQL instance already up
+    and running. Once the data is ready to be imported, we can execute the following
+    command:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 像使用`mysqldump`一样，我们需要确保副本MySQL实例已经正常运行。一旦数据准备好导入，我们可以执行以下命令：
+- en: '[PRE38]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: Establishing the replication
+  id: totrans-142
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 建立复制关系
+- en: 'Now that we’ve restored the data, we will set up replication. We need to find
+    the correct binary log position at the start of the backup. This information is
+    stored in the `mydumper` metadata file:'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经恢复了数据，我们将设置复制。我们需要找到备份开始时的正确二进制日志位置。这些信息存储在`mydumper`元数据文件中：
+- en: '[PRE39]'
+  id: totrans-144
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'Now, we simply execute the `CHANGE MASTER` command like we did previously for
+    `mysqldump`:'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们就像之前对`mysqldump`所做的那样，简单地执行`CHANGE MASTER`命令：
+- en: '[PRE40]'
+  id: totrans-146
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: Group Replication
+  id: totrans-147
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Group Replication
+- en: It might be a bit controversial to include Group Replication in the asynchronous
+    replication group. The short explanation for this choice is that Group Replication
+    is asynchronous. The confusion here can be explained by the comparison with Galera
+    (discussed in [“Galera/PXC Cluster”](#GALERA-CLUSTER-INTRO)), which claims to
+    be synchronous or virtually synchronous.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将Group Replication包含在异步复制组中可能会有点有争议。这种选择的简短解释是Group Replication是异步的。这里的混淆可以通过与Galera的比较来解释（见[“Galera/PXC
+    Cluster”](#GALERA-CLUSTER-INTRO)），Galera声称是同步或准同步的。
+- en: 'The more detailed reasoning is that it depends on how we define replication.
+    In the MySQL world, we define replication as the process that enables changes
+    made in one database (the source) to be automatically duplicated in another (the
+    replica). The entire process involves five different steps:'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更详细的理由是这取决于我们如何定义复制。在MySQL世界中，我们将复制定义为使一个数据库（源）中进行的更改自动复制到另一个数据库（副本）中的过程。整个过程涉及五个不同的步骤：
+- en: Locally applying the change on the source
+  id: totrans-150
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在源上局部应用变更
+- en: Generating a binlog event
+  id: totrans-151
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 生成binlog事件
+- en: Sending the binlog event to the replica(s)
+  id: totrans-152
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将binlog事件发送到副本
+- en: Adding the binlog event to the replica’s relay log
+  id: totrans-153
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将binlog事件添加到副本的relay log中
+- en: Applying the binlog event from the relay log on the replica
+  id: totrans-154
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在副本上应用来自relay log的binlog事件
+- en: In MySQL Group Replication and Galera (even if the Galera cache primarily replaces
+    the binlog and relay log files), only step 3 is synchronous—the streaming of the
+    binary log event (or write set in Galera) to the replica(s).
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在MySQL Group Replication和Galera中（即使Galera缓存主要替换了binlog和relay log文件），只有第三步是同步的——将二进制日志事件（或在Galera中的写集）流式传输到副本。
+- en: Thus, while the process of sending (replicating/streaming) the data to the other
+    servers is synchronous, the *applying* of these changes is still wholly asynchronous.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，尽管将数据发送（复制/流式传输）到其他服务器的过程是同步的，但对这些更改的应用仍然完全是异步的。
+- en: Tip
+  id: totrans-157
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Group Replication has been available since MySQL 5.7\. However, when the product
+    was released, it was not mature enough, leading to constant performance issues
+    and crashes. We highly recommend using MySQL 8.0 if you want to test Group Replication.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Group Replication自MySQL 5.7起就已经可用。然而，当产品发布时，它的成熟度不够，导致持续的性能问题和崩溃。如果您想测试Group
+    Replication，我们强烈建议使用MySQL 8.0版本。
+- en: Installing Group Replication
+  id: totrans-159
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 安装Group Replication
+- en: The first advantage of Group Replication compared to Galera is that you don’t
+    have to install different binaries. MySQL Server provides Group Replication as
+    a plugin. It’s also available for Oracle MySQL and Percona Server for MySQL; for
+    details on installing those, see [Chapter 1](ch01.xhtml#CH1_INSTALL).
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与Galera相比，Group Replication的第一个优点是您无需安装不同的二进制文件。MySQL Server提供Group Replication作为插件。它还适用于Oracle
+    MySQL和Percona Server for MySQL；有关安装这些的详细信息，请参见[第1章](ch01.xhtml#CH1_INSTALL)。
+- en: 'To confirm that the Group Replication plugin is enabled, run the following
+    query:'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确认Group Replication插件是否已启用，请运行以下查询：
+- en: '[PRE41]'
+  id: totrans-162
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'The output should show `ACTIVE`, as you see here:'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出应该显示`ACTIVE`，如你在这里所见：
+- en: '[PRE42]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: 'If the plugin is not installed, run the following command to install it:'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果未安装插件，请运行以下命令进行安装：
+- en: '[PRE43]'
+  id: totrans-166
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'With the plugin active, we will set the minimum parameters required on the
+    servers to start Group Replication. Open *my.cnf* on server 1 and add the following:'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在插件激活的情况下，我们将在服务器上设置启动Group Replication所需的最小参数。在服务器1上打开*my.cnf*并添加以下内容：
+- en: '[PRE44]'
+  id: totrans-168
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: 'Let’s go over each of those parameters:'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们逐个讨论这些参数：
+- en: '`server_id`'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`server_id`'
+- en: Like with classic replication, this parameter helps to identify each member
+    in the group using a unique ID. You must use a different value for each server
+    participating in Group Replication.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与传统复制类似，此参数有助于使用唯一ID标识组中的每个成员。每个参与Group Replication的服务器必须使用不同的值。
+- en: '`log_bin`'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`log_bin`'
+- en: In MySQL 8.0 this parameter is enabled by default. It is responsible for recording
+    all the changes in the database in binary log files.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在MySQL 8.0中，默认启用此参数。它负责记录数据库中的所有更改到二进制日志文件中。
+- en: '`enforce_gtid_consistency`'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`enforce_gtid_consistency`'
+- en: This value must be set to `ON` to instruct MySQL to execute transaction-safe
+    statements to ensure consistency when replicating data.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此值必须设置为`ON`，以指示MySQL执行事务安全语句，确保在复制数据时的一致性。
+- en: '`gtid_mode`'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`gtid_mode`'
+- en: This directive enables global transaction identifier-based logging when set
+    to `ON`. This is required for Group Replication.
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当设置为`ON`时，此指令启用基于全局事务标识符的日志记录。Group Replication需要此功能。
+- en: '`log_slave_updates`'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`log_slave_updates`'
+- en: This value is set to `ON` to allow members to log updates from each other. In
+    other words, the directive chains the replication servers together.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此值设置为`ON`以允许成员记录彼此的更新。换句话说，此指令将复制服务器链接在一起。
+- en: '`transaction_write_set_extraction`'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`transaction_write_set_extraction`'
+- en: This instructs the MySQL server to collect write sets and encode them using
+    a hashing algorithm. In this case, we are using the XXHASH64 algorithm. Write
+    sets are defined by primary keys on each record.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这指示MySQL服务器收集写集并使用哈希算法对其进行编码。在这种情况下，我们使用XXHASH64算法。写集由每个记录上的主键定义。
+- en: '`master_info_repository`'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`master_info_repository`'
+- en: When set to `TABLE`, this directive allows MySQL to store details about source
+    binary log files and positions into a table rather than a file to enable faster
+    replication and guarantee consistency using InnoDB’s ACID properties. In MySQL
+    8.0.23 this is the default, and the `FILE` option is deprecated.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当设置为`TABLE`时，此指令允许MySQL将源二进制日志文件和位置的详细信息存储到表中，而不是文件中，以便通过InnoDB的ACID属性实现更快的复制和保证一致性。在MySQL
+    8.0.23中，这是默认设置，`FILE`选项已不推荐使用。
+- en: '`relay_log_info_repository`'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`relay_log_info_repository`'
+- en: When set to `TABLE`, this configures MySQL to store replication information
+    as an InnoDB table. In MySQL 8.0.23 this is the default, and the `FILE` option
+    is deprecated.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当设置为`TABLE`时，此配置指示MySQL将复制信息存储为InnoDB表。在MySQL 8.0.23中，这是默认设置，`FILE`选项已不推荐使用。
+- en: '`binlog_checksum`'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`binlog_checksum`'
+- en: Setting this to `NONE` tells MySQL not to write a checksum for each event in
+    the binary log. The server will instead verify events when they are written by
+    checking their length. In versions of MySQL up to and including 8.0.20, Group
+    Replication cannot make use of checksums. If you’re using a later release and
+    want to use checksums, you can omit this setting and use the default, `CRC32`.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将此设置为`NONE`告诉MySQL不要为二进制日志中的每个事件写入校验和。服务器将在写入时通过检查其长度来验证事件。在MySQL 8.0.20及更早版本中，Group
+    Replication无法使用校验和。如果您正在使用更新版本并希望使用校验和，可以省略此设置并使用默认的`CRC32`。
+- en: 'Next, we are going to add some specific parameters for Group Replication:'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将添加一些特定于Group Replication的参数：
+- en: '[PRE45]'
+  id: totrans-189
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: Note
+  id: totrans-190
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: We are using the `loose-` prefix to instruct the server to start even when the
+    MySQL Group Replication plugin is not installed and configured. This avoids encountering
+    server errors before you finish configuring all the settings.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们使用`loose-`前缀来指示服务器在尚未安装和配置MySQL Group Replication插件时启动，避免在完成所有设置之前遇到服务器错误。
+- en: 'Let’s see what each parameter does:'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看每个参数的作用：
+- en: '`group_replication_group_name`'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`group_replication_group_name`'
+- en: 'This is the name of the group that we are creating. We are going to use the
+    built-in Linux `uuidgen` command to generate a universally unique identifier (UUID).
+    It produces output like this:'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是我们正在创建的组的名称。我们将使用内置的Linux `uuidgen`命令生成通用唯一标识符(UUID)。它产生如下输出：
+- en: '[PRE46]'
+  id: totrans-195
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: '[PRE47]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: '`group_replication_start_on_boot`'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`group_replication_start_on_boot`'
+- en: When set to `OFF`, the value instructs the plugin not to start working automatically
+    when the server starts. You may set this value to `ON` once you are through with
+    configuring all the group members.
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当设置为`OFF`时，此值指示插件在服务器启动时不自动开始工作。在完成所有组成员的配置后，您可以将此值设置为`ON`。
+- en: '`loose-group_replication_local_address`'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`loose-group_replication_local_address`'
+- en: This is the internal IP address and port combination used for communicating
+    with other MySQL server members in the group. The recommended port for Group Replication
+    is 33061.
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是用于与组中其他MySQL服务器成员通信的内部IP地址和端口组合。Group Replication推荐的端口是33061。
+- en: '`group_replication_group_seeds`'
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`group_replication_group_seeds`'
+- en: This configures the IP addresses or hostnames of members participating in Group
+    Replication, together with their communication port. New members use the value
+    to establish themselves in the group.
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这配置了参与组复制的成员的IP地址或主机名，以及它们的通信端口。新成员使用该值来加入组。
+- en: '`group_replication_bootstrap_group`'
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`group_replication_bootstrap_group`'
+- en: This option instructs the server whether to create a group or not. We will only
+    enable this option on demand on server 1, to avoid creating multiple groups. So,
+    it will remain off for now.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此选项指示服务器是否创建组。我们将仅在服务器1上按需启用此选项，以避免创建多个组。因此，暂时保持关闭状态。
+- en: '`bind_address`'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`bind_address`'
+- en: The value of `0.0.0.0` tells MySQL to listen to all networks.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`0.0.0.0`的值告诉MySQL监听所有网络。'
+- en: '`report_host`'
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`report_host`'
+- en: This is the IP address or hostname the group members reports to each other when
+    they are registered in the group.
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是组成员在注册组时彼此报告的IP地址或主机名。
+- en: Setting up MySQL Group Replication
+  id: totrans-209
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 设置MySQL组复制
+- en: First, we will set up the `group_replication_recovery` channel. MySQL Group
+    Replication uses this channel to transfer transactions between members. Because
+    of this, we must set up a replication user with `REPLICATION SLAVE` permission
+    on each server.
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们将设置`group_replication_recovery`通道。MySQL组复制使用此通道在成员之间传输事务。因此，我们必须在每个服务器上为复制用户设置`REPLICATION
+    SLAVE`权限。
+- en: 'So, on server 1, log in to the MySQL console and execute the following commands:'
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，在服务器1上，登录MySQL控制台并执行以下命令：
+- en: '[PRE48]'
+  id: totrans-212
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: We first set `SQL_LOG_BIN` to `0` to prevent the new user’s details from being
+    logged to the binary log then we reenable it at the end.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们首先将`SQL_LOG_BIN`设置为`0`，以防止新用户的详细信息记录到二进制日志中，然后在最后重新启用它。
+- en: 'To instruct the MySQL server to use the replication user we have created for
+    the `group_replication_recovery` channel, run this command:'
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要指示MySQL服务器使用我们为`group_replication_recovery`通道创建的复制用户，运行以下命令：
+- en: '[PRE49]'
+  id: totrans-215
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: These settings will allow members joining the group to run the distributed recovery
+    process to get to the same state as the other members (donors).
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些设置将允许加入组的成员运行分布式恢复过程，使其达到与其他成员（提供者）相同的状态。
+- en: 'Now we will start the Group Replication service on server 1\. We will bootstrap
+    the group using these commands:'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们将在服务器1上启动组复制服务。我们将使用以下命令引导组：
+- en: '[PRE50]'
+  id: totrans-218
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: To avoid starting up more groups, we set `group_replication_bootstrap_group`
+    back to `OFF` after successfully starting the group.
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了避免启动更多的组，我们在成功启动组后将`group_replication_bootstrap_group`设置回`OFF`。
+- en: 'To check the status of the new member, use this command:'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要检查新成员的状态，请使用此命令：
+- en: '[PRE51]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: '[PRE52]'
+  id: totrans-222
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: 'Great. So far we’ve bootstrapped and initiated one group member. Let’s proceed
+    to the second server. Make sure you have installed the same MySQL version as on
+    server 1, and add the following settings to the *my.cnf* file:'
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 很好。到目前为止，我们已经引导并初始化了一个组成员。让我们继续进行第二台服务器的设置。确保您已安装与服务器1相同的MySQL版本，并将以下设置添加到*my.cnf*文件中：
+- en: '[PRE53]'
+  id: totrans-224
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: All we’ve changed is the `group_replication_local_address`; the other settings
+    remain the same. Note that the other MySQL configurations are required for server
+    2, and we strongly recommend keeping them the same across all nodes.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们修改的只是`group_replication_local_address`；其他设置保持不变。请注意，其他MySQL配置对于服务器2也是必需的，我们强烈建议在所有节点上保持它们相同。
+- en: 'With the configurations in place, restart the MySQL service:'
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 配置完成后，重新启动MySQL服务：
+- en: '[PRE54]'
+  id: totrans-227
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: 'Issue the following commands to configure the credentials for the recovery
+    user on server 2:'
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在服务器2上执行以下命令配置恢复用户的凭据：
+- en: '[PRE55]'
+  id: totrans-229
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: 'Next, add server 2 to the group that we bootstrapped earlier:'
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，将服务器2添加到之前引导引导的组中：
+- en: '[PRE56]'
+  id: totrans-231
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: 'And run the query to check the member’s state:'
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并运行查询以检查成员的状态：
+- en: '[PRE57]'
+  id: totrans-233
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: '[PRE58]'
+  id: totrans-234
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: 'Now you can follow the same steps for server 3 as we used for server 2, again
+    updating the local address. When you’re done, you can validate whether all the
+    servers are responsive by inserting some dummy data:'
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，您可以为服务器3执行与服务器2相同的步骤，再次更新本地地址。完成后，您可以通过插入一些虚拟数据来验证所有服务器是否响应：
+- en: '[PRE59]'
+  id: totrans-236
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: '[PRE60]'
+  id: totrans-237
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: '[PRE61]'
+  id: totrans-238
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: '[PRE62]'
+  id: totrans-239
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: '[PRE63]'
+  id: totrans-240
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: '[PRE64]'
+  id: totrans-241
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: '[PRE65]'
+  id: totrans-242
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: '[PRE66]'
+  id: totrans-243
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: Then connect to the other servers to see whether you can visualize the data.
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后连接到其他服务器，查看是否可以可视化数据。
+- en: Synchronous Replication
+  id: totrans-245
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 同步复制
+- en: Synchronous replication is used by Galera Clusters, where we have more than
+    one MySQl server, but they act as a single entity for the application. [Figure 13-2](#FIG-GALERA-TOPOLOGY)
+    illustrates a Galera Cluster with three nodes.
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Galera集群使用同步复制，其中我们有多个MySQL服务器，但它们对应用程序而言作为单个实体。[图13-2](#FIG-GALERA-TOPOLOGY)说明了一个具有三个节点的Galera集群的拓扑。
+- en: '![lm2e 1302](Images/lm2e_1302.png)'
+  id: totrans-247
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1302](Images/lm2e_1302.png)'
+- en: Figure 13-2\. In a Galera Cluster, all nodes communicate with each other
+  id: totrans-248
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图13-2\. 在Galera集群中，所有节点彼此通信
+- en: The primary difference between synchronous and asynchronous replication is that
+    synchronous replication guarantees that if a change happens on one node in the
+    cluster, then the change will happen on the other nodes in the cluster synchronously,
+    or at the same time. Asynchronous replication gives no guarantees about the delay
+    between applying changes on the source node and propagating those changes to replica
+    nodes. The delay with asynchronous replication can be short or long. This also
+    implies that if the source node crashes in an asynchronous replication topology,
+    some of the latest changes may be lost. This concepts of source and replica do
+    not exist in a Galera Cluster. All nodes can receive reads and writes.
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同步和异步复制的主要区别在于，同步复制保证如果集群中的一个节点发生更改，则其他节点中也会同步或同时发生相同的更改。异步复制则不对在源节点应用更改和在复制节点传播更改之间的延迟做任何保证。异步复制的延迟可以很短也可以很长。这也意味着如果异步复制拓扑中的源节点崩溃，可能会丢失一些最新的更改。这些源和复制的概念在Galera集群中不存在。所有节点都可以接收读取和写入。
+- en: 'Theoretically, synchronous replication has several advantages over asynchronous
+    replication:'
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理论上，同步复制比异步复制具有几个优势：
+- en: Clusters utilizing synchronous replication are always highly available. If one
+    of the nodes crashes, then there will be no data loss. Additionally, all cluster
+    nodes are always consistent.
+  id: totrans-251
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用同步复制的集群始终高可用。如果其中一个节点崩溃，则不会丢失数据。此外，所有集群节点始终保持一致。
+- en: Clusters utilizing synchronous replication allow transactions to be executed
+    on all nodes in parallel.
+  id: totrans-252
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用同步复制的集群允许事务在所有节点上并行执行。
+- en: Clusters utilizing synchronous replication can guarantee causality across the
+    whole cluster. This means that if a `SELECT` is executed on one cluster node after
+    a transaction is executed on another cluster node, it should see the effects of
+    that transaction.
+  id: totrans-253
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用同步复制的集群可以保证整个集群的因果关系。这意味着如果在一个集群节点上执行事务后在另一个集群节点上执行`SELECT`，它应该能看到该事务的效果。
+- en: However, there are disadvantages to synchronous replication as well. Traditionally,
+    eager replication protocols coordinate nodes one operation at a time, using a
+    two-phase commit or distributed locking. Increasing the number of nodes in the
+    cluster leads to growth in the transaction response times and the probability
+    of conflicts and deadlocks among the nodes. This is because all nodes need to
+    certify the transaction and reply with an OK message.
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，同步复制也有缺点。传统上，急切的复制协议一次协调一个节点的操作，使用两阶段提交或分布式锁定。增加集群中节点的数量会导致事务响应时间增加，节点之间的冲突和死锁的概率增加。这是因为所有节点都需要认证事务并回复OK消息。
+- en: For this reason, asynchronous replication remains the dominant replication protocol
+    for database performance, scalability, and availability. Not understanding or
+    underestimating the impact of synchronous replication is one reason companies
+    sometimes give up using Galera Clusters and go back to using asynchronous replication.
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，异步复制出于数据库性能、可伸缩性和可用性的原因仍然是主要的复制协议。不理解或低估同步复制的影响是某些公司放弃使用Galera集群并回到使用异步复制的原因之一。
+- en: 'At the time of writing, two companies support the Galera Cluster: Percona and
+    MariaDB. The following example shows how to set up a Percona XtraDB Cluster.'
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在撰写本文时，有两家公司支持Galera集群：Percona和MariaDB。以下示例显示如何设置Percona XtraDB Cluster。
+- en: Galera/PXC Cluster
+  id: totrans-257
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Galera/PXC集群
+- en: Installing Percona XtraDB Cluster (PXC) is similar to installing Percona Server
+    (the difference is the packages), so we won’t dive into details for all platforms.
+    You may want to revisit [Chapter 1](ch01.xhtml#CH1_INSTALL) to review the installation
+    process. The configuration process we’ll follow here assumes there are three PXC
+    nodes.
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 安装Percona XtraDB Cluster（PXC）与安装Percona Server类似（区别在于软件包），因此我们不会深入讨论所有平台的详细信息。您可能希望重新访问[第1章](ch01.xhtml#CH1_INSTALL)以审查安装过程。我们将在此处遵循的配置过程假定有三个PXC节点。
+- en: Table 13-1\. The three PXC nodes
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表13-1\. 三个PXC节点
+- en: '| Node | Host | IP |'
+  id: totrans-260
+  prefs: []
+  type: TYPE_TB
+  zh: '| 节点 | 主机 | IP |'
+- en: '| --- | --- | --- |'
+  id: totrans-261
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- | --- |'
+- en: '| Node 1 | pxc1 | 172.16.2.56 |'
+  id: totrans-262
+  prefs: []
+  type: TYPE_TB
+  zh: '| 节点1 | pxc1 | 172.16.2.56 |'
+- en: '| Node 2 | pxc2 | 172.16.2.198 |'
+  id: totrans-263
+  prefs: []
+  type: TYPE_TB
+  zh: '| 节点2 | pxc2 | 172.16.2.198 |'
+- en: '| Node 3 | pxc3 | 172.16.3.177 |'
+  id: totrans-264
+  prefs: []
+  type: TYPE_TB
+  zh: '| 节点3 | pxc3 | 172.16.3.177 |'
+- en: 'Connect to one of the nodes and install the repository:'
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 连接到其中一个节点并安装存储库：
+- en: '[PRE67]'
+  id: totrans-266
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: 'With the repository installed, install the binaries:'
+  id: totrans-267
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 安装存储库后，安装二进制文件：
+- en: '[PRE68]'
+  id: totrans-268
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: 'Next, you can apply the typical configurations that you would use for a regular
+    MySQL process (see Chapter 11). With the changes made, start the `mysqld` process
+    and get the temporary password:'
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，您可以应用您将用于常规MySQL进程的典型配置（参见第11章）。完成更改后，启动`mysqld`进程并获取临时密码：
+- en: '[PRE69]'
+  id: totrans-270
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: 'Use the previous password to log in as `root` and change the password:'
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用以前的密码作为`root`登录并更改密码：
+- en: '[PRE70]'
+  id: totrans-272
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: '[PRE71]'
+  id: totrans-273
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: 'Stop the `mysqld` process:'
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 停止`mysqld`进程：
+- en: '[PRE72]'
+  id: totrans-275
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: Repeat the previous steps for the other two nodes.
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重复前面的步骤，对其他两个节点执行相同操作。
+- en: With the binaries and basic configuration in place, we can start working on
+    the cluster parameters.
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二进制文件和基本配置就绪后，我们可以开始配置集群参数。
+- en: 'We need to add the following configuration variables to */etc/my.cnf* on the
+    first node:'
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们需要将以下配置变量添加到第一个节点的*/etc/my.cnf*中：
+- en: '[PRE73]'
+  id: totrans-279
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: Use the same configuration for the second and third nodes, except the `wsrep_node_name`
+    and `wsrep_node_address` variables.
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用相同的配置来配置第二和第三个节点，除了`wsrep_node_name`和`wsrep_node_address`变量。
+- en: 'For the second node, use:'
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于第二个节点，请使用：
+- en: '[PRE74]'
+  id: totrans-282
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: 'For the third node, use:'
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于第三个节点，请使用：
+- en: '[PRE75]'
+  id: totrans-284
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: Like regular MySQL, Percona XtraDB Cluster has many configurable parameters,
+    and the ones we’ve shown are the minimal settings to start the cluster. We are
+    configuring the node’s name and IP address, the cluster address, and the user
+    that will be used for internal communication among the nodes. You can find more
+    detailed information in the [documentation](https://oreil.ly/Ap8Rr).
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 像常规的MySQL一样，Percona XtraDB Cluster有许多可配置参数，我们展示的是启动集群所需的最小设置。我们正在配置节点的名称和IP地址，集群地址以及在节点之间进行内部通信时将使用的用户。您可以在[文档](https://oreil.ly/Ap8Rr)中找到更详细的信息。
+- en: We have all the nodes configured at this point, but the `mysqld` process is
+    not running on any node. PXC requires you to start one node in a cluster as a
+    reference point for the others before the other nodes can join and form the cluster.
+    This node must be started in *bootstrap* mode. Bootstrapping is an initial step
+    to introduce one server as a primary component so the others can use it as a reference
+    point to sync up data.
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们此时已经配置了所有节点，但是任何节点上都没有运行`mysqld`进程。PXC要求您在其他节点可以加入并形成集群之前，首先启动一个节点作为其他节点的参考点。此节点必须以*bootstrap*模式启动。引导是将一个服务器作为主要组件引入的初始步骤，以便其他服务器可以使用它作为同步数据的参考点。
+- en: 'Start the first node with the following command:'
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用以下命令启动第一个节点：
+- en: '[PRE76]'
+  id: totrans-288
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: 'Before adding other nodes to your new cluster, connect to the node that you
+    just started, create a user for State Snapshot Transfer (SST), and provide the
+    necessary privileges for it. The credentials must match those specified in the
+    `wsrep_sst_auth` configuration that you set previously:'
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在将其他节点添加到新集群之前，请连接到刚刚启动的节点，为State Snapshot Transfer（SST）创建一个用户，并为其提供必要的权限。凭据必须与您之前设置的`wsrep_sst_auth`配置中指定的凭据匹配：
+- en: '[PRE77]'
+  id: totrans-290
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: Note
+  id: totrans-291
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The SST process is used by the cluster to provision nodes by transferring a
+    full data copy from one node to another. When a new node joins the cluster, the
+    new node initiates an SST to synchronize its data with a node that is already
+    part of the cluster.
+  id: totrans-292
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 集群使用SST过程通过从一个节点向另一个节点传输完整数据副本来配置节点。当新节点加入集群时，新节点会启动SST以将其数据与已经是集群成员的节点同步。
+- en: 'After this, you can initialize the other nodes regularly:'
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，您可以正常初始化其他节点：
+- en: '[PRE78]'
+  id: totrans-294
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: 'To verify that the cluster is up and running fine, we can perform a few checks,
+    like creating a database on the first node, creating a table and inserting some
+    data on the second node, and retrieving some rows from that table on the third
+    node. First, let’s create the database on the first node (`pxc1`):'
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要验证集群是否正常运行，我们可以执行一些检查，如在第一个节点上创建一个数据库，在第二个节点上创建一个表并插入一些数据，并在第三个节点上检索该表中的一些行。首先，在第一个节点（`pxc1`）上创建数据库：
+- en: '[PRE79]'
+  id: totrans-296
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: '[PRE80]'
+  id: totrans-297
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: 'On the second node (`pxc2`), create a table and insert some data:'
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在第二个节点（`pxc2`）上创建一个表并插入一些数据：
+- en: '[PRE81]'
+  id: totrans-299
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: '[PRE82]'
+  id: totrans-300
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: '[PRE83]'
+  id: totrans-301
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: '[PRE84]'
+  id: totrans-302
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE84]'
+- en: '[PRE85]'
+  id: totrans-303
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE85]'
+- en: '[PRE86]'
+  id: totrans-304
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE86]'
+- en: 'Then retrieve some rows from that table on the third node:'
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后在第三个节点上检索该表中的一些行：
+- en: '[PRE87]'
+  id: totrans-306
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE87]'
+- en: '[PRE88]'
+  id: totrans-307
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE88]'
+- en: 'Another, more elegant solution is checking the `wsrep_%` global status variables,
+    in particular `wsrep_cluster_size` and `wsrep_cluster_status`:'
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个更优雅的解决方案是检查`wsrep_%`全局状态变量，特别是`wsrep_cluster_size`和`wsrep_cluster_status`：
+- en: '[PRE89]'
+  id: totrans-309
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE89]'
+- en: '[PRE90]'
+  id: totrans-310
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE90]'
+- en: '[PRE91]'
+  id: totrans-311
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE91]'
+- en: '[PRE92]'
+  id: totrans-312
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE92]'
+- en: The output of these commands tells us that the cluster has three nodes and is
+    in the primary state (it can receive reads and writes).
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些命令的输出告诉我们，集群有三个节点，并处于主状态（可以接收读取和写入）。
+- en: You might consider using ProxySQL in addition to the Galera Cluster to ensure
+    transparency for the application (see [Chapter 15](ch15.xhtml#CH15_LOAD_BAlANCERS)).
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了使用Galera集群外，您可能考虑同时使用ProxySQL来确保应用程序的透明性（见[第15章](ch15.xhtml#CH15_LOAD_BAlANCERS)）。
+- en: The goal of this chapter was just to familiarize you with the different topologies
+    so you know they exist. Cluster maintenance and optimization are advanced topics
+    that are beyond the scope of this book.
+  id: totrans-315
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的目标只是让您熟悉不同的拓扑结构，以便您知道它们的存在。集群维护和优化是超出本书范围的高级主题。

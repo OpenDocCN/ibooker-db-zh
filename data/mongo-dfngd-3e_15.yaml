@@ -1,0 +1,731 @@
+- en: Chapter 12\. Connecting to a Replica Set from Your Application
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第12章。从您的应用程序连接到副本集
+- en: 'This chapter covers how applications interact with replica sets, including:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章涵盖应用程序与副本集的交互，包括：
+- en: How connections and failovers work
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 连接和故障转移的工作方式
+- en: Waiting for replication on writes
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 等待写入复制完成
+- en: Routing reads to the correct member
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将读取路由到正确的成员
+- en: Client−to−Replica Set Connection Behavior
+  id: totrans-5
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 客户端到副本集连接行为
+- en: MongoDB client libraries (“drivers” in MongoDB parlance) are designed to manage
+    communication with MongoDB servers, regardless of whether the server is a standalone
+    MongoDB instance or a replica set. For replica sets, by default, drivers will
+    connect to the primary and route all traffic to it. Your application can perform
+    reads and writes as though it were talking to a standalone server while your replica
+    set quietly keeps hot standbys ready in the background.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB客户端库（MongoDB术语中称为“驱动程序”）旨在管理与MongoDB服务器的通信，无论服务器是独立的MongoDB实例还是副本集。对于副本集，默认情况下，驱动程序将连接到主要成员并将所有流量路由到主要成员。您的应用程序可以像与独立服务器交互一样执行读取和写入操作，而您的副本集则在后台保持准备就绪的热备份。
+- en: 'Connections to a replica set are similar to connections to a single server.
+    Use the `MongoClient` class (or equivalent) in your driver and provide a seed
+    list for the driver to connect to. A seed list is simply a list of server addresses.
+    *Seeds* are members of the replica set your application will read from and write
+    data to. You do not need to list all members in the seed list (although you can).
+    When the driver connects to the seeds, it will discover the other members from
+    them. A connection string usually looks something like this:'
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 连接到副本集的方式类似于连接到单个服务器。在您的驱动程序中使用`MongoClient`类（或等效类），并为驱动程序提供一个种子列表以连接到。种子列表只是一系列服务器地址。*种子*是您的应用程序将从中读取和写入数据的副本集成员。您不需要在种子列表中列出所有成员（尽管可以这样做）。当驱动程序连接到种子时，它将从它们那里发现其他成员。连接字符串通常如下所示：
+- en: '[PRE0]'
+  id: totrans-8
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: See your driver’s documentation for details.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关详细信息，请参阅您的驱动程序文档。
+- en: To provide further resilience, you should also use the [DNS Seedlist Connection
+    format](https://oreil.ly/Uq4za) to specify how your applications connect to your
+    replica set. The advantage to using DNS is that servers hosting your MongoDB replica
+    set members can be changed in rotation without needing to reconfigure the clients
+    (specifically, their connection strings).
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要增强可靠性，您还应使用[DNS种子连接格式](https://oreil.ly/Uq4za)来指定应用程序如何连接到您的副本集。使用DNS的优势在于，托管MongoDB副本集成员的服务器可以轮换更改，而无需重新配置客户端（具体来说是它们的连接字符串）。
+- en: All MongoDB drivers adhere to the [server discovery and monitoring (SDAM) spec](https://oreil.ly/ZsS8p).
+    They persistently monitor the topology of your replica set to detect any changes
+    in your application’s ability to reach all members of the set. In addition, the
+    drivers monitor the set to maintain information on which member is the primary.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有MongoDB驱动程序遵循[服务器发现和监控（SDAM）规范](https://oreil.ly/ZsS8p)。它们持续监视您的副本集的拓扑结构，以便检测应用程序能否访问集合的所有成员是否有任何变化。此外，驱动程序还监视集合以保持关于哪个成员是主要成员的信息。
+- en: The purpose of replica sets is to make your data highly available in the face
+    of network partitions or servers going down. In ordinary circumstances, replica
+    sets respond gracefully to such problems by electing a new primary so that applications
+    can continue to read and write data. If a primary goes down, the driver will automatically
+    find the new primary (once one is elected) and will route requests to it as soon
+    as possible. However, while there is no reachable primary, your application will
+    be unable to perform writes.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 副本集的目的是在面对网络分区或服务器宕机时使您的数据高度可用。在正常情况下，副本集通过选举新的主要成员来优雅地响应此类问题，以便应用程序可以继续读取和写入数据。如果主要成员宕机，驱动程序将自动找到新的主要成员（一旦选举出一个）并尽快将请求路由到它。然而，在没有可达的主要成员时，您的应用程序将无法执行写操作。
+- en: There may be no primary available for a brief time (during an election) or for
+    an extended period of time (if no reachable member can become primary). By default,
+    the driver will not service any requests—read or write—during this period. If
+    necessary to your application, you can configure the driver to use secondaries
+    for read requests.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在选举期间可能短时间内没有主要成员，或者长时间内没有可达的成员能够成为主要成员。默认情况下，驱动程序在此期间不会处理任何请求（读取或写入）。如果对您的应用程序有必要，可以配置驱动程序使用次要成员进行读取请求。
+- en: A common desire is to have the driver hide the entire election process (the
+    primary going away and a new primary being elected) from the user. However, no
+    driver handles failover this way, for a few reasons. First, a driver can only
+    hide a lack of primary for so long. Second, a driver often finds out that the
+    primary went down because an operation failed, which means that the driver doesn’t
+    know whether or not the primary processed the operation before going down. This
+    is a fundamental distributed systems problem that is impossible to avoid, so we
+    need a strategy for dealing with it when it emerges. Should we retry the operation
+    on the new primary, if one is elected quickly? Assume it got through on the old
+    primary? Check and see if the new primary has the operation?
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个常见的愿望是使驱动程序隐藏选举过程的全部细节（主节点失效和选出新的主节点）对用户不可见。然而，没有驱动程序以这种方式处理故障转移，原因有几个。首先，驱动程序只能在有限的时间内隐藏没有主节点的情况。其次，驱动程序通常是因为操作失败而发现主节点已经宕机，这意味着驱动程序无法确定主节点在宕机之前是否已处理了操作。这是一个基本的分布式系统问题，不可能避免，因此我们在问题出现时需要一种处理策略。如果新的主节点迅速选出，我们应该重试操作吗？假设它已经在旧的主节点上处理了？检查并查看新的主节点是否有该操作？
+- en: 'The correct strategy, it turns out, is to retry at most one time. Huh? To explain,
+    let’s consider our options. These boil down to the following: don’t retry, give
+    up after retrying some fixed number of times, or retry at most once. We also need
+    to consider the type of error that could be the source of our problem. There are
+    three types of errors we might see in attempting to write to a replica set: a
+    transient network error, a persistent outage (either network or server), or an
+    error caused by a command the server rejects as incorrect (e.g., not authorized).
+    For each type of error, let’s consider our retry options.'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正确的策略，结果证明，最多重试一次。嗯？解释一下，让我们考虑一下我们的选择。这些可以归结为以下几点：不重试，在重试固定次数后放弃，或者最多重试一次。我们还需要考虑可能导致问题的错误类型。在尝试写入副本集时，可能出现三种类型的错误：瞬时网络错误，持久性中断（无论是网络还是服务器），或者由服务器拒绝的命令错误（例如，未经授权）。针对每种错误类型，让我们考虑我们的重试选项。
+- en: For the sake of this discussion, let’s look at the example of a write to simply
+    increment a counter. If our application attempts to increment our counter but
+    gets no response from the server, we don’t know whether the server received the
+    message and performed the update. So, if we follow a strategy of not retrying
+    this write, for a transient network error, we might undercount. For a persistent
+    outage or a command error not retrying is the correct strategy, because no amount
+    of retrying the write operation will have the desired effect.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了讨论的完整性，让我们以简单地增加计数器的写入为例。如果我们的应用程序试图增加计数器但未收到服务器的响应，我们不知道服务器是否收到了消息并执行了更新。因此，如果我们遵循不重试此写入的策略，对于瞬时网络错误，我们可能会计数不准确。对于持久性中断或命令错误，不重试是正确的策略，因为再次尝试写操作不会产生预期的效果。
+- en: If we follow a strategy of retrying some fixed number of times, for transient
+    network errors, we might overcount (in the case where our first attempt succeeded).
+    For a persistent outage or command error, retrying multiple times will simply
+    waste cycles.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们遵循重试固定次数的策略，对于瞬时网络错误，我们可能会计数过多（在第一次尝试成功的情况下）。对于持久性中断或命令错误，多次重试只会浪费资源。
+- en: Let’s look now at the strategy of retrying just once. For a transient network
+    error, we might overcount. For a persistent outage or command error, this is the
+    correct strategy. However, what if we could ensure that our operations are idempotent?
+    Idempotent operations are those that have the same outcome whether we do them
+    once or multiple times. With idempotent operations, retrying network errors once
+    has the best chance of correctly dealing with all three types of errors.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们看看只重试一次的策略。对于瞬时网络错误，我们可能会计数过多。对于持久性中断或命令错误，这是正确的策略。然而，如果我们能确保我们的操作是幂等的呢？幂等操作是指无论我们执行一次还是多次，其结果都相同。对于幂等操作，仅在网络错误时重试一次具有最佳处理所有三种错误类型的可能性。
+- en: As of MongoDB 3.6, the server and all MongoDB drivers support a retryable writes
+    option. See your driver’s documentation for details on how to use this option.
+    With retryable writes, the driver will automatically follow the retry-at-most-once
+    strategy. Command errors will be returned to the application for client-side handling.
+    Network errors will be retried once after an appropriate delay that should accommodate
+    a primary election under ordinary circumstances. With retryable writes turned
+    on, the server maintains a unique identifier for each write operation and can
+    therefore determine when the driver is attempting to retry a command that already
+    succeeded. Rather than apply the write again, it will simply return a message
+    indicating the write succeeded and thereby overcome the problem caused by the
+    transient network issue.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从 MongoDB 3.6 起，服务器和所有 MongoDB 驱动程序都支持可重试写选项。请查阅您驱动程序的文档以获取有关如何使用此选项的详细信息。使用可重试写入时，驱动程序将自动采用最多一次重试的策略。命令错误将返回给应用程序以供客户端处理。网络错误将在适当的延迟后重试一次，以便在普通情况下适应主节点选举。启用可重试写入后，服务器将为每个写操作维护唯一标识符，因此可以确定驱动程序何时尝试重试已成功的命令。而不是再次应用写入，它将简单地返回一个表明写入成功的消息，从而解决由于暂时网络问题导致的问题。
+- en: Waiting for Replication on Writes
+  id: totrans-20
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 等待写入的复制
+- en: Depending on the needs of your application, you might want to require that all
+    writes are replicated to a majority of the replica set before they are acknowledged
+    by the server. In the rare circumstance where the primary of a set goes down and
+    the newly elected primary (formerly a secondary) did not replicate the very last
+    writes to the former primary, those writes will be rolled back when the former
+    primary comes back up. They can be recovered, but it requires manual intervention.
+    For many applications, having a small number of writes rolled back is not a problem.
+    In a blog application, for example, there is little real danger in rolling back
+    one or two comments from one reader.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据您的应用程序需求，可能希望在服务器确认之前将所有写入复制到大多数副本集。在极少数情况下，如果副本集的主节点宕机，新选举的主节点（之前是副本）未能复制前主节点的最后写入，那么当前主节点恢复时将会回滚这些写入。这些写入可以恢复，但需要手动干预。对许多应用程序而言，少量写入回滚并非问题。例如，在博客应用程序中，回滚一两条读者评论几乎没有真正的危险性。
+- en: However, for other applications, rollback of any writes should be avoided. Suppose
+    your application sends a write to the primary. It receives confirmation that the
+    write was written, but the primary crashes before any secondaries have had a chance
+    to replicate that write. Your application thinks that it’ll be able to access
+    that write, but the current members of the replica set don’t have a copy of it.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，对于其他应用程序，应尽量避免任何写入的回滚。假设您的应用程序将写入发送到主节点，并收到写入已成功的确认，但在任何副本有机会复制该写入之前，主节点崩溃了。您的应用程序认为它能够访问该写入，但副本集的当前成员却没有它的副本。
+- en: At some point, a secondary may be elected primary and start taking new writes.
+    When the former primary comes back up, it will discover that it has writes that
+    the current primary does not. To correct this, it will undo any writes that do
+    not match the sequence of operations on the current primary. These operations
+    are not lost, but they are written to special rollback files that have to be manually
+    applied to the current primary. MongoDB cannot automatically apply these writes,
+    since they may conflict with other writes that have happened since the crash.
+    Thus, the writes essentially disappear until an admin gets a chance to apply the
+    rollback files to the current primary (see [Chapter 11](ch11.xhtml#chapter-repl-comp)
+    for more details on rollbacks).
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某些时候，一个副本可能会被选为主节点并开始接受新的写入。当先前的主节点恢复时，它将发现自己有一些当前主节点没有的写入。为了纠正这一点，它将撤销任何与当前主节点操作顺序不匹配的写入。这些操作并未丢失，而是写入特殊的回滚文件中，需要手动应用到当前主节点上。由于可能与其他在宕机后发生的写入冲突，MongoDB
+    无法自动应用这些写入。因此，这些写入实际上会消失，直到管理员有机会将回滚文件应用到当前主节点上（详见[第 11 章](ch11.xhtml#chapter-repl-comp)有关回滚的更多详情）。
+- en: 'The requirement of writing to a majority prevents this situation: if the application
+    gets a confirmation that a write succeeded, then the new primary will have to
+    have a copy of the write to be elected (a member must be up to date to be elected
+    primary). If the application does not receive acknowledgment from the server or
+    receives an error, then it will know to try again, because the write was not propagated
+    to a majority of the set before the primary crashed.'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写入到大多数的要求防止了这种情况：如果应用程序收到确认写入成功的确认，那么新的主节点必须复制写入才能被选举（成员必须保持最新以被选举为主节点）。如果应用程序未收到服务器的确认或收到错误，则将知道需要再次尝试，因为写入在主节点崩溃之前未传播到大多数集合。
+- en: Thus, to ensure that writes will be persisted no matter what happens to the
+    set, we must ensure that each write propagates to a majority of the members of
+    the set. We can achieve this using `writeConcern`.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，为了确保写入被持久化，不管集群中发生什么情况，我们必须确保每次写入都传播到集合中大多数成员。我们可以使用`writeConcern`来实现这一点。
+- en: 'As of MongoDB 2.6, `writeConcern` is integrated with write operations. For
+    example, in JavaScript, we can use `writeConcern` as follows:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自MongoDB 2.6起，`writeConcern`与写操作集成在一起。例如，在JavaScript中，我们可以如下使用`writeConcern`：
+- en: '[PRE1]'
+  id: totrans-27
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'The specific syntax in your driver will vary depending on the programming language,
+    but the semantics remain the same. In the example here, we specify a write concern
+    of `"majority"`. Upon success, the server will respond with a message such as
+    the following:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在你的驱动程序中的具体语法将根据编程语言而异，但语义保持不变。在这个例子中，我们指定了`"majority"`的写关注点。成功后，服务器将响应以下消息：
+- en: '[PRE2]'
+  id: totrans-29
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'But the server will not respond until this write operation has replicated to
+    a majority of the members of the replica set. Only then will our application receive
+    acknowledgment that this write succeeded. If the write does not succeed within
+    the timeout we’ve specified, the server will respond with an error message:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是在此写入操作复制到复制集大多数成员之前，服务器将不会响应。只有在此写入操作成功复制到指定的超时时间内，我们的应用程序才会收到确认消息：
+- en: '[PRE3]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Write concern majority and the replica set election protocol ensure that in
+    the event of a primary election, only secondaries that are up to date with acknowledged
+    writes can be elected primary. In this way, we guarantee that rollback will not
+    happen. With the timeout option, we also have a tunable setting that enables us
+    to detect and flag any long-running writes at the application layer.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写入关注点大多数和复制集选举协议确保在主节点选举事件中，只有更新了已确认写入的从节点才能被选为主节点。通过超时选项，我们还有一个可调整的设置，可以在应用程序层检测和标记任何长时间运行的写入。
+- en: Other Options for “w”
+  id: totrans-33
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 其他关于“w”的选项
+- en: '`"majority"` is not the only `writeConcern` option. MongoDB also lets you specify
+    an arbitrary number of servers to replicate to by passing `"w"` a number, as shown
+    here:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"majority"`不是唯一的`writeConcern`选项。MongoDB还允许您通过向`"w"`传递数字来指定要复制到的任意数量的服务器，如下所示：'
+- en: '[PRE4]'
+  id: totrans-35
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: This will wait until two members (the primary and one secondary) have the write.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将等待两个成员（主节点和一个从节点）写入完成。
+- en: 'Note that the `"w"` value includes the primary. If you want the write propagated
+    to ``*`n`*`` secondaries, you should set `"w"` to ``*`n`*``+1 (to include the
+    primary). Setting ``"`w`" : 1`` is the same as not passing the `"w"` option at
+    all because it just checks that the write was successful on the primary.'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '注意，`"w"`值包括主节点。如果要将写入传播到``*`n`*``个从节点，您应将`"w"`设置为``*`n`*``+1（包括主节点）。设置``"`w`"
+    : 1``与根本不传递`"w"`选项相同，因为它只是检查写入是否在主节点上成功。'
+- en: The downside to using a literal number is that you have to change your application
+    if your replica set configuration changes.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用字面数字的缺点是，如果复制集配置更改，您必须更改应用程序。
+- en: Custom Replication Guarantees
+  id: totrans-39
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 自定义复制保证
+- en: 'Writing to a majority of a set is considered “safe.” However, some sets may
+    have more complex requirements: you may want to make sure that a write makes it
+    to at least one server in each data center or a majority of the nonhidden nodes.
+    Replica sets allow you to create custom rules that you can pass to `"getLastError"`
+    to guarantee replication to whatever combination of servers you need.'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 向集合中的大多数写入被认为是“安全的”。然而，某些集合可能具有更复杂的要求：您可能希望确保写入至少传播到每个数据中心的一个服务器或大多数非隐藏节点。复制集允许您创建自定义规则，可以将其传递给`"getLastError"`，以保证复制到所需的服务器组合。
+- en: Guaranteeing One Server per Data Center
+  id: totrans-41
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 确保每个数据中心有一个服务器
+- en: Network issues between data centers are much more common than within data centers,
+    and it is more likely for an entire data center to go dark than an equivalent
+    smattering of servers across multiple data centers. Thus, you might want some
+    data center−specific logic for writes. Guaranteeing a write to every data center
+    before confirming success means that, in the case of a write followed by the data
+    center going offline, every other data center will have at least one local copy.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据中心之间的网络问题比数据中心内部的问题要普遍得多，整个数据中心停电的可能性也比多个数据中心中的散落服务器停电的可能性要大得多。因此，您可能希望为写操作引入一些特定于数据中心的逻辑。在确认成功之前保证向每个数据中心写入数据意味着，如果写入后数据中心断电，其他每个数据中心都将至少有一份本地副本。
+- en: 'To set this up, we first classify the members by data center. We do this by
+    adding a `"tags"` field to their replica set configuration:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要设置此项，我们首先按数据中心对成员进行分类。我们通过向副本集配置中添加一个`"tags"`字段来完成这项任务：
+- en: '[PRE5]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'The `"tags"` field is an object, and each member can have multiple tags. It
+    might be a “high quality” server in the `"us-east"` data center, for example,
+    in which case we’d want a `"tags"` field such as `{"dc": "us-east", "quality"
+    : "high"}`.'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"tags"`字段是一个对象，每个成员可以有多个标签。例如，它可能是`"us-east"`数据中心中的“高质量”服务器，此时我们希望`"tags"`字段如`{"dc":
+    "us-east", "quality" : "high"}`。'
+- en: 'The second step is to add a rule by creating a `"getLastErrorModes"` field
+    in our replica set config. The name `"getLastErrorModes"` is vestigial in the
+    sense that prior to MongoDB 2.6, applications used a method called `"getLastError"`
+    to specify write concern. In replica configs, for `"getLastErrorModes"` each rule
+    is of the form ``"*`name`*" : {"*`key`*" : *`number`*}}``. ``"*`name`*"`` is the
+    name for the rule, which should describe what the rule does in a way that clients
+    can understand, as they’ll be using this name when they call `getLastError`. In
+    this example, we might call this rule `"eachDC"` or something more abstract such
+    as `"user-level safe"`.'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '第二步是通过在我们的副本集配置中创建一个`"getLastErrorModes"`字段来添加一条规则。名称`"getLastErrorModes"`在某种程度上是遗留的，因为在MongoDB
+    2.6之前，应用程序使用称为`"getLastError"`的方法来指定写入关注点。在副本配置中，对于`"getLastErrorModes"`，每个规则的形式为``"*`name`*"
+    : {"*`key`*" : *`number`*}}``。`"*`name`*"`是规则的名称，应该以客户端可以理解的方式描述规则的作用，因为在调用`getLastError`时，他们将使用此名称。在本例中，我们可以称此规则为`"eachDC"`或者更抽象的名称，如`"user-level
+    safe"`。'
+- en: The ``"*`key`*"`` field is the key field from the tags, so in this example it
+    will be `"dc"`. The *`number`* is the number of groups that are needed to fulfill
+    this rule. In this case, *`number`* is 2 (because we want at least one server
+    from `"us-east"` and one from `"us-west"`). *`number`* always means “at least
+    one server from each of *`number`* groups.”
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '``"*`key`*"``字段是标签中的键字段，因此在本例中，它将是`"dc"`。*`number`*是需要满足此规则的组数。在本例中，*`number`*为2（因为我们希望至少从`"us-east"`和`"us-west"`各选取一个服务器）。*`number`*始终表示“至少从每个*`number`*组中选取一个服务器”。'
+- en: 'We add `"getLastErrorModes"` to the replica set config as follows and reconfigure
+    to create the rule:'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们按以下方式向副本集配置中添加`"getLastErrorModes"`并重新配置以创建此规则：
+- en: '[PRE6]'
+  id: totrans-49
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: '`"getLastErrorModes"` lives in the `"settings"` subobject of a replica set
+    config, which contains a few set-level optional settings.'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"getLastErrorModes"`位于副本集配置的`"settings"`子对象中，其中包含几个集级可选设置。'
+- en: 'Now we can use this rule for writes:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们可以为写操作使用这条规则：
+- en: '[PRE7]'
+  id: totrans-52
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Note that rules are somewhat abstracted away from the application developer:
+    they don’t have to know which servers are in `"eachDC"` to use the rule, and the
+    rule can change without their application having to change. We could add a data
+    center or change set members and the application would not have to know.'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，规则与应用开发者有些抽象：他们不必知道“每个DC”中有哪些服务器才能使用该规则，并且该规则可以更改而无需更改其应用程序。我们可以添加一个数据中心或更改成员集合，而应用程序无需了解这些更改。
+- en: Guaranteeing a Majority of Nonhidden Members
+  id: totrans-54
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 保证大多数非隐藏成员
+- en: 'Often, hidden members are somewhat second-class citizens: you’re never going
+    to fail over to them and they certainly aren’t taking any reads. Thus, you may
+    only care that nonhidden members received a write and let the hidden members sort
+    it out for themselves.'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，隐藏成员有点像二等公民：你永远不会将故障切换到它们，它们肯定不会进行任何读取操作。因此，您可能只关心非隐藏成员是否收到写入，并让隐藏成员自行处理。
+- en: 'Suppose we have five members, *host0* through *host4*, *host4* being a hidden
+    member. We want to make sure that a majority of the nonhidden members have a write—that
+    is, at least three of *host0*, *host1*, *host2*, and *host3*. To create a rule
+    for this, first we tag each of the nonhidden members with its own tag:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们有五个成员，*host0* 到 *host4*，其中 *host4* 是隐藏成员。我们想确保大多数非隐藏成员有写入权限，即至少 *host0*、*host1*、*host2*
+    和 *host3* 中的三个。为此，首先我们为每个非隐藏成员分配自己的标签：
+- en: '[PRE8]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: The hidden member, *host4*, is not given a tag.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 隐藏成员 *host4* 没有被分配标签。
+- en: 'Now we add a rule for the majority of these servers:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们为大多数这些服务器添加一个规则：
+- en: '[PRE9]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Finally, we can use this rule in our application:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们可以在我们的应用程序中使用这个规则：
+- en: '[PRE10]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: This will wait until at least three of the nonhidden members have the write.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将等待至少三个非隐藏成员进行写入。
+- en: Creating Other Guarantees
+  id: totrans-64
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 创建其他的保证。
+- en: 'The rules you can create are limitless. Remember that there are two steps to
+    creating a custom replication rule:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以创建的规则是没有限制的。记住创建自定义复制规则有两个步骤：
+- en: Tag members by assigning them key/value pairs. The keys describe classifications;
+    for example, you might have keys such as `"data_center"` or `"region"` or `"serverQuality"`.
+    Values determine which group a server belongs to within a classification. For
+    example, for the key `"data_center"`, you might have some servers tagged `"us-east"`,
+    some `"us-west"`, and others `"aust"`.
+  id: totrans-66
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过分配键值对为成员打上标签。键描述分类，例如 `"data_center"`、`"region"` 或 `"serverQuality"`。值确定服务器在分类内属于哪个组。例如，对于键
+    `"data_center"`，你可能会有一些服务器标记为 `"us-east"`，一些标记为 `"us-west"`，还有其他的标记为 `"aust"`。
+- en: 'Create a rule based on the classifications you create. Rules are always of
+    the form ``{"*`name`*" : {"*`key`*" : *`number`*}}``, where at least one server
+    from *`number`* groups must have a write before it has succeeded. For example,
+    you could create a rule `{"twoDCs" : {"data_center" : 2}}`, which would mean that
+    at least one server in two of the data centers tagged must confirm a write before
+    it is successful.'
+  id: totrans-67
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '基于你创建的分类创建一个规则。规则总是采用这种形式 ``{"*`name`*" : {"*`key`*" : *`number`*}}``，其中至少来自
+    *`number`* 组的一个服务器必须在成功之前写入。例如，你可以创建一个规则 `{"twoDCs" : {"data_center" : 2}}`，这意味着至少有两个被标记的数据中心中的一个服务器必须确认写入成功。'
+- en: Then you can use this rule in `getLastErrorModes`.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后你可以在 `getLastErrorModes` 中使用这个规则。
+- en: 'Rules are immensely powerful ways to configure replication, although they are
+    complex to understand and set up. Unless you have fairly involved replication
+    requirements, you should be perfectly safe sticking with `"w" : "majority"`.'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '规则是配置复制的强大方式，尽管理解和设置它们很复杂。除非你有相当复杂的复制需求，否则坚持使用 `"w" : "majority"` 是非常安全的选择。'
+- en: Sending Reads to Secondaries
+  id: totrans-70
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 向次要节点发送读请求
+- en: By default, drivers will route all requests to the primary. This is generally
+    what you want, but you can configure other options by setting read preferences
+    in your driver. Read preferences let you specify the types of servers queries
+    should be sent to.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，驱动程序将所有请求路由到主节点。这通常是你想要的，但你可以通过在驱动程序中设置读取偏好来配置其他选项。读取偏好允许你指定查询应该发送到哪些类型的服务器。
+- en: Sending read requests to secondaries is generally a bad idea. There are some
+    specific situations in which it makes sense, but you should generally send all
+    traffic to the primary. If you are considering sending reads to secondaries, make
+    sure to weigh the pros and cons very carefully before allowing it. This section
+    covers why it’s a bad idea and the specific conditions when it makes sense to
+    do so.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常向次要节点发送读请求是一个不好的做法。在某些特定情况下，这样做是有意义的，但你应该在允许之前非常仔细地权衡利弊。本节涵盖了为什么这是一个不好的想法以及在何种特定条件下这样做是有意义的。
+- en: Consistency Considerations
+  id: totrans-73
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 一致性考虑
+- en: Applications that require strongly consistent reads should not read from secondaries.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 需要强一致性读取的应用程序不应从次要节点读取。
+- en: Secondaries should usually be within a few milliseconds of the primary. However,
+    there is no guarantee of this. Sometimes secondaries can fall behind by minutes,
+    hours, or even days due to load, misconfiguration, network errors, or other issues.
+    Client libraries cannot tell how up to date a secondary is, so clients will cheerfully
+    send queries to secondaries that are far behind. Hiding a secondary from client
+    reads can be done but is a manual process. Thus, if your application needs data
+    that is predictably up to date, it should not read from secondaries.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 辅助节点通常应与主节点相差几毫秒。然而，并没有这方面的保证。有时候，由于负载、配置错误、网络错误或其他问题，辅助节点可能会落后数分钟、数小时甚至数天。客户端库无法判断辅助节点的实时性，因此客户端可能会愉快地将查询发送到远远落后的辅助节点。可以隐藏辅助节点以防止客户端读取，但这是一个手动过程。因此，如果您的应用程序需要可预测的实时数据，就不应该从辅助节点读取。
+- en: If your application needs to read its own writes (e.g., insert a document and
+    then query for it and find it) you should not send the read to a secondary (unless
+    the write waits for replication to all secondaries using `"w"` as shown earlier).
+    Otherwise, an application may perform a successful write, attempt to read the
+    value, and not be able to find it (because it sent the read to a secondary that
+    hasn’t replicated yet). Clients can issue requests faster than replication can
+    copy operations.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的应用程序需要读取自己的写入（例如，插入文档然后查询并找到它），则不应将读取操作发送到辅助节点（除非写入使用`"w"`等待所有辅助节点的复制，如前所示）。否则，应用程序可能会执行成功的写入操作，尝试读取该值，但却找不到它（因为它将读取操作发送到尚未复制的辅助节点）。客户端可以比复制操作更快地发出请求。
+- en: To always send read requests to the primary, set your read preference to `primary`
+    (or leave it alone, since `primary` is the default). If there is no primary, queries
+    will error out. This means that your application cannot perform queries if the
+    primary goes down. However, it is certainly an acceptable option if your application
+    can deal with downtime during failovers or network partitions or if getting stale
+    data is unacceptable.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要始终将读取请求发送到主节点，请将读取首选项设置为`primary`（或者保持不变，因为`primary`是默认设置）。如果没有主节点，查询将报错。这意味着如果主节点宕机，则您的应用程序无法执行查询。但是，如果您的应用程序可以在故障转移或网络分区期间处理停机时间，或者不能接受获取过时数据，这绝对是一个可接受的选项。
+- en: Load Considerations
+  id: totrans-78
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 负载考虑
+- en: Many users send reads to secondaries to distribute load. For example, if your
+    servers can only handle 10,000 queries a second and you need to handle 30,000,
+    you might set up a couple of secondaries and have them take some of the load.
+    However, this is a dangerous way to scale because it’s easy to accidentally overload
+    your system and difficult to recover from once you do.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多用户将读取操作发送到辅助节点以分担负载。例如，如果您的服务器每秒只能处理10,000个查询，而您需要处理30,000个查询，您可能会设置几个辅助节点并让它们承担部分负载。然而，这种扩展的方式存在危险性，因为很容易意外地过载系统，并且一旦过载，很难从中恢复。
+- en: 'For example, suppose that you have the situation just described: 30,000 reads
+    per second. You decide to create a replica set with four members (one of these
+    would be configured as nonvoting, to prevent ties in elections) to handle this:
+    each secondary is well below its maximum load and the system works perfectly.'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设您有刚才描述的情况：每秒30,000次读取。您决定创建一个包含四个成员的复制集（其中一个将配置为非投票成员，以防止选举中的平局）来处理此问题：每个辅助节点都远低于其最大负载，并且系统运行良好。
+- en: Until one of the secondaries crashes.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 直到其中一个辅助节点崩溃。
+- en: Now each of the remaining members are handling 100% of their possible load.
+    If you need to rebuild the member that crashed, it may need to copy data from
+    one of the other servers, overwhelming the remaining servers. Overloading a server
+    often makes it perform slower, lowering the set’s capacity even further and forcing
+    other members to take on more load, causing them to slow down in a death spiral.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在剩下的每个成员都在处理他们可能的全部负载。如果需要重建崩溃的成员，可能需要从其他服务器中复制数据，从而使剩余的服务器负担过重。服务器过载通常会使其性能下降，进一步降低集合的容量，并迫使其他成员承担更多负载，导致它们陷入一个越来越慢的螺旋式崩溃。
+- en: Overloading can also cause replication to slow down, making the remaining secondaries
+    fall behind. Suddenly you have a member down and a member lagging, and everything
+    is too overloaded to have any wiggle room.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 过载还会导致复制速度减慢，使其余辅助节点落后。突然间，一个成员崩溃，一个成员滞后，而整个系统过载到没有任何余地。
+- en: 'If you have a good idea of how much load a server can take, you might feel
+    like you can plan this out better: use five servers instead of four and the set
+    won’t be overloaded if one goes down. However, even if you plan it out perfectly
+    (and only lose the number of servers you expected), you still have to fix the
+    situation with the other servers under more stress than they would be otherwise.'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你对服务器可以承受多大负载有一个良好的了解，你可能会觉得你可以更好地计划这一点：使用五台服务器而不是四台，即使有一台故障，整个系统也不会过载。然而，即使你计划得很完美（并且只丢失了你预期的服务器数量），你仍然需要处理其他服务器在比预期更大的压力下的情况。
+- en: A better choice is to use sharding to distribute load. We’ll cover how to set
+    sharding up in [Chapter 14](ch14.xhtml#chapter_d1e10482).
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更好的选择是使用分片来分发负载。我们将在[第14章](ch14.xhtml#chapter_d1e10482)中介绍如何设置分片。
+- en: Reasons to Read from Secondaries
+  id: totrans-86
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 从次要节点读取的原因
+- en: 'There are a few cases in which it’s reasonable to send application reads to
+    secondaries. For instance, you may want your application to still be able to perform
+    reads if the primary goes down (and you do not care if those reads are somewhat
+    stale). This is the most common case for distributing reads to secondaries: you’d
+    like a temporary read-only mode when your set loses a primary. This read preference
+    is called `primaryPreferred`.'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有几种情况下将应用程序读取发送到次要节点是合理的。例如，如果主节点宕机（而你不在乎这些读取可能有些陈旧），你可能希望你的应用程序仍然能执行读取操作。这是将读取分发到次要节点的最常见情况：当你的集群失去主节点时，你希望有一个临时的只读模式。这种读取偏好被称为`primaryPreferred`。
+- en: 'One common argument for reading from secondaries is to get low-latency reads.
+    You can specify `nearest` as your read preference to route requests to the lowest-latency
+    member based on average ping time from the driver to the replica set member. If
+    your application needs to access the same document with low latency in multiple
+    data centers, this is the only way to do it. If, however, your documents are more
+    location-based (application servers in this data center need low-latency access
+    to some of your data, or application servers in another data center need low-latency
+    access to other data), this should be done with sharding. Note that you must use
+    sharding if your application requires low-latency reads *and* low-latency writes:
+    replica sets only allow writes to one location (wherever the primary is).'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从次要节点读取的一个常见论点是获得低延迟读取。你可以将`nearest`作为你的读取偏好，根据从驱动程序到副本集成员的平均ping时间路由请求到最低延迟的成员。如果你的应用程序需要在多个数据中心中低延迟访问相同的文档，这是唯一的方法。然而，如果你的文档更加基于位置（此数据中心的应用服务器需要低延迟访问一些数据，或者另一个数据中心的应用服务器需要低延迟访问其他数据），这应该通过分片来完成。请注意，如果你的应用程序要求低延迟读取和写入，你必须使用分片：副本集只允许写入到一个位置（主节点所在位置）。
+- en: You must be willing to sacrifice consistency if you are reading from members
+    that may not have replicated all the writes yet. Alternatively, you could sacrifice
+    write speed if you wanted to wait until writes had been replicated to all members.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你从可能尚未复制所有写入的成员读取数据，你必须愿意牺牲一致性。或者，如果你希望等待写入已经复制到所有成员再进行写入，你可以牺牲写入速度。
+- en: If your application can truly function acceptably with arbitrarily stale data,
+    you can use the `secondary` or `secondaryPreferred` read preferences. `secondary`
+    will always send read requests to a secondary. If there are no secondaries available,
+    this will error out rather than send reads to the primary. It can be used for
+    applications that do not care about stale data and want to use the primary for
+    writes only. If you have any concerns about staleness of data, this is not recommended.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你的应用程序可以接受任意陈旧的数据，你可以使用`secondary`或`secondaryPreferred`读取偏好。`secondary`总是将读取请求发送到次要节点。如果没有次要节点可用，它会报错而不是将读取请求发送到主节点。这可以用于那些不关心陈旧数据并且只想使用主节点进行写入的应用程序。如果你对数据的陈旧性有任何顾虑，不建议使用这种方法。
+- en: '`secondaryPreferred` will send read requests to a secondary if one is available.
+    If no secondaries are available, requests will be sent to the primary.'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`secondaryPreferred`会将读取请求发送到次要节点（如果有）。如果没有次要节点可用，请求将被发送到主节点。'
+- en: Sometimes, read load is drastically different than write load—i.e., you’re reading
+    entirely different data than you’re writing. You might want dozens of indexes
+    for offline processing that you don’t want to have on the primary. In this case,
+    you might want to set up a secondary with different indexes than the primary.
+    If you’d like to use a secondary for this purpose, you’d probably create a connection
+    directly to it from the driver, instead of using a replica set connection.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时，读取负载与写入负载显著不同——即，您读取的数据完全不同于您写入的数据。您可能希望为离线处理设置数十个索引，这些索引不希望在主要数据库上存在。在这种情况下，您可能希望设置一个具有不同索引的次要数据库。如果您想要为此目的使用次要数据库，您可能会直接从驱动程序创建连接，而不是使用复制集连接。
+- en: 'Consider which of the options makes sense for your application. You can also
+    combine options: if some read requests must be from the primary, use `primary`
+    for those. If you are OK with other reads not having the most up-to-date data,
+    use `primaryPreferred` for those. And if certain requests require low latency
+    over consistency, use `nearest` for those.'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 考虑哪种选项适合您的应用程序。您还可以结合选项使用：如果某些读取请求必须来自主要数据库，请使用`primary`。如果您可以接受其他读取请求不具有最新数据，请为这些请求使用`primaryPreferred`。如果某些请求需要低延迟而不需要一致性，请为这些请求使用`nearest`。

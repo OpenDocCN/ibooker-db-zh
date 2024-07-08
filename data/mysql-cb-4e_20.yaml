@@ -1,0 +1,1023 @@
+- en: Chapter 20\. Performing Transactions
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第20章 执行事务
+- en: 20.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 20.0 简介
+- en: The MySQL server can handle multiple clients at the same time because it is
+    multithreaded. To deal with contention among clients, the server performs any
+    necessary locking so that two clients cannot modify the same data at once. However,
+    as the server executes SQL statements, it’s very possible that successive statements
+    received from a given client will be interleaved with statements from other clients.
+    If a client executes multiple statements that are dependent on each other, the
+    fact that other clients may be updating tables in between those statements can
+    cause difficulties.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL服务器可以同时处理多个客户端，因为它是多线程的。为了处理客户端之间的竞争，服务器执行任何必要的锁定，以防止两个客户端同时修改同一数据。然而，当服务器执行SQL语句时，来自同一客户端的连续语句可能与来自其他客户端的语句交错执行。如果一个客户端执行多个依赖于彼此的语句，其他客户端在这些语句之间更新表可能会引发困难。
+- en: 'Statement failures can be problematic, too, if a multiple-statement operation
+    does not run to completion. Suppose that a `flight` table contains information
+    about airline flight schedules and you want to update the row for Flight 578 by
+    choosing a pilot from among those available. You might do so using three statements
+    as follows:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果多语句操作未能完成，语句失败也可能会带来问题。假设`flight`表包含有关航班时间表的信息，并且您想通过从可用飞行员中选择一个来更新Flight
+    578的行。您可以使用以下三个语句来执行：
+- en: '[PRE0]'
+  id: totrans-4
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'The first statement chooses an available pilot, the second marks the pilot
+    as unavailable, and the third assigns the pilot to the flight. That’s straightforward
+    enough in principle, but in practice there are significant difficulties:'
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一条语句选择一个可用的飞行员，第二条将该飞行员标记为不可用，第三条将该飞行员分配给航班。原则上说这很简单，但实际操作中存在显著困难：
+- en: Concurrency issues
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并发问题
+- en: If two clients want to schedule pilots, it’s possible for both to run the initial
+    `SELECT` query and retrieve the same pilot ID number before either has a chance
+    to set the pilot’s status to unavailable. If that happens, the same pilot is scheduled
+    for two flights at once.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果两个客户端想要安排飞行员，它们可以在设置飞行员状态为不可用之前同时运行初始的`SELECT`查询并检索相同的飞行员ID号。如果发生这种情况，同一飞行员会同时安排两个航班。
+- en: Integrity issues
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完整性问题
+- en: All three statements must execute successfully as a unit. For example, if the
+    `SELECT` and the first `UPDATE` run successfully, but the second `UPDATE` fails,
+    the pilot’s status is set to unavailable without the pilot being assigned a flight.
+    The database becomes inconsistent.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有三个语句必须作为一个单元成功执行。例如，如果`SELECT`和第一个`UPDATE`成功运行，但第二个`UPDATE`失败，则飞行员的状态被设置为不可用，但飞行员未被分配到航班。数据库变得不一致。
+- en: 'To prevent concurrency and integrity problems in these types of situations,
+    transactions are helpful. A transaction groups a set of statements and guarantees
+    the following properties:'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了在这些类型的情况下预防并发和完整性问题，事务是有帮助的。事务组合了一组语句并保证以下属性：
+- en: No other client can update the data used in the transaction while the transaction
+    is in progress; it’s as though you have the server all to yourself. For example,
+    other clients cannot modify the pilot or flight records while you’re booking a
+    pilot for a flight. Transactions solve concurrency problems arising from the multiple-client
+    nature of the MySQL server. In effect, transactions serialize access to a shared
+    resource across multiple-statement operations.
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当事务正在进行时，其他客户端不能更新事务中使用的数据；就像你独占了服务器一样。例如，在您为一个航班预订飞行员时，其他客户端不能修改飞行员或航班记录。事务解决了MySQL服务器多客户端性质带来的并发问题。事实上，事务序列化了多语句操作对共享资源的访问。
+- en: Statements grouped within a transaction are committed (take effect) as a unit,
+    but only if they all succeed. If an error occurs, any actions that occurred prior
+    to the error are rolled back, leaving the relevant tables unaffected as though
+    none of the statements had been executed. This keeps the database from becoming
+    inconsistent. For example, if an update to the `flights` table fails, rollback
+    causes the change to the `pilots` table to be undone, leaving the pilot still
+    available. Rollback frees you from having to figure out how to undo a partially
+    completed operation yourself.
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 事务中分组的语句将作为一个单元提交（生效），但仅当它们全部成功时。如果发生错误，则会回滚发生错误之前的所有操作，使相关表保持不受影响，就好像没有执行任何语句一样。这可以防止数据库变得不一致。例如，如果更新`flights`表失败，则回滚会取消对`pilots`表的更改，使飞行员仍然可用。回滚使您无需自行解决部分完成的操作的撤销问题。
+- en: This chapter shows the syntax for the SQL statements that begin and end transactions.
+    It also describes how to implement transactional operations from within programs,
+    using error detection to determine whether to commit or roll back.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章展示了开始和结束事务的SQL语句的语法。还描述了如何从程序内部实现事务操作，使用错误检测来确定是提交还是回滚。
+- en: Scripts related to the examples shown here are located in the *transactions*
+    directory of the `recipes` distribution.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此处显示的示例相关脚本位于`recipes`发行版的*transactions*目录中。
+- en: 20.1 Choosing a Transactional Storage Engine
+  id: totrans-15
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 20.1 选择事务存储引擎
+- en: Problem
+  id: totrans-16
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to use transactions.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要使用事务。
+- en: Solution
+  id: totrans-18
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: To use transactions, you must use a transaction-safe engine. Check your MySQL
+    server to determine which transactional storage engines it supports.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用事务，必须使用事务安全引擎。检查您的MySQL服务器以确定它支持哪些事务存储引擎。
+- en: Discussion
+  id: totrans-20
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'MySQL supports several storage engines. Currently, the transactional engines,
+    shipped with the standard distribution, include InnoDB and NDB. To see which your
+    MySQL server supports, use this statement:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL支持多种存储引擎。当前的事务引擎，包括InnoDB和NDB，已随标准分发。要查看您的MySQL服务器支持哪些，请使用此语句：
+- en: '[PRE1]'
+  id: totrans-22
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: If MySQL Cluster is enabled, you’ll also see a line that says `ndbcluster`.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果启用了MySQL Cluster，则还会看到一行显示`ndbcluster`。
+- en: Transactional engines are those that have a `TRANSACTIONS` value of `YES`; those
+    actually usable have a `SUPPORT` value of `YES` or `DEFAULT`.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务引擎是那些具有`TRANSACTIONS`值为`YES`的引擎；实际可用的引擎具有`SUPPORT`值为`YES`或`DEFAULT`。
+- en: 'After determining which transactional storage engines are available, to create
+    a table that uses a given engine, add an `ENGINE` `=` *`tbl_engine`* clause to
+    your `CREATE` `TABLE` statement:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在确定了哪些事务存储引擎可用后，要创建使用特定引擎的表，请在您的`CREATE TABLE`语句中添加一个`ENGINE = ` *`tbl_engine`*
+    子句：
+- en: '[PRE2]'
+  id: totrans-26
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'If you need to modify an existing application to perform transactions, but
+    it uses nontransactional tables, you can alter the tables to use a transactional
+    storage engine. For example, MyISAM tables are nontransactional and trying to
+    use them for transactions will yield incorrect results because they do not support
+    rollback. In this case, you can use `ALTER` `TABLE` to convert the tables to a
+    transactional type. Suppose that `t` is a MyISAM table. To make it an InnoDB table,
+    do this:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果需要修改现有应用程序以执行事务，但它使用非事务表，则可以修改表以使用事务存储引擎。例如，MyISAM表是非事务性的，试图将它们用于事务将产生错误的结果，因为它们不支持回滚。在这种情况下，您可以使用`ALTER
+    TABLE`将表转换为事务类型。假设`t`是一个MyISAM表。要将其转换为InnoDB表，请执行以下操作：
+- en: '[PRE3]'
+  id: totrans-28
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: One thing to consider before altering a table is that changing it to use a transactional
+    storage engine may affect its behavior in other ways. For example, the MyISAM
+    engine provides more flexible handling of `AUTO_INCREMENT` columns than do other
+    storage engines. If you rely on MyISAM-only sequence features, changing the storage
+    engine will cause problems.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在修改表之前要考虑的一件事是，将其更改为使用事务存储引擎可能会影响其在其他方面的行为。例如，MyISAM引擎对`AUTO_INCREMENT`列提供了比其他存储引擎更灵活的处理方式。如果依赖于仅支持MyISAM的序列特性，更改存储引擎将会导致问题。
+- en: 20.2 Performing Transactions Using SQL
+  id: totrans-30
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 20.2 使用SQL执行事务
+- en: Problem
+  id: totrans-31
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: A set of statements must succeed or fail as a unit—that is, you require a transaction.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一组语句必须作为一个单元成功或失败，也就是说，您需要一个事务。
+- en: Solution
+  id: totrans-33
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Manipulate MySQL’s auto-commit mode to enable multiple-statement transactions,
+    and then commit or roll back the statements depending on whether they succeed
+    or fail.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 修改MySQL的自动提交模式以启用多语句事务，然后根据成功或失败来提交或回滚语句。
+- en: Discussion
+  id: totrans-35
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: This recipe describes the SQL statements that control transactional behavior
+    in MySQL. The immediately following recipes discuss how to perform transactions
+    from within programs. Some APIs require that you implement transactions by executing
+    the SQL statements discussed in this recipe; others provide a special mechanism
+    that enables transaction management without writing SQL directly. However, even
+    in the latter case, the API mechanism maps program operations onto transactional
+    SQL statements, so reading this recipe will give you a better understanding of
+    what the API does on your behalf.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本方法描述了在 MySQL 中控制事务行为的 SQL 语句。紧接着的方法讨论了如何从程序内部执行事务。一些 API 要求您通过执行本方法中讨论的 SQL
+    语句来实现事务；其他 API 则提供了一种特殊机制，允许在不直接编写 SQL 的情况下进行事务管理。然而，即使在后一种情况下，API 机制也会将程序操作映射到事务性
+    SQL 语句上，因此阅读本方法将让您更好地了解 API 在您的代表下所做的事情。
+- en: 'MySQL normally operates in auto-commit mode, which commits the effect of each
+    statement as soon as it executes. (In effect, each statement is its own transaction.)
+    To perform a transaction, you must disable auto-commit mode, execute the statements
+    that make up the transaction, and then either commit or roll back your changes.
+    In MySQL, you can do this two ways:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 通常在自动提交模式下运行，这会在每次执行语句时提交其效果。（实际上，每个语句都是其自己的事务。）要执行一个事务，必须禁用自动提交模式，执行构成事务的语句，然后要么提交，要么回滚更改。在
+    MySQL 中，可以通过两种方式实现这一点：
+- en: 'Execute a `START` `TRANSACTION` (or `BEGIN`) statement to suspend auto-commit
+    mode, then execute the statements that make up the transaction. If the statements
+    succeed, record their effect in the database and terminate the transaction by
+    executing a `COMMIT` statement:'
+  id: totrans-38
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 执行 `START TRANSACTION`（或 `BEGIN`）语句以暂停自动提交模式，然后执行构成事务的语句。如果语句成功，则记录其在数据库中的效果，并通过执行
+    `COMMIT` 语句终止事务：
+- en: '[PRE4]'
+  id: totrans-39
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'If an error occurs, don’t use `COMMIT`. Instead, cancel the transaction by
+    executing a `ROLLBACK` statement. In the following example, `t` remains empty
+    after the transaction because the effects of the `INSERT` statements are rolled
+    back:'
+  id: totrans-40
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如果发生错误，请不要使用 `COMMIT`。而是通过执行 `ROLLBACK` 语句来取消事务。在下面的例子中，由于 `INSERT` 语句的效果被回滚，`t`
+    保持为空：
+- en: '[PRE5]'
+  id: totrans-41
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Another way to group statements is to turn off auto-commit mode explicitly
+    by setting the `autocommit` session variable to 0\. After that, each statement
+    you execute becomes part of the current transaction. To end the transaction and
+    begin the next one, execute a `COMMIT` or `ROLLBACK` statement:'
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 另一种分组语句的方式是通过将 `autocommit` 会话变量显式设置为 0 来关闭自动提交模式。之后，您执行的每个语句都成为当前事务的一部分。要结束事务并开始下一个事务，请执行
+    `COMMIT` 或 `ROLLBACK` 语句：
+- en: '[PRE6]'
+  id: totrans-43
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'To turn auto-commit mode back on, use this statement:'
+  id: totrans-44
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 要重新启用自动提交模式，请使用以下语句：
+- en: '[PRE7]'
+  id: totrans-45
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Warning
+  id: totrans-46
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Transactions have their limits because not all statements can be part of a transaction.
+    For example, if you execute a `DROP` `DATABASE` statement, don’t expect to restore
+    the database by executing a `ROLLBACK`.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务有其局限性，因为并非所有语句都可以成为事务的一部分。例如，如果执行 `DROP DATABASE` 语句，则不要期望通过执行 `ROLLBACK`
+    来恢复数据库。
+- en: 20.3 Performing Transactions from Within Programs
+  id: totrans-48
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 20.3 从程序内部执行事务
+- en: Problem
+  id: totrans-49
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You’re writing a program that must implement transactional operations.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您正在编写一个必须实现事务操作的程序。
+- en: Solution
+  id: totrans-51
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the transaction abstraction provided by your language API, if it has such
+    a thing. If it doesn’t, use the API’s usual statement-execution mechanism to execute
+    the transactional SQL statements directly.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的语言 API 提供了事务抽象化，可以使用该功能。如果没有，则使用 API 的常规语句执行机制直接执行事务性 SQL 语句。
+- en: Discussion
+  id: totrans-53
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: To perform transactional processing from within a program, use your API language
+    to detect errors and take appropriate action. This recipe provides general background
+    on doing this. The next recipes provide language-specific details for the MySQL
+    APIs for Perl, Ruby, PHP, Python, Go, and Java.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要从程序内部执行事务处理，使用您的 API 语言检测错误并采取适当的操作。这个方法提供了关于如何执行这一操作的一般背景。接下来的方法将为 Perl、Ruby、PHP、Python、Go
+    和 Java 的 MySQL API 提供语言特定的详细信息。
+- en: Every MySQL API supports transactions, even if only in the sense that you can
+    explicitly execute transaction-related SQL statements such as `START` `TRANSACTION`
+    and `COMMIT`. However, some APIs also provide a transaction abstraction that enables
+    control over transactional behavior without working directly with SQL. That approach
+    hides the details and provides better portability to other database engines that
+    have different underlying transaction SQL syntax. An API abstraction is available
+    for each language that we use in this book.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个 MySQL API 都支持事务，即使仅仅是显式地执行与事务相关的 SQL 语句如`START TRANSACTION`和`COMMIT`。然而，一些
+    API 还提供了事务抽象，使得可以控制事务行为，而无需直接使用 SQL。这种方法隐藏了细节，并且提供了更好的可移植性，以适应具有不同底层事务 SQL 语法的其他数据库引擎。本书中使用的每种语言都有相应的
+    API 抽象。
+- en: 'The next few recipes each implement the same example to illustrate how to perform
+    program-based transactions. They use a table `money` containing the following
+    initial rows that show how much money two people have:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来的几个示例展示了如何执行基于程序的事务的相同示例，它们使用一个包含以下初始行的`money`表，展示了两个人拥有的金额：
+- en: '[PRE8]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'The sample transaction is a simple financial transfer that uses two `UPDATE`
+    statements to give six dollars of Eve’s money to Ida:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 样本交易是一笔简单的金融转账，使用两个`UPDATE`语句将伊娃的六美元转给艾达：
+- en: '[PRE9]'
+  id: totrans-59
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'The intended result is that the table should look like this:'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 预期的结果是表应该如下所示：
+- en: '[PRE10]'
+  id: totrans-61
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: It’s necessary to execute both statements within a transaction to ensure that
+    both of them take effect at once. Without a transaction, Eve’s money disappears
+    without being credited to Ida if the second statement fails. By using a transaction,
+    the table is left unchanged if statement failure occurs.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 必须在事务中执行这两个语句以确保它们同时生效。如果没有事务，如果第二个语句失败，则伊娃的钱将不会被记入艾达的账户。通过使用事务，如果语句失败，表将保持不变。
+- en: 'The sample programs for each language are located in the *transactions* directory
+    of the `recipes` distribution. If you compare them, you’ll see that they all employ
+    a similar framework for performing transactional processing:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每种语言的示例程序位于`recipes`发布的*transactions*目录中。如果你进行比较，你会发现它们都使用类似的框架执行事务处理：
+- en: The transaction statements are grouped within a control structure, along with
+    a commit operation.
+  id: totrans-64
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 事务语句被包含在一个控制结构内，以及一个提交操作。
+- en: If the status of the control structure indicates that it did not execute successfully
+    to completion, the transaction is rolled back.
+  id: totrans-65
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果控制结构的状态表明它未成功执行完成，则回滚事务。
+- en: 'That logic can be expressed as follows, where `block` represents the control
+    structure used to group statements:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以将该逻辑表达如下，其中`block`表示用于分组语句的控制结构：
+- en: '[PRE11]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: If the statements in the block succeed, you reach the end of the block and perform
+    a commit. Otherwise, occurrence of an error raises an exception that triggers
+    execution of the error-handling code where you roll back the transaction.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果块中的语句成功执行，你将到达块的末尾并执行提交。否则，出现错误会引发异常，触发错误处理代码的执行，其中你会回滚事务。
+- en: The benefit of structuring your code as just described is that it minimizes
+    the number of tests needed to determine whether to roll back. The alternative—checking
+    the result of each statement within the transaction and rolling back on individual
+    statement errors—quickly turns your code into an unreadable mess.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将代码结构化为刚才描述的方式的好处在于，它最大限度地减少了确定是否回滚所需的测试数量。另一种方法——在事务中检查每个语句的结果，并在个别语句错误时回滚——很快会使你的代码变得难以阅读。
+- en: A subtle point to be aware of when rolling back within languages that raise
+    exceptions is that it may be possible for the rollback itself to fail, causing
+    another exception to be raised. If you don’t deal with that, your program itself
+    may terminate. To handle this, execute the rollback within another block that
+    has an empty exception handler. The sample programs do this as necessary.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在引发异常的语言中回滚时需要注意的一个微妙点是，回滚本身可能会失败，导致另一个异常被引发。如果你不处理这个问题，你的程序本身可能会终止。为了处理这个问题，在另一个没有异常处理程序的块内执行回滚是必要的。示例程序在必要时会这样做。
+- en: Those sample programs that disable auto-commit mode explicitly when performing
+    a transaction enable auto-commit afterward. In applications that perform all database
+    processing in transactional fashion, it’s unnecessary to do this. Just disable
+    auto-commit mode once after you connect to the database server, and leave it off.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那些在执行事务时显式禁用自动提交模式的示例程序在之后执行事务后启用自动提交。在将所有数据库处理以事务方式执行的应用程序中，不必这样做。只需在连接到数据库服务器后一次禁用自动提交模式，并保持禁用状态。
+- en: 20.4 Performing Transactions in Perl Programs
+  id: totrans-72
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 20.4 Perl 程序中执行事务
+- en: Problem
+  id: totrans-73
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to perform a transaction in a Perl DBI script.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望在 Perl DBI 脚本中执行事务。
+- en: Solution
+  id: totrans-75
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the standard DBI transaction support mechanism.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用标准的 DBI 事务支持机制。
+- en: Discussion
+  id: totrans-77
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'The Perl DBI transaction mechanism is based on explicit manipulation of auto-commit
+    mode:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Perl DBI 事务机制基于显式操作自动提交模式：
+- en: Turn on the `RaiseError` attribute if it’s not enabled and disable `PrintError`
+    if it’s on. You want errors to raise exceptions without printing anything, and
+    leaving `PrintError` enabled can interfere with failure detection in some cases.
+  id: totrans-79
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果 `RaiseError` 属性未启用，则打开它；如果启用了 `PrintError`，则禁用它。您希望错误引发异常而不打印任何内容，保持 `PrintError`
+    启用可能会干扰某些情况下的故障检测。
+- en: Disable the `AutoCommit` attribute so that a commit will be done only when you
+    say so.
+  id: totrans-80
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 禁用 `AutoCommit` 属性，以便仅在您说时提交。
+- en: Execute the statements that make up the transaction within an `eval` block so
+    that errors raise an exception and terminate the block. The last thing in the
+    block should be a call to `commit()`, which commits the transaction if all its
+    statements completed successfully.
+  id: totrans-81
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在一个 `eval` 块中执行组成事务的语句，以便于错误会引发异常并终止该块。该块的最后一件事应该是调用 `commit()`，如果所有语句成功完成，则提交事务。
+- en: After the `eval` executes, check the `$@` variable. If `$@` contains the empty
+    string, the transaction succeeded. Otherwise, the `eval` will have failed due
+    to the occurrence of some error and `$@` will contain an error message. Invoke
+    `rollback()` to cancel the transaction. To display an error message, print `$@`
+    before calling `rollback()`.
+  id: totrans-82
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在执行 `eval` 后，检查 `$@` 变量。如果 `$@` 包含空字符串，则事务成功。否则，由于出现错误，`eval` 将失败，`$@` 将包含错误消息。调用
+    `rollback()` 取消事务。要显示错误消息，请在调用 `rollback()` 之前打印 `$@`。
+- en: If desired, restore the original values of the `RaiseError` and `PrintError`
+    attributes.
+  id: totrans-83
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果需要，恢复 `RaiseError` 和 `PrintError` 属性的原始值。
+- en: 'Because it can be messy to change and restore the error-handling and auto-commit
+    attributes if an application performs multiple transactions, let’s put the code
+    to begin and end a transaction into convenience functions that handle the processing
+    that occurs before and after the `eval`:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果应用程序执行多个事务，更改和恢复错误处理和自动提交属性可能会很混乱，让我们将开始和结束事务的代码放入方便处理前后处理的函数中，这些函数处理 `eval`
+    前后的处理：
+- en: '[PRE12]'
+  id: totrans-85
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'By using those two functions, our sample transaction can be performed easily
+    as follows:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过使用这两个函数，我们的示例事务可以轻松执行如下：
+- en: '[PRE13]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: In Perl DBI, an alternative to manipulating the `AutoCommit` attribute manually
+    is to begin a transaction by invoking `begin_work()`. This method disables `AutoCommit`
+    and causes it to be enabled again automatically when you invoke `commit()` or
+    `rollback()` later.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Perl DBI 中，手动操作 `AutoCommit` 属性的替代方法是通过调用 `begin_work()` 开始事务。此方法禁用 `AutoCommit`，并在稍后调用
+    `commit()` 或 `rollback()` 时自动启用它。
+- en: 20.5 Performing Transactions in Ruby Programs
+  id: totrans-89
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 20.5 Ruby 程序中执行事务
+- en: Problem
+  id: totrans-90
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to perform a transaction in a Ruby Mysql2 script.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望在 Ruby Mysql2 脚本中执行事务。
+- en: Solution
+  id: totrans-92
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Send transaction management statements, such as `START TRANSACTIONS`, `BEGIN`,
+    `COMMIT`, and `ROLLBACK` as regular queries.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 发送事务管理语句，例如 `START TRANSACTIONS`、`BEGIN`、`COMMIT` 和 `ROLLBACK` 作为常规查询。
+- en: Discussion
+  id: totrans-94
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: The Ruby Mysql2 module does not have built-in functions for the transaction
+    support. Instead, it expects its users to run transaction management statements
+    as regular queries.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Ruby Mysql2 模块没有内置的事务支持功能。相反，它期望其用户将事务管理语句作为常规查询运行。
+- en: To start transaction, execute `client.query("START TRANSACTION")`, then execute
+    required updates, and finish the block with `client.query("COMMIT")`.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要开始事务，请执行 `client.query("START TRANSACTION")`，然后执行所需的更新，并用 `client.query("COMMIT")`
+    结束块。
+- en: Put your transaction into a `begin ... rescue` block, so you can call `ROLLBACK`
+    if something goes wrong.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将您的事务放入 `begin ... rescue` 块中，以便在出现问题时调用 `ROLLBACK`。
+- en: '[PRE14]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 20.6 Performing Transactions in PHP Programs
+  id: totrans-99
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 20.6 在PHP程序中执行事务
+- en: Problem
+  id: totrans-100
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to perform a transaction in a PHP script.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望在PHP脚本中执行事务。
+- en: Solution
+  id: totrans-102
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the standard PDO transaction support mechanism.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用标准的PDO事务支持机制。
+- en: Discussion
+  id: totrans-104
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'The PDO extension supports a transaction abstraction that can be used to perform
+    transactions. To begin a transaction, use the `beginTransaction()` method. Then,
+    after executing your statements, invoke either `commit()` or `rollback()` to commit
+    or roll back the transaction. The following code illustrates this. It uses exceptions
+    to detect transaction failure, so it assumes that exceptions are enabled for PDO
+    errors:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PDO扩展支持事务抽象，可用于执行事务。要开始事务，请使用`beginTransaction()`方法。然后，在执行语句后，调用`commit()`或`rollback()`来提交或回滚事务。以下代码说明了这一点。它使用异常来检测事务失败，因此假定PDO错误已启用异常：
+- en: '[PRE15]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 20.7 Performing Transactions in Python Programs
+  id: totrans-107
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 20.7 在Python程序中执行事务
+- en: Problem
+  id: totrans-108
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to perform a transaction in a Python DB API script.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望在Python DB API脚本中执行事务。
+- en: Solution
+  id: totrans-110
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the standard DB API transaction support mechanism.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用标准的DB API事务支持机制。
+- en: Discussion
+  id: totrans-112
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'The Python DB API abstraction provides transaction processing control through
+    connection object methods. The DB API specification indicates that database connections
+    should begin with auto-commit mode disabled. Therefore, when you open a connection
+    to the database server, Connector/Python disables auto-commit mode, which implicitly
+    begins a transaction. End each transaction with either `commit()` or `rollback()`.
+    The `commit()` call occurs within a `try` statement, and the `rollback()` occurs
+    within the `except` clause to cancel the transaction if an error occurs:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Python DB API抽象通过连接对象方法提供事务处理控制。DB API规范指出，数据库连接应该以禁用自动提交模式开始。因此，当您打开与数据库服务器的连接时，Connector/Python会禁用自动提交模式，这隐式地开始了一个事务。每个事务要么在`commit()`语句中结束，要么在`except`子句中的`rollback()`中取消事务，以取消事务如果发生错误：
+- en: '[PRE16]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 20.8 Performing Transactions in Go Programs
+  id: totrans-115
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 20.8 在Go程序中执行事务
+- en: Problem
+  id: totrans-116
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to perform a transaction in a Go Program
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望在Go程序中执行事务
+- en: Solution
+  id: totrans-118
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the standard transaction support mechanism, provided by the `database/sql`
+    package.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用由`database/sql`包提供的标准事务支持机制。
+- en: Discussion
+  id: totrans-120
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: The Go `sql` interface supports a transaction abstraction that could be used
+    to perform transactions. To begin a transaction, use the `DB.Begin()` function.
+    Then, after executing your statements, invoke either `Tx.Commit()` or `Tx.Rollback()`
+    to commit or rollback the transaction. The following code illustrates this.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Go `sql`接口支持事务抽象，可用于执行事务。要开始事务，请使用`DB.Begin()`函数。然后，在执行语句后，调用`Tx.Commit()`或`Tx.Rollback()`来提交或回滚事务。以下代码说明了这一点。
+- en: '[PRE17]'
+  id: totrans-122
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 20.9 Using Context-Aware Functions to Handle Transactions in Go
+  id: totrans-123
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 20.9 使用上下文感知函数处理Go中的事务
+- en: Problem
+  id: totrans-124
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to rollback transactions automatically in your Go program.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望在Go程序中自动回滚事务。
+- en: Solution
+  id: totrans-126
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: The Go-MySQL-Driver supports context cancellation. This means that you can cancel
+    database operations, such as running a query, if cancel the context.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Go-MySQL-Driver支持上下文取消。这意味着您可以取消数据库操作，例如取消运行查询，如果取消上下文。
+- en: Discussion
+  id: totrans-128
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: To use the package [context](https://pkg.go.dev/context) with SQL you need to
+    create the object of type `Context` first, then pass it to the database function.
+    Function names of the `sql` interface that support context are similar to ones
+    that do not, but have prefix `Context`. For example, function `Query()` does not
+    support `Context` while the function `QueryContext()` does.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用[context](https://pkg.go.dev/context)包与SQL，您需要首先创建`Context`类型的对象，然后将其传递给数据库函数。支持上下文的`sql`接口函数与不支持的函数名称相似，但具有前缀`Context`。例如，函数`Query()`不支持`Context`，而函数`QueryContext()`支持。
+- en: The following example uses `Context` to handle database transactions. You will
+    find code for it in the file *transaction_context.go* in the *transactions* directory
+    of the `recipes` distribution.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面的示例使用`Context`来处理数据库事务。您可以在`recipes`分发的`transactions`目录中的文件*transaction_context.go*中找到其代码。
+- en: '[PRE18]'
+  id: totrans-131
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: '[![1](Images/1.png)](#co_nch-xact-xact-go-context_import_co)'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![1](Images/1.png)](#co_nch-xact-xact-go-context_import_co)'
+- en: Import statement for the context support.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上下文支持的导入语句。
+- en: '[![2](Images/2.png)](#co_nch-xact-xact-go-context_funcparam_co)'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![2](Images/2.png)](#co_nch-xact-xact-go-context_funcparam_co)'
+- en: Our user-defined functions take `context.Context` as a parameter.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的用户定义函数以 `context.Context` 作为参数。
+- en: '[![3](Images/3.png)](#co_nch-xact-xact-go-context_exec_co)'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![3](Images/3.png)](#co_nch-xact-xact-go-context_exec_co)'
+- en: To execute statements that do not return a result set, use a context-aware function
+    `ExecContext()`.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要执行不返回结果集的语句，请使用支持上下文的函数 `ExecContext()`。
+- en: '[![4](Images/4.png)](#co_nch-xact-xact-go-context_query_co)'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![4](Images/4.png)](#co_nch-xact-xact-go-context_query_co)'
+- en: To execute queries that do return a result set, use a context-aware function
+    `QueryContext()`.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要执行返回结果集的查询，请使用支持上下文的函数 `QueryContext()`。
+- en: '[![5](Images/5.png)](#co_nch-xact-xact-go-context_begin_co)'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![5](Images/5.png)](#co_nch-xact-xact-go-context_begin_co)'
+- en: To start a transaction that will automatically rollback if context is cancelled,
+    use a context-aware function `BeginTx()`.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要启动一个如果上下文取消将自动回滚的事务，请使用支持上下文的函数 `BeginTx()`。
+- en: '[![6](Images/6.png)](#co_nch-xact-xact-go-context_tx_co)'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![6](Images/6.png)](#co_nch-xact-xact-go-context_tx_co)'
+- en: To execute a statement that could be cancelled inside the transaction, use context-aware
+    function `Tx.ExecContext()`.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要执行可能在事务中取消的语句，请使用支持上下文的函数 `Tx.ExecContext()`。
+- en: '[![7](Images/7.png)](#co_nch-xact-xact-go-context_ctx_co)'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![7](Images/7.png)](#co_nch-xact-xact-go-context_ctx_co)'
+- en: Before using context, you need to create it. In our example we created a cancellable
+    context. Function `context.WithCancel()` takes parent context as a parameter and
+    returns just created new context, and a `cancel()` function. We deferred its call
+    to the end of the `main()` function execution. You have options to call the `cancel()`
+    function in whatever place of the code when appropriate. You may prefer to use
+    `context.WithDeadline()` or `context.WithTimeout()`, so your SQL execution code
+    will be cancelled if runs longer than certain time.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用上下文之前，您需要创建它。在我们的示例中，我们创建了一个可取消的上下文。函数 `context.WithCancel()` 接受父上下文作为参数，并返回刚创建的新上下文及一个
+    `cancel()` 函数。我们推迟了它在 `main()` 函数执行结束时的调用。您可以在代码的任何适当位置调用 `cancel()` 函数。您可以选择使用
+    `context.WithDeadline()` 或 `context.WithTimeout()`，以便在超过一定时间后取消 SQL 执行代码。
+- en: 20.10 Performing Transactions in Java Programs
+  id: totrans-146
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 20.10 在 Java 程序中执行事务
+- en: Problem
+  id: totrans-147
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to perform a transaction in a JDBC application.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望在 JDBC 应用程序中执行事务。
+- en: Solution
+  id: totrans-149
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the standard JDBC transaction support mechanism.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用标准的 JDBC 事务支持机制。
+- en: Discussion
+  id: totrans-151
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'To perform transactions in Java, use your `Connection` object to turn off auto-commit
+    mode. Then, after executing your statements, use the object’s `commit()` method
+    to commit the transaction or `rollback()` to cancel it. Typically, you execute
+    the statements for the transaction in a `try` block, with `commit()` at the end
+    of the block. To handle failures, invoke `rollback()` in the corresponding exception
+    handler:'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在 Java 中执行事务，请使用您的 `Connection` 对象关闭自动提交模式。然后，在执行语句后，使用该对象的 `commit()` 方法提交事务或
+    `rollback()` 取消事务。通常，您在事务的 `try` 块中执行语句，并在块末尾调用 `commit()`。若出现故障，请在相应的异常处理程序中调用
+    `rollback()`：
+- en: '[PRE19]'
+  id: totrans-153
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'

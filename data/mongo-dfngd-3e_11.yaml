@@ -1,0 +1,1151 @@
+- en: Chapter 9\. Application Design
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第九章 应用程序设计
+- en: 'This chapter covers designing applications to work effectively with MongoDB.
+    It discusses:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章涵盖了如何有效地设计与 MongoDB 协同工作的应用程序。它讨论了：
+- en: Schema design considerations
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 架构设计考虑因素
+- en: Trade-offs when deciding whether to embed data or to reference it
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 决定是嵌入数据还是引用数据时的权衡
+- en: Tips for optimization
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 优化技巧
+- en: Consistency considerations
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一致性考虑因素
+- en: How to migrate schemas
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何迁移架构
+- en: How to manage schemas
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何管理架构
+- en: When MongoDB isn’t a good choice of data store
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当 MongoDB 不适合作为数据存储时
+- en: Schema Design Considerations
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 架构设计考虑因素
+- en: A key aspect of data representation is the design of the schema, which is the
+    way your data is represented in your documents. The best approach to this design
+    is to represent the data the way your application wants to see it. Thus, unlike
+    in relational databases, you first need to understand your queries and data access
+    patterns before modeling your schema.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据表达的关键方面是架构的设计，即数据在文档中的表示方式。此设计的最佳方法是按照应用程序希望查看数据的方式进行表示。因此，与关系数据库不同，您需要在建模架构之前首先了解查询和数据访问模式。
+- en: 'Here are the key aspects you need to consider when designing a schema:'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 设计架构时需要考虑的关键方面如下：
+- en: Constraints
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 约束
+- en: You need to understand any database or hardware limitations. You also need to
+    consider a number of MongoDB’s specific aspects, such as the maximum document
+    size of 16 MB, that full documents get read and written from disk, that an update
+    rewrites the whole document, and that atomic updates are at the document level.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要了解任何数据库或硬件限制。您还需要考虑 MongoDB 的一些特定方面，例如最大文档大小为 16 MB，完整文档从磁盘读取和写入，更新重写整个文档，以及原子更新是在文档级别进行的。
+- en: Access patterns of your queries and of your writes
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询和写入的访问模式
+- en: You will need to identify and quantify the workload of your application and
+    of the wider system. The workload encompasses both the reads and the writes in
+    your application. Once you know when queries are running and how frequently, you
+    can identify the most common queries. These are the queries you need to design
+    your schema to support. Once you have identified these queries, you should try
+    to minimize the number of queries and ensure in your design that data that gets
+    queried together is stored in the same document.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要识别和量化应用程序及更广泛系统的工作负载。工作负载包括应用程序中的读取和写入。一旦您知道查询何时运行以及频率，您可以识别最常见的查询。这些查询是您需要设计架构来支持的查询。确定了这些查询后，您应尽量减少查询数量，并确保在设计中查询到的数据存储在同一文档中。
+- en: Data not used in these queries should be put into a different collection. Data
+    that is infrequently used should also be moved to a different collection. It is
+    worth considering if you can separate your dynamic (read/write) data and your
+    static (mostly read) data. The best performance results occur when you prioritize
+    your schema design for your most common queries.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不在这些查询中使用的数据应放入不同的集合中。也应将很少使用的数据移至不同的集合中。是否可以将动态（读/写）数据与静态（主要是读取）数据分开值得考虑。优化架构设计以支持最常见的查询可以获得最佳性能结果。
+- en: Relation types
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关系类型
+- en: You should consider which data is related in terms of your application’s needs,
+    as well as the relationships between documents. You can then determine the best
+    approaches to embed or reference the data or documents. You will need to work
+    out how you can reference documents without having to perform additional queries,
+    and how many documents are updated when there is a relationship change. You must
+    also consider if the data structure is easy to query, such as with nested arrays
+    (arrays in arrays), which support modeling certain relationships.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您应考虑与您应用需求相关的数据及文档间的关系。然后，您可以确定最佳的嵌入或引用数据或文档的方法。您需要解决如何引用文档而不需要执行额外的查询，以及在关系更改时更新多少文档。还必须考虑数据结构是否易于查询，例如支持建模特定关系的嵌套数组（数组中的数组）。
+- en: Cardinality
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基数
+- en: Once you have determined how your documents and your data are related, you should
+    consider the cardinality of these relationships. Specifically, is it one-to-one,
+    one-to-many, many-to-many, one-to-millions, or many-to-billions? It is very important
+    to establish the cardinality of the relationships to ensure you use the best format
+    to model them in your MongoDB schema. You should also consider whether the object
+    on the many/millions side is accessed separately or only in the context of the
+    parent object, as well as the ratio of updates to reads for the data field in
+    question. The answers to these questions will help you to determine whether you
+    should embed documents or reference documents and if you should be denormalizing
+    data across documents.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦确定了文档和数据之间的关系，应考虑这些关系的基数。具体来说，它是一对一，一对多，多对多，一对百万还是多对十亿？确立关系的基数非常重要，以确保在 MongoDB
+    架构中使用最佳格式对其进行建模。您还应考虑在访问许多/百万侧的对象时是否单独访问或仅在父对象的上下文中访问，以及问题数据字段的更新与读取的比率。这些问题的答案将帮助您确定是否应嵌入文档或引用文档，以及是否应跨文档对数据进行去规范化。
+- en: Schema Design Patterns
+  id: totrans-21
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 架构设计模式
+- en: Schema design is important in MongoDB, as it impacts directly on application
+    performance. There are many common issues in schema design that can be addressed
+    through the use of known patterns, or “building blocks.” It is best practice in
+    schema design to use one or more of these patterns together.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MongoDB 中，模式设计对应用程序性能直接影响重大。模式设计中有许多常见问题可以通过已知模式或“构建块”来解决。在模式设计中最佳实践是同时使用一个或多个这些模式。
+- en: 'Scheme design patterns that might apply include:'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可能适用的方案设计模式包括：
+- en: '*Polymorphic pattern*'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*多态模式*'
+- en: This is suitable where all documents in a collection have a similar, but not
+    identical, structure. It involves identifying the common fields across the documents
+    that support the common queries that will be run by the application. Tracking
+    specific fields in the documents or subdocuments will help identify the differences
+    between the data and different code paths or classes/subclasses that can be coded
+    in your application to manage these differences. This allows for the use of simple
+    queries in a single collection of not-quite-identical documents to improve query
+    performance.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这适用于集合中所有文档具有相似但不完全相同结构的情况。它涉及识别文档中支持应用程序将运行的常见查询的公共字段。跟踪文档或子文档中的特定字段有助于识别数据之间的差异，以及可以在应用程序中编码的不同代码路径或类/子类。这允许在不完全相同的文档集合中使用简单查询以提高查询性能。
+- en: '*Attribute pattern*'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*属性模式*'
+- en: This is suitable when there are a subset of fields in a document that share
+    common features on which you want to sort or query, or when the fields you need
+    to sort on only exist in a subset of the documents, or when both of these conditions
+    are true. It involves reshaping the data into an array of key/value pairs and
+    creating an index on the elements in this array. Qualifiers can be added as additional
+    fields to these key/value pairs. This pattern assists in targeting many similar
+    fields per document so that fewer indexes are required and queries become simpler
+    to write.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当文档中有一个子集的字段共享公共特征，并且您想要对其进行排序或查询时，或者需要进行排序的字段仅存在于文档的子集中，或者这两种情况同时成立时，适合使用此模式。它涉及将数据重新塑造为键/值对数组，并在此数组的元素上创建索引。修饰符可以作为这些键/值对的附加字段添加。此模式有助于针对每个文档的许多类似字段，从而减少所需的索引并简化查询。
+- en: '*Bucket pattern*'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*桶模式*'
+- en: This is suitable for time series data where the data is captured as a stream
+    over a period of time. It is much more efficient in MongoDB to “bucket” this data
+    into a set of documents each holding the data for a particular time range than
+    it is to create a document per point in time/data point. For example, you might
+    use a one-hour bucket and place all readings for that hour in an array in a single
+    document. The document itself will have start and end times indicating the period
+    this “bucket” covers.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此适用于时间序列数据，其中数据作为一段时间内的流捕获。在 MongoDB 中，将此数据“分桶”为一组文档，每个文档都包含特定时间范围内的数据，比创建每个时间点/数据点的文档要有效得多。例如，您可以使用一个小时的“桶”，将该小时内的所有读数放入单个文档中的数组中。文档本身将具有指示此“桶”覆盖的时间段的开始和结束时间。
+- en: '*Outlier pattern*'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*异常模式*'
+- en: This addresses the rare instances where a few queries of documents fall outside
+    the normal pattern for the application. It is an advanced schema pattern designed
+    for situations where popularity is a factor. This can be seen in social networks
+    with major influencers, book sales, movie reviews, etc. It uses a flag to indicate
+    the document is an outlier and stores the additional overflow into one or more
+    documents that refer back to the first document via the `"_id"`. The flag will
+    be used by your application code to make the additional queries to retrieve the
+    overflow document(s).
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 处理偶尔的文档查询超出应用程序正常模式的罕见情况。这是为受欢迎度影响的高级架构模式设计的情况。这可以在社交网络中看到，例如重要影响者、图书销售、电影评论等。它使用一个标志来指示文档是异常值，并将额外的内容存储到一个或多个文档中，这些文档通过`"_id"`引用回第一个文档。标志将由您的应用程序代码使用，以获取溢出文档。
+- en: '*Computed pattern*'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*计算模式*'
+- en: This is used when data needs to be computed frequently, and it can also be used
+    when the data access pattern is read-intensive. This pattern recommends that the
+    calculations be done in the background, with the main document being updated periodically.
+    This provides a valid approximation of the computed fields or documents without
+    having to continuously generate these for individual queries. This can significantly
+    reduce the strain on the CPU by avoiding repetition of the same calculations,
+    particularly in use cases where reads trigger the calculation and you have a high
+    read-to-write ratio.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当数据需要频繁计算时使用，也可以在数据访问模式为读取密集型时使用。这种模式建议在后台进行计算，并定期更新主文档。这样可以有效地近似计算字段或文档，而无需为每个查询持续生成这些内容。这样可以显著减少CPU的负担，避免重复计算相同的内容，特别是在读操作触发计算且读写比高的情况下。
+- en: '*Subset pattern*'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*子集模式*'
+- en: This is used when you have a working set that exceeds the available RAM of the
+    machine. This can be caused by large documents that contain a lot of information
+    that isn’t being used by your application. This pattern suggests that you split
+    frequently used data and infrequently used data into two separate collections.
+    A typical example might be an ecommerce application keeping the 10 most recent
+    reviews of a product in the “main” (frequently accessed) collection and moving
+    all the older reviews into a second collection queried only if the application
+    needs more than the last 10 reviews.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您的工作集超过机器可用RAM时使用。这可能是由包含许多信息但未被应用程序使用的大型文档引起的。这种模式建议将频繁使用的数据和不经常使用的数据分割到两个单独的集合中。典型的例子可能是电子商务应用程序在“主”（经常访问）集合中保留产品的最近10条评论，并将所有较旧的评论移动到第二个集合中，仅在应用程序需要超过最近10条评论时才查询该集合。
+- en: '*Extended Reference pattern*'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*扩展引用模式*'
+- en: This is used for scenarios where you have many different logical entities or
+    “things,” each with their own collection, but you may want to gather these entities
+    together for a specific function. A typical ecommerce schema might have separate
+    collections for orders, customers, and inventory. This can have a negative performance
+    impact when we want to collect together all the information for a single order
+    from these separate collections. The solution is to identify the frequently accessed
+    fields and duplicate these within the order document. In the case of an ecommerce
+    order, this would be the name and address of the customer we are shipping the
+    item to. This pattern trades off the duplication of data for a reduction in the
+    number of queries necessary to collate the information together.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用于存在许多不同逻辑实体或“物件”，每个实体都有自己的集合，但您可能希望为特定功能将这些实体聚集在一起的情景。典型的电子商务架构可能为订单、客户和库存分别设置不同的集合。当我们想要从这些单独的集合中汇总单个订单的所有信息时，这可能会对性能产生负面影响。解决方案是识别经常访问的字段，并在订单文档内部进行重复。对于电子商务订单而言，这可能是我们要将商品发运给的客户的姓名和地址。这种模式通过数据重复换取减少汇总信息所需的查询数量。
+- en: '*Approximation pattern*'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*近似模式*'
+- en: This is useful for situations where resource-expensive (time, memory, CPU cycles)
+    calculations are needed but where exact precision is not absolutely required.
+    An example of this is an image or post like/love counter or a page view counter,
+    where knowing the exact count (e.g., whether it’s 999,535 or 1,000,0000) isn’t
+    necessary. In these situations, applying this pattern can greatly reduce the number
+    of writes—for example, by only updating the counter after every 100 or more views
+    instead of after every view.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于需要资源密集型（时间、内存、CPU周期）计算但精确性并非绝对必需的情况，这是非常有用的。例如，像/赞数或页面访问计数器这样的图片或帖子，在这些情况下，应用这种模式可以大大减少写入数量，例如每100次或更多次浏览后才更新计数器，而不是每次浏览都更新。
+- en: '*Tree pattern*'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*树模式*'
+- en: This can be applied when you have a lot of queries and have data that is primarily
+    hierarchical in structure. It follows the earlier concept of storing data together
+    that is typically queried together. In MongoDB, you can easily store a hierarchy
+    in an array within the same document. In the example of the ecommerce site, specifically
+    its product catalog, there are often products that belong to multiple categories
+    or to categories that are part of other categories. An example might be “Hard
+    Drive,” which is itself a category but comes under the “Storage” category, which
+    itself is under the “Computer Parts” category, which is part of the “Electronics”
+    category. In this kind of scenario, we would have a field that would track the
+    entire hierarchy and another field that would hold the immediate category (“Hard
+    Drive”). The entire hierarchy field, kept in an array, provides the ability to
+    use a multikey index on those values. This ensures all items related to categories
+    in the hierarchy will be easily found. The immediate category field allows all
+    items directly related to this category to be found.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您有大量查询且数据主要是分层结构时，可以应用此模式。它遵循将通常一起查询的数据存储在一起的早期概念。在MongoDB中，您可以在同一文档中的数组中轻松存储层次结构。在电子商务网站的产品目录示例中，通常有属于多个类别或属于其他类别的类别的产品。例如，“硬盘”本身是一个类别，但属于“存储”类别，后者又属于“计算机配件”类别，后者又是“电子产品”类别的一部分。在这种情况下，我们将有一个字段来跟踪整个层次结构，并且另一个字段将保留直接类别（“硬盘”）。在这些值上使用多键索引，可以确保轻松找到与层次结构中类别相关的所有项目。直接类别字段允许找到与此类别直接相关的所有项目。
+- en: '*Preallocation pattern*'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*预分配模式*'
+- en: This was primarily used with the MMAP storage engine, but there are still uses
+    for this pattern. The pattern recommends creating an initial empty structure that
+    will be populated later. An example use could be for a reservation system that
+    manages a resource on a day-by-day basis, keeping track of whether it is free
+    or already booked/unavailable. A two-dimensional structure of resources (*x*)
+    and days (*y*) makes it trivially easy to check availability and perform calculations.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然最初主要用于MMAP存储引擎，但现在仍有此模式的用途。该模式建议创建一个初始空结构，稍后将其填充。例如，用于管理按天管理资源的预订系统，跟踪资源是否空闲或已预订/不可用。资源（*x*）和天数（*y*）的二维结构使得检查可用性和执行计算非常简单。
+- en: '*Document Versioning pattern*'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*文档版本化模式*'
+- en: 'This provides a mechanism to enable retention of older revisions of documents.
+    It requires an extra field to be added to each document to track the document
+    version in the “main” collection, and an additional collection that contains all
+    the revisions of the documents. This pattern makes a few assumptions: specifically,
+    that each document has a limited number of revisions, that there are not large
+    numbers of documents that need to be versioned, and that the queries are primarily
+    done on the current version of each document. In situations where these assumptions
+    are not valid, you may need to modify the pattern or consider a different schema
+    design pattern.'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这提供了一种机制，可以保留文档的旧版本。需要向每个文档添加一个额外的字段来跟踪“主”集合中的文档版本，以及一个包含所有文档修订版本的附加集合。这种模式有一些假设，特别是每个文档有限数量的修订版本，需要版本化的文档数量不多，并且主要查询都是在每个文档的当前版本上进行。在这些假设不成立的情况下，您可能需要修改模式或考虑不同的模式设计方案。
+- en: MongoDB provides several useful resources online on patterns and schema design.
+    MongoDB University offers a free course, [M320 Data Modeling](https://oreil.ly/BYtSr),
+    as well as a [“Building with Patterns” blog series](https://oreil.ly/MjSld).
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 在线提供了关于模式和架构设计的多个有用资源。MongoDB University 提供了一门免费课程，[M320 数据建模](https://oreil.ly/BYtSr)，以及一个[“使用模式构建”博客系列](https://oreil.ly/MjSld)。
+- en: Normalization Versus Denormalization
+  id: totrans-47
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 规范化与去规范化
+- en: There are many ways to represent data, and one of the most important issues
+    to consider is how much you should normalize your data. *Normalization* refers
+    to dividing up data into multiple collections with references between collections.
+    Each piece of data lives in one collection, although multiple documents may reference
+    it. Thus, to change the data, only one document must be updated. The MongoDB Aggregation
+    Framework offers joins with the `$lookup` stage, which performs a left outer join
+    by adding documents to the “joined” collection where there is a matching document
+    in the source collection—it adds a new array field to each matched document in
+    the “joined” collection with the details of the document from the source collection.
+    These reshaped documents are then available in the next stage for further processing.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有许多表示数据的方式，其中一个最重要的问题是考虑数据的规范化程度。*规范化*指的是将数据分成多个集合，并在集合之间建立引用关系。每个数据片段只存在于一个集合中，尽管可能有多个文档引用它。因此，要更改数据，只需更新一个文档。MongoDB
+    聚合框架提供了带有 `$lookup` 阶段的连接功能，通过将“加入”集合中具有源集合匹配文档的文档添加到“加入”集合中，向每个匹配文档添加一个新的数组字段，其中包含来自源集合的文档的详细信息。这些重塑后的文档随后可以在下一个阶段中进一步处理。
+- en: '*Denormalization* is the opposite of normalization: embedding all of the data
+    in a single document. Instead of documents containing references to one definitive
+    copy of the data, many documents may have copies of the data. This means that
+    multiple documents need to be updated if the information changes, but enables
+    all related data to be fetched with a single query.'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*去规范化*是规范化的相反：将所有数据嵌入到单个文档中。而不是文档包含对数据的一份定义性拷贝的引用，许多文档可能包含数据的拷贝。这意味着如果信息更改，需要更新多个文档，但可以使用单个查询获取所有相关数据。'
+- en: 'Deciding when to normalize and when to denormalize can be difficult: typically,
+    normalizing makes writes faster and denormalizing makes reads faster. Thus, you
+    need to decide what trade-offs make sense for your application.'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 决定何时规范化和何时去规范化可能很困难：通常规范化使写操作更快，而去规范化使读操作更快。因此，您需要决定哪些权衡对您的应用程序是合理的。
+- en: Examples of Data Representations
+  id: totrans-51
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 数据表示示例
+- en: 'Suppose we are storing information about students and the classes that they
+    are taking. One way to represent this would be to have a *students* collection
+    (each student is one document) and a *classes* collection (each class is one document).
+    Then we could have a third collection (*studentClasses*) that contains references
+    to the students and the classes they are taking:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们正在存储关于学生和他们所选课程的信息。一种表示方法是有一个*students*集合（每个学生是一个文档），一个*classes*集合（每门课程是一个文档）。然后我们可以有一个第三个集合（*studentClasses*），其中包含对学生和他们所选课程的引用：
+- en: '[PRE0]'
+  id: totrans-53
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: If you are familiar with relational databases, you may have seen this type of
+    join table before (although typically you’d have one student and one class per
+    document, instead of a list of class `"_id"`s). It’s a bit more MongoDB-ish to
+    put the classes in an array, but you usually wouldn’t want to store the data this
+    way because it requires a lot of querying to get to the actual information.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你熟悉关系数据库，可能以前见过这种连接表（虽然通常每个文档只有一个学生和一个课程，而不是一个课程`"_id"`列表）。在MongoDB中，将课程放入数组可能更合适一些，但通常不建议以这种方式存储数据，因为这样需要大量查询才能获取实际信息。
+- en: Suppose we wanted to find the classes a student was taking. We’d query for the
+    student in the *students* collection, query *studentClasses* for the course `"_id"`s,
+    and then query the *classes* collection for the class information. Thus, finding
+    this information would take three trips to the server. This is generally *not*
+    the way you want to structure data in MongoDB, unless the classes and students
+    are changing constantly and reading the data does not need to be done quickly.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们想要找出一个学生正在上的课程。我们将在*students*集合中查询学生，在*studentClasses*中查询课程`"_id"`，然后在*classes*集合中查询课程信息。因此，查找这些信息将需要向服务器发送三次请求。通常情况下，这不是在MongoDB中结构化数据的方式，除非课程和学生经常变化且读取数据不需要快速完成。
+- en: 'We can remove one of the dereferencing queries by embedding class references
+    in the student’s document:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以通过在学生文档中嵌入类引用来消除一个解引用查询：
+- en: '[PRE1]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: The `"classes"` field keeps an array of `"_id"`s of classes that John Doe is
+    taking. When we want to find out information about those classes, we can query
+    the *classes* collection with those `"_id"`s. This only takes two queries. This
+    is a fairly popular way to structure data that does not need to be instantly accessible
+    and changes, but not constantly.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"classes"`字段保留John Doe正在上的班级的`"_id"`数组。当我们想要了解这些班级的信息时，可以使用这些`"_id"`在*classes*集合中进行查询。这只需要两个查询。这是一种相当流行的数据结构方式，不需要立即访问且变化不频繁但也不是一成不变的数据。'
+- en: 'If we need to optimize reads further, we can get all of the information in
+    a single query by fully denormalizing the data and storing each class as an embedded
+    document in the `"classes"` field:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们需要进一步优化读取，我们可以通过完全去归一化数据并将每个班级作为嵌入文档存储在`"classes"`字段中来一次性获取所有信息的查询：
+- en: '[PRE2]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: The upside of this is that it only takes one query to get the information. The
+    downsides are that it takes up more space and is more difficult to keep in sync.
+    For example, if it turns out that physics was supposed to be worth four credits
+    (not three), every student in the physics class would need to have their document
+    updated (instead of just updating a central “Physics” document).
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这样做的好处是只需要一个查询即可获取信息。缺点是占用更多空间且更难保持同步。例如，如果事实证明物理应该值四学分（而不是三学分），则物理班的每个学生都需要更新他们的文档（而不仅仅是更新一个中心的“物理”文档）。
+- en: 'Finally, you can use the Extended Reference pattern mentioned earlier, which
+    is a hybrid of embedding and referencing—you create an array of subdocuments with
+    the frequently used information, but with a reference to the actual document for
+    more information:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，你可以使用之前提到的扩展引用模式，这是嵌入和引用的混合体——你创建一个包含常用信息的子文档数组，但同时有一个指向实际文档的引用以获取更多信息：
+- en: '[PRE3]'
+  id: totrans-63
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'This approach is also a nice option because the amount of information embedded
+    can change over time as your requirements change: if you want to include more
+    or less information on a page, you can embed more or less of it in the document.'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种方法也是一个不错的选择，因为随着需求的变化，嵌入的信息量随时间可以改变：如果你想在页面中包含更多或更少的信息，可以在文档中嵌入更多或更少的信息。
+- en: Another important consideration is how often this information will change, versus
+    how often it’s read. If it will be updated regularly, then normalizing it is a
+    good idea. However, if it changes infrequently, then there is little benefit to
+    optimizing the update process at the expense of every read your application performs.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个重要的考虑因素是这些信息变化的频率，以及它们被阅读的频率。如果它会经常更新，那么归一化是个好主意。然而，如果变化不频繁，那么优化更新过程可能对应用程序的每次读取都是有代价的，收益较少。
+- en: For example, a textbook normalization use case is to store a user and their
+    address in separate collections. However, people’s addresses rarely change, so
+    you generally shouldn’t penalize every read on the off chance that someone’s moved.
+    Your application should embed the address in the user document.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，教科书归一化的一个用例是将用户及其地址存储在单独的集合中。然而，人们的地址很少更改，所以通常不应因为某人可能搬迁而对每次读取进行惩罚。你的应用程序应该将地址嵌入到用户文档中。
+- en: If you decide to use embedded documents and you need to update them, you should
+    set up a cron job to ensure that any updates you do are successfully propagated
+    to every document. For example, suppose you attempt to do a multi-update but the
+    server crashes before all of the documents have been updated. You need a way to
+    detect this and retry the update.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果决定使用嵌入式文档并需要更新它们，应设置定期任务以确保成功地将任何更新传播到每个文档。例如，假设你尝试进行多次更新，但服务器在所有文档更新完成之前崩溃。你需要一种方法来检测并重试更新。
+- en: In terms of update operators, `"$set"` is idempotent but `"$inc"` is not. Idempotent
+    operations will have the same outcome whether tried once or several times; in
+    the case of a network error, retrying the operation will be sufficient for the
+    update to occur. In the case of operators that are not idempotent, the operation
+    should be broken into two operations that are individually idempotent and safe
+    to retry. This can be achieved by including a unique pending token in the first
+    operation and having the second operation use both a unique key and the unique
+    pending token. This approach allows `"$inc"` to be idempotent because each individual
+    `updateOne` operation is idempotent.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在更新操作符方面，`"$set"`是幂等的，但`"$inc"`则不是。幂等操作无论尝试一次还是多次，结果都相同；在网络错误的情况下，重试操作足以使更新发生。对于不是幂等的操作符，操作应分为两个分别是幂等且可以安全重试的操作。这可以通过在第一个操作中包含唯一的待处理令牌，并在第二个操作中同时使用唯一键和唯一的待处理令牌来实现。这种方法允许`"$inc"`是幂等的，因为每个单独的`updateOne`操作都是幂等的。
+- en: To some extent, the more information you are generating, the less of it you
+    should embed. If the content of the embedded fields or number of embedded fields
+    is supposed to grow without bound then they should generally be referenced, not
+    embedded. Things like comment trees or activity lists should be stored as their
+    own documents, not embedded. It is also worth considering using the Subset pattern
+    (described in [“Schema Design Patterns”](#schemeDesignPatterns)) to store the
+    most recent items (or some other subset) in the document.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在一定程度上，生成的信息越多，嵌入的内容就越少。如果嵌入字段的内容或嵌入字段的数量可能会无限增长，则通常应该使用引用而不是嵌入。像评论树或活动列表这样的内容应存储为它们自己的文档，而不是嵌入其中。还值得考虑使用子集模式（在[“模式设计模式”](#schemeDesignPatterns)中描述）来存储最新的项目（或其他子集）在文档中。
+- en: Finally, the fields that are included should be integral to the data in the
+    document. If a field is almost always excluded from your results when you query
+    for a document, it’s a good sign that it may belong in another collection. These
+    guidelines are summarized in [Table 9-1](#table8-1).
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，包含的字段应与文档中的数据完整相关。如果在查询文档时，一个字段几乎总是被排除在结果之外，这表明它可能属于另一个集合。这些准则在[表 9-1](#table8-1)中总结。
+- en: Table 9-1\. Comparison of embedding versus references
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 9-1\. 嵌入与引用的比较
+- en: '| Embedding is better for... | References are better for... |'
+  id: totrans-72
+  prefs: []
+  type: TYPE_TB
+  zh: '| 嵌入更适合... | 引用更适合... |'
+- en: '| --- | --- |'
+  id: totrans-73
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| Small subdocuments | Large subdocuments |'
+  id: totrans-74
+  prefs: []
+  type: TYPE_TB
+  zh: '| 小型子文档 | 大型子文档 |'
+- en: '| Data that does not change regularly | Volatile data |'
+  id: totrans-75
+  prefs: []
+  type: TYPE_TB
+  zh: '| 不经常更改的数据 | 易变数据 |'
+- en: '| When eventual consistency is acceptable | When immediate consistency is necessary
+    |'
+  id: totrans-76
+  prefs: []
+  type: TYPE_TB
+  zh: '| 当接受最终一致性时 | 当需要立即一致性时 |'
+- en: '| Documents that grow by a small amount | Documents that grow by a large amount
+    |'
+  id: totrans-77
+  prefs: []
+  type: TYPE_TB
+  zh: '| 少量增长的文档 | 大量增长的文档 |'
+- en: '| Data that you’ll often need to perform a second query to fetch | Data that
+    you’ll often exclude from the results |'
+  id: totrans-78
+  prefs: []
+  type: TYPE_TB
+  zh: '| 您经常需要执行第二个查询来获取的数据 | 您经常在结果中排除的数据 |'
+- en: '| Fast reads | Fast writes |'
+  id: totrans-79
+  prefs: []
+  type: TYPE_TB
+  zh: '| 快速读取 | 快速写入 |'
+- en: 'Suppose we had a *users* collection. Here are some example fields we might
+    have in the user documents and an indication of whether or not they should be
+    embedded:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们有一个*users*集合。以下是可能包含在用户文档中的一些示例字段及其是否应该嵌入的指示：
+- en: Account preferences
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 账户偏好
+- en: These are only relevant to this user document, and will probably be exposed
+    with other user information in the document. Account preferences should generally
+    be embedded.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些只与此用户文档相关，并且可能会与文档中的其他用户信息一起公开。账户偏好通常应该被嵌入。
+- en: Recent activity
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最近活动
+- en: This depends on how much recent activity grows and changes. If it is a fixed-size
+    field (say, the last 10 things), it might be useful to embed this information
+    or to implement the Subset pattern.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这取决于最近活动的增长和变化情况。如果它是一个固定大小的字段（例如，最近的10个事物），可能有必要将这些信息嵌入或实现子集模式。
+- en: Friends
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 好友
+- en: Generally this information should not be embedded, or at least not fully. See
+    [“Friends, Followers, and Other Inconveniences”](#friendFollowers_otherinconv).
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常不应完全嵌入此类信息，或者至少不应完全嵌入。参见[“好友、关注者和其他不便之处”](#friendFollowers_otherinconv)。
+- en: All of the content this user has produced
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此用户产生的所有内容
+- en: This should not be embedded.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这不应该被嵌入。
+- en: Cardinality
+  id: totrans-89
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 基数
+- en: '*Cardinality* is an indication of how many references a collection has to another
+    collection. Common relationships are one-to-one, one-to-many, or many-to-many.
+    For example, suppose we had a blog application. Each *post* has a *title*, so
+    that’s a one-to-one relationship. Each *author* has many *posts*, so that’s a
+    one-to-many relationship. And *posts* have many *tags* and *tags* refer to many
+    *posts*, so that’s a many-to-many relationship.'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*基数*表示一个集合对另一个集合的引用数量。常见的关系是一对一、一对多或多对多。例如，假设我们有一个博客应用程序。每篇*文章*都有一个*标题*，因此这是一对一关系。每个*作者*有多篇*文章*，所以这是一对多关系。*文章*有多个*标签*，*标签*也指向多篇*文章*，因此这是多对多关系。'
+- en: 'When using MongoDB, it can be conceptually useful to split “many” into subcategories:
+    “many” and “few.” For example, you might have a one-to-few relationship between
+    authors and posts: each author only writes a few posts. You might have many-to-few
+    relation between blog posts and tags: you probably have many more blog posts than
+    you have tags. However, you’d have a one-to-many relationship between blog posts
+    and comments: each post has many comments.'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用MongoDB时，将“许多”概念上分为“许多”和“少”。例如，您可能在作者和文章之间有一个一对少的关系：每个作者只写几篇文章。您可能在博客文章和标签之间有一个多对少的关系：您可能拥有比标签更多的博客文章。但是，您可能在博客文章和评论之间有一个一对多的关系：每篇文章有许多评论。
+- en: Determining few versus many relations can help you decide what to embed versus
+    what to reference. Generally, “few” relationships will work better with embedding,
+    and “many” relationships will work better as references.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确定少关系与多关系可以帮助您决定何时嵌入何时引用。通常情况下，“少”关系与嵌入效果更好，“多”关系与引用效果更好。
+- en: Friends, Followers, and Other Inconveniences
+  id: totrans-93
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 朋友、粉丝和其他不便之处
+- en: Keep your friends close and your enemies embedded.
+  id: totrans-94
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: 让朋友近在咫尺，而敌人则深藏不露。
+- en: 'This section covers considerations for social graph data. Many social applications
+    need to link people, content, followers, friends, and so on. Figuring out how
+    to balance embedding and referencing this highly connected information can be
+    tricky, but generally following, friending, or favoriting can be simplified to
+    a publication/subscription system: one user is subscribing to notifications from
+    another. Thus, there are two basic operations that need to be efficient: storing
+    subscribers and notifying all interested parties of an event.'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节涵盖社交图数据的考虑因素。许多社交应用程序需要连接人员、内容、关注者、朋友等。找到如何平衡嵌入和引用这些高度连接信息可能有些棘手，但通常遵循、成为朋友或收藏可以简化为发布/订阅系统：一个用户订阅另一个用户的通知。因此，有两种基本操作需要高效处理：存储订阅者和通知所有感兴趣的人某个事件。
+- en: 'There are three ways people typically implement subscribing. The first option
+    is to put the producer in the subscriber’s document, which looks something like
+    this:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 人们通常有三种方式实现订阅。第一种选择是将生产者放入订阅者的文档中，看起来像这样：
+- en: '[PRE4]'
+  id: totrans-97
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'Now, given a user’s document, you can issue a query like the following to find
+    all of the activities that have been published that they might be interested in:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，给定用户的文档，您可以发出以下查询来查找他们可能感兴趣的所有已发布活动：
+- en: '[PRE5]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: However, if you need to find everyone who is interested in a newly published
+    activity, you’d have to query the `"following"` field across all users.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，如果您需要找到所有对新发布的活动感兴趣的人，您将不得不跨所有用户查询“following”字段。
+- en: 'Alternatively, you could append the followers to the producer’s document, like
+    so:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，您可以将关注者附加到生产者的文档中，就像这样：
+- en: '[PRE6]'
+  id: totrans-102
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Whenever this user does something, all the users you need to notify are right
+    there. The downside is that now you need to query the whole *users* collection
+    to find everyone a user follows (the opposite limitation as in the previous case).
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每当此用户执行某些操作时，所有需要通知的用户都在这里。缺点是现在您需要查询整个*用户*集合来找到每个用户关注的所有人（与前一种情况相反的限制）。
+- en: 'Either of these options comes with an additional downside: they make your user
+    documents larger and more volatile. The `"following"` (or `"followers"`) field
+    often won’t even need to be returned: how often do you want to list every follower?
+    Thus, the final option neutralizes these downsides by normalizing even further
+    and storing subscriptions in another collection. Normalizing this far is often
+    overkill, but it can be useful for an extremely volatile field that often isn’t
+    returned with the rest of the document. `"followers"` may be a sensible field
+    to normalize this way.'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这两个选项都带来了一个额外的缺点：它们使您的用户文档变得更大并且更不稳定。`"following"`（或`"followers"`）字段通常甚至不需要返回：您想多频繁地列出每个关注者？因此，最终的选项通过进一步归一化甚至存储在另一个集合中的订阅来抵消这些缺点。彻底归一化通常是过度的，但对于经常与其余文档一起返回的极不稳定的字段可能是有用的。`"followers"`可能是以这种方式彻底归一化的一个明智的字段。
+- en: 'In this case you keep a collection that matches publishers to subscribers,
+    with documents that look something like this:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，您需要维护一个将发布者与订阅者匹配的集合，并且文档看起来像这样：
+- en: '[PRE7]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: This keeps your user documents svelte but means an extra query is needed to
+    get the followers.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这样可以保持您的用户文档简洁，但意味着需要额外的查询来获取关注者。
+- en: Dealing with the Wil Wheaton effect
+  id: totrans-108
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 处理威尔·惠特恩效应
+- en: 'Regardless of which strategy you use, embedding only works with a limited number
+    of subdocuments or references. If you have celebrity users, they may overflow
+    any document that you’re storing followers in. The typical way of compensating
+    for this is to use the Outlier pattern discussed in [“Schema Design Patterns”](#schemeDesignPatterns)
+    and have a “continuation” document, if necessary. For example, you might have:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论您使用哪种策略，只嵌入有限数量的子文档或引用是可行的。如果您有名人用户，他们可能会溢出您存储关注者的任何文档。补偿此问题的典型方法是使用[“模式设计模式”](#schemeDesignPatterns)中讨论的异常模式，并在必要时使用“续集”文档。例如，您可能会有：
+- en: '[PRE8]'
+  id: totrans-110
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Then add application logic to support fetching the documents in the “to be continued”
+    (`"tbc"`) array.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后添加应用逻辑来支持获取“待续”(`"tbc"`)数组中的文档。
+- en: Optimizations for Data Manipulation
+  id: totrans-112
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据操作的优化
+- en: To optimize your application, you must first determine what its bottleneck is
+    by evaluating its read and write performance. Optimizing reads generally involves
+    having the correct indexes and returning as much of the information as possible
+    in a single document. Optimizing writes usually involves minimizing the number
+    of indexes you have and making updates as efficient as possible.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要优化您的应用程序，您必须首先通过评估其读取和写入性能来确定其瓶颈所在。优化读取通常涉及拥有正确的索引并尽可能返回单个文档中的尽可能多的信息。优化写入通常涉及最小化索引数量并尽可能高效地进行更新。
+- en: 'There is often a trade-off between schemas that are optimized for writing quickly
+    and those that are optimized for reading quickly, so you may have to decide which
+    is more important for your application. Factor in not only the importance of reads
+    versus writes, but also their proportions: if writes are more important but you’re
+    doing a thousand reads to every write, you may still want to optimize reads first.'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常在为快速写入而优化的模式和为快速读取而优化的模式之间存在权衡，因此您可能必须决定对于您的应用程序来说哪个更重要。不仅要考虑读取与写入的重要性，还要考虑它们的比例：如果写入更重要，但您每次写入都进行了一千次读取，您可能仍然希望优先优化读取。
+- en: Removing Old Data
+  id: totrans-115
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 删除旧数据
+- en: 'Some data is only important for a brief time: after a few weeks or months it
+    is just wasting storage space. There are three popular options for removing old
+    data: using capped collections, using TTL collections, and dropping collections
+    per time period.'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有些数据只在短时间内重要：几周或几个月后，它只会浪费存储空间。有三种流行的方法可以删除旧数据：使用固定大小集合（capped collections）、使用
+    TTL 集合和按时间段删除集合。
+- en: 'The easiest option is to use a capped collection: set it to a large size and
+    let old data “fall off” the end. However, capped collections pose certain limitations
+    on the operations you can do and are vulnerable to spikes in traffic, temporarily
+    lowering the length of time that they can hold. See [“Capped Collections”](ch06.xhtml#sect1_d1e7549)
+    for more information.'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最简单的选项是使用固定大小集合：将其设置为一个大尺寸，让旧数据“掉落”到末尾。然而，固定大小集合对您可以执行的操作有一定的限制，并且容易受到流量峰值的影响，暂时降低它们可以保持的时间长度。更多信息请参见[“固定大小集合”](ch06.xhtml#sect1_d1e7549)。
+- en: 'The second option is to use a TTL collections. This gives you finer-grain control
+    over when documents are removed, but it may not be fast enough for collections
+    with a very high write volume: it removes documents by traversing the TTL index
+    the same way a user-requested remove would. If a TTL collection can keep up, though,
+    this is probably the easiest solution to implement. See [“Time-To-Live Indexes”](ch06.xhtml#sect1-ttl)
+    for more information about TTL indexes.'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二个选项是使用 TTL 集合。这可以让您更精细地控制文档何时被移除，但对于写入量非常高的集合可能不够快速：它通过遍历 TTL 索引来移除文档，方式与用户请求的移除相同。但是，如果
+    TTL 集合能够跟得上，这可能是最容易实现的解决方案。有关 TTL 索引的更多信息，请参阅[“生存时间索引”](ch06.xhtml#sect1-ttl)。
+- en: 'The final option is to use multiple collections: for example, one collection
+    per month. Every time the month changes, your application starts using this month’s
+    (empty) collection and searching for data in both the current and previous months’
+    collections. Once a collection is older than, say, six months, you can drop it.
+    This strategy can keep up with nearly any volume of traffic, but it’s more complex
+    to build an application around because you have to use dynamic collection (or
+    database) names and possibly query multiple databases.'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最终的选项是使用多个集合：例如，每个月一个集合。每次月份变更时，您的应用程序开始使用本月的（空）集合，并在当前和前几个月的集合中搜索数据。一旦一个集合超过了，比如说，六个月，您可以丢弃它。这种策略可以应对几乎任何量的流量，但构建应用程序会更加复杂，因为您需要使用动态集合（或数据库）名称，并可能查询多个数据库。
+- en: Planning Out Databases and Collections
+  id: totrans-120
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 规划数据库和集合
+- en: Once you have sketched out what your documents look like, you must decide what
+    collections or databases to put them in. This is often a fairly intuitive process,
+    but there are some guidelines to keep in mind.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦您勾画出您的文档的外观，您必须决定将它们放在哪些集合或数据库中。这通常是一个相当直观的过程，但有一些指导原则需要牢记。
+- en: In general, documents with a similar schema should be kept in the same collection.
+    MongoDB generally disallows combining data from multiple collections, so if there
+    are documents that need to be queried or aggregated together, those are good candidates
+    for putting in one big collection. For example, you might have documents that
+    are fairly different “shapes,” but if you’re going to be aggregating them, they
+    should all live in the same collection (or you can use the `$merge` stage if they
+    are in separate collections or databases).
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常情况下，具有相似模式的文档应放在同一个集合中。MongoDB通常不允许将来自多个集合的数据合并，因此如果有需要一起查询或聚合的文档，这些文档适合放在一个大集合中。例如，您可能有形状相当不同的文档，但如果要对它们进行聚合，它们应该都存在于同一个集合中（或者如果它们在不同的集合或数据库中，则可以使用`$merge`阶段）。
+- en: For collections, the big issues to consider are locking (you get a read/write
+    lock per document) and storage. Generally, if you have a high-write workload you
+    may need to consider using multiple physical volumes to reduce I/O bottlenecks.
+    Each database can reside in its own directory when you use the `--directoryperdb`
+    option, allowing you to mount different databases to different volumes. Thus,
+    you may want all items within a database to be of similar “quality,” with a similar
+    access pattern or similar traffic levels.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于集合，需要考虑的主要问题是锁定（每个文档获取读/写锁）和存储。一般来说，如果您有高写入工作负载，可能需要考虑使用多个物理卷来减少I/O瓶颈。当您使用`--directoryperdb`选项时，每个数据库可以驻留在自己的目录中，允许您将不同的数据库挂载到不同的卷上。因此，您可能希望数据库中的所有项具有类似的“质量”，具有类似的访问模式或类似的流量水平。
+- en: 'For example, suppose you have an application with several components: a logging
+    component that creates a huge amount of not-very-valuable data, a user collection,
+    and a couple of collections for user-generated data. These collections are high-value:
+    it is important that user data is safe. There is also a high-traffic collection
+    for social activities, which is of lower importance but not quite as unimportant
+    as the logs. This collection is mainly used for user notifications, so it is almost
+    an append-only collection.'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设您有一个应用程序，包括几个组件：一个创建大量非常有价值数据的日志组件，一个用户集合，以及几个用于用户生成数据的集合。这些集合都是高价值的：用户数据的安全非常重要。还有一个用于社交活动的高流量集合，重要性较低，但不像日志那么不重要。这个集合主要用于用户通知，因此几乎是一个追加记录的集合。
+- en: 'Splitting these up by importance, you might end up with three databases: *logs*,
+    *activities*, and *users*. The nice thing about this strategy is that you may
+    find that your highest-value data is also what you have the least of (e.g., users
+    probably don’t generate as much data as logging does). You might not be able to
+    afford an SSD for your entire dataset, but you might be able to get one for your
+    users, or you might use RAID10 for users and RAID0 for logs and activities.'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将这些按重要性分开，你可能会得到三个数据库：*日志*、*活动*和*用户*。这种策略的好处在于，你可能会发现你的最有价值的数据也是你最少拥有的（例如，用户生成的数据可能不如日志那么多）。你可能无法为整个数据集买SSD，但你可能可以为用户买一个，或者你可以为用户使用RAID10，而为日志和活动使用RAID0。
+- en: Be aware that there are some limitations when using multiple databases prior
+    to MongoDB 4.2 and the introduction of the `$merge` operator in the Aggregation
+    Framework, which allows you to store results from an aggregation from one database
+    to a different database and a different collection within that database. An additional
+    point to note is that the `renameCollection` command is slower when copying an
+    existing collection from one database to a different database, as it must copy
+    all the documents to the new database.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在MongoDB 4.2之前及聚合框架中引入`$merge`操作符之前，使用多个数据库存在一些限制，该操作允许将聚合的结果从一个数据库存储到不同数据库和该数据库内的不同集合。另一个需要注意的点是，在将现有集合从一个数据库复制到另一个数据库时，使用`renameCollection`命令速度较慢，因为它必须将所有文档复制到新数据库。
+- en: Managing Consistency
+  id: totrans-127
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 管理一致性
+- en: You must figure out how consistent your application’s reads need to be. MongoDB
+    supports a huge variety of consistency levels, from always being able to read
+    your own writes to reading data of unknown oldness. If you’re reporting on the
+    last year of activity, you might only need data that’s correct to the last couple
+    of days. Conversely, if you’re doing real-time trading, you might need to immediately
+    read the latest writes.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您必须弄清楚您的应用程序读取数据需要多一致。MongoDB支持多种一致性级别，从始终能够读取您自己的写入数据到读取未知数据的旧度。如果您正在报告过去一年的活动情况，您可能只需要正确到过去几天的数据。相反，如果您正在进行实时交易，您可能需要立即读取最新的写入数据。
+- en: To understand how to achieve these varying levels of consistency, it is important
+    to understand what MongoDB is doing under the hood. The server keeps a queue of
+    requests for each connection. When the client sends a request, it will be placed
+    at the end of its connection’s queue. Any subsequent requests on the connection
+    will occur after the previously enqueued operation is processed. Thus, a single
+    connection has a consistent view of the database and can always read its own writes.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要了解如何实现这些不同级别的一致性，了解MongoDB在幕后的操作是很重要的。服务器保持每个连接的请求队列。当客户端发送请求时，它将被放置在其连接队列的末尾。连接上的任何后续请求将在先前入队的操作处理后发生。因此，单个连接具有数据库的一致视图，并且始终可以读取其自己的写入数据。
+- en: 'Note that this is a per-connection queue: if we open two shells, we will have
+    two connections to the database. If we perform an insert in one shell, a subsequent
+    query in the other shell might not return the inserted document. However, within
+    a single shell, if we query for a document after inserting it, the document will
+    be returned. This behavior can be difficult to duplicate by hand, but on a busy
+    server interleaved inserts and queries are likely to occur. Often developers run
+    into this when they insert data in one thread and then check that it was successfully
+    inserted in another. For a moment or two, it looks like the data was not inserted,
+    and then it suddenly appears.'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，这是一个连接队列：如果我们打开两个shell，我们将有两个连接到数据库。如果我们在一个shell中进行插入操作，在另一个shell中进行后续查询可能不会返回插入的文档。然而，在单个shell中，如果我们在插入后查询文档，文档将被返回。这种行为在手动复制时可能难以复制，但在繁忙的服务器上，插入和查询可能交错发生。开发人员经常遇到这种情况，当他们在一个线程中插入数据然后在另一个线程中检查是否成功插入时。在某个瞬间，看起来数据没有插入，然后突然出现了。
+- en: This behavior is especially worth keeping in mind when using the Ruby, Python,
+    and Java drivers, because all three use connection pooling. For efficiency, these
+    drivers open multiple connections (a *pool*) to the server and distribute requests
+    across them. They all, however, have mechanisms to guarantee that a series of
+    requests is processed by a single connection. There is detailed documentation
+    on connection pooling for the various languages in [the MongoDB Drivers Connection
+    Monitoring and Pooling specification](https://oreil.ly/nAt9i).
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当使用Ruby、Python和Java驱动程序时，特别需要注意这种行为，因为这三种语言都使用连接池。为了效率，这些驱动程序会打开多个连接（一个*池*）到服务器，并在它们之间分发请求。然而，它们都有机制来确保一系列请求由单个连接处理。有关各种语言的连接池的详细文档在[MongoDB驱动程序连接监控和池化规范](https://oreil.ly/nAt9i)中有所介绍。
+- en: When you send reads to a replica set secondary (see [Chapter 12](ch12.xhtml#chapter-repl-app)),
+    this becomes an even larger issue. Secondaries may lag behind the primary, leading
+    to reading data from seconds, minutes, or even hours ago. There are several ways
+    to deal with this, the easiest being to simply send all reads to the primary if
+    you care about staleness.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你将读操作发送到复制集的次要节点时（参见[第12章](ch12.xhtml#chapter-repl-app)），这就成为一个更大的问题。次要节点可能落后于主节点，导致读取数据是几秒、几分钟甚至几小时前的数据。有几种方法可以处理这个问题，最简单的方法是如果你关心数据的陈旧性，就把所有读取操作都发送到主节点。
+- en: 'MongoDB offers the `readConcern` option to control the consistency and isolation
+    properties of the data being read. It can be combined with `writeConcern` to control
+    the consistency and availability guarantees made to your application. There are
+    five levels: `"local"`, `"available"`, `"majority"`, `"linearizable"`, and `"snapshot"`.
+    Depending on the application, in cases where you want to avoid read staleness
+    you could consider using `"majority"`, which returns only durable data that has
+    been acknowledged by the majority of the replica set members and will not be rolled
+    back. `"linearizable"` may also be an option: it returns data that reflects all
+    successful majority-acknowledged writes that have completed prior to the start
+    of the read operation. MongoDB may wait for concurrently executing writes to finish
+    before returning the results with the `"linearizable" readConcern`.'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB提供了`readConcern`选项来控制所读取数据的一致性和隔离特性。它可以与`writeConcern`结合使用，以控制向你的应用程序所做的一致性和可用性保证。有五个级别："local"、"available"、"majority"、"linearizable"和"snapshot"。根据应用程序的不同，如果你希望避免读取数据的陈旧性，可以考虑使用"majority"，它仅返回已被大多数复制集成员确认的持久化数据，并且不会被回滚。"linearizable"也是一个选择：它返回反映了所有成功的多数确认写操作完成之前的数据。在返回带有"linearizable"的`readConcern`结果之前，MongoDB可能会等待并发执行的写操作完成。
+- en: Three senior engineers from MongoDB published a paper called [“Tunable Consistency
+    in MongoDB”](https://oreil.ly/PfcBx) at the PVLDB conference in 2019.^([1](ch09.xhtml#idm45882356872472))
+    This paper outlines the different MongoDB consistency models used for replication
+    and how application developers can utilize the various models.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 的三位资深工程师在2019年的PVLDB会议上发表了一篇名为[“MongoDB中的可调一致性”](https://oreil.ly/PfcBx)的论文。^[1](ch09.xhtml#idm45882356872472)
+    本文概述了用于复制的不同MongoDB一致性模型及应用程序开发人员如何利用这些模型。
+- en: Migrating Schemas
+  id: totrans-135
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 迁移模式
+- en: As your application grows and your needs change, your schema may have to grow
+    and change as well. There are a couple of ways of accomplishing this, but regardless
+    of the method you choose, you should carefully document each schema that your
+    application has used. Ideally, you should consider if the Document Versioning
+    pattern (see [“Schema Design Patterns”](#schemeDesignPatterns)) is applicable.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着应用程序的增长和需求的变化，你的模式可能也需要增长和变化。有几种方法可以实现这一点，但无论你选择哪种方法，你都应该仔细记录应用程序使用过的每个模式。理想情况下，你应该考虑是否适用于文档版本控制模式（参见[“模式设计模式”](#schemeDesignPatterns)）。
+- en: The simplest method is to simply have your schema evolve as your application
+    requires, making sure that your application supports all old versions of the schema
+    (e.g., accepting the existence or nonexistence of fields or dealing with multiple
+    possible field types gracefully). But this technique can become messy, particularly
+    if you have conflicting schema versions. For instance, one version might require
+    a `"mobile"` field, another version might require *not* having a `"mobile"` field
+    but instead require a different field, and yet another version might treat the
+    `"mobile"` field as optional. Keeping track of these shifting requirements can
+    gradually turn your code into spaghetti.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最简单的方法是随着应用程序的需要使模式逐步演变，确保应用程序支持所有旧版本的模式（例如，接受字段的存在或不存在，或优雅地处理多种可能的字段类型）。但是，如果您有冲突的模式版本，这种技术可能会变得混乱。例如，一个版本可能需要一个`"mobile"`字段，另一个版本可能需要*没有*`"mobile"`字段，而是需要一个不同的字段，而另一个版本可能将`"mobile"`字段视为可选。跟踪这些变化的需求可能会逐渐使您的代码变得混乱不堪。
+- en: 'To handle changing requirements in a slightly more structured way, you can
+    include a `"version"` field (or just `"v"`) in each document and use that to determine
+    what your application will accept for document structure. This enforces your schema
+    more rigorously: a document has to be valid for some version of the schema, if
+    not the current one. However, it still requires supporting old versions.'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了以稍微结构化的方式处理变化的需求，您可以在每个文档中包含一个`"version"`字段（或仅使用`"v"`），并使用它来确定应用程序将接受的文档结构。这样可以更严格地执行您的模式：文档必须对某个模式版本有效，即使不是当前版本。然而，它仍然需要支持旧版本。
+- en: 'The final option is to migrate all of your data when the schema changes. Generally
+    this is not a good idea: MongoDB allows you to have a dynamic schema in order
+    to avoid migrates because they put a lot of pressure on your system. However,
+    if you do decide to change every document, you will need to ensure that all the
+    documents were successfully updated. MongoDB supports *transactions*, which support
+    this type of migration. If MongoDB crashes in the middle of a transaction, the
+    older schema will be retained.'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后的选择是在模式更改时迁移所有数据。通常这不是一个好主意：MongoDB允许您具有动态模式以避免迁移，因为它们会给系统施加很大压力。但是，如果您决定更改每个文档，您需要确保所有文档都已成功更新。MongoDB支持*事务*，支持此类迁移。如果MongoDB在事务中途中崩溃，则会保留旧模式。
+- en: Managing Schemas
+  id: totrans-140
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 管理模式
+- en: MongoDB introduced schema validation in version 3.2, which allows for validation
+    during updates and insertions. In version 3.6 it added JSON Schema validation
+    via the `$jsonSchema` operator, which is now the recommended method for all schema
+    validation in MongoDB. At the time of writing MongoDB supports draft 4 of JSON
+    Schema, but please check the documentation for the most up-to-date information
+    on this feature.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB在3.2版本中引入了模式验证，允许在更新和插入期间进行验证。在3.6版本中，它通过`$jsonSchema`操作符添加了JSON模式验证，现在建议在MongoDB中使用此方法进行所有模式验证。截至撰写本文时，MongoDB支持JSON模式的草案4，但请查阅文档获取此功能的最新信息。
+- en: Validation does not check existing documents until they are modified, and it
+    is configured per collection. To add validation to an existing collection, you
+    use the `collMod` command with the `validator` option. You can add validation
+    to a new collection by specifying the `validator` option when using `db.createCollection()`.
+    MongoDB also provides two additional options, `validationLevel` and `validationAction`.
+    `validationLevel` determines how strictly validation rules are applied to existing
+    documents during an update, and `validationAction` decides whether an error plus
+    rejection or a warning with allowance for illegal documents should occur.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 验证在修改现有文档之前不会检查它们，并且配置是针对每个集合的。要向现有集合添加验证，可以使用`collMod`命令，并使用`validator`选项。在使用`db.createCollection()`时，通过指定`validator`选项可以向新集合添加验证。MongoDB还提供了两个额外的选项，`validationLevel`和`validationAction`。`validationLevel`确定在更新现有文档期间应用验证规则的严格程度，而`validationAction`决定在出现错误加拒绝或警告加允许非法文档的情况下应该采取的操作。
+- en: When Not to Use MongoDB
+  id: totrans-143
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 不适合使用MongoDB的情况
+- en: 'While MongoDB is a general-purpose database that works well for most applications,
+    it isn’t good at everything. There are a few reasons you might need to avoid it:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然MongoDB是一种通用的数据库，在大多数应用中表现良好，但它并非万能。有几个原因可能需要避免使用它：
+- en: Joining many different types of data across many different dimensions is something
+    relational databases are fantastic at. MongoDB isn’t supposed to do this well
+    and most likely never will.
+  id: totrans-145
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 加入多种不同类型的数据以及跨多个不同维度进行连接是关系数据库擅长的事情。MongoDB并不擅长这样做，并且很可能永远也不会。
+- en: One of the big (if, hopefully, temporary) reasons to use a relational database
+    over MongoDB is if you’re using tools that don’t support it. From SQLAlchemy to
+    WordPress, there are thousands of tools that just weren’t built to support MongoDB.
+    The pool of tools that do support it is growing, but its ecosystem is hardly the
+    size of relational databases’ yet.
+  id: totrans-146
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用关系数据库而不是 MongoDB 的一个重要（如果幸运的话是暂时的）原因是，如果你正在使用不支持 MongoDB 的工具。从SQLAlchemy到WordPress，有成千上万的工具只是不支持MongoDB。支持MongoDB的工具数量正在增加，但其生态系统远不及关系数据库的庞大。
+- en: ^([1](ch09.xhtml#idm45882356872472-marker)) The authors are William Schultz,
+    senior software engineer for replication; Tess Avitabile, team lead of the replication
+    team; and Alyson Cabral, product manager for Distributed Systems.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch09.xhtml#idm45882356872472-marker)) 作者是复制高级软件工程师威廉·舒尔茨；复制团队团队负责人特斯·阿维塔比勒；以及分布式系统产品经理艾莉森·卡布拉尔。

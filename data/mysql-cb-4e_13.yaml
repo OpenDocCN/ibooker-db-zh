@@ -1,0 +1,3068 @@
+- en: Chapter 13\. Importing and Exporting Data
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第13章。 导入和导出数据
+- en: 13.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.0 引言
+- en: Suppose that a file named *somedata.csv* contains 12 data columns in comma-separated
+    values (CSV) format. From this file you want to extract only columns 2, 11, 5,
+    and 9, and use them to create database rows in a MySQL table that contains `name`,
+    `birth`, `height`, and `weight` columns. You must make sure that the height and
+    weight are positive integers, and convert the birth dates from *`MM/DD/YY`* format
+    to *`YYYY-MM-DD`* format. How can you do this?
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设名为*somedata.csv*的文件包含以逗号分隔的值（CSV）格式的12个数据列。 您希望从该文件中提取仅包含第2、11、5和9列，并将它们用于在包含`name`、`birth`、`height`和`weight`列的MySQL表中创建数据库行。
+    您必须确保身高和体重为正整数，并将出生日期从*`MM/DD/YY`*格式转换为*`YYYY-MM-DD`*格式。 您可以如何做到这一点？
+- en: Data transfer problems with specific requirements occur frequently when you
+    transfer data into MySQL. Datafiles are not always formatted for being ready to
+    load into MySQL with no preparation. As a result, it’s often necessary to preprocess
+    information to put it into a format acceptable for MySQL. The reverse also is
+    true; data exported from MySQL may need massaging to be useful for other programs.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在将数据传输到MySQL时经常会出现具有特定要求的数据传输问题。 数据文件并非总是经过格式化以便无需准备即可加载到MySQL中。 因此，通常需要预处理信息以使其符合MySQL可接受的格式。
+    反之亦然； 从MySQL导出的数据可能需要调整才能对其他程序有用。
+- en: Although some data preparation operations require a great deal of hand checking
+    and reformatting, in most cases you can do at least part of the job automatically.
+    Virtually all such problems involve at least some elements of a common set of
+    conversion issues. This chapter and the next discuss what these issues are, how
+    to deal with them by taking advantage of the existing tools at your disposal,
+    and how to write your own tools when necessary. The idea is not to cover all possible
+    situations (an impossible task), but to show representative techniques and utilities.
+    Use them as is or adapt them. (There are commercial data-handling tools, but our
+    purpose here is to enable you to do things yourself.) With respect to the problem
+    posed at the beginning of this Introduction, see [Recipe 14.18](ch14.xhtml#nch-format-format-epilog)
+    for the solution we arrived at.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然有些数据准备操作需要大量手动检查和重新格式化，但在大多数情况下，您至少可以自动完成部分工作。 几乎所有这些问题都涉及到一些公共转换问题的元素集。 本章和下一章讨论了这些问题是什么，如何通过利用您可以使用的现有工具来处理它们，以及在必要时如何编写您自己的工具。
+    思路不是覆盖所有可能的情况（这是不可能的任务），而是展示代表性的技术和实用工具。 您可以按原样使用它们或进行调整。（虽然有商业数据处理工具，但我们这里的目的是让您自己动手做。）
+    关于本引言开头提出的问题，请参阅[食谱14.18](ch14.xhtml#nch-format-format-epilog)以了解我们找到的解决方案。
+- en: 'The discussion on how to transfer data to and from MySQL begins with native
+    MySQL facilities for importing data (the `LOAD` `DATA` statement and the *mysqlimport*
+    command-line program), and for exporting data (the `SELECT` … `INTO` `OUTFILE`
+    statement). For situations where the native facilities do not suffice, we move
+    on to cover techniques for using external supporting utilities (such as *sed*
+    and *tr*) and for writing your own. There are two broad sets of issues to consider:'
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 讨论如何将数据传输到MySQL和从MySQL中传输数据始于本地MySQL用于导入数据的工具（`LOAD` `DATA`语句和*mysqlimport*命令行程序），以及用于导出数据的工具（`SELECT`
+    … `INTO` `OUTFILE`语句）。 对于本地工具不足的情况，我们继续介绍使用外部支持工具（如*sed*和*tr*）以及编写自己的工具的技术。 有两组广泛的问题需要考虑：
+- en: How to manipulate the *structure* of datafiles. When a file is in a format not
+    suitable for import, you must convert it to a different format. This may involve
+    issues such as changing the column delimiters or line-ending sequences, or removing
+    or rearranging columns in the file. This chapter covers such techniques.
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何操作数据文件的*结构*。 当文件格式不适合导入时，必须将其转换为不同的格式。 这可能涉及问题，如更改列分隔符或行结束序列，或删除或重新排列文件中的列。
+    本章介绍了这些技术。
+- en: How to manipulate the *content* of datafiles. If you don’t know whether the
+    values contained in a file are legal, you may want to preprocess it to check or
+    reformat them. Numeric values may need verification as lying within a specific
+    range, dates may need conversion to or from ISO format, and so forth. [Chapter 14](ch14.xhtml#nch-format)
+    covers those techniques.
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何操作数据文件的*内容*。 如果你不确定文件中的值是否合法，可能需要预处理以进行检查或重新格式化。 数值可能需要验证是否在特定范围内，日期可能需要转换为或从ISO格式进行转换，等等。
+    [第14章](ch14.xhtml#nch-format) 讨论了这些技术。
+- en: Source code for program fragments and scripts discussed in this chapter is located
+    in the *transfer* directory of the `recipes` distribution.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章讨论的程序片段和脚本的源代码位于`recipes`发行版的*transfer*目录中。
+- en: General Import and Export Issues
+  id: totrans-9
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 一般的导入和导出问题
+- en: Incompatible datafile formats and differing rules for interpreting various kinds
+    of values cause headaches when transferring data between programs. Nevertheless,
+    certain issues recur frequently. Be aware of them and you can identify more easily
+    what must be done to solve particular import or export problems.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不兼容的数据文件格式和不同的解释各种值的规则，在程序之间传输数据时会带来很多麻烦。尽管如此，某些问题经常重复出现。了解这些问题可以更轻松地确定解决特定导入或导出问题所需的步骤。
+- en: 'In its most basic form, an input stream is just a set of bytes with no particular
+    meaning. Successful import into MySQL requires recognizing which bytes represent
+    structural information and which represent the data values framed by that structure.
+    Because such recognition is key to decomposing the input into appropriate units,
+    the most fundamental import issues are these:'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在其最基本的形式中，输入流只是一组没有特定含义的字节。成功导入到MySQL需要识别哪些字节代表结构信息，哪些字节代表由该结构框定的数据值。因为这种识别对将输入分解成适当单位至关重要，所以最基本的导入问题如下：
+- en: What is the record separator? Knowing this enables you to partition the input
+    stream into records.
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 记录分隔符是什么？知道这个可以将输入流分成记录。
+- en: What is the field delimiter? Knowing this enables you to partition each record
+    into field values. Identifying the data values also might include stripping quotes
+    from around the values or recognizing escape sequences within them.
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 字段分隔符是什么？知道这个可以将每个记录分成字段值。识别数据值还可能包括去掉值周围的引号或识别其中的转义序列。
+- en: 'The ability to break the input into records and fields is important for extracting
+    the data values from it. If the values are still not in a form that can be used
+    directly, you may need to consider other issues:'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将输入分解为记录和字段的能力对从中提取数据值至关重要。如果值仍未以可直接使用的形式存在，则可能需要考虑其他问题：
+- en: Do the order and number of columns match the structure of the database table?
+    Mismatches require rearranging or skipping columns.
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 列的顺序和数量是否与数据库表的结构匹配？不匹配可能需要重新排列或跳过列。
+- en: How should `NULL` or empty values be handled? Are they permitted? Can `NULL`
+    values even be detected? (Some systems export `NULL` values as empty strings,
+    making it impossible to distinguish them.)
+  id: totrans-16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`NULL`或空值应该如何处理？它们允许存在吗？甚至可以检测到`NULL`值吗？（某些系统将`NULL`值导出为空字符串，这使得无法区分它们。）'
+- en: Do data values require validation or reformatting? If the values are in a format
+    that matches MySQL’s expectations, no further processing is necessary. Otherwise,
+    they must be checked and possibly rewritten.
+  id: totrans-17
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据值是否需要验证或重新格式化？如果值的格式与MySQL的期望匹配，则无需进一步处理。否则，它们必须进行检查并可能需要重写。
+- en: For export from MySQL, the issues are somewhat the reverse. You can assume that
+    values stored in the database are valid, but it’s necessary to add column and
+    record delimiters to form an output stream that has a structure other programs
+    can recognize, and values may require reformatting for use by other programs.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于从MySQL导出的情况，问题有些相反。您可以假设存储在数据库表中的值是有效的，但是需要添加列和记录分隔符，以形成其他程序可以识别的输出流，并且可能需要重新格式化以供其他程序使用。
+- en: File Formats
+  id: totrans-19
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 文件格式
+- en: 'Datafiles come in many formats, two of which appear frequently in this chapter:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据文件存在多种格式，其中两种在本章中频繁出现：
+- en: Tab-delimited or tab-separated values (TSV) format
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 制表符分隔或制表符分隔值（TSV）格式
+- en: 'This is one of the simplest file structures; lines contain values separated
+    by tab characters. A short tab-delimited file might look like this, where the
+    whitespace between column values represents single tab characters:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是最简单的文件结构之一；行中包含由制表符分隔的值。一个简短的制表符分隔文件可能如下所示，其中列值之间的空格表示单个制表符字符：
+- en: '[PRE0]'
+  id: totrans-23
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Comma-separated values (CSV) format
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 逗号分隔值（CSV）格式
+- en: 'Files written in CSV format vary somewhat; there is apparently no formal standard
+    describing the format. However, the general idea is that lines consist of values
+    separated by commas, and values containing internal commas are enclosed within
+    quotes to prevent the commas from being interpreted as value delimiters. It’s
+    also common for values containing spaces to be quoted as well. In this example,
+    each line contains three values:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以 CSV 格式编写的文件有所不同；似乎没有正式的标准描述这种格式。然而，一般的想法是，每行由逗号分隔的值组成，包含内部逗号的值用引号括起来，以防逗号被解释为值分隔符。同样，包含空格的值通常也会用引号括起来。在这个例子中，每行包含三个值：
+- en: '[PRE1]'
+  id: totrans-26
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'It’s trickier to process CSV files than tab-delimited files because characters
+    like quotes and commas have a dual meaning: they may represent file structure
+    or be included in the content of data values.'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 处理 CSV 文件比制表符分隔文件更复杂，因为像引号和逗号这样的字符具有双重含义：它们可能代表文件结构，也可能包含在数据值的内容中。
+- en: Another important datafile characteristic is the line-ending sequence. The most
+    common sequences are carriage return (CR), linefeed (LF) and carriage return/linefeed
+    (CRLF) pair.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个重要的数据文件特征是行尾序列。最常见的序列是回车（CR）、换行（LF）和回车/换行（CRLF）对。
+- en: 'Datafiles often begin with a row of column labels. For some import operations,
+    the row of labels must be discarded to avoid having it be loaded into your table
+    as data. In other cases, the labels are quite useful:'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据文件通常以一行列标签开头。对于某些导入操作，必须丢弃标签行，以避免将其作为数据加载到您的表中。在其他情况下，标签非常有用：
+- en: For import into existing tables, the labels help you match datafile columns
+    with the table columns if they are not necessarily in the same order.
+  id: totrans-30
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于导入到现有表中，如果数据文件列与表列的顺序不一致，标签有助于匹配它们。
+- en: The labels can be used for column names when creating a new table automatically
+    or semiautomatically from a datafile. For example, [Recipe 13.20](#nch-xfer-xfer-guess)
+    discusses a utility that examines a datafile and guesses the `CREATE` `TABLE`
+    statement to use to create a table from the file. If a label row is present, the
+    utility uses the labels for column names.
+  id: totrans-31
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当从数据文件自动或半自动创建新表时，这些标签可用作列名。例如，[Recipe 13.20](#nch-xfer-xfer-guess) 讨论了一个工具，该工具检查数据文件并猜测用于从文件创建表的
+    `CREATE` `TABLE` 语句。如果存在标签行，则该工具使用这些标签作为列名。
+- en: Notes on Invoking Shell Commands
+  id: totrans-32
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 关于调用 Shell 命令的注意事项
+- en: 'This chapter shows a number of programs that you invoke from the command line
+    using a shell like *bash* or *tcsh* under Unix or *cmd.exe* (<q>the command prompt</q>)
+    under Windows. Many of the example commands for these programs use quotes around
+    option values, and sometimes an option value is itself a quote character. Quoting
+    conventions vary from one shell to another, but the following rules seem to work
+    with most of them (including *cmd.exe* under Windows):'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章展示了许多程序，您可以通过像 *bash* 或 *tcsh*（Unix）或 *cmd.exe*（<q>命令提示符</q>）（Windows）这样的
+    shell 从命令行调用。这些程序的示例命令中，很多选项值周围使用引号，有时选项值本身就是引号字符。引用约定因 shell 而异，但以下规则似乎适用于大多数
+    shell（包括 Windows 下的 *cmd.exe*）：
+- en: For an argument that contains spaces, enclose it within double quotes to prevent
+    the shell from interpreting it as multiple separate arguments. The shell strips
+    the quotes and passes the argument to the command intact.
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于包含空格的参数，用双引号括起来，以防 shell 将其解释为多个独立参数。Shell 去除引号并将参数完整传递给命令。
+- en: To include a double-quote character in the argument itself, precede it with
+    a backslash.
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要在参数本身包含双引号字符，需在其前面加上反斜杠。
+- en: 'Some shell commands in this chapter are so long that they’re shown as you would
+    enter them using several lines, with a backslash character as the line-continuation
+    character:'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中的一些 shell 命令非常长，显示方式按照您输入它们时的多行格式，使用反斜杠字符作为行连续字符：
+- en: '[PRE2]'
+  id: totrans-37
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'That works for Unix. On Windows, the continuation character is `^` (or `` `
+    `` for PowerShell). Alternatively, on any platform, enter the entire command on
+    one line:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这在 Unix 下有效。在 Windows 上，连续字符是 `^`（或者对于 PowerShell 是 `` ` ``）。或者，无论在任何平台上，都可以将整个命令输入到一行中：
+- en: '[PRE3]'
+  id: totrans-39
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 13.1 Importing Data with LOAD DATA and mysqlimport
+  id: totrans-40
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.1 使用 LOAD DATA 和 mysqlimport 导入数据
+- en: Problem
+  id: totrans-41
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to load a datafile into a table using MySQL’s built-in import capabilities.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想使用 MySQL 的内置导入功能将数据文件加载到表中。
+- en: Solution
+  id: totrans-43
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the `LOAD` `DATA` statement or the *mysqlimport* command-line program.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`LOAD` `DATA`语句或者 *mysqlimport* 命令行程序。
+- en: Discussion
+  id: totrans-45
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'MySQL provides a `LOAD` `DATA` statement that acts as a bulk data loader. Here’s
+    an example statement that reads a file *mytbl.txt* from your current directory
+    (the directory from which you call *mysql* client) and loads it into the table
+    `mytbl` in the default database:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL提供了一个`LOAD` `DATA`语句，作为批量数据加载器。以下是一个示例语句，从当前目录（调用*mysql*客户端的目录）读取文件*mytbl.txt*并将其加载到默认数据库中的表`mytbl`中：
+- en: '[PRE4]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: Warning
+  id: totrans-48
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Since MySQL 8.0, the `LOCAL` loading capability is disabled by default for security
+    reasons.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自MySQL 8.0起，默认情况下禁用了`LOCAL`加载功能，出于安全考虑。
+- en: 'To enable it on the test server, set variable `local_infile` to `ON`:'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在测试服务器上启用它，请将变量`local_infile`设置为`ON`：
+- en: '[PRE5]'
+  id: totrans-51
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'and start *mysql* client with option `--local-infile`:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并使用选项`--local-infile`启动*mysql*客户端：
+- en: '[PRE6]'
+  id: totrans-53
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Alternatively, omit `LOCAL` from the statement and specify the full pathname
+    to the file, which must be readable by the server. Local versus nonlocal data
+    loading is discussed shortly.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，从语句中省略`LOCAL`并指定文件的完整路径名，该文件必须可读取服务器。稍后将讨论本地与非本地数据加载的差异。
+- en: 'The MySQL utility program *mysqlimport* acts as a wrapper around `LOAD` `DATA`
+    so that you can load input files directly from the command line. The *mysqlimport*
+    command that is equivalent to the preceding `LOAD` `DATA` statement looks like
+    this, assuming that `mytbl` is in the `cookbook` database:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL实用程序*mysqlimport*充当了围绕`LOAD` `DATA`的包装器的角色，以便您可以直接从命令行加载输入文件。与前述`LOAD`
+    `DATA`语句等效的*mysqlimport*命令如下，假设`mytbl`在`cookbook`数据库中：
+- en: '[PRE7]'
+  id: totrans-56
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: For *mysqlimport*, as with other MySQL programs, you may need to specify connection
+    parameter options such as `--user` or `--host` (see [Recipe 1.4](ch01.xhtml#nch-mysql-mysql-options)).
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于*mysqlimport*，与其他MySQL程序一样，您可能需要指定连接参数选项，如`--user`或`--host`（参见[Recipe 1.4](ch01.xhtml#nch-mysql-mysql-options)）。
+- en: '`LOAD` `DATA` provides options to address many of the import issues mentioned
+    in the chapter introduction, such as the line-ending sequence for recognizing
+    how to break input into records, the column value delimiter that permits records
+    to be broken into separate values, the quoting character that may enclose column
+    values, quoting and escaping conventions within values, and `NULL` value representation.'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LOAD` `DATA` 提供了许多选项来解决章节介绍中提到的许多导入问题，例如用于识别如何将输入分割为记录的行结束序列，允许将记录分割为单独值的列值分隔符，可能围绕列值的引用字符，值内的引用和转义约定以及`NULL`值表示。'
+- en: The following list describes `LOAD` `DATA`’s general characteristics and capabilities;
+    *mysqlimport* shares most of these behaviors. We’ll note some differences as we
+    go along, but for the most, what can be done with `LOAD` `DATA` can be done with
+    *mysqlimport* as well.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下列表描述了`LOAD` `DATA`的一般特性和功能；*mysqlimport*共享大多数这些行为。我们会在进行时注意一些差异，但对于大多数情况，`LOAD`
+    `DATA`所能做的与*mysqlimport*也可以做到。
+- en: By default, `LOAD` `DATA` expects the datafile to have the same number of columns
+    as the table into which you load it, with the columns present in the same order
+    as in the table. If the file column number or order differ from the table, you
+    can specify which columns are present and their order. If the datafile contains
+    fewer columns than the table, MySQL assigns default values for the missing columns.
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 默认情况下，`LOAD` `DATA` 期望数据文件与加载数据的表具有相同数量的列，并且列的顺序与表中的列相同。如果文件的列数或顺序与表不同，您可以指定存在的列及其顺序。如果数据文件包含的列少于表中的列数，MySQL会为缺少的列分配默认值。
+- en: '`LOAD` `DATA` assumes that data values are separated by tab characters and
+    that lines end with linefeeds (newlines). If a file doesn’t conform to these conventions,
+    you can specify its format explicitly.'
+  id: totrans-61
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`LOAD` `DATA`假定数据值由制表符分隔，并且行以换行符（新行）结束。如果文件不符合这些约定，您可以明确指定其格式。'
+- en: You can indicate that data values may have quotes around them that should be
+    stripped, and you can specify the quote character.
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以指示数据值可能带有应该被剥离的引号，并且可以指定引号字符。
+- en: Several special escape sequences are recognized and converted during input processing.
+    The default escape character is backslash (`\`), but you can change it. The `\N`
+    sequence is interpreted as a `NULL` value. The `\b`, `\n`, `\r`, `\t`, `\\`, and
+    `\0` sequences are interpreted as backspace, linefeed, carriage return, tab, backslash,
+    and ASCII NUL characters. (NUL is a zero-valued byte; it differs from the SQL
+    `NULL` value.)
+  id: totrans-63
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 输入处理期间识别并转换多个特殊转义序列。默认的转义字符是反斜杠（`\`），但您可以更改它。序列 `\N` 被解释为 `NULL` 值。序列 `\b`、`\n`、`\r`、`\t`、`\\`
+    和 `\0` 被解释为退格、换行、回车、制表符、反斜杠和 ASCII NUL 字符。（NUL 是一个零值字节；它与 SQL 中的 `NULL` 值不同。）
+- en: '`LOAD` `DATA` provides diagnostic information about which input values cause
+    problems. To display this information, execute a `SHOW` `WARNINGS` statement after
+    the `LOAD` `DATA` statement.'
+  id: totrans-64
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`LOAD` `DATA` 提供关于哪些输入值导致问题的诊断信息。要显示此信息，请在 `LOAD` `DATA` 语句之后执行 `SHOW` `WARNINGS`
+    语句。'
+- en: This and following eigth recipes describe how to handle these issues using `LOAD`
+    `DATA` or *mysqlimport*. It’s lengthy because there’s a lot to cover.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章及其后几篇配方描述了如何使用 `LOAD` `DATA` 或 *mysqlimport* 处理这些问题。由于需要涵盖的内容很多，因此篇幅较长。
+- en: Specifying the datafile location
+  id: totrans-66
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 指定数据文件的位置
+- en: You can load files located either on the server host, or on the client host
+    from which you issue the `LOAD` `DATA` statement. Telling MySQL where to find
+    your datafile is a matter of knowing the rules that determine where it looks for
+    the file (particularly important for files not in your current directory).
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以从发出 `LOAD` `DATA` 语句的服务器主机或客户端主机上加载文件。告知 MySQL 如何找到您的数据文件是了解它查找文件的规则的问题（对于不在当前目录中的文件特别重要）。
+- en: By default, the MySQL server assumes that the datafile is located on the server
+    host. You can load local files that are located on the client host using `LOAD`
+    `DATA` `LOCAL` rather than `LOAD` `DATA`, unless `LOCAL` capability is disabled
+    by default.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，MySQL 服务器假定数据文件位于服务器主机上。您可以使用 `LOAD` `DATA` `LOCAL` 而不是 `LOAD` `DATA`
+    来加载位于客户端主机上的本地文件，除非默认情况下禁用了 `LOCAL` 能力。
+- en: Note
+  id: totrans-69
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'Many of the examples in this chapter assume that `LOCAL` can be used. If that’s
+    not true for your system, adapt the examples: omit `LOCAL` from the statement,
+    make sure that the file is located on the MySQL server host and readable to the
+    server.'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中的许多示例假定可以使用 `LOCAL`。如果您的系统不支持这一点，请调整示例：从语句中省略 `LOCAL`，确保文件位于 MySQL 服务器主机上并对服务器可读。
+- en: 'If the `LOAD` `DATA` statement includes no `LOCAL` keyword, the MySQL server
+    looks for the file on the server host using the following rules:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果 `LOAD` `DATA` 语句中不包含 `LOCAL` 关键字，MySQL 服务器将根据以下规则在服务器主机上查找文件：
+- en: Your MySQL account must have the `FILE` privilege, and the file to be loaded
+    must be either located in the data directory for the default database or world
+    readable.
+  id: totrans-72
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您的 MySQL 帐户必须具有 `FILE` 权限，要加载的文件必须位于默认数据库的数据目录中或者对所有用户可读。
+- en: An absolute pathname fully specifies the location of the file in the filesystem
+    and the server reads it from the given location.
+  id: totrans-73
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 绝对路径名完全指定了文件在文件系统中的位置，服务器从指定位置读取它。
+- en: A relative pathname is interpreted two ways, depending on whether it has a single
+    component or multiple components. For a single-component filename such as *mytbl.txt*,
+    the server looks for the file in the database directory for the default database.
+    (The operation fails if you have not selected a default database.) For a multiple-component
+    filename such as *xyz/mytbl.txt*, the server looks for the file beginning in the
+    MySQL data directory. That is, it expects to find *mytbl.txt* in a directory named
+    *xyz*.
+  id: totrans-74
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 相对路径名根据其是否具有单个组件或多个组件两种方式进行解释。对于单个组件文件名（例如 *mytbl.txt*），服务器在默认数据库的数据库目录中查找文件。（如果未选择默认数据库，则操作失败。）对于多个组件文件名（例如
+    *xyz/mytbl.txt*），服务器从 MySQL 数据目录开始查找文件。也就是说，它期望在名为 *xyz* 的目录中找到 *mytbl.txt*。
+- en: If option `secure_file_priv` is set to a directory path, MySQL is able to access
+    import and export files only in this directory. Specify absolute path if you use
+    `secure_file_priv`.
+  id: totrans-75
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果选项 `secure_file_priv` 设置为一个目录路径，MySQL 只能访问此目录中的导入和导出文件。如果使用 `secure_file_priv`，请指定绝对路径。
+- en: 'Database directories are located directly under the server’s data directory,
+    so these two statements are equivalent if the default database is `cookbook`:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库目录直接位于服务器数据目录下，因此如果默认数据库是 `cookbook`，这两个语句是等效的：
+- en: '[PRE8]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'If the `LOAD` `DATA` statement includes the `LOCAL` keyword, your client program
+    reads the file on the client host and sends its contents to the server. The client
+    interprets the pathname like this:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果 `LOAD DATA` 语句包括 `LOCAL` 关键字，则客户端程序将在客户端主机上读取文件并将其内容发送到服务器。客户端解释路径名的方式如下：
+- en: An absolute pathname fully specifies the location of the file in the filesystem.
+  id: totrans-79
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 绝对路径名完全指定了文件在文件系统中的位置。
+- en: A relative pathname specifies the file location relative to the directory from
+    which you stated the *mysql* client.
+  id: totrans-80
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 相对路径名指定文件位置相对于您指定 *mysql* 客户端的目录。
+- en: 'If your file is located on the client host, but you forget to indicate that
+    it’s local, an error occurs:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的文件位于客户端主机上，但您忘记指示它是本地的，将会发生错误：
+- en: '[PRE9]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'That `Access` `denied` message can be confusing: if you’re able to connect
+    to the server and issue the `LOAD` `DATA` statement, it would seem that you’ve
+    already gained access to MySQL, right? The error message means the server (not
+    the client) tried to open *mytbl.txt* on the server host and could not access
+    it.'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那个 `Access denied` 的消息可能会让人困惑：如果您能够连接到服务器并发出 `LOAD DATA` 语句，那么看起来您已经获得了对 MySQL
+    的访问权限，对吧？错误消息意味着服务器（而不是客户端）尝试在服务器主机上打开 *mytbl.txt* 并无法访问它。
+- en: If your MySQL server runs on the host from which you issue the `LOAD` `DATA`
+    statement, <q>remote</q> and <q>local</q> refer to the same host. But the rules
+    just discussed for locating datafiles still apply. Without `LOCAL`, the server
+    reads the datafile directly. With `LOCAL`, the client program reads the file and
+    sends its contents to the server.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的 MySQL 服务器运行在发出 `LOAD DATA` 语句的主机上，则 `<q>remote</q>` 和 `<q>local</q>` 指的是同一主机。但是仍适用于定位数据文件的刚讨论的规则。没有
+    `LOCAL`，服务器直接读取数据文件。有 `LOCAL`，客户端程序读取文件并将其内容发送到服务器。
+- en: '*mysqlimport* uses the same rules for finding files as `LOAD` `DATA`. By default,
+    it assumes that the datafile is located on the server host. To indicate that the
+    file is local to the client host, specify the `--local` (or `-L`) option on the
+    command line.'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysqlimport* 使用与 `LOAD DATA` 相同的规则来查找文件。默认情况下，它假定数据文件位于服务器主机上。要指示文件位于客户端主机上，请在命令行上指定
+    `--local`（或 `-L`）选项。'
+- en: '`LOAD` `DATA` assumes that the table is located in the default database. To
+    load a file into a specific database, qualify the table name with the database
+    name. The following statement indicates that the `mytbl` table is located in the
+    `other_db` database:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LOAD DATA` 假定表位于默认数据库中。要将文件加载到特定数据库中，请使用数据库名称限定表名。以下语句表示 `mytbl` 表位于 `other_db`
+    数据库中：'
+- en: '[PRE10]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: '*mysqlimport* always requires a database argument:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysqlimport* 总是需要一个数据库参数：'
+- en: '[PRE11]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: '`LOAD` `DATA` assumes no relationship between the name of the datafile and
+    the name of the table into which you load the file’s contents. *mysqlimport* assumes
+    a fixed relationship between the datafile name and the table name. Specifically,
+    it uses the last component of the filename to determine the table name. For example,
+    *mysqlimport* interprets *mytbl,* *mytbl.dat*, */home/paul/mytbl.csv*, and *C:\projects\mytbl.txt*
+    all as files containing data for the `mytbl` table.'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LOAD DATA` 假定数据文件的名称与加载文件内容的表的名称之间没有关系。*mysqlimport* 假定数据文件名的最后一个组成部分确定表名。例如，*mysqlimport*
+    将 *mytbl*、*mytbl.dat*、*/home/paul/mytbl.csv* 和 *C:\projects\mytbl.txt* 解释为包含 `mytbl`
+    表数据的文件。'
+- en: 13.2 Specifying Column and Line Delimiters
+  id: totrans-91
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.2 指定列和行分隔符
+- en: Problem
+  id: totrans-92
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Your datafile uses non-standard column or line delimitrs.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您的数据文件使用非标准的列或行分隔符。
+- en: Solution
+  id: totrans-94
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use clauses `FIELDS TERMINATED BY` and `LINES TERMINATED BY` for the `LOAD DATA
+    INFILE` statement and options `--fields-terminated-by` and `--lines-terminated-by`
+    for *mysqlimport*.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 `LOAD DATA INFILE` 语句，请使用 `FIELDS TERMINATED BY` 和 `LINES TERMINATED BY`
+    子句，对于 *mysqlimport*，使用 `--fields-terminated-by` 和 `--lines-terminated-by` 选项。
+- en: Discussion
+  id: totrans-96
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'By default, `LOAD` `DATA` assumes that datafile lines are terminated by linefeed
+    (newline) characters and that values within a line are separated by tab characters.
+    To provide explicit information about datafile format, use a `FIELDS` clause to
+    describe the characteristics of fields within a line, and a `LINES` clause to
+    specify the line-ending sequence. The following `LOAD` `DATA` statement indicates
+    that the input file contains data values separated by colons and lines terminated
+    by carriage returns:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，`LOAD` `DATA`假定数据文件的行以换行符（newline）结尾，行内的值由制表符分隔。要提供有关数据文件格式的明确信息，请使用`FIELDS`子句描述行内字段的特性，并使用`LINES`子句指定行结束序列。以下`LOAD`
+    `DATA`语句指示输入文件包含以冒号分隔的数据值，并以回车符结尾：
+- en: '[PRE12]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: Each clause follows the table name. If both are present, `FIELDS` must precede
+    `LINES`. The line and field termination indicators can contain multiple characters.
+    For example, `\r\n` indicates that lines are terminated by carriage return/linefeed
+    pairs.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个子句都跟在表名之后。如果两者都存在，`FIELDS`必须在`LINES`之前。行和字段终止指示可以包含多个字符。例如，`\r\n`表示行以回车/换行对结尾。
+- en: The `LINES` clause also has a `STARTING` `BY` subclause. It specifies the sequence
+    to be stripped from each input record. (Everything *up* *to* the given sequence
+    is stripped. If you specify `STARTING` `BY` `'X'` and a record begins with `abcX`,
+    all four leading characters are stripped.) Like `TERMINATED` `BY`, the sequence
+    can have multiple characters. If `TERMINATED` `BY` and `STARTING` `BY` both are
+    present in the `LINES` clause, they can appear in any order.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LINES`子句还有一个`STARTING` `BY`子句。它指定要从每个输入记录中剥离的序列。（从给定序列开始的所有内容都将被剥离。如果你指定`STARTING`
+    `BY` `''X''`并且记录以`abcX`开头，则所有四个前导字符都将被剥离。）像`TERMINATED` `BY`一样，该序列可以有多个字符。如果`LINES`子句中同时存在`TERMINATED`
+    `BY`和`STARTING` `BY`，它们可以以任意顺序出现。'
+- en: 'For *mysqlimport*, command options provide the format specifiers. Commands
+    that correspond to the preceding two `LOAD` `DATA` statements look like this:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于*mysqlimport*，命令选项提供了格式说明符。与前面两个`LOAD` `DATA`语句相对应的命令如下所示：
+- en: '[PRE13]'
+  id: totrans-102
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: Option order doesn’t matter for *mysqlimport*.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于*mysqlimport*，选项顺序并不重要。
+- en: 'The `FIELDS` and `LINES` clauses understand hex notation to specify arbitrary
+    format characters, which is useful for loading datafiles that use binary format
+    codes. Suppose that a datafile has lines with Ctrl-A between fields and Ctrl-B
+    at the end of lines. The ASCII values for Ctrl-A and Ctrl-B are 1 and 2, so you
+    represent them as `0x01` and `0x02`:'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`FIELDS`和`LINES`子句理解十六进制表示法来指定任意格式字符，这对于加载使用二进制格式代码的数据文件非常有用。假设数据文件中的行之间用Ctrl-A分隔字段，行末用Ctrl-B结束。Ctrl-A和Ctrl-B的ASCII值分别为1和2，因此你可以表示它们为`0x01`和`0x02`：'
+- en: '[PRE14]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: '*mysqlimport* also understands hex constants for format specifiers. You may
+    find this capability helpful if you don’t like remembering how to type escape
+    sequences on the command line or when it’s necessary to use quotes around them.
+    Tab is `0x09`, linefeed is `0x0a`, and carriage return is `0x0d`. This command
+    indicates that the datafile contains tab-delimited lines terminated by CRLF pairs:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysqlimport*还能理解格式说明符的十六进制常量。如果你不喜欢在命令行上记住如何键入转义序列，或者在必须在其周围使用引号时，你可能会发现这种功能很有帮助。制表符是`0x09`，换行符是`0x0a`，回车符是`0x0d`。该命令指示数据文件包含以制表符分隔的行，以CRLF对结尾：'
+- en: '[PRE15]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: When you import datafiles, don’t assume that `LOAD` `DATA` (or *mysqlimport*)
+    knows more than it does. Some `LOAD` `DATA` frustrations occur because people
+    expect MySQL to know more than it possibly can. Keep in mind that `LOAD` `DATA`
+    has no idea at all about the format of your datafile. It makes certain assumptions
+    about the input structure, represented as the default settings for the line and
+    field terminators, and for the quote and escape character settings. If your input
+    differs from those assumptions, you must tell MySQL so.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你导入数据文件时，不要假设`LOAD` `DATA`（或*mysqlimport*）知道比它实际了解的更多。一些`LOAD` `DATA`的挫折是因为人们期望MySQL知道它可能不知道的东西。记住，`LOAD`
+    `DATA`对于你的数据文件的格式一无所知。它对输入结构有一些假设，这些假设是基于行和字段终止符的默认设置，以及引号和转义字符的设置。如果你的输入与这些假设不同，你必须告诉MySQL。
+- en: 'The line-ending sequence used in a datafile typically is determined by the
+    system from which the file originated. Unix files normally have lines terminated
+    by linefeeds, which you indicate like this:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据文件中使用的行结束序列通常由生成文件的系统决定。Unix文件通常以换行符结尾，你可以这样指示：
+- en: '[PRE16]'
+  id: totrans-110
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'Because `\n` happens to be the default line terminator, you need not specify
+    that clause in this case unless you want to indicate the line-ending sequence
+    explicitly. If files on your system don’t use the Unix default (linefeed), you
+    must specify the line terminator explicitly. For files that have lines ending
+    in carriage returns or carriage return/linefeed pairs, respectively, use the appropriate
+    `LINES` `TERMINATED` `BY` clause:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为 `\n` 恰好是默认的行终止符，因此在这种情况下，您不需要显式指定该子句，除非您希望显式指定行结束序列。如果您的系统上的文件不使用Unix默认（换行符）结尾，则必须显式指定行终止符。对于以回车符或回车符/换行符对结尾的文件，分别使用适当的
+    `LINES` `TERMINATED` `BY` 子句：
+- en: '[PRE17]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'For example, to load a Windows file that contains tab-delimited fields and
+    lines ending with CRLF pairs, use this `LOAD` `DATA` statement:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，要加载包含制表字段和以CRLF对结尾的Windows文件，请使用以下 `LOAD` `DATA` 语句：
+- en: '[PRE18]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'The corresponding *mysqlimport* command is:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相应的 *mysqlimport* 命令是：
+- en: '[PRE19]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: If the file has been transferred from one machine to another, its contents may
+    have been changed in subtle ways of which you’re not aware. For example, an FTP
+    transfer between machines running different operating systems typically translates
+    line endings to those that are appropriate for the destination machine if the
+    transfer is performed in text mode rather than in binary (image) mode.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果文件已从一台机器传输到另一台机器，则其内容可能以您不知道的微妙方式发生了更改。例如，如果在不同操作系统上运行的机器之间进行FTP传输，则通常将行尾转换为适合目标机器的行尾，前提是传输以文本模式而不是二进制（图像）模式执行。
+- en: When in doubt, check the contents of your datafile using a hex dump program
+    or other utility that displays a visible representation of whitespace characters
+    like tab, carriage return, and linefeed. Under Unix, programs such as *od* or
+    *hexdump* can display file contents in a variety of formats. If you don’t have
+    these or some comparable utility, the *transfer* directory of the `recipes` distribution
+    contains hex dumpers written in Perl, Ruby, and Python (*hexdump.pl*, *hexdump.rb*,
+    and *hexdump.py*), as well as programs that display printable representations
+    of all characters of a file (*see.pl*, *see.rb*, and *see.py*). You may find them
+    useful for examining files to see what they really contain.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果不确定，可以使用十六进制转储程序或显示制表符、回车符和换行符等空白字符的其他实用程序来检查数据文件的内容。在Unix下，诸如 *od* 或 *hexdump*
+    的程序可以以各种格式显示文件内容。如果没有这些工具或类似的实用程序，`recipes` 分发目录中的 *hexdump.pl*、*hexdump.rb* 和
+    *hexdump.py* 是用Perl、Ruby和Python编写的十六进制转储程序，以及显示文件所有字符可打印表示的程序 (*see.pl*、*see.rb*
+    和 *see.py*) 可能对检查文件以查看其实际内容很有用。
+- en: 13.3 Dealing with Quotes and Special Characters
+  id: totrans-119
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.3 处理引号和特殊字符
+- en: Problem
+  id: totrans-120
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Your data file contains quotes or special characters, therefore cannot be loaded
+    with default options.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于您的数据文件包含引号或特殊字符，因此不能使用默认选项加载。
+- en: Solution
+  id: totrans-122
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use `FIELDS` clause for `LOAD DATA INFILE` with combination of `TERMINATED BY`,
+    `ECNLOSED BY` and `ESCAPED BY`. For *mysqlimport* use options `--fields-enclosed-by`
+    and `--fields-escaped-by`.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `LOAD DATA INFILE` 中的 `FIELDS` 子句，结合 `TERMINATED BY`、`ECNLOSED BY` 和 `ESCAPED
+    BY`。对于 *mysqlimport*，使用选项 `--fields-enclosed-by` 和 `--fields-escaped-by`。
+- en: Discussion
+  id: totrans-124
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: If your datafile contains quoted values or escaped characters, tell `LOAD` `DATA`
+    to be aware of them so that it doesn’t load uninterpreted data values into the
+    database.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的数据文件包含引号值或转义字符，请告知 `LOAD` `DATA` 以便它不会将未解释的数据值加载到数据库中。
+- en: The `FIELDS` clause can specify other format options besides `TERMINATED` `BY`.
+    By default, `LOAD` `DATA` assumes that values are unquoted, and it interprets
+    the backslash (`\`) as an escape character for special characters. To indicate
+    the value-quoting character explicitly, use `ENCLOSED` `BY`; MySQL will strip
+    that character from the ends of data values during input processing. To change
+    the default escape character, use `ESCAPED` `BY`.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`FIELDS` 子句除了 `TERMINATED` `BY` 外，还可以指定其他格式选项。默认情况下，`LOAD` `DATA` 假定值未引用，并且将反斜杠（`\`）解释为特殊字符的转义字符。要显式指示值引用字符，请使用
+    `ENCLOSED` `BY`；MySQL 在输入处理期间会去掉数据值两端的该字符。要更改默认的转义字符，请使用 `ESCAPED` `BY`。'
+- en: 'You can use subclauses `ENCLOSED` `BY`, `ESCAPED` `BY`, and `TERMINATED` `BY`
+    in any order. For example, these `FIELDS` clauses are equivalent:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以按任意顺序使用子句 `ENCLOSED` `BY`、`ESCAPED` `BY` 和 `TERMINATED` `BY`。例如，这些 `FIELDS`
+    子句是等效的：
+- en: '[PRE20]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'The `TERMINATED` `BY` value can consist of multiple characters. If data values
+    are separated within input lines by `*@*`, sequences, indicate that like this:'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TERMINATED BY` 值可以由多个字符组成。如果数据值在输入行内由 `*@*` 序列分隔，指定如下：'
+- en: '[PRE21]'
+  id: totrans-130
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'To disable escape processing entirely, specify an empty escape sequence:'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要完全禁用转义处理，请指定空转义序列：
+- en: '[PRE22]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: When you specify `ENCLOSED` `BY` to indicate which quote character should be
+    stripped from data values, it’s possible to include the quote character literally
+    within data values by doubling it or by preceding it with the escape character.
+    For example, if the quote character is `"` and escape character is `\`, the input
+    value `"a""b\"c"` is interpreted as `a"b"c`.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您指定 `ENCLOSED BY` 表示应从数据值中剥离哪个引号字符时，可以通过将其加倍或在其前面加上转义字符的方式，直接在数据值中包含引号字符。例如，如果引号字符是
+    `"`，转义字符是 `\`，则输入值 `"a""b\"c"` 被解释为 `a"b"c`。
+- en: For *mysqlimport*, the corresponding command options for specifying quote and
+    escape values are `--fields-enclosed-by` and `--fields-escaped-by`. (When using
+    *mysqlimport* options that include quotes or backslashes or other characters that
+    are special to your command interpreter, you may need to quote or escape the quote
+    or escape characters.)
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 *mysqlimport*，用于指定引号和转义值的相应命令选项是 `--fields-enclosed-by` 和 `--fields-escaped-by`。（当使用
+    *mysqlimport* 选项包含引号、反斜杠或其他对您的命令解释器特殊的字符时，您可能需要引用或转义引号或转义字符。）
+- en: 13.4 Handling Duplicate Key Values
+  id: totrans-135
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.4 处理重复键值
+- en: Problem
+  id: totrans-136
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You have duplicates in your datafile and import fails with an error.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您的数据文件中存在重复项，导入时出现错误。
+- en: Solution
+  id: totrans-138
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Instruct `LOAD DATA INFILE` and *mysqlimport* to either ignore or replace duplicates.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 指示 `LOAD DATA INFILE` 和 *mysqlimport* 忽略或替换重复项。
+- en: Discussion
+  id: totrans-140
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: By default, an error occurs if an input record duplicates an existing row in
+    the column or columns that form a `PRIMARY` `KEY` or `UNIQUE` index. To control
+    this behavior, specify `IGNORE` or `REPLACE` after the filename to tell MySQL
+    to either ignore duplicate rows or replace old rows with the new ones.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，如果输入记录在形成 `PRIMARY KEY` 或 `UNIQUE` 索引的列或列中复制现有行，则会出错。要控制此行为，请在文件名后指定 `IGNORE`
+    或 `REPLACE`，告诉 MySQL 要么忽略重复行，要么用新行替换旧行。
+- en: 'Suppose that you periodically receive meteorological data about current weather
+    conditions from various monitoring stations, and that you store various measurements
+    from these stations in a table that looks like this:'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您定期从各种监测站接收当前天气条件的气象数据，并且您将这些站点的各种测量存储在看起来像这样的表中：
+- en: '[PRE23]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'The table includes a primary key on the combination of station ID and measurement
+    type, to ensure that it contains only one row per station per type of measurement.
+    The table is intended to hold only current conditions, so when new measurements
+    for a given station are loaded into the table, they should kick out the station’s
+    previous measurements. To accomplish this, use the `REPLACE` keyword:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表包括一个主键，组合是站点 ID 和测量类型，以确保每个站点每种测量类型只包含一行。该表旨在仅保存当前条件，因此当为给定站点加载新的测量值到表中时，它们应替换掉站点之前的测量值。为此，使用
+    `REPLACE` 关键字：
+- en: '[PRE24]'
+  id: totrans-145
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: '*mysqlimport* has `--ignore` and `--replace` options that correspond to the
+    `IGNORE` and `REPLACE` keywords for `LOAD` `DATA`.'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysqlimport* 具有与 `LOAD DATA` 中 `IGNORE` 和 `REPLACE` 关键字对应的 `--ignore` 和 `--replace`
+    选项。'
+- en: 13.5 Obtaining Diagnostics about Bad Input Data
+  id: totrans-147
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.5 关于坏输入数据的诊断获取
+- en: Problem
+  id: totrans-148
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You found differences between the datafile and data, loaded into the database
+    and want to know why import failed for those values.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您发现数据文件与导入到数据库中的数据之间存在差异，并希望了解为什么这些值导入失败。
+- en: Solution
+  id: totrans-150
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use statement `SHOW WARNINGS`.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用语句 `SHOW WARNINGS`。
+- en: Discussion
+  id: totrans-152
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: '`LOAD` `DATA` displays an information line to indicate whether there are any
+    problematic input values. If so, use `SHOW` `WARNINGS` to find where they are
+    and what the problems are.'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LOAD DATA` 显示一行信息，指示是否存在问题输入值。如果有问题，请使用 `SHOW WARNINGS` 查找其位置和问题内容。'
+- en: 'When a `LOAD` `DATA` statement finishes, it returns a line of information that
+    tells you how many errors or data conversion problems occurred. For example:'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当 `LOAD DATA` 语句完成时，它会返回一行信息，告诉您发生了多少错误或数据转换问题。例如：
+- en: '[PRE25]'
+  id: totrans-155
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'These values provide general information about the import operation:'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些值提供了关于导入操作的一般信息：
+- en: '`Records` indicates the number of records found in the file.'
+  id: totrans-157
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`Records` 表示文件中找到的记录数。'
+- en: '`Deleted` and `Skipped` are related to treatment of input records that duplicate
+    existing table rows on unique index values. `Deleted` indicates how many rows
+    were deleted from the table and replaced by input records, and `Skipped` indicates
+    how many input records were ignored in favor of existing rows.'
+  id: totrans-158
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`Deleted` 和 `Skipped` 与处理输入记录相关，这些记录在唯一索引值上重复现有表行。`Deleted` 指示从表中删除并由输入记录替换的行数，而
+    `Skipped` 指示忽略以 favor 存在的行数。'
+- en: '`Warnings` is something of a catchall that indicates the number of problems
+    found while loading data values into columns. Either a value stores into a column
+    properly, or it doesn’t. In the latter case, the value ends up in MySQL as something
+    different, and MySQL counts it as a warning. (Storing a string `abc` into a numeric
+    column results in a stored value of `0`, for example.)'
+  id: totrans-159
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`Warnings` 是一个总结，指示在加载数据值到列时发现的问题数量。如果一个值正确存储到列中，或者没有存储。在后一种情况下，该值以不同的方式存储在
+    MySQL 中，并且 MySQL 计为一个警告。（例如，将字符串 `abc` 存储到数值列中的存储值为 `0`。）'
+- en: What do these values tell you? The `Records` value normally should match the
+    number of lines in the input file. If it doesn’t, that’s a sign that MySQL interprets
+    the file as having a different format than it actually has. In this case, you’ll
+    likely also see a high `Warnings` value, which indicates that many values had
+    to be converted because they didn’t match the expected data type. The solution
+    to this problem often is to specify the proper `FIELDS` and `LINES` clauses.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些值告诉您什么？`Records` 值通常应该与输入文件中的行数相匹配。如果不匹配，则表示 MySQL 解释文件格式与实际格式不同。在这种情况下，您可能还会看到一个较高的
+    `Warnings` 值，这表示许多值必须转换，因为它们与预期的数据类型不匹配。解决此问题的常见方法是指定适当的 `FIELDS` 和 `LINES` 子句。
+- en: Assuming that your `FIELDS` and `LINES` format specifiers are correct, a nonzero
+    `Warnings` count indicates the presence of bad input values. You can’t tell from
+    the numbers in the `LOAD` `DATA` information line which input records had problems
+    or which columns were bad. To get that information, issue a `SHOW` `WARNINGS`
+    statement.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您的 `FIELDS` 和 `LINES` 格式说明符是正确的，非零 `Warnings` 计数表示存在不良输入值。您无法从 `LOAD DATA`
+    信息行的数字中判断哪些输入记录存在问题或哪些列不良。要获取此信息，请发出 `SHOW WARNINGS` 语句。
+- en: 'Suppose that a table `t` has this structure:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设表 `t` 有以下结构：
+- en: '[PRE26]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'And suppose that a datafile *data.txt* looks like this:'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并假设数据文件 *data.txt* 如下所示：
+- en: '[PRE27]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'Loading the file into the table causes a number, a string, and a date to be
+    loaded into each of the three columns. Doing so results in several data conversions
+    and warnings, which you can see using `SHOW` `WARNINGS` immediately following
+    `LOAD` `DATA`:'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将文件加载到表中会导致每个三列加载一个数字、一个字符串和一个日期。这样做会产生多个数据转换和警告，您可以在 `LOAD DATA` 后立即使用 `SHOW
+    WARNINGS` 查看这些警告：
+- en: '[PRE28]'
+  id: totrans-167
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'The `SHOW` `WARNINGS` output helps you determine which values were converted
+    and why. The resulting table looks like this:'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SHOW WARNINGS` 输出帮助您确定哪些值已转换及其原因。结果表如下所示：'
+- en: '[PRE29]'
+  id: totrans-169
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 13.6 Skipping Datafile Lines
+  id: totrans-170
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.6 跳过数据文件行
+- en: Problem
+  id: totrans-171
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to skip few first lines from a datafile.
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望从数据文件中跳过几行。
+- en: Solution
+  id: totrans-173
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use `IGNORE ... LINES` clause for `LOAD DATA INFILE` and option `--ignore-lines`
+    for *mysqlimport*.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 `LOAD DATA INFILE` 使用 `IGNORE ... LINES` 子句和对于 *mysqlimport* 使用 `--ignore-lines`
+    选项。
+- en: Discussion
+  id: totrans-175
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'To skip the first *`n`* lines of a datafile, add an `IGNORE` *`n`* `LINES`
+    clause to the `LOAD` `DATA` statement. For example, a file might include an initial
+    line of column labels. You can skip it like this:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要跳过数据文件的前 *`n`* 行，请在 `LOAD DATA` 语句中添加一个 `IGNORE` *`n`* `LINES` 子句。例如，文件可能包含一个包含列标签的初始行。您可以像这样跳过它：
+- en: '[PRE30]'
+  id: totrans-177
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: '*mysqlimport* supports an `--ignore-lines=`*`n`* option that corresponds to
+    `IGNORE` *`n`* `LINES`.'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysqlimport* 支持一个 `--ignore-lines=` *`n`* 选项，对应于 `IGNORE` *`n`* `LINES`。'
+- en: 13.7 Specifying Input Column Order
+  id: totrans-179
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.7 指定输入列顺序
+- en: Problem
+  id: totrans-180
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Column order in the datafile and the table is different and you need to change
+    for the import.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据文件和表中的列顺序不同，您需要为导入做出更改。
+- en: Solution
+  id: totrans-182
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Specify order of the columns when importing.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 导入时指定列的顺序。
+- en: Discussion
+  id: totrans-184
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: '`LOAD` `DATA` assumes that columns in the datafile have the same order as the
+    columns in the table. If that’s not true, specify a list to indicate the table
+    columns into which to load the datafile columns. Suppose that your table has columns
+    `a`, `b`, and `c`, but successive columns in the datafile correspond to columns
+    `b`, `c`, and `a`. Load the file like this:'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LOAD DATA`假设数据文件中的列与表中的列具有相同的顺序。如果不是这样，请指定一个列表来指示数据文件列应加载到哪些表列中。假设您的表具有列`a`、`b`和`c`，但数据文件的连续列对应于列`b`、`c`和`a`。像这样加载文件：'
+- en: '[PRE31]'
+  id: totrans-186
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: '*mysqlimport* has a corresponding `--columns` option to specify the column
+    list:'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysqlimport*有一个对应的`--columns`选项，用于指定列名列表：'
+- en: '[PRE32]'
+  id: totrans-188
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 13.8 Preprocessing Input Values Before Inserting Them
+  id: totrans-189
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.8 在插入之前预处理输入值
+- en: Problem
+  id: totrans-190
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Values in the datafile cannot be inserted into the database as is. You need
+    to modify them before inserting.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据文件中的值不能直接插入到数据库中。您需要在插入之前对它们进行修改。
+- en: Solution
+  id: totrans-192
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use `SET` clause for `LOAD DATA INFILE` and MySQL functions to modify values.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`LOAD DATA INFILE`和MySQL函数的`SET`子句来修改值。
+- en: Discussion
+  id: totrans-194
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: '`LOAD` `DATA` can perform limited preprocessing of input values before inserting
+    them, which sometimes enables you to map input data onto more appropriate values
+    before loading them into your table. This is useful when values are not in a format
+    suitable for loading into a table (for example, they are in the wrong units, or
+    two input fields must be combined and inserted into a single column).'
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LOAD DATA`在插入之前可以对输入值进行有限的预处理，有时可以在加载到表之前将输入数据映射到更合适的值，这在值不适合加载到表中的情况下非常有用（例如，它们的单位不正确，或者两个输入字段必须组合并插入到单个列中）。'
+- en: The previous section shows how to specify a column list for `LOAD` `DATA` to
+    indicate how input fields correspond to table columns. The column list also can
+    name user-defined variables, such that for each input record, the input fields
+    are assigned to the variables. You can then perform calculations with those variables
+    before inserting the result into the table. Specify these calculations in a `SET`
+    clause that names one or more *`col_name`* `=` *`expr`* assignments, separated
+    by commas.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前一节展示了如何为`LOAD DATA`指定列名列表，以指示输入字段如何对应到表列。列名还可以命名用户定义变量，以便为每个输入记录将输入字段分配给变量。然后，您可以在一个`SET`子句中指定这些变量的计算，命名一个或多个*`col_name`*
+    `=` *`expr`*赋值，用逗号分隔。
+- en: 'Suppose that a datafile has the following columns, with the first line providing
+    column labels:'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设数据文件具有以下列，并且第一行提供列标签：
+- en: '[PRE33]'
+  id: totrans-198
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'Suppose also that the file is to be loaded into a table that has these columns:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还假设文件将加载到具有以下列的表中：
+- en: '[PRE34]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'To import the file, you must address several mismatches between its fields
+    and the table columns:'
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要导入文件，您必须解决其字段与表列之间的几个不匹配：
+- en: The file contains separate date and time fields that must be combined into date-and-time
+    values for insertion into the `DATETIME` column.
+  id: totrans-202
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 文件包含单独的日期和时间字段，必须将它们组合成日期时间值，以便插入到`DATETIME`列中。
+- en: The file contains a name field, which must be split into separate first and
+    last name values for insertion into the `first_name` and `last_name` columns.
+  id: totrans-203
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 文件包含一个名字字段，必须将其拆分为单独的名和姓值，以便插入到`first_name`和`last_name`列中。
+- en: The file contains a weight in pounds, which must be converted to kilograms for
+    insertion into the `weight_kg` column. (1 lb. equals .454 kg.)
+  id: totrans-204
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 文件包含一个以磅为单位的重量，必须将其转换为公斤，以便插入到`weight_kg`列中（1磅等于0.454公斤）。
+- en: The file contains state names, but the table contains two-letter abbreviations.
+    The name can be mapped to the abbreviation by performing a lookup in the `states`
+    table.
+  id: totrans-205
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 文件包含州名，但表中包含两个字母的缩写。可以通过在`states`表中进行查找来将名称映射到缩写。
+- en: 'To handle these conversions, skip the first line that contains the column labels,
+    assign each input column to a user-defined variable, and write a `SET` clause
+    to perform the calculations:'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要处理这些转换，请跳过包含列标签的第一行，将每个输入列分配给用户定义的变量，并编写一个`SET`子句来执行计算：
+- en: '[PRE35]'
+  id: totrans-207
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'After the import operation, the table contains these rows:'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 导入操作后，表中包含以下行：
+- en: '[PRE36]'
+  id: totrans-209
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: '`LOAD` `DATA` can perform data value reformatting, as just shown. Other examples
+    showing uses for this capability occur elsewhere. (For example, [Recipe 13.12](#nch-xfer-xfer-null)
+    uses it to map `NULL` values, and [Recipe 14.16](ch14.xhtml#nch-format-format-date-import)
+    rewrites non-ISO dates to ISO format during data import.) However, although `LOAD`
+    `DATA` can map input values to other values, it cannot outright reject an input
+    record that is found to contain unsuitable values. To do that, either preprocess
+    the input file to remove these records or issue a `DELETE` statement after loading
+    the file.'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LOAD` `DATA`可以执行数据值重新格式化，就像刚才展示的那样。其他显示此功能用法的示例在其他地方也有出现。（例如，[Recipe 13.12](#nch-xfer-xfer-null)将其用于映射`NULL`值，而[Recipe
+    14.16](ch14.xhtml#nch-format-format-date-import)在数据导入期间将非ISO日期重写为ISO格式。）然而，虽然`LOAD`
+    `DATA`可以将输入值映射到其他值，但它不能完全拒绝包含不合适值的输入记录。要做到这一点，要么预处理输入文件以删除这些记录，要么在加载文件后发出`DELETE`语句。'
+- en: 13.9 Ignoring Datafile Columns
+  id: totrans-211
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.9 忽略数据文件列
+- en: Problem
+  id: totrans-212
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Your datafile contains extra fields that should not be added to the database.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你的数据文件包含额外的字段，不应添加到数据库中。
+- en: Solution
+  id: totrans-214
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Specify column order when importing data. In place of the columns that need
+    to be ignored specify user-defined variable.
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在导入数据时指定列顺序。在需要忽略的列位置指定用户定义变量。
+- en: Discussion
+  id: totrans-216
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Extra columns at the end of input lines are easy to handle. If a line contains
+    more columns than are in the table, `LOAD` `DATA` just ignores them (although
+    it might produce a nonzero warning count).
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果一行包含比表中列数更多的列，`LOAD` `DATA`会忽略它们（尽管它可能会生成非零的警告计数）。
+- en: 'Skipping columns in the middle of lines is a bit more involved. To handle this,
+    use a column list with `LOAD` `DATA` that assigns the columns to be ignored to
+    a dummy user-defined variable. Suppose that you want to load information from
+    a Unix password file */etc/passwd*, which contains lines in the following format:'
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在行中跳过中间的列涉及到更多步骤。为了处理这个问题，使用一个包含`LOAD` `DATA`指定要忽略列的列列表，并将它们分配给一个虚拟用户定义变量。假设你要加载Unix密码文件*/etc/passwd*中的信息，该文件包含以下格式的行：
+- en: '[PRE37]'
+  id: totrans-219
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'Suppose also that you don’t want to load the password and directory columns.
+    A table to hold the information in the remaining columns looks like this:'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还假设你不想加载密码和目录列。用来保存剩余列信息的表如下所示：
+- en: '[PRE38]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'To load the file, specify that the column delimiter is a colon. Also, tell
+    `LOAD` `DATA` to skip the second and sixth fields that contain the password and
+    directory. To do this, add a column list in the statement. The list should include
+    the name of each column to load into the table, and a dummy user-defined variable
+    for columns to be ignored (you can use the same variable for all of them). The
+    resulting statement looks like this:'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要加载文件，请指定列分隔符为冒号。还要告诉`LOAD` `DATA`跳过包含密码和目录的第二和第六字段。为此，在语句中添加一个列列表。列表应包括每个要加载到表中的列的名称，并且对于要忽略的列使用一个虚拟用户定义变量（你可以对所有这些列使用相同的变量）。生成的语句如下所示：
+- en: '[PRE39]'
+  id: totrans-223
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'The corresponding *mysqlimport* command includes a `--columns` option:'
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相应的*mysqlimport*命令包括`--columns`选项：
+- en: '[PRE40]'
+  id: totrans-225
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: See Also
+  id: totrans-226
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: Another approach to ignoring columns is to preprocess the input file to remove
+    columns. Utility *yank_col.pl*, included into the recipes distribution, can extract
+    and display datafile columns in any order.
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 忽略列的另一种方法是预处理输入文件以删除列。实用程序*yank_col.pl*包含在配方分发中，可以按任意顺序提取和显示数据文件列。
+- en: 13.10 Importing CSV Files
+  id: totrans-228
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.10 导入CSV文件
+- en: Problem
+  id: totrans-229
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to load a file that is in CSV format.
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你想要加载一个CSV格式的文件。
+- en: Solution
+  id: totrans-231
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the appropriate format specifiers with `LOAD` `DATA` or *mysqlimport*.
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用适当的格式指示符与`LOAD` `DATA`或*mysqlimport*。
+- en: Discussion
+  id: totrans-233
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Datafiles in CSV format contain values that are delimited by commas rather
+    than tabs and that may be quoted with double-quote characters. A CSV file *mytbl.txt*
+    containing lines that end with carriage return/linefeed pairs can be loaded into
+    `mytbl` using `LOAD` `DATA`:'
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CSV格式的数据文件包含由逗号分隔而不是制表符的值，并且可能用双引号括起来。一个包含以回车/换行对结束的行的CSV文件*mytbl.txt*可以使用`LOAD`
+    `DATA`加载到`mytbl`中：
+- en: '[PRE41]'
+  id: totrans-235
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'Or like this using *mysqlimport*:'
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者像这样使用*mysqlimport*：
+- en: '[PRE42]'
+  id: totrans-237
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: 13.11 Exporting Query Results from MySQL
+  id: totrans-238
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.11 从MySQL导出查询结果
+- en: Problem
+  id: totrans-239
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to export the result of a query from MySQL into a file or another program.
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你想要将MySQL查询的结果导出到一个文件或另一个程序。
+- en: Solution
+  id: totrans-241
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the `SELECT` … `INTO` `OUTFILE` statement, or redirect the output of the
+    *mysql* program.
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`SELECT` … `INTO` `OUTFILE`语句，或者重定向*mysql*程序的输出。
+- en: Discussion
+  id: totrans-243
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: The `SELECT` … `INTO` `OUTFILE` statement exports a query result directly into
+    a file on the server host. To capture the result on the client host instead, redirect
+    the output of the *mysql* program. These methods have different strengths and
+    weaknesses; get to know them both and apply whichever one best suits a given situation.
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SELECT` … `INTO` `OUTFILE` 语句直接将查询结果导出到服务器主机上的文件中。要在客户端主机上捕获结果，可以重定向 *mysql*
+    程序的输出。这两种方法各有优劣；请了解它们并根据具体情况选择合适的方法。'
+- en: Exporting using the SELECT ... INTO OUTFILE statement
+  id: totrans-245
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用 `SELECT ... INTO OUTFILE` 语句导出
+- en: 'The syntax for `SELECT ... INTO OUTFILE` statement combines a regular `SELECT`
+    with `INTO` `OUTFILE` *`file_name`*. The default output format is the same as
+    for `LOAD` `DATA`, so the following statement exports the `passwd` table into
+    */tmp/passwd.txt* as a tab-delimited, linefeed-terminated file:'
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SELECT ... INTO OUTFILE` 语句的语法将普通的 `SELECT` 与 `INTO` `OUTFILE` *`file_name`*
+    结合在一起。默认输出格式与 `LOAD` `DATA` 相同，因此以下语句将 `passwd` 表导出为一个制表符分隔、换行符结束的文件 */tmp/passwd.txt*：'
+- en: '[PRE43]'
+  id: totrans-247
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'To change the output format, use options similar to those used with `LOAD`
+    `DATA` that indicate how to quote and delimit columns and records. For example,
+    to export the `passwd` table (created earlier in [Recipe 13.1](#nch-xfer-xfer-load-data))
+    in CSV format with CRLF-terminated lines, use this statement:'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要更改输出格式，请使用类似于 `LOAD` `DATA` 使用的选项，指示如何引用和分隔列和记录。例如，要以 CSV 格式导出先前在 [Recipe 13.1](#nch-xfer-xfer-load-data)
+    中创建的 `passwd` 表，并以 CRLF 结束行，请使用此语句：
+- en: '[PRE44]'
+  id: totrans-249
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: '`SELECT` … `INTO` `OUTFILE` has these properties:'
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SELECT` … `INTO` `OUTFILE` 具有以下特性：'
+- en: The output file is created directly by the MySQL server, so the filename should
+    indicate where to write the file on the server host. The file location is determined
+    using the same rules as for `LOAD` `DATA` without `LOCAL`, as described in [Recipe
+    13.1](#nch-xfer-xfer-load-data). (There is no `LOCAL` version of the statement
+    analogous to the `LOCAL` version of `LOAD` `DATA`.)
+  id: totrans-251
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 输出文件由 MySQL 服务器直接创建，因此文件名应指示在服务器主机上写入文件的位置。文件位置的确定使用与未使用 `LOCAL` 的 `LOAD` `DATA`
+    相同的规则，如 [Recipe 13.1](#nch-xfer-xfer-load-data) 中所述。（该语句没有类似于 `LOAD` `DATA` 的
+    `LOCAL` 版本。）
+- en: You must have the MySQL `FILE` privilege to execute the `SELECT` … `INTO` `OUTFILE`
+    statement.
+  id: totrans-252
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 执行 `SELECT` … `INTO` `OUTFILE` 语句必须具有 MySQL 的 `FILE` 特权。
+- en: The output file must not already exist. (This prevents MySQL from overwriting
+    files that may be important.)
+  id: totrans-253
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 输出文件不能已经存在。（这可以防止 MySQL 覆盖可能很重要的文件。）
+- en: You should have a login account on the server host or some way to access files
+    on that host. `SELECT` … `INTO` `OUTFILE` is of no value to you if you cannot
+    retrieve the output file.
+  id: totrans-254
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您应该在服务器主机上拥有登录帐户或某种方式访问该主机上的文件。如果您无法检索输出文件，`SELECT` … `INTO` `OUTFILE` 对您毫无价值。
+- en: Under Unix, before MySQL 8.0.17, the file is created world readable and is owned
+    by the account used for running the MySQL server. This means that although you
+    can read the file, you may not be able to delete it unless you can log in using
+    that account. As of MySQL 8.0.17, the file is world writable.
+  id: totrans-255
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在 Unix 环境下，在 MySQL 8.0.17 之前，该文件是全局可读的，并由用于运行 MySQL 服务器的帐户拥有。这意味着虽然您可以读取文件，但除非您可以使用该帐户登录，否则可能无法删除它。从
+    MySQL 8.0.17 开始，文件是全局可写的。
+- en: If the option `secure_file_priv` is set, you can only export into the specified
+    directory.
+  id: totrans-256
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果设置了选项 `secure_file_priv`，则只能导出到指定目录。
+- en: Exporting using the mysql client program
+  id: totrans-257
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用 mysql 客户端程序导出
+- en: 'Because `SELECT` … `INTO` `OUTFILE` writes the datafile on the server host,
+    you cannot use it unless your MySQL account has the `FILE` privilege. To export
+    data into a local file owned by yourself, use another strategy. If all you require
+    is tab-delimited output, do a <q>poor-man’s export</q> by executing a `SELECT`
+    statement with the *mysql* program and redirecting the output to a file. That
+    way you can write query results into a file on your local host without the `FILE`
+    privilege. Here’s an example that exports the login name and command interpreter
+    columns from the `passwd` table:'
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为 `SELECT` … `INTO` `OUTFILE` 在服务器主机上写入数据文件，所以除非您的 MySQL 帐户具有 `FILE` 特权，否则无法使用它。要将数据导出到您自己拥有的本地文件，请使用其他策略。如果您只需要制表符分隔的输出，请通过使用
+    *mysql* 程序执行 `SELECT` 语句并将输出重定向到文件来进行“穷人的导出”。这样，您可以将查询结果写入到本地主机上的文件，而无需 `FILE`
+    特权。以下是一个示例，导出 `passwd` 表中的登录名和命令解释器列：
+- en: '[PRE45]'
+  id: totrans-259
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: The `-e` option specifies the statement to execute (see [Recipe 1.5](ch01.xhtml#nch-mysql-mysql-interactive)),
+    and `--skip-column-names` tells MySQL not to write the row of column names that
+    normally precedes statement output (see [Recipe 1.7](ch01.xhtml#nch-mysql-mysql-output)).
+    Operator `>` instructs *mysql* to redirect output into the file. Otherwise result
+    will be printed onto the screen.
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`-e`选项指定要执行的语句（参见[Recipe 1.5](ch01.xhtml#nch-mysql-mysql-interactive)），`--skip-column-names`告诉MySQL不要写入通常在语句输出之前的列名行（参见[Recipe
+    1.7](ch01.xhtml#nch-mysql-mysql-output)）。运算符`>`指示*mysql*将输出重定向到文件中。否则结果将被打印到屏幕上。'
+- en: Note that MySQL writes `NULL` values as the string <q>NULL</q>. Some postprocessing
+    to convert them may be needed, depending on what you want to do with the output
+    file. We discuss how to handle `NULL` values during export and import in [Recipe
+    13.12](#nch-xfer-xfer-null)
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，MySQL将`NULL`值写为字符串 <q>NULL</q>。根据输出文件的处理方式，可能需要进行一些后处理来转换它们。我们在[Recipe 13.12](#nch-xfer-xfer-null)中讨论如何在导出和导入过程中处理`NULL`值。
+- en: 'It’s possible to produce output in formats other than tab-delimited by sending
+    the query result into a postprocessing filter that converts tabs to something
+    else. For example, to use hash marks as delimiters, convert all tabs to `#` characters
+    (*`TAB`* indicates where you type a tab character in the command):'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以通过将查询结果发送到后处理过滤器来生成除了制表符分隔之外的其他格式的输出。例如，要使用井号作为分隔符，将所有制表符转换为`#`字符（*`TAB`*指示输入命令时输入制表符字符的位置）：
+- en: '[PRE46]'
+  id: totrans-263
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: 'You can also use *tr* for this purpose, although the syntax varies for different
+    implementations of this utility. For Mac OS X or Linux, the command looks like
+    this:'
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您也可以为此目的使用*tr*，尽管该实用程序的语法在不同实现中有所不同。对于Mac OS X或Linux，命令如下所示：
+- en: '[PRE47]'
+  id: totrans-265
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: The *mysql* commands just shown use `--skip-column-names` to suppress column
+    labels from appearing in the output. Under some circumstances, it may be useful
+    to include the labels. (For example, if they will useful when importing the file
+    later.) In this respect, exporting query results with *mysql* is more flexible
+    than `SELECT` … `INTO` `OUTFILE` because the latter cannot produce output that
+    includes column labels.
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 刚才展示的*mysql*命令使用`--skip-column-names`来防止输出中出现列标签。在某些情况下，包含这些标签可能会有用（例如，在稍后导入文件时）。在这方面，使用*mysql*导出查询结果比`SELECT`
+    … `INTO` `OUTFILE`更灵活，因为后者无法生成包含列标签的输出。
+- en: Another way to export query results to a file on the client host is to use the
+    *mysql_to_text.pl* utility, available in the recipes distribution. That program
+    has options that enable you to specify the output format explicitly. To export
+    a query result as an Excel spreadsheet or XML document, use *mysql_to_excel.pl*
+    and *mysql_to_xml.pl* utilities.
+  id: totrans-267
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种将查询结果导出到客户端主机上的文件的方法是使用配方发布中提供的*mysql_to_text.pl*实用程序。该程序具有选项，使您能够明确指定输出格式。要将查询结果导出为Excel电子表格或XML文档，请使用*mysql_to_excel.pl*和*mysql_to_xml.pl*实用程序。
+- en: 13.12 Importing and Exporting NULL Values
+  id: totrans-268
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.12 导入和导出NULL值
+- en: Problem
+  id: totrans-269
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You need to represent `NULL` values in a datafile.
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要在数据文件中表示`NULL`值。
+- en: Solution
+  id: totrans-271
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a value not otherwise present, so that you can distinguish `NULL` from all
+    other legitimate non-`NULL` values. When you import the file, convert instances
+    of that value to `NULL`.
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用一个在其他情况下不存在的值，这样你就可以区分`NULL`和所有其他合法的非`NULL`值。当你导入文件时，将该值的实例转换为`NULL`。
+- en: Discussion
+  id: totrans-273
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: There’s no standard for representing `NULL` values in datafiles, which makes
+    them problematic for import and export operations. The difficulty arises from
+    the fact that `NULL` indicates the *absence* of a value, and that’s not easy to
+    represent literally in a datafile. Using an empty column value is the most obvious
+    thing to do, but that’s ambiguous for string-valued columns because there is no
+    way to distinguish a `NULL` represented that way from a true empty string. Empty
+    values can be a problem for other data types as well. For example, if you load
+    an empty value with `LOAD` `DATA` into a numeric column, it is stored as `0` rather
+    than as `NULL` and thus becomes indistinguishable from a true `0` in the input.
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据文件中没有关于表示`NULL`值的标准，这使得它们在导入和导出操作中变得棘手。困难之处在于`NULL`表示*值的缺失*，而这在数据文件中很难直接表示。使用空列值是最明显的做法，但对于字符串值列来说存在歧义，因为无法区分以这种方式表示的`NULL`和真正的空字符串。对于其他数据类型，空值也可能是个问题。例如，如果将空值加载到数值列中，则会将其存储为`0`而不是`NULL`，因此在输入中它变得无法与真正的`0`区分开。
+- en: 'The usual solution to this problem is to represent `NULL` using a value not
+    otherwise present in the data. This is how `LOAD` `DATA` and *mysqlimport* handle
+    the issue: they understand the value of `\N` by convention to mean `NULL`. (`\N`
+    is interpreted as `NULL` only when it occurs by itself, not as part of a larger
+    value such as `x\N` or `\Nx`.) For example, if you load the following datafile
+    with `LOAD` `DATA`, it treats the instances of `\N` as `NULL`:'
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此问题的通常解决方案是使用数据中未包含的值来表示`NULL`。这就是`LOAD DATA`和*mysqlimport*处理此问题的方式：它们按约定理解`\N`的值表示`NULL`。（只有当`\N`单独出现时，例如`x\N`或`\Nx`，`\N`才会被解释为`NULL`。）例如，如果使用`LOAD
+    DATA`加载以下数据文件，则它将`\N`的实例视为`NULL`：
+- en: '[PRE48]'
+  id: totrans-276
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: 'But you might want to interpret values other than `\N` as signifying `NULL`,
+    and you might have different conventions in different columns. Consider the following
+    datafile:'
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是您可能希望将`\N`以外的值解释为表示`NULL`，并且可能在不同列中有不同的约定。考虑以下数据文件：
+- en: '[PRE49]'
+  id: totrans-278
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: The first column contains strings, and `Unknown` signifies `NULL`. The second
+    column contains integers, and `-1` signifies `NULL`. The third column contains
+    dates, and an empty value signifies `NULL`. What to do?
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一列包含字符串，`Unknown`表示`NULL`。第二列包含整数，`-1`表示`NULL`。第三列包含日期，空值表示`NULL`。该怎么办？
+- en: 'To handle situations like this, use `LOAD` `DATA`’s input preprocessing capability:
+    specify a column list that assigns input values to user-defined variables and
+    use a `SET` clause that maps the special values to true `NULL` values. If the
+    datafile is named *has_nulls.txt*, the following `LOAD` `DATA` statement properly
+    interprets its contents:'
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要处理这种情况，请使用`LOAD DATA`的输入预处理功能：指定一个列列表，将输入值分配给用户定义的变量，并使用`SET`子句将特殊值映射到真正的`NULL`值。如果数据文件命名为*has_nulls.txt*，则以下`LOAD
+    DATA`语句可以正确解释其内容：
+- en: '[PRE50]'
+  id: totrans-281
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: 'The resulting data after import looks like this:'
+  id: totrans-282
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 导入后的数据如下所示：
+- en: '[PRE51]'
+  id: totrans-283
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: 'The preceding discussion pertains to interpreting `NULL` values for import
+    into MySQL, but it’s also necessary to think about `NULL` values when transferring
+    data in the other direction—from MySQL into other programs. Here are some examples:'
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前述讨论涉及将`NULL`值解释为导入到MySQL中，但在将数据从MySQL传输到其他程序时，也需要考虑`NULL`值。以下是一些示例：
+- en: '`SELECT` … `INTO` `OUTFILE` writes `NULL` values as `\N`. Will another program
+    understand that convention? If not, convert `\N` to something the program understands.
+    For example, the `SELECT` statement can export the column using an expression
+    like this:'
+  id: totrans-285
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SELECT` … `INTO OUTFILE` 将`NULL`值写入为`\N`。其他程序是否能理解这种约定？如果不能，请将`\N`转换为程序理解的内容。例如，`SELECT`语句可以使用以下表达式导出列：'
+- en: '[PRE52]'
+  id: totrans-286
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: 'You can use *mysql* in batch mode as an easy way to produce tab-delimited output
+    (see [Recipe 13.11](#nch-xfer-xfer-export-query)), but then `NULL` values appear
+    in the output as instances of the word <q>NULL</q>. If that word occurs nowhere
+    else in the output, you may be able to postprocess it to convert instances of
+    it to something more appropriate. For example, you can use a one-line *sed* command:'
+  id: totrans-287
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以使用*mysql*的批处理模式来生成制表符分隔的输出（参见[Recipe 13.11](https://example.org/nch-xfer-xfer-export-query)），但是`NULL`值会作为单词<q>NULL</q>的实例出现在输出中。如果在输出中该单词没有其他出现，您可以尝试后处理它以将其实例转换为更合适的内容。例如，您可以使用一行*sed*命令：
+- en: '[PRE53]'
+  id: totrans-288
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: If the word <q>NULL</q> appears where it represents something other than a `NULL`
+    value, it’s ambiguous and you should probably export your data differently. For
+    example, use `IFNULL()` to map `NULL` values to something else.
+  id: totrans-289
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如果单词<q>NULL</q>出现在表示非`NULL`值的情况下，它是模棱两可的，您应该考虑以不同方式导出数据。例如，使用`IFNULL()`将`NULL`值映射为其他内容。
+- en: 13.13 Exporting Data in SQL Format
+  id: totrans-290
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.13 SQL格式导出数据
+- en: Problem
+  id: totrans-291
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to export data in SQL format.
+  id: totrans-292
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望以SQL格式导出数据。
+- en: Solution
+  id: totrans-293
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use *mysqldump* or *mysqlpump*.
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用*mysqldump*或*mysqlpump*。
+- en: Discussion
+  id: totrans-295
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: SQL format is widely used for exporting and importing data. It has such advantages
+    that it could be executed inside the MySQL clients as we discuss in [Recipe 1.6](ch01.xhtml#nch-mysql-mysql-batch)
+    and [Recipe 13.14](#nch-xfer-xfer-import-sql). SQL files can also have special
+    information, such as replication source position ([Recipe 3.3](ch03.xhtml#nch-replication-replication-position-existing)),
+    default character set and other. SQL files can contain data for all tables, triggers,
+    events and stored routines on the server, so you may use them to copy your MySQL
+    installation.
+  id: totrans-296
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQL格式广泛用于导出和导入数据。它具有诸如可以在MySQL客户端中执行的优势，正如我们在[Recipe 1.6](ch01.xhtml#nch-mysql-mysql-batch)和[Recipe
+    13.14](#nch-xfer-xfer-import-sql)中讨论的那样。SQL文件还可以包含特殊信息，例如复制源位置（[Recipe 3.3](ch03.xhtml#nch-replication-replication-position-existing)）、默认字符集和其他信息。SQL文件可以包含服务器上所有表格、触发器、事件和存储过程的数据，因此您可以使用它们来复制您的MySQL安装。
+- en: 'Since very first versions MySQL distribution contains utility *mysqldump* that
+    allows to export (dump) data into a SQL file. *mysqldump* is very easy to use.
+    For example, to dump all databases run it with option `--all-databases`:'
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自MySQL分发的最早版本就包含了工具*mysqldump*，它允许将数据导出（转储）到SQL文件中。*mysqldump*使用非常简单。例如，要转储所有数据库，使用`--all-databases`选项运行它：
+- en: '[PRE54]'
+  id: totrans-298
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: 'To copy all tables in the database `cookbook` put its name as a *mysqldump*
+    parameter:'
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要复制数据库`cookbook`中的所有表格，请将其名称作为*mysqldump*的参数：
+- en: '[PRE55]'
+  id: totrans-300
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: 'To export just few tables in the database `cookbook` specify their names after
+    the database name. Thus, to copy tables `limbs` and `patients` run:'
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 若要仅导出数据库`cookbook`中的几张表，请在数据库名后指定它们的名称。因此，要复制`limbs`和`patients`表，运行以下命令：
+- en: '[PRE56]'
+  id: totrans-302
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: Shell command `>` redirects output of the *mysqldump* into a file. You may also
+    specify an option `--result-file` to instruct *mysqldump* to store result in the
+    named file.
+  id: totrans-303
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Shell命令`>`将*mysqldump*的输出重定向到文件中。您还可以指定`--result-file`选项，指示*mysqldump*将结果存储在指定的文件中。
+- en: Resulting file will contain SQL instructions that allow to re-create a database,
+    tables in it and then fill them with data.
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果文件将包含SQL指令，允许重新创建数据库及其表格，并填充数据。
+- en: 'Normally MySQL works in high concurrent environments. Therefore *mysqldump*
+    supports the following options to ensure consistency of the resulting backup file:'
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常MySQL在高并发环境中工作。因此，*mysqldump*支持以下选项以确保备份文件的一致性：
+- en: '`--lock-all-tables`'
+  id: totrans-306
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`--lock-all-tables`'
+- en: Locks all tables accross all databases with a read lock, preventing writes to
+    any of the tables until the dump is finished.
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用读锁在所有数据库中锁定所有表格，防止在完成转储之前对任何表格进行写入。
+- en: '`--lock-tables`'
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`--lock-tables`'
+- en: Locks all tables for each dumped database separately. This protection prevents
+    writes only into a database being exported, but it does not guarantee consistency
+    of the resulting dump for multiple-database backups.
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分别为每个转储的数据库锁定所有表格。此保护仅阻止写入正在导出的数据库，但不能保证多数据库备份的结果一致性。
+- en: '`--single-transaction`'
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`--single-transaction`'
+- en: Starts a transaction before dumping. This option does not prevent any write
+    and still guarantees consistency of the backup. This is the recommended option
+    for backups of tables that use transactional storage engines.
+  id: totrans-311
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在转储之前启动一个事务。该选项不会阻止任何写操作，但仍保证备份的一致性。这是备份使用事务存储引擎表格的推荐选项。
+- en: Tip
+  id: totrans-312
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 小贴士
+- en: Since ensuring consistency may affect performance of the high concurrent writes,
+    it is advisable to run *mysqldump* on the read-only replica.
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于保证一致性可能影响高并发写入的性能，建议在只读复制品上运行*mysqldump*。
+- en: '*mysqldump* is a mature tool, but it exports data in a single thread. This
+    maybe not so performant as we expect nowadays. Therefore since version 5.7 MySQL
+    distribution includes one more backup tool: *mysqlpump*.'
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysqldump*是一个成熟的工具，但它在单线程中导出数据。这可能不符合我们现在的性能期望。因此，自版本5.7起，MySQL分发包括了另一个备份工具：*mysqlpump*。'
+- en: '*mysqlpump* works similarly to *mysqldump*. You may use the same options as
+    for *mysqldump* to export all databases, single database or just a few tables.
+    But *mysqlpump* also supports parallel processing to speed up the dump process,
+    progress indicator, smarter dumping of the user accounts, filters and other features
+    that *mysqldump* lacks.'
+  id: totrans-315
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysqlpump*类似于*mysqldump*。您可以使用与*mysqldump*相同的选项来导出所有数据库、单个数据库或只是几张表。但*mysqlpump*还支持并行处理以加快转储过程、进度指示器、更智能地导出用户账户、过滤器等功能，这些是*mysqldump*所不具备的。'
+- en: 'Thus, to create a dump of the whole MySQL instance in four threads, protect
+    the dump with the `--single-transaction` option and see the progress bar use command:'
+  id: totrans-316
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，要在四个线程中创建整个MySQL实例的转储，使用`--single-transaction`选项保护转储，并查看进度条，请运行以下命令：
+- en: '[PRE57]'
+  id: totrans-317
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: Note
+  id: totrans-318
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: '*mysqlpump* supports option `--single-transaction`, but does not support `--lock-all-tables`
+    and `--lock-tables`. It has option `--add-locks` instead that surrounds each dumped
+    table with `LOCK TABLES` and `UNLOCK TABLES` statements.'
+  id: totrans-319
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysqlpump* 支持选项 `--single-transaction`，但不支持 `--lock-all-tables` 和 `--lock-tables`。它有选项
+    `--add-locks`，该选项会在每个转储表周围添加 `LOCK TABLES` 和 `UNLOCK TABLES` 语句。'
+- en: See Also
+  id: totrans-320
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 另请参阅
+- en: For additional information about *mysqldump*, see [mysqldump — A Database Backup
+    Program](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html) and about *mysqlpump*,
+    see [mysqlpump — A Database Backup Program](https://dev.mysql.com/doc/refman/8.0/en/mysqlpump.html)
+    in the MySQL User Reference Manual.
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于 *mysqldump* 的更多信息，请参见 [mysqldump — A Database Backup Program](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html)，关于
+    *mysqlpump* 的更多信息，请参见 [mysqlpump — A Database Backup Program](https://dev.mysql.com/doc/refman/8.0/en/mysqlpump.html)
+    在 MySQL 用户参考手册中。
+- en: 13.14 Importing SQL Data
+  id: totrans-322
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.14 导入 SQL 数据
+- en: Problem
+  id: totrans-323
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You have a SQL dump file and want to import it.
+  id: totrans-324
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你有一个 SQL 转储文件并希望导入它。
+- en: Solution
+  id: totrans-325
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Process the file using *mysql* client or MySQL Shell.
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 *mysql* 客户端或 MySQL Shell 处理文件。
+- en: Discussion
+  id: totrans-327
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: A SQL dump is just a file with SQL commands. Therefore you can read it with
+    *mysql* client as we discussed in [Recipe 1.6](ch01.xhtml#nch-mysql-mysql-batch)
+  id: totrans-328
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQL 转储只是一个包含 SQL 命令的文件。因此，你可以像我们在 [Recipe 1.6](ch01.xhtml#nch-mysql-mysql-batch)
+    中讨论的那样使用 *mysql* 客户端读取它。
+- en: '[PRE58]'
+  id: totrans-329
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: MySQL Shell supports similar functionality in SQL mode.
+  id: totrans-330
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL Shell 在 SQL 模式下支持类似的功能。
+- en: To load dump from the command line specify option `--sql` for the *mysqlsh*
+    client and redirect input into it.
+  id: totrans-331
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要从命令行加载转储，请为 *mysqlsh* 客户端指定选项 `--sql` 并将输入重定向到其中。
+- en: '[PRE59]'
+  id: totrans-332
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: To load dump while in the interactive session switch to the SQL mode and use
+    command *\source* or its shortcut *\.*
+  id: totrans-333
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在交互会话中加载转储，请切换到 SQL 模式并使用命令 *\source* 或其快捷方式 *\.*。
+- en: '[PRE60]'
+  id: totrans-334
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: 13.15 Exporting Query Results as XML
+  id: totrans-335
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.15 将查询结果导出为 XML
+- en: Problem
+  id: totrans-336
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to export the result of a query as an XML document.
+  id: totrans-337
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你想将查询结果导出为 XML 文档。
+- en: Solution
+  id: totrans-338
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the *mysql* client,or *mysqldump* with option `--xml`.
+  id: totrans-339
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 *mysql* 客户端或 *mysqldump* 并选择选项 `--xml`。
+- en: Discussion
+  id: totrans-340
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: The *mysql* client can produce XML-format output from a query result (see [Recipe
+    1.7](ch01.xhtml#nch-mysql-mysql-output)).
+  id: totrans-341
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysql* 客户端可以从查询结果生成 XML 格式输出（参见 [Recipe 1.7](ch01.xhtml#nch-mysql-mysql-output)）。'
+- en: 'Suppose that a table named `expt` contains test scores from an experiment:'
+  id: totrans-342
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设名为 `expt` 的表包含实验中的测试分数：
+- en: '[PRE61]'
+  id: totrans-343
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: 'Run *mysql* client with optin `--xml`:'
+  id: totrans-344
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 运行 *mysql* 客户端并选择选项 `--xml`：
+- en: '[PRE62]'
+  id: totrans-345
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: 'The resulting XML document, *expt.xml*, looks like this:'
+  id: totrans-346
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成的 XML 文档 *expt.xml* 如下所示：
+- en: '[PRE63]'
+  id: totrans-347
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: 'To produce similar output with *mysqldump*, run it with option `--xml`. The
+    resulting file will contain table definition unless you specify option `--no-create-info`:'
+  id: totrans-348
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用 *mysqldump* 以选项 `--xml` 导出类似的输出。生成的文件将包含表定义，除非你指定选项 `--no-create-info`：
+- en: '[PRE64]'
+  id: totrans-349
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: 13.16 Importing XML into MySQL
+  id: totrans-350
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.16 将 XML 导入 MySQL
+- en: Problem
+  id: totrans-351
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to import an XML document into a MySQL table.
+  id: totrans-352
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你想将 XML 文档导入到 MySQL 表中。
+- en: Solution
+  id: totrans-353
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use `LOAD XML` statement.
+  id: totrans-354
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `LOAD XML` 语句。
+- en: Discussion
+  id: totrans-355
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Importing an XML document depends on being able to parse the document and extract
+    record contents from it. How you do that depends on how the document is written.
+    To read XML files, created by the *mysql* client, use the `LOAD XML` statement.
+  id: totrans-356
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 导入 XML 文档取决于能够解析文档并从中提取记录内容。如何执行此操作取决于文档的编写方式。要读取由 *mysql* 客户端创建的 XML 文件，请使用
+    `LOAD XML` 语句。
+- en: 'To load file `expt.xml` that we created in [Recipe 13.15](#nch-xfer-xfer-xml-export),
+    run the following:'
+  id: totrans-357
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要加载我们在 [Recipe 13.15](#nch-xfer-xfer-xml-export) 中创建的文件 `expt.xml`，请运行以下命令：
+- en: '[PRE65]'
+  id: totrans-358
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: '`LOAD XML` statement automatically recognizes three different XML formats as
+    shown below.'
+  id: totrans-359
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LOAD XML` 语句会自动识别下面显示的三种不同 XML 格式。'
+- en: Column names as attributes and column values as attribute values
+  id: totrans-360
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 列名作为属性，列值作为属性值
+- en: '[PRE66]'
+  id: totrans-361
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: Column names as tags and column values as tag values.
+  id: totrans-362
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 列名作为标签，列值作为标签值。
+- en: '[PRE67]'
+  id: totrans-363
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: Column names as values of the attribute `name` of the tag `field`, and column
+    values as their values.
+  id: totrans-364
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 列名作为标签 `field` 的属性 `name` 的值，列值作为它们的值。
+- en: '[PRE68]'
+  id: totrans-365
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: This is the same format that *mysql*, *mysqldump*, and other MySQL utilities
+    use.
+  id: totrans-366
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这与 *mysql*、*mysqldump* 和其他 MySQL 工具使用的相同格式。
+- en: 'If your XML file uses different tag name, specify it with clause `ROWS IDENTIFIED
+    BY`. For example, if rows for the table `expt` are defined as follow:'
+  id: totrans-367
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你的 XML 文件使用不同的标签名，请使用 `ROWS IDENTIFIED BY` 子句指定它。例如，如果表 `expt` 的行定义如下：
+- en: '[PRE69]'
+  id: totrans-368
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: 'Load them with the statement:'
+  id: totrans-369
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用以下语句加载它们：
+- en: '[PRE70]'
+  id: totrans-370
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: 13.17 Importing Data in JSON Format
+  id: totrans-371
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.17 使用 JSON 格式导入数据
+- en: Problem
+  id: totrans-372
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You have a JSON file and want to import it into MySQL database.
+  id: totrans-373
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你有一个 JSON 文件并希望将其导入到 MySQL 数据库。
+- en: Solution
+  id: totrans-374
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use MySQL Shell utility *importJson*.
+  id: totrans-375
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 MySQL Shell 实用程序 *importJson*。
+- en: Discussion
+  id: totrans-376
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: JSON is a popular format for storing data. You can have it prepared by an application
+    or want to import data from MongoDB.
+  id: totrans-377
+  prefs: []
+  type: TYPE_NORMAL
+  zh: JSON 是存储数据的流行格式。您可以让应用程序准备好它，或者希望从 MongoDB 导入数据。
+- en: Utility *importJson* takes path to the JSON file and dictionary of options as
+    arguments. You can either import JSON into a collection or into a table. In the
+    latter case you need to specify `tableColumn` where to store the document unless
+    default value `doc` works for you.
+  id: totrans-378
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实用程序 *importJson* 接受 JSON 文件的路径和选项字典作为参数。您可以将 JSON 导入到集合中，也可以导入到表中。在后一种情况下，除非默认值
+    `doc` 对您有效，否则需要指定要存储文档的 `tableColumn`。
+- en: The document should contain list of JSON objects, separated by a new line. This
+    list should not be a member of JSON array or another object.
+  id: totrans-379
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文档应包含以新行分隔的 JSON 对象列表。此列表不应是 JSON 数组或其他对象的成员。
+- en: '[PRE71]'
+  id: totrans-380
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: You will find JSON dump of the collection `CollectionLimbs` in the file *collections/limbs.json*
+    of the `recipes` distribution.
+  id: totrans-381
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您将在 `recipes` 发行版的 *collections/limbs.json* 文件中找到集合 `CollectionLimbs` 的 JSON
+    转储。
+- en: To insert data from the JSON file into collection `CollectionLimbs` run following
+    code.
+  id: totrans-382
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将 JSON 文件中的数据插入到 `CollectionLimbs` 集合中，请运行以下代码。
+- en: '[PRE72]'
+  id: totrans-383
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: '[![1](Images/1.png)](#co_nch-xfer-xfer-importjson-options_co)'
+  id: totrans-384
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![1](Images/1.png)](#co_nch-xfer-xfer-importjson-options_co)'
+- en: First, create a dictionary object with options. At the minimum, you need to
+    specify collection name and the schema.
+  id: totrans-385
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，创建一个带有选项的字典对象。最少需要指定集合名称和模式。
+- en: '[![2](Images/2.png)](#co_nch-xfer-xfer-importjson-importJson_co)'
+  id: totrans-386
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![2](Images/2.png)](#co_nch-xfer-xfer-importjson-importJson_co)'
+- en: Then call *util.importJson* with path to the JSON file and options dictionary
+    as arguments.
+  id: totrans-387
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后使用 JSON 文件的路径和选项字典作为参数调用 *util.importJson*。
+- en: You can also call utility *importJson* from the command line without entering
+    interactive MySQL Shell session. To do it use option `--import` of the command
+    *mysqlsh* and specify path to the JSON file and target collection as parameters.
+  id: totrans-388
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以从命令行调用实用程序 *importJson*，而无需进入交互式 MySQL Shell 会话。要执行此操作，请使用命令 *mysqlsh* 的选项
+    `--import`，并将 JSON 文件的路径以及目标集合作为参数指定。
+- en: '[PRE73]'
+  id: totrans-389
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: Tip
+  id: totrans-390
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: If no collection or a table with the specific name exists in the database, utility
+    *importJson* will create it for you.
+  id: totrans-391
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果数据库中不存在具有特定名称的集合或表，则实用程序 *importJson* 将为您创建它。
+- en: 13.18 Importing data from MongoDB
+  id: totrans-392
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.18 从 MongoDB 导入数据
+- en: Problem
+  id: totrans-393
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to import data from a MongoDB collection.
+  id: totrans-394
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望从 MongoDB 集合导入数据。
+- en: Solution
+  id: totrans-395
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: 'Export the collection from MongoDB into a file with help of the utility *mongoexport*
+    and use *importJson* with option `"convertBsonTypes": true` to import the collection
+    into MySQL.'
+  id: totrans-396
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '使用实用程序 *mongoexport* 将集合从 MongoDB 导出到文件，并使用 *importJson* 并选择选项 `"convertBsonTypes":
+    true` 将集合导入到 MySQL 中。'
+- en: Solution
+  id: totrans-397
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: '*importJson* can import documents, exported from MongoDB with the help of the
+    utility *mongoexport*. Additionally, it can convert BSON data types into MySQL
+    format. To explore this feature put `"convertBsonTypes": true` into the options
+    dictionary and perform import.'
+  id: totrans-398
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*importJson* 可以导入使用实用程序 *mongoexport* 从 MongoDB 导出的文档，并将 BSON 数据类型转换为 MySQL
+    格式。要探索此功能，请将 `"convertBsonTypes": true` 放入选项字典中，并执行导入操作。'
+- en: '[PRE74]'
+  id: totrans-399
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: The resulting collection `blogs` uses data in MySQL format. We can check it
+    if select all documents from the collection using MySQL Shell.
+  id: totrans-400
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果集合 `blogs` 使用 MySQL 格式的数据。我们可以通过使用 MySQL Shell 选择该集合中的所有文档来验证它。
+- en: '[PRE75]'
+  id: totrans-401
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: '[![1](Images/1.png)](#co_ch-xfer-xfer-importjson-bson_oid_co)'
+  id: totrans-402
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![1](Images/1.png)](#co_ch-xfer-xfer-importjson-bson_oid_co)'
+- en: BSON OID value `"_id":{"$oid":"6029abb942e2e9c45760eabc"}` converted to MySQL
+    ID format.
+  id: totrans-403
+  prefs: []
+  type: TYPE_NORMAL
+  zh: BSON OID 值 `"_id":{"$oid":"6029abb942e2e9c45760eabc"}` 转换为 MySQL ID 格式。
+- en: '[![2](Images/2.png)](#co_ch-xfer-xfer-importjson-bson_date_co)'
+  id: totrans-404
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![2](Images/2.png)](#co_ch-xfer-xfer-importjson-bson_date_co)'
+- en: BSON Date value `"date_created":{"$date":"2021-02-13T23:01:13.154Z"}` converted
+    to MySQL Date format.
+  id: totrans-405
+  prefs: []
+  type: TYPE_NORMAL
+  zh: BSON 日期值 `"date_created":{"$date":"2021-02-13T23:01:13.154Z"}` 转换为 MySQL 日期格式。
+- en: You will find JSON dump of the collection `blogs` in the file *collections/blogs.json*
+    of the `recipes` distribution.
+  id: totrans-406
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您将在 `recipes` 发行版的 *collections/blogs.json* 文件中找到集合 `blogs` 的 JSON 转储。
+- en: 13.19 Exporting Data in JSON Format
+  id: totrans-407
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.19 以 JSON 格式导出数据
+- en: Problem
+  id: totrans-408
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to export MySQL collection into a JSON file.
+  id: totrans-409
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望将 MySQL 集合导出到 JSON 文件中。
+- en: Solution
+  id: totrans-410
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use MySQL Shell to retrieve result in the JSON format. Redirect output into
+    a file if needed.
+  id: totrans-411
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 MySQL Shell 检索以 JSON 格式返回的结果。如有需要，将输出重定向到文件。
+- en: Discussion
+  id: totrans-412
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'MySQL Shell allows you to retrieve data in JSON format. The following code
+    snippet dumps collection `CollectionLimbs` and redirects result into a file:'
+  id: totrans-413
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL Shell 允许您以 JSON 格式检索数据。以下代码片段将集合 `CollectionLimbs` 转储并将结果重定向到文件中：
+- en: '[PRE76]'
+  id: totrans-414
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: '[![1](Images/1.png)](#co_nch-xfer-xfer-exportjson-select_co)'
+  id: totrans-415
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![1](Images/1.png)](#co_nch-xfer-xfer-exportjson-select_co)'
+- en: Select the collection.
+  id: totrans-416
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择集合。
+- en: '[![2](Images/2.png)](#co_nch-xfer-xfer-exportjson-fetch_co)'
+  id: totrans-417
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![2](Images/2.png)](#co_nch-xfer-xfer-exportjson-fetch_co)'
+- en: Fetch all rows from the collection.
+  id: totrans-418
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从集合中获取所有行。
+- en: '[![3](Images/3.png)](#co_nch-xfer-xfer-exportjson-print_co)'
+  id: totrans-419
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![3](Images/3.png)](#co_nch-xfer-xfer-exportjson-print_co)'
+- en: Print the result and redirect command output into a file.
+  id: totrans-420
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 打印结果并将命令输出重定向到文件中。
+- en: Resulting file will contain array of JSON documents. This is not the same format
+    that MySQL Shell utility *importJson* can use. If you want to import the data
+    back into MySQL modify resulting file. You can do it with help of the utility
+    *jq*.
+  id: totrans-421
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果文件将包含一组 JSON 文档。这不是 MySQL Shell 实用程序 *importJson* 可以使用的相同格式。如果要将数据导入 MySQL，请修改结果文件。您可以借助实用程序
+    *jq* 来完成此操作。
+- en: '[PRE77]'
+  id: totrans-422
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: '*jq* reads file `limbs.json` and prints each its array element into standard
+    output. Then we redirect result into a file `limbs_fixed.json`.'
+  id: totrans-423
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*jq* 读取文件 `limbs.json` 并将其每个数组元素打印到标准输出。然后，我们将结果重定向到文件 `limbs_fixed.json` 中。'
+- en: See Also
+  id: totrans-424
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 另请参阅
+- en: For additional information about utility *jq*, see the [jq Manual](https://stedolan.github.io/jq/manual/).
+  id: totrans-425
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关实用程序 *jq* 的更多信息，请参阅 [jq 手册](https://stedolan.github.io/jq/manual/)。
+- en: 13.20 Guessing Table Structure from a Datafile
+  id: totrans-426
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 13.20 从数据文件中猜测表结构
+- en: Problem
+  id: totrans-427
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Someone gives you a datafile and says, <q>Here, put this into MySQL for me.</q>
+    But no table yet exists to hold the data. You need to create a table that will
+    hold data from the file.
+  id: totrans-428
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有人给了您一个数据文件，并说：<q>嗨，请把这个放到 MySQL 中。</q> 但还没有表来存储数据。您需要创建一个可以容纳文件数据的表。
+- en: Solution
+  id: totrans-429
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a utility that guesses the table structure by examining the datafile contents.
+  id: totrans-430
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用一个通过检查数据文件内容来猜测表结构的实用程序。
+- en: Discussion
+  id: totrans-431
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Sometimes you must import data into MySQL for which no table has yet been set
+    up. You can create the table yourself, based on any knowledge you have about the
+    contents of the file. Or you might be able to avoid some of the work by using
+    *guess_table.pl*, a utility located in the *transfer* directory of the `recipes`
+    distribution. *guess_table.pl* reads the datafile to see what kind of information
+    it contains, then attempts to produce an appropriate `CREATE` `TABLE` statement
+    that matches the contents of the file. This script is necessarily imperfect because
+    column contents sometimes are ambiguous. (For example, a column containing a small
+    number of distinct strings might be a `VARCHAR` column or an `ENUM`.) Still, it
+    may be easier to tweak the `CREATE` `TABLE` statement that *guess_table.pl* produces
+    than to write the statement from scratch. This utility also has diagnostic value,
+    although that’s not its primary purpose. For example, if you believe a column
+    contains only numbers, but *guess_table.pl* indicates that it should be a `VARCHAR`
+    column, that tells you the column contains at least one nonnumeric value.
+  id: totrans-432
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时您必须导入 MySQL 中尚未设置表的数据。您可以根据您对文件内容的了解自己创建表格。或者您可以使用 *guess_table.pl*，这是分发中
+    *transfer* 目录中的一个实用程序。*guess_table.pl* 读取数据文件以查看其中包含的信息类型，然后尝试生成与文件内容匹配的适当 `CREATE`
+    `TABLE` 语句。这个脚本是不完美的，因为列内容有时是含糊不清的。（例如，包含少量不同字符串的列可能是 `VARCHAR` 列或 `ENUM` 列。）尽管如此，调整
+    *guess_table.pl* 生成的 `CREATE` `TABLE` 语句可能比从头开始编写更容易。尽管这个实用程序也具有诊断价值，但这并不是它的主要目的。例如，如果您认为某列只包含数字，但
+    *guess_table.pl* 表示它应该是 `VARCHAR` 列，这表明该列至少包含一个非数字值。
+- en: '*guess_table.pl* assumes that its input is in tab-delimited, linefeed-terminated
+    format. It also assumes valid input because any attempt to guess data types based
+    on possibly flawed data is doomed to failure. This means, for example, that if
+    a date column is to be recognized as such, it should be in ISO format. Otherwise,
+    *guess_table.pl* may characterize it as a `VARCHAR` column. If a datafile doesn’t
+    satisfy these assumptions, you may be able to reformat it first using the *cvt_file.pl*
+    and *cvt_date.pl* utilities, available in the recipes distribution.'
+  id: totrans-433
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*guess_table.pl* 假设其输入为制表符分隔的换行终止格式。它还假设输入有效，因为基于可能存在缺陷的数据来猜测数据类型是注定失败的。这意味着，例如，如果要识别日期列，它应该采用
+    ISO 格式。否则，*guess_table.pl* 可能会将其描述为 `VARCHAR` 列。如果数据文件不满足这些假设，您可以首先使用配方分发中提供的实用程序
+    *cvt_file.pl* 和 *cvt_date.pl* 重新格式化它。'
+- en: '*guess_table.pl* understands the following options:'
+  id: totrans-434
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*guess_table.pl* 理解以下选项：'
+- en: '`--labels`'
+  id: totrans-435
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`--labels`'
+- en: Interpret the first input line as a row of column labels and use them for table
+    column names. Without this option, *guess_table.pl* uses default column names
+    of `c1`, `c2`, and so forth.
+  id: totrans-436
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将第一行输入解释为列标签行，并将其用作表列名。如果没有此选项，*guess_table.pl* 将使用`c1`、`c2`等默认列名。
+- en: If the file contains a row of labels and you omit this option, *guess_table.pl*
+    treats the labels as data values. The likely result is that the script will characterize
+    *all* columns as `VARCHAR` columns (even those that otherwise contain only numeric
+    or temporal values), due to the presence of a nonnumeric or nontemporal value
+    in the column.
+  id: totrans-437
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果文件包含一个标签行而您省略此选项，*guess_table.pl*将标签视为数据值。由于列中存在非数字或非时间值，脚本可能将*所有*列描述为`VARCHAR`列。
+- en: '`--lower`, `--upper`'
+  id: totrans-438
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`--lower`, `--upper`'
+- en: Force column names in the `CREATE` `TABLE` statement to be lowercase or uppercase.
+  id: totrans-439
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 强制在`CREATE TABLE`语句中使用小写或大写的列名。
+- en: '`--quote-names`, `--skip-quote-names`'
+  id: totrans-440
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`--quote-names`, `--skip-quote-names`'
+- en: Quote or do not quote table and column identifiers in the `CREATE` `TABLE` statement
+    with `` ` `` characters (for example, `` `mytbl` ``). This can be useful if an
+    identifier is a reserved word. The default is to quote identifiers.
+  id: totrans-441
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`CREATE TABLE`语句中使用 `` ` `` 字符引用或不引用表和列标识符（例如，`` `mytbl` ``）。如果标识符是保留字，这可能很有用。默认情况是引用标识符。
+- en: '`--report`'
+  id: totrans-442
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`--report`'
+- en: Generate a report rather than a `CREATE` `TABLE` statement. The script displays
+    the information that it gathers about each column.
+  id: totrans-443
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成报告而不是`CREATE TABLE`语句。该脚本显示它收集到的有关每列的信息。
+- en: '`--table``=`*`tbl_name`*'
+  id: totrans-444
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`--table``=`*`tbl_name`*'
+- en: Specify the table name to use in the `CREATE` `TABLE` statement. The default
+    name is `t`.
+  id: totrans-445
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 指定在`CREATE TABLE`语句中使用的表名称。默认名称为`t`。
+- en: 'Here’s an example of how *guess_table.pl* works. Suppose that a file named
+    *commodities.csv* is in CSV format and has the following contents:'
+  id: totrans-446
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是*guess_table.pl*的工作示例。假设名为*commodities.csv*的文件以CSV格式存在，并且内容如下：
+- en: '[PRE78]'
+  id: totrans-447
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: 'The first row indicates the column labels, and the following rows contain data
+    records, one per line. The values in the `trade_date` column are dates, but they
+    are in *`MM-DD-YYYY`* format rather than the ISO format that MySQL expects. *cvt_date.pl*
+    can convert these dates to ISO format. However, both *cvt_date.pl* and *guess_table.pl*
+    require input in tab-delimited, linefeed-terminated format, so first use *cvt_file.pl*
+    to convert the input to tab-delimited, linefeed-terminated format, and *cvt_date.pl*
+    to convert the dates:'
+  id: totrans-448
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一行指示列标签，随后的行包含数据记录，每行一条。`trade_date`列中的值是日期，但它们使用的是*`MM-DD-YYYY`*格式，而不是MySQL期望的ISO格式。*cvt_date.pl*
+    可以将这些日期转换为ISO格式。但是，*cvt_date.pl*和*guess_table.pl*都要求以制表符分隔、以换行符结尾的格式输入，因此首先使用*cvt_file.pl*将输入转换为制表符分隔、以换行符结尾的格式，然后使用*cvt_date.pl*转换日期：
+- en: '[PRE79]'
+  id: totrans-449
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: 'Feed the resulting file, *tmp2.txt*, to *guess_table.pl*:'
+  id: totrans-450
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将生成的文件*tmp2.txt*输入到*guess_table.pl*中：
+- en: '[PRE80]'
+  id: totrans-451
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: 'The `CREATE` `TABLE` statement that *guess_table.pl* writes to *commodities.sql*
+    looks like this:'
+  id: totrans-452
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*guess_table.pl* 写入 *commodities.sql* 的`CREATE TABLE`语句如下所示：'
+- en: '[PRE81]'
+  id: totrans-453
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: '*guess_table.pl* produces that statement based on heuristics such as these:'
+  id: totrans-454
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*guess_table.pl* 根据以下启发性原则生成该语句：'
+- en: A column that contains only numeric values is assumed to be a `BIGINT` if no
+    values contain a decimal point, and `DOUBLE` otherwise.
+  id: totrans-455
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果只包含数字值的列不包含小数点，则假定为`BIGINT`类型，否则为`DOUBLE`类型。
+- en: A numeric column that contains no negative values is likely to be `UNSIGNED`.
+  id: totrans-456
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不包含负值的数值列可能是`UNSIGNED`类型。
+- en: If a column contains no empty values, *guess_table.pl* assumes that it’s probably
+    `NOT` `NULL`.
+  id: totrans-457
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果列不包含空值，则*guess_table.pl*假定它可能是`NOT NULL`。
+- en: Columns that cannot be classified as numbers or dates are taken to be `VARCHAR`
+    columns, with a length equal to the longest value present in the column.
+  id: totrans-458
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 无法归类为数字或日期的列被视为`VARCHAR`列，长度等于该列中出现的最长值。
+- en: You might want to edit the `CREATE` `TABLE` statement that *guess_table.pl*
+    produces, to make modifications such as using smaller integer types, increasing
+    the size of character fields, changing `VARCHAR` to `CHAR`, adding indexes, or
+    changing a column name that is a reserved word in MySQL.
+  id: totrans-459
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可能需要编辑*guess_table.pl*生成的`CREATE TABLE`语句，以进行修改，例如使用较小的整数类型，增加字符字段的大小，将`VARCHAR`更改为`CHAR`，添加索引或更改MySQL中的保留字列名。
+- en: 'To create the table, use the statement produced by *guess_table.pl*:'
+  id: totrans-460
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要创建表，请使用*guess_table.pl*生成的语句：
+- en: '[PRE82]'
+  id: totrans-461
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: 'Then load the datafile into the table (skipping the initial row of labels):'
+  id: totrans-462
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后将数据文件加载到表中（跳过初始标签行）：
+- en: '[PRE83]'
+  id: totrans-463
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: 'The resulting table contents after import look like this:'
+  id: totrans-464
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 导入后生成的表格内容如下：
+- en: '[PRE84]'
+  id: totrans-465
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE84]'

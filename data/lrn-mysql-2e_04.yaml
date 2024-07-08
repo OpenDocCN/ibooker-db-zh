@@ -1,0 +1,4255 @@
+- en: Chapter 4\. Working with Database Structures
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第4章。处理数据库结构
+- en: This chapter shows you how to create your own databases, add and remove structures
+    such as tables and indexes, and make choices about column types in your tables.
+    It focuses on the syntax and features of SQL, and not the semantics of conceiving,
+    specifying, and refining a database design; you’ll find an introductory description
+    of database design techniques in [Chapter 2](ch02.xhtml#CH2_DESIGN). To work through
+    this chapter, you need to understand how to work with an existing database and
+    its tables, as discussed in [Chapter 3](ch03.xhtml#CH3_BASICS).
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章节向您展示如何创建您自己的数据库，添加和删除诸如表和索引之类的结构，并在您的表中做出列类型的选择。它侧重于 SQL 的语法和特性，而不是关于构思、指定和完善数据库设计的语义；您将在[第2章](ch02.xhtml#CH2_DESIGN)中找到数据库设计技术的简介描述。要完成本章的学习，您需要理解如何处理现有数据库及其表，如[第3章](ch03.xhtml#CH3_BASICS)所讨论的那样。
+- en: This chapter lists the structures in the sample `sakila` database. If you followed
+    the instructions for loading the database in [“Entity Relationship Modeling Examples”](ch02.xhtml#BAS-SEC-MODELING-EXAMPLES),
+    you’ll already have the database available and know how to restore it after you’ve
+    modified its structures.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章节列出了示例数据库`sakila`中的结构。如果您按照[“实体关系建模示例”](ch02.xhtml#BAS-SEC-MODELING-EXAMPLES)中的说明加载了数据库，那么您已经可以使用这个数据库，并且知道在修改其结构后如何恢复它。
+- en: When you finish this chapter, you’ll have all the basics required to create,
+    modify, and delete database structures. Together with the techniques you learned
+    in [Chapter 3](ch03.xhtml#CH3_BASICS), you’ll have the skills to carry out a wide
+    range of basic operations. Chapters [5](ch05.xhtml#CH5_ADV1) and [7](ch07.xhtml#CH7_DOING_MORE)
+    cover skills that allow you to do more advanced operations with MySQL.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您完成本章时，您将掌握创建、修改和删除数据库结构所需的所有基础知识。与您在[第3章](ch03.xhtml#CH3_BASICS)中学到的技术一起，您将具备执行各种基本操作的技能。第[5章](ch05.xhtml#CH5_ADV1)和[7章](ch07.xhtml#CH7_DOING_MORE)介绍了允许您使用
+    MySQL 执行更高级操作的技能。
+- en: Creating and Using Databases
+  id: totrans-4
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 创建和使用数据库
+- en: 'When you’ve finished designing a database, the first practical step to take
+    with MySQL is to create it. You do this with the `CREATE DATABASE` statement.
+    Suppose you want to create a database with the name `lucy`. Here’s the statement
+    you’d type:'
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您完成数据库的设计后，使用 MySQL 的第一个实际步骤是创建它。您可以使用`CREATE DATABASE`语句完成这一步骤。假设您要创建一个名为`lucy`的数据库，这是您要输入的语句：
+- en: '[PRE0]'
+  id: totrans-6
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: '[PRE1]'
+  id: totrans-7
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: We assume here that you know how to connect using the MySQL client, as described
+    in [Chapter 1](ch01.xhtml#CH1_INSTALL). We also assume that you’re able to connect
+    as the root user or as another user who can create, delete, and modify structures
+    (you’ll find a detailed discussion on user privileges in [Chapter 8](ch08.xhtml#CH8_USER_MANAGEMENT)).
+    Note that when you create the database, MySQL says that one row was affected.
+    This isn’t in fact a normal row in any specific database, but a new entry added
+    to the list that you see with the `SHOW DATABASES` command.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在这里假设您知道如何使用 MySQL 客户端进行连接，正如[第1章](ch01.xhtml#CH1_INSTALL)中所述。我们还假设您能够作为 root
+    用户或另一个能够创建、删除和修改结构的用户进行连接（您将在[第8章](ch08.xhtml#CH8_USER_MANAGEMENT)中找到有关用户权限的详细讨论）。请注意，当您创建数据库时，MySQL
+    会说有一行受到影响。事实上，这并不是任何特定数据库中的正常行，而是添加到您使用`SHOW DATABASES`命令看到的列表中的新条目。
+- en: 'Once you’ve created the database, the next step is to use it—that is, choose
+    it as the database you’re working with. You do this with the MySQL `USE` command:'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦您创建了数据库，下一步是使用它——也就是说，选择它作为您正在使用的数据库。您可以使用 MySQL 的`USE`命令来实现这一点：
+- en: '[PRE2]'
+  id: totrans-10
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: '[PRE3]'
+  id: totrans-11
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: This command must be entered on one line and need not be terminated with a semicolon,
+    though we usually do so automatically through habit. Once you’ve used (selected)
+    the database, you can start creating tables, indexes, and other structures using
+    the steps discussed in the next section.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此命令必须在一行中输入，无需用分号终止，尽管我们通常会通过习惯自动这样做。一旦您使用（选择）了数据库，您可以开始使用下一节讨论的步骤创建表、索引和其他结构。
+- en: 'Before we move on to creating other structures, let’s discuss a few features
+    and limitations of creating databases. First, let’s see what happens if you try
+    to create a database that already exists:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们继续创建其他结构之前，让我们讨论一下创建数据库的一些特性和限制。首先，让我们看看如果您尝试创建一个已经存在的数据库会发生什么：
+- en: '[PRE4]'
+  id: totrans-14
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: '[PRE5]'
+  id: totrans-15
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'You can avoid this error by adding the `IF NOT EXISTS` keyword phrase to the
+    statement:'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过在语句中添加`IF NOT EXISTS`关键字短语来避免此错误：
+- en: '[PRE6]'
+  id: totrans-17
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: '[PRE7]'
+  id: totrans-18
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'You can see that MySQL didn’t complain, but it didn’t do anything either: the
+    `0 rows affected` message indicates that no data was changed. This addition is
+    useful when you’re adding SQL statements to a script: it prevents the script from
+    aborting on error.'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到MySQL没有投诉，但也没做任何事情：`0 rows affected`消息表明没有数据被更改。这个附加功能在将SQL语句添加到脚本时非常有用：它可以防止脚本在错误时中止。
+- en: 'Let’s look at how to choose database names and use character case. Database
+    names define physical directory (or folder) names on disk. On some operating systems,
+    directory names are case-sensitive; on others, case doesn’t matter. For example,
+    Unix-like systems such as Linux and macOS are typically case-sensitive, whereas
+    Windows isn’t. The result is that database names have the same restrictions: when
+    case matters to the operating system, it matters to MySQL. For example, on a Linux
+    machine, `LUCY`, `lucy`, and `Lucy` are different database names; on Windows,
+    they refer to just one database. Using incorrect capitalization under Linux or
+    macOS will cause MySQL to complain:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看如何选择数据库名称并使用字符大小写。数据库名称定义了磁盘上的物理目录（或文件夹）名称。在某些操作系统上，目录名称区分大小写；在其他系统上，大小写无关紧要。例如，类Unix系统（如Linux和macOS）通常区分大小写，而Windows则不区分。因此，数据库名称具有相同的限制：当大小写对操作系统有影响时，MySQL也会受到影响。例如，在Linux机器上，`LUCY`、`lucy`和`Lucy`是不同的数据库名称；在Windows上，它们指的是同一个数据库。在Linux或macOS下使用不正确的大写会导致MySQL投诉：
+- en: '[PRE8]'
+  id: totrans-21
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: '[PRE9]'
+  id: totrans-22
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: But under Windows, this will normally work.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但在Windows下，这通常会起作用。
+- en: Tip
+  id: totrans-24
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: To make your SQL machine-independent, we recommend that you consistently use
+    lowercase names for databases (and for tables, columns, aliases, and indexes).
+    That’s not a requirement, though, and as earlier examples in this book have demonstrated,
+    you’re welcome to use whatever naming convention you are comfortable with. Just
+    be consistent and remember how MySQL behaves on different OSs.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使你的SQL代码能够跨机器运行，我们建议始终使用小写命名数据库（以及表、列、别名和索引）。当然，这并非硬性要求，在本书的早期示例中已经证明，你可以使用自己习惯的命名规则。只需保持一致，并记住MySQL在不同操作系统上的行为。
+- en: This behavior is controlled by the `lower_case_table_names` parameter. If it’s
+    set to `0`, table names are stored as specified, and comparisons are case-sensitive.
+    If it’s set to `1`, table names are stored in lowercase on disk, and comparisons
+    are not case-sensitive. If this parameter is set to `2`, table names are stored
+    as given but compared in lowercase. On Windows, the default value is `1`. On macOS,
+    the default is `2`. On Linux, a value of `2` is not supported; the server forces
+    the value to `0` instead.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种行为由`lower_case_table_names`参数控制。如果设置为`0`，则表名按指定的方式存储，并且区分大小写。如果设置为`1`，则表名以小写形式存储在磁盘上，并且不区分大小写。如果此参数设置为`2`，则表名按给定的方式存储，但比较时以小写形式进行。在Windows上，默认值为`1`。在macOS上，默认值为`2`。在Linux上，不支持值`2`；服务器会强制将该值设置为`0`。
+- en: 'There are other restrictions on database names. They can be at most 64 characters
+    in length. You also shouldn’t use MySQL reserved words, such as `SELECT`, `FROM`,
+    and `USE`, as names for structures; these can confuse the MySQL parser, making
+    it impossible to interpret the meaning of your statements. You can get around
+    this restriction by enclosing the reserved word in backticks (`` ` ``), but it’s
+    more trouble remembering to do so than it’s worth. In addition, you can’t use
+    certain characters in the names—specifically, the forward slash, backward slash,
+    semicolon, and period characters—and a database name can’t end in whitespace.
+    Again, the use of these characters confuses the MySQL parser and can result in
+    unpredictable behavior. For example, here’s what happens when you insert a semicolon
+    into a database name:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库名称还有其他限制。名称最多可以为64个字符长度。您还不应该使用MySQL保留字，例如`SELECT`、`FROM`和`USE`作为结构的名称；这些保留字会使MySQL解析器混淆，无法解释语句的含义。您可以通过将保留字用反引号（``
+    ` ``）括起来来避免此限制，但这样做比值得的麻烦多。此外，您不能在名称中使用特定字符，包括斜线、反斜线、分号和句点字符，数据库名称不能以空格结束。再次强调，这些字符的使用会使MySQL解析器混淆，并可能导致不可预测的行为。例如，当您在数据库名称中插入分号时会发生什么：
+- en: '[PRE10]'
+  id: totrans-28
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: '[PRE11]'
+  id: totrans-29
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'Since more than one SQL statement can be on a single line, the result is that
+    a database `lu` is created, and then an error is generated by the very short,
+    unexpected SQL statement `cy;`. If you really want to create a database with a
+    semicolon in its name, you can do that with backticks:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于一行中可能有多个SQL语句，结果是创建了一个名为`lu`的数据库，然后由非常短、意外的SQL语句`cy;`生成了错误。如果您确实想要创建一个带有分号名称的数据库，可以使用反引号：
+- en: '[PRE12];`'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[PRE12];`'
+- en: '[PRE13]'
+  id: totrans-32
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: Query OK, 1 row affected (0.01 sec)
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询完成，影响1行（0.01秒）
+- en: '[PRE14]'
+  id: totrans-34
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: mysql> `SHOW` `DATABASES` `LIKE` `` `lu%` [PRE15]
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SHOW` `DATABASES` `LIKE` `` `lu%` [PRE15]
+- en: '[PRE16]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: Creating Tables
+  id: totrans-37
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 创建表格
+- en: 'This section covers topics on table structures. We show you how to:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节涵盖表结构相关主题。我们将向您展示如何：
+- en: Create tables, through introductory examples.
+  id: totrans-39
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过简单示例创建表格。
+- en: Choose names for tables and table-related structures.
+  id: totrans-40
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 选择表格及相关结构的名称。
+- en: Understand and choose column types.
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 理解并选择列类型。
+- en: Understand and choose keys and indexes.
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 理解并选择键和索引。
+- en: Use the proprietary MySQL `AUTO_INCREMENT` feature.
+  id: totrans-43
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用专有的MySQL `AUTO_INCREMENT`功能。
+- en: When you finish this section, you’ll have completed all of the basic material
+    on creating database structures; the remainder of this chapter covers the sample
+    `sakila` database and how to alter and remove existing structures.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完成本节后，您将掌握所有关于创建数据库结构的基础材料；本章的其余部分将涵盖`sakila`示例数据库及如何修改和删除现有结构。
+- en: Basics
+  id: totrans-45
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 基础知识
+- en: 'For the examples in this section, we’ll assume that the database `sakila` hasn’t
+    yet been created. If you want to follow along with the examples and you have already
+    loaded the database, you can drop it for this section and reload it later; dropping
+    it removes the database, its tables, and all of the data, but the original is
+    easy to restore by following the steps in [“Entity Relationship Modeling Examples”](ch02.xhtml#BAS-SEC-MODELING-EXAMPLES).
+    Here’s how you drop it temporarily:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于本节中的示例，假设尚未创建`sakila`数据库。如果您希望跟随示例操作，并且已加载了数据库，可以在本节中删除它，稍后再重新加载；删除它将删除数据库、其表格和所有数据，但可以通过以下步骤轻松恢复原始状态，详见[“实体关系建模示例”](ch02.xhtml#BAS-SEC-MODELING-EXAMPLES)。以下是临时删除它的方法：
+- en: '[PRE17]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: '[PRE18]'
+  id: totrans-48
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: The `DROP` statement is discussed further at the end of this chapter in [“Deleting
+    Structures”](#MOD-SEC-DELETE).
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章末尾进一步讨论`DROP`语句，详见[“删除结构”](#MOD-SEC-DELETE)。
+- en: 'To begin, create the database `sakila` using the statement:'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要开始，使用以下语句创建数据库`sakila`：
+- en: '[PRE19]'
+  id: totrans-51
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: '[PRE20]'
+  id: totrans-52
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'Then select the database with:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后使用以下语句选择数据库：
+- en: '[PRE21]'
+  id: totrans-54
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: '[PRE22]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'We’re now ready to begin creating the tables that will hold our data. Let’s
+    create a table to hold actor details. For now, we’re going to have a simplified
+    structure, and we’ll add more complexity later. Here’s the statement we use:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们准备开始创建将存储数据的表格。让我们创建一个用于保存演员详情的表格。暂时我们将使用简化的结构，稍后再添加更复杂的内容。以下是我们使用的语句：
+- en: '[PRE23]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: '[PRE24]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'Don’t panic—even though MySQL reports that zero rows were affected, it created
+    the table:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不要惊慌——即使MySQL报告说未影响任何行，它已经创建了表格：
+- en: '[PRE25]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: '[PRE26]'
+  id: totrans-61
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'Let’s consider all this in detail. The `CREATE TABLE` command has three major
+    sections:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们详细考虑所有这些内容。`CREATE TABLE`命令有三个主要部分：
+- en: The `CREATE TABLE` statement, which is followed by the table name to create.
+    In this example, it’s `actor`.
+  id: totrans-63
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`CREATE TABLE`语句后跟随要创建的表格名称。在本示例中，它是`actor`。'
+- en: 'A list of one or more columns to be added to the table. In this example, we’ve
+    added quite a few: `actor_id SMALLINT UNSIGNED NOT NULL DEFAULT 0`, `first_name
+    VARCHAR(45) DEFAULT NULL`, `last_name VARCHAR(45)`, and `last_update TIMESTAMP`.
+    We’ll discuss these in a moment.'
+  id: totrans-64
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 列出要添加到表中的一个或多个列。在本示例中，我们添加了相当多的列：`actor_id SMALLINT UNSIGNED NOT NULL DEFAULT
+    0`，`first_name VARCHAR(45) DEFAULT NULL`，`last_name VARCHAR(45)`，以及`last_update
+    TIMESTAMP`。稍后我们会详细讨论这些内容。
+- en: 'Optional key definitions. In this example, we’ve defined a single key: `PRIMARY
+    KEY (actor_id)`. We’ll discuss keys and indexes in detail later in this chapter.'
+  id: totrans-65
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 可选的键定义。在本示例中，我们定义了一个主键：`PRIMARY KEY (actor_id)`。稍后我们将详细讨论键和索引。
+- en: Notice that the `CREATE TABLE` component is followed by an opening parenthesis
+    that’s matched by a closing parenthesis at the end of the statement. Notice also
+    that the other components are separated by commas. There are other elements that
+    you can add to a `CREATE TABLE` statement, and we’ll discuss some in a moment.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意`CREATE TABLE`组件后跟随的是开放括号，与语句末尾的闭合括号相匹配。还要注意其他组件由逗号分隔。`CREATE TABLE`语句还可以添加其他元素，我们稍后将讨论一些内容。
+- en: 'Let’s discuss the column specifications. The basic syntax is as follows: `*name*
+    *type* [NOT NULL | NULL] [DEFAULT *value*]`. The `*name*` field is the column
+    name, and it has the same limitations as database names, as discussed in the previous
+    section. It can be at most 64 characters in length, backward and forward slashes
+    aren’t allowed, periods aren’t allowed, it can’t end in whitespace, and case sensitivity
+    is dependent on the underlying operating system. The `*type*` field defines how
+    and what is stored in the column; for example, we’ve seen that it can be set to
+    `VARCHAR` for strings, `SMALLINT` for numbers, or `TIMESTAMP` for a date and time.'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们讨论列规范。基本语法如下：`*name* *type* [NOT NULL | NULL] [DEFAULT *value*]`。`*name*`字段是列名，具有与数据库名称相同的限制，如前一节所述。其长度最多为64个字符，不允许使用反斜杠和斜杠，不允许使用句点，不能以空白结束，大小写敏感性取决于底层操作系统。`*type*`字段定义了列中存储的内容和方式；例如，我们已经看到它可以设置为`VARCHAR`表示字符串，`SMALLINT`表示数字，或`TIMESTAMP`表示日期和时间。
+- en: If you specify `NOT NULL`, a row isn’t valid without a value for the column;
+    if you specify `NULL` or omit this clause, a row can exist without a value for
+    the column. If you specify a `*value*` with the `DEFAULT` clause, it’ll be used
+    to populate the column when you don’t otherwise provide data; this is particularly
+    useful when you frequently reuse a default value such as a country name. The `*value*`
+    must be a constant (such as `0`, `"cat"`, or `20060812045623`), except if the
+    column is of the type `TIMESTAMP`. Types are discussed in detail in [“Column Types”](#SEC-COLUMN-TYPES).
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果指定了`NOT NULL`，则无值列的行无效；如果指定了`NULL`或省略了此子句，则行可以存在而不为列提供值。如果在`DEFAULT`子句中指定了`*value*`，则在没有其他数据的情况下，它将用于填充列；当您经常重用默认值（如国家名称）时，这尤其有用。`*value*`必须是常量（如`0`、`"cat"`或`20060812045623`），除非列的类型是`TIMESTAMP`。类型将在[“列类型”](#SEC-COLUMN-TYPES)中详细讨论。
+- en: 'The `NOT NULL` and `DEFAULT` features can be used together. If you specify
+    `NOT NULL` and add a `DEFAULT` value, the default is used when you don’t provide
+    a value for the column. Sometimes, this works fine:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`NOT NULL`和`DEFAULT`特性可以一起使用。如果指定了`NOT NULL`并添加了`DEFAULT`值，则在未为列提供值时使用默认值。有时候，这很有效：'
+- en: '[PRE27]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: '[PRE28]'
+  id: totrans-71
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'And sometimes it doesn’t:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时候却不是这样：
+- en: '[PRE29]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: '[PRE30]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'Whether it works or not is dependent on the underlying constraints and conditions
+    of the database: in this example, `actor_id` has a default value of `0`, but it’s
+    also the primary key. Having two rows with the same primary key value isn’t permitted,
+    and so the second attempt to insert a row with no values (and a resulting primary
+    key value of `0`) fails. We discuss primary keys in detail in [“Keys and Indexes”](#SEC-KEYS_AND_INDEXES).'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它是否有效取决于数据库的底层约束和条件：在此示例中，`actor_id`具有默认值`0`，但它也是主键。不允许具有相同主键值的两行存在，因此尝试插入没有值的行（并且结果主键值为`0`）的第二次尝试失败了。我们将在[“键和索引”](#SEC-KEYS_AND_INDEXES)中详细讨论主键。
+- en: Column names have fewer restrictions than database and table names. What’s more,
+    the names are case-insensitive and portable across all platforms. All characters
+    are allowed in column names, though if you want terminate them with whitespace
+    or include periods or other special characters, such as a semicolon or dash, you’ll
+    need to enclose the name in backticks (`` ` ``). Again, we recommend that you
+    consistently choose lowercase names for developer-driven choices (such as database,
+    alias, and table names) and avoid characters that require you to remember to use
+    backticks.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 列名比数据库和表名的限制少。此外，列名不区分大小写，并且在所有平台上都可以移植。列名中允许使用所有字符，但如果要以空白结束或包含句点或其他特殊字符（如分号或破折号），则需要用反引号（``
+    ` ``）括起来。同样，我们建议您始终选择小写名称用于开发者驱动的选择（如数据库、别名和表名），并避免需要记住使用反引号的字符。
+- en: 'Naming columns and other database objects is something of a personal preference
+    when starting anew (you can get some inspiration by looking at the example databases)
+    or a matter of following standards when working on an existing codebase. In general,
+    aim to avoid repetition: in a table named `actor`, use the column name `first_name`
+    rather than `actor_first_name`, which would look redundant when preceded by the
+    table name in a complex query (`actor.actor_first_name` versus `actor.first_name`).
+    An exception to this is when using the ubiquitous `id` column name; either avoid
+    using this or prepend the table name for clarity (e.g., `actor_id`). It’s good
+    practice to use the underscore character to separate words. You could use another
+    character, like a dash or slash, but you’d have to remember to enclose the names
+    with backticks (e.g., `` `actor-id` ``). You can also omit the word-separating
+    formatting altogether, but “CamelCase” is arguably harder to read. As with database
+    and table names, the longest permitted length for a column name is 64 characters.'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在开始新的命名列和其他数据库对象时，命名方式有一些个人偏好（您可以查看示例数据库以获取一些灵感），或者在现有代码库上工作时需要遵循标准。一般来说，避免重复是目标：在名为
+    `actor` 的表中，使用列名 `first_name` 而不是 `actor_first_name`，当在复杂查询中使用表名前缀时，后者看起来会显得多余（`actor.actor_first_name`
+    相对于 `actor.first_name`）。唯一的例外是使用普遍存在的 `id` 列名；要么避免使用这个名称，要么为了清晰起见在前面加上表名前缀（例如
+    `actor_id`）。使用下划线字符来分隔单词是一个良好的做法。您也可以使用其他字符，比如破折号或斜杠，但您需要记住要用反引号将名称括起来（例如 `` `actor-id`
+    ``）。您也可以完全省略单词间的格式化，但是“驼峰命名法”可能更难阅读。与数据库和表名一样，列名的最大允许长度为 64 个字符。
+- en: Collation and Character Sets
+  id: totrans-78
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 排序和字符集
+- en: 'When you’re comparing or sorting strings, how MySQL evaluates the result depends
+    on the character set and collation used. Character sets, or charsets, define what
+    characters can be stored; for example, you may need to store non-English characters
+    such as ю or ü. A collation defines how strings are ordered, and there are different
+    collations for different languages: for example, the position of the character
+    ü in the alphabet is different in two German orderings, and different again in
+    Swedish and Finnish. Because not everyone wants to store English strings, it’s
+    important that a database server be able to manage non-English characters and
+    different ways of sorting characters.'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您比较或排序字符串时，MySQL 如何评估结果取决于所使用的字符集和排序规则。字符集定义了可以存储哪些字符；例如，您可能需要存储像 ю 或 ü 这样的非英文字符。排序规则定义了字符串的顺序，不同的语言有不同的排序规则：例如，在两种德语排序中字符
+    ü 在字母表中的位置不同，在瑞典语和芬兰语中又有所不同。因为不是每个人都希望存储英文字符串，因此数据库服务器能够管理非英文字符和不同的字符排序方式非常重要。
+- en: We understand that discussion of collations and charsets may feel to be too
+    advanced when you’re just starting out learning MySQL. We also think, however,
+    that these are topics worth covering, as mismatched charsets and collations may
+    result in unexpected situations including loss of data and incorrect query results.
+    If you prefer, you can skip this section and some of the later discussion in this
+    chapter and come back to these topics when you want to learn about them specifically.
+    That won’t affect your understanding of other material in this book.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们理解，在您刚开始学习 MySQL 时，讨论排序和字符集可能会感觉太过深奥。然而，我们认为这些是值得涵盖的话题，因为不匹配的字符集和排序可能导致意外情况，包括数据丢失和错误的查询结果。如果您愿意，可以跳过本节以及本章节后面的部分内容，等到您有兴趣学习这些特定内容时再回来阅读。这不会影响您对本书其他材料的理解。
+- en: In our previous string-comparison examples, we ignored the collation and charset
+    issue and just let MySQL use its defaults. In versions of MySQL prior to 8.0,
+    the default character set is `latin1`, and the default collation is `latin1_swedish_ci`.
+    MySQL 8.0 changed the defaults, and now the default charset is `utf8mb4`, and
+    the default collation is `utf8mb4_0900_ai_ci`. MySQL can be configured to use
+    different character sets and collation orders at the connection, database, table,
+    and column levels. The outputs shown here are from MySQL 8.0.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们先前的字符串比较示例中，我们忽略了排序和字符集问题，只是让 MySQL 使用其默认值。在 MySQL 8.0 之前的版本中，默认字符集为 `latin1`，默认排序规则为
+    `latin1_swedish_ci`。MySQL 8.0 更改了默认设置，现在默认字符集为 `utf8mb4`，默认排序规则为 `utf8mb4_0900_ai_ci`。MySQL
+    可以在连接、数据库、表和列级别配置使用不同的字符集和排序顺序。这里显示的输出来自 MySQL 8.0。
+- en: 'You can list the character sets available on your server with the `SHOW CHARACTER
+    SET` command. This shows a short description of each character set, its default
+    collation, and the maximum number of bytes used for each character in that character
+    set:'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用 `SHOW CHARACTER SET` 命令列出服务器上可用的字符集。此命令显示每个字符集的简短描述、默认排序规则以及该字符集中每个字符的最大字节数：
+- en: '[PRE31]'
+  id: totrans-83
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: '[PRE32]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: For example, the `latin1` character set is actually the Windows code page 1252
+    character set that supports West European languages. The default collation for
+    this character set is `latin1_swedish_ci`, which follows Swedish conventions to
+    sort accented characters (English is handled as you’d expect). This collation
+    is case-insensitive, as indicated by the letters `ci`. Finally, each character
+    takes up 1 byte. By comparison, if you use the default `utf8mb4` character set,
+    each character will take up to 4 bytes of storage. Sometimes, it makes sense to
+    change the default. For example, there’s no reason to store base64-encoded data
+    (which, by definition, is ASCII) in `utf8mb4`.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，`latin1` 字符集实际上是支持西欧语言的 Windows 代码页 1252 字符集。这种字符集的默认排序规则是 `latin1_swedish_ci`，遵循瑞典的惯例对带重音的字符进行排序（英语按照预期处理）。此排序规则是不区分大小写的，如字母
+    `ci` 所示。最后，每个字符占用 1 字节。相比之下，如果使用默认的 `utf8mb4` 字符集，每个字符将占用多达 4 个字节的存储空间。有时候，更改默认设置是有道理的。例如，没有理由在
+    `utf8mb4` 中存储 Base64 编码的数据（它定义为 ASCII）。
+- en: 'Similarly, you can list the collation orders and the character sets they apply
+    to:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 类似地，您可以列出排序规则和它们适用的字符集：
+- en: '[PRE33]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: '[PRE34]'
+  id: totrans-88
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: Note
+  id: totrans-89
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The number of character sets and collations available depends on how the MySQL
+    server was built and packaged. The examples we show are from a default MySQL 8.0
+    installation, and the same numbers can be seen on Linux and Windows. MariaDB 10.5,
+    however, has 322 collations but 40 character sets.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可用的字符集和排序规则取决于 MySQL 服务器的构建和打包方式。我们展示的示例来自默认的 MySQL 8.0 安装，相同的数字在 Linux 和 Windows
+    上也可以看到。然而，MariaDB 10.5 有 322 种排序规则，但只有 40 种字符集。
+- en: 'You can see the current defaults on your server as follows:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以按以下方式查看服务器的当前默认设置：
+- en: '[PRE35]'
+  id: totrans-92
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: '[PRE36]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'When you’re creating a database, you can set the default character set and
+    sort order for the database and its tables. For example, if you want to use the
+    `utf8mb4` character set and the `utf8mb4_ru_0900_as_cs` (case-sensitive) collation
+    order, you would write:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在创建数据库时，您可以设置数据库及其表的默认字符集和排序顺序。例如，如果要使用 `utf8mb4` 字符集和 `utf8mb4_ru_0900_as_cs`（区分大小写）的排序顺序，您可以编写：
+- en: '[PRE37]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: '[PRE38]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: Usually, there’s no need to do this if you’ve installed MySQL correctly for
+    your language and region and if you’re not planning on internationalizing your
+    application. With `utf8mb4` being the default since MySQL 8.0, there’s even less
+    need to change the charset. You can also control the character set and collation
+    for individual tables or columns, but we won’t go into the details of how to do
+    that here. We will discuss how collations affect string types in [“String types”](#SEC-STRING-COLUMN-TYPES).
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您已正确为您的语言和地区安装了 MySQL，并且不打算国际化应用程序，则通常不需要这样做。从 MySQL 8.0 开始，默认字符集为 `utf8mb4`，甚至更少需要更改字符集。您还可以控制单独表或列的字符集和排序规则，但我们不会在这里详细讨论如何执行此操作。我们将讨论排序规则如何影响字符串类型的问题，详见[“字符串类型”](#SEC-STRING-COLUMN-TYPES)。
+- en: Other Features
+  id: totrans-98
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 其他特性
+- en: This section briefly describes other features of the `CREATE TABLE` statement.
+    It includes an example using the `IF NOT EXISTS` feature, and a list of advanced
+    features and where to find more about them in this book. The statement shown is
+    the full representation of the table taken from the `sakila` database, unlike
+    the previous simplified example.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节简要描述了 `CREATE TABLE` 语句的其他功能。其中包括使用 `IF NOT EXISTS` 功能的示例，以及在本书中查找更多关于高级功能及其详细信息的列表。所示的语句是从
+    `sakila` 数据库中完整表示的表，不像之前的简化示例。
+- en: 'You can use the `IF NOT EXISTS` keyword phrase when creating a table, and it
+    works much as it does for databases. Here’s an example that won’t report an error
+    even when the `actor` table exists:'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在创建表时，可以使用 `IF NOT EXISTS` 关键字短语，其工作方式与创建数据库类似。以下是一个示例，即使 `actor` 表已存在也不会报错：
+- en: '[PRE39]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: '[PRE40]'
+  id: totrans-102
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'You can see that zero rows are affected, and a warning is reported. Let’s take
+    a look:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以看到没有影响任何行，并且报告了一个警告。让我们来看看：
+- en: '[PRE41]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: '[PRE42]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: 'There are a wide range of additional features you can add to a `CREATE TABLE`
+    statement, only a few of which are present in this example. Many of these are
+    advanced and aren’t discussed in this book, but you can find more information
+    in the MySQL Reference Manual in the section on the [`CREATE TABLE` statement](https://oreil.ly/ZGQgq).
+    These additional features include the following:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`CREATE TABLE`语句中可以添加各种附加功能，本示例中仅列出了其中几个。许多这些功能都是高级功能，在本书中未涉及，但您可以在MySQL参考手册的[`CREATE
+    TABLE`语句](https://oreil.ly/ZGQgq)部分找到更多信息。'
+- en: The `AUTO_INCREMENT` feature for numeric columns
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数值列的`AUTO_INCREMENT`功能
+- en: This feature allows you to automatically create unique identifiers for a table.
+    We discuss it in detail in [“The AUTO_INCREMENT Feature”](#SEC-AUTOINCREMENT).
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此功能允许您为表自动创建唯一标识符。我们在[“AUTO_INCREMENT功能”](#SEC-AUTOINCREMENT)中详细讨论它。
+- en: Column comments
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 列注释
+- en: You can add a comment to a column; this is displayed when you use the `SHOW
+    CREATE TABLE` command that we discuss later in this section.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以向列添加注释；当您使用稍后在本节讨论的`SHOW CREATE TABLE`命令时，会显示这些注释。
+- en: Foreign key constraints
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 外键约束
+- en: You can tell MySQL to check whether data in one or more columns matches data
+    in another table. For example, the `sakila` database has a foreign key constraint
+    on the `city_id` column of the `address` table, referring to the `city` table’s
+    `city_id` column. That means it’s impossible to have an address in a city not
+    present in the `city` table. We introduced foreign key constraints in [Chapter 2](ch02.xhtml#CH2_DESIGN),
+    and we’ll take a look at what engines support foreign key constraints in [“Alternative
+    Storage Engines”](ch07.xhtml#ADV2-SEC-STORAGEENGINES). Not every storage engine
+    in MySQL supports foreign keys.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以告诉MySQL检查一个或多个列中的数据是否与另一个表中的数据匹配。例如，`sakila`数据库在`address`表的`city_id`列上有一个外键约束，引用`city`表的`city_id`列。这意味着在`city`表中不存在的城市中无法有地址。我们在[第二章](ch02.xhtml#CH2_DESIGN)介绍了外键约束，并将在[“备用存储引擎”](ch07.xhtml#ADV2-SEC-STORAGEENGINES)中查看哪些引擎支持外键约束。并非MySQL的每个存储引擎都支持外键。
+- en: Creating temporary tables
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建临时表
+- en: If you create a table using the keyword phrase `CREATE TEMPORARY TABLE`, it’ll
+    be removed (dropped) when the connection is closed. This is useful for copying
+    and reformatting data because you don’t have to remember to clean up. Sometimes
+    temporary tables are also used as an optimization to hold some intermediate data.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果使用`CREATE TEMPORARY TABLE`关键字短语创建表，则在连接关闭时将删除（丢弃）该表。这对于复制和重新格式化数据很有用，因为您无需记住清理工作。有时临时表也用作优化，用于保存一些中间数据。
+- en: Advanced table options
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 高级表选项
+- en: You can control a wide range of features of the table using table options. These
+    include the starting value of `AUTO_INCREMENT`, the way indexes and rows are stored,
+    and options to override the information that the MySQL query optimizer gathers
+    from the table. It’s also possible to specify *generated columns*, containing
+    data like sum of two other columns, as well as indexes on such columns.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用表选项控制表的广泛功能范围。这些包括`AUTO_INCREMENT`的起始值、索引和行存储方式以及覆盖MySQL查询优化器从表中收集的信息的选项。还可以指定*生成的列*，包含像两个其他列的总和之类的数据，以及这些列的索引。
+- en: Control over index structures
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引结构控制
+- en: Some storage engines in MySQL allow you to specify and control what type of
+    internal structure—such as a B-tree or hash table—MySQL uses for its indexes.
+    You can also tell MySQL that you want a full-text or spatial data index on a column,
+    allowing special types of search.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL中的一些存储引擎允许您指定和控制MySQL在其索引上使用的内部结构类型，如B树或哈希表。您还可以告诉MySQL希望在列上创建全文或空间数据索引，允许特殊类型的搜索。
+- en: Partitioning
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分区
+- en: MySQL supports different partitioning strategies, which you can select at table
+    creation time or later. We will not be covering partitioning in this book.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL支持不同的分区策略，您可以在创建表时或以后选择。我们不会在本书中涵盖分区。
+- en: 'You can see the statement used to create a table using the `SHOW CREATE TABLE`
+    statement introduced in [Chapter 3](ch03.xhtml#CH3_BASICS). This often shows you
+    output that includes some of the advanced features we’ve just discussed; the output
+    rarely matches what you actually typed to create the table. Here’s an example
+    for the `actor` table:'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用在[第三章](ch03.xhtml#CH3_BASICS)中介绍的`SHOW CREATE TABLE`语句查看用于创建表的语句。这通常显示了包含我们刚讨论的一些高级功能的输出；输出很少与实际用于创建表的内容匹配。以下是`actor`表的一个示例：
+- en: '[PRE43]'
+  id: totrans-122
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: '[PRE44]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: 'You’ll notice that the output includes content added by MySQL that wasn’t in
+    our original `CREATE TABLE` statement:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您会注意到输出包含MySQL添加的内容，这些内容不在我们原始的`CREATE TABLE`语句中：
+- en: The names of the table and columns are enclosed in backticks. This isn’t necessary,
+    but it does avoid any parsing problems that can be caused by the use of reserved
+    words and special characters, as discussed previously.
+  id: totrans-125
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 表和列的名称用反引号括起来。这并非必需，但可以避免由于使用保留字和特殊字符而引起的任何解析问题，如前面讨论的。
+- en: An additional default `ENGINE` clause is included, which explicitly states the
+    table type that should be used. The setting in a default installation of MySQL
+    is `InnoDB`, so it has no effect in this example.
+  id: totrans-126
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 包括额外默认的`ENGINE`子句，明确说明应使用的表类型。在MySQL的默认安装中设置为`InnoDB`，因此在此示例中没有影响。
+- en: An additional `DEFAULT CHARSET` clause is included, which tells MySQL what character
+    set is used by the columns in the table. Again, this has no effect in a default
+    installation.
+  id: totrans-127
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 包括额外的`DEFAULT CHARSET`子句，告诉MySQL表中的列使用的字符集是什么。同样，在默认安装中没有影响。
+- en: Column Types
+  id: totrans-128
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 列类型
+- en: This section describes the column types you can use in MySQL. It explains when
+    each should be used and any limitations it has. The types are grouped by their
+    purpose. We’ll cover the most widely used data types and mention more advanced
+    or less used types in passing. That doesn’t mean they have no use, but consider
+    learning about them as an exercise. Most likely, you will not remember each of
+    the data types and its particular intricacies, and that’s okay. It’s worth rereading
+    this chapter later and consulting the MySQL documentation on the topic to keep
+    your knowledge up-to-date.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节描述了您可以在MySQL中使用的列类型。它解释了何时应使用每种类型以及它的任何限制。这些类型按其用途分组。我们将涵盖最常用的数据类型，并简要提及更高级或不常用的类型。这并不意味着它们没有用处，但考虑学习它们作为一种练习。您很可能不会记住每种数据类型及其特定的复杂性，这没关系。值得稍后重新阅读本章节并查阅有关主题的MySQL文档，以保持您的知识最新。
+- en: Integer types
+  id: totrans-130
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 整数类型
+- en: 'We will start with numeric data types, and more specifically with integer types,
+    or the types holding specific whole numbers. First, the two most popular integer
+    types:'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将从数值数据类型开始，更具体地说是整数类型，或者保存特定整数的类型。首先，两种最流行的整数类型：
+- en: '`INT[(*width*)] [UNSIGNED] [ZEROFILL]`'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INT[(*width*)] [UNSIGNED] [ZEROFILL]`'
+- en: This is the most commonly used numeric type; it stores integer (whole number)
+    values in the range –2,147,483,648 to 2,147,483,647\. If the optional `UNSIGNED`
+    keyword is added, the range is 0 to 4,294,967,295\. The keyword `INT` is short
+    for `INTEGER`, and they can be used interchangeably. An `INT` column requires
+    4 bytes of storage space.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是最常用的数字类型；它在范围内存储整数（整数）值-2,147,483,648至2,147,483,647。如果添加可选的`UNSIGNED`关键字，则范围为0至4,294,967,295。关键字`INT`是`INTEGER`的缩写，它们可以互换使用。`INT`列需要4个字节的存储空间。
+- en: '`INT`, as well as other integer types, has two properties specific to MySQL:
+    optional `*width*` and `ZEROFILL` arguments. They are not part of a SQL standard,
+    and as of MySQL 8.0 are deprecated. Still, you will surely notice them in a lot
+    of codebases, so we will briefly cover both of them.'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INT`，以及其他整数类型，具有两个特定于MySQL的属性：可选的`*width*`和`ZEROFILL`参数。它们不是SQL标准的一部分，并且自MySQL
+    8.0起已被弃用。尽管如此，您肯定会在许多代码库中注意到它们，因此我们将简要介绍它们。'
+- en: The `*width*` parameter specifies the display width, which can be read by applications
+    as part of the column metadata. Unlike parameters in a similar position for other
+    data types, this parameter has no effect on the storage characteristics of a particular
+    integer type and does not constrain the usable range of values. `INT(4)` and `INT(32)`
+    are the same for the purpose of data storage.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*width*`参数指定显示宽度，可以作为列元数据的一部分被应用程序读取。与其他数据类型类似位置的参数不同，此参数对特定整数类型的存储特性没有影响，也不限制可用值的范围。对于数据存储目的，`INT(4)`和`INT(32)`是相同的。'
+- en: '`ZEROFILL` is an additional argument that is used to left-pad the values with
+    zeros up to the length specified by the `*width*` parameter. If you use `ZEROFILL`,
+    MySQL automatically adds `UNSIGNED` to the declaration (since zero-filling makes
+    sense only in the context of positive numbers).'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ZEROFILL`是一个额外的参数，用于将值左填充为零，直到达到`*width*`参数指定的长度。如果使用`ZEROFILL`，MySQL会自动将`UNSIGNED`添加到声明中（因为零填充只在正数的情况下有意义）。'
+- en: In a few applications where `ZEROFILL` and `*width*` are useful, the `LPAD()`
+    function can be used, or numbers can be stored formatted in `CHAR` columns.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在一些需要`ZEROFILL`和`*width*`的应用程序中，可以使用`LPAD()`函数，或者可以将数字存储为格式化的`CHAR`列。
+- en: '`BIGINT[(*width*)] [UNSIGNED] [ZEROFILL]`'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`BIGINT[(*width*)] [UNSIGNED] [ZEROFILL]`'
+- en: In the world of growing data sizes, having tables with counts of rows in the
+    billions is getting more common. Even simple `id`-type columns might need a wider
+    range than a regular `INT` provides. `BIGINT` solves that problem. It is a large
+    integer type with a signed range of –9,223,372,036,854,775,808 to 9,223,372,036,854,775,807\.
+    An unsigned `BIGINT` can store numbers from 0 to 18,446,744,073,709,551,615\.
+    Columns of this type will require 8 bytes of storage.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在数据规模不断增长的世界中，拥有数十亿行计数的表格变得越来越普遍。即使是简单的`id`类型列，可能也需要比普通的`INT`提供的范围更广。`BIGINT`解决了这个问题。它是一个大整数类型，有一个带符号范围从–9,223,372,036,854,775,808到9,223,372,036,854,775,807。无符号的`BIGINT`可以存储从0到18,446,744,073,709,551,615的数字。这种类型的列将需要8字节的存储空间。
+- en: Internally, all calculations within MySQL are done using signed `BIGINT` or
+    `DOUBLE` values. The important consequence of that is that you should be very
+    careful when dealing with extremely large numbers. There are two issues to be
+    aware of. First, unsigned big integers larger than 9,223,372,036,854,775,807 should
+    only be used with bit functions. Second, if the result of an arithmetical operation
+    is larger than 9,223,372,036,854,775,807, unexpected results might be observed.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在MySQL中，所有计算都是使用带符号的`BIGINT`或`DOUBLE`值完成的。这其中的重要结果是，在处理非常大的数字时，必须非常小心。有两个问题需要注意。首先，大于9,223,372,036,854,775,807的无符号大整数只能与位函数一起使用。其次，如果算术运算的结果大于9,223,372,036,854,775,807，则可能会观察到意外的结果。
+- en: 'For example:'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如：
+- en: '[PRE45]'
+  id: totrans-142
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: '[PRE46]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: '[PRE47]'
+  id: totrans-144
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: '[PRE48]'
+  id: totrans-145
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: '[PRE49]'
+  id: totrans-146
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: '[PRE50]'
+  id: totrans-147
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: '[PRE51]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: '[PRE52]'
+  id: totrans-149
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: Even though 18,446,744,073,709,551,600 is less than 18,446,744,073,709,551,615,
+    since a signed `BIGINT` is used for multiplication internally, the out-of-range
+    error is observed.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使18,446,744,073,709,551,600小于18,446,744,073,709,551,615，由于内部使用带符号的`BIGINT`进行乘法，观察到了超出范围的错误。
+- en: Tip
+  id: totrans-151
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: The `SERIAL` data type can be used as an alias for `BIGINT UNSIGNED NOT NULL
+    AUTO_INCREMENT UNIQUE`. Unless you must optimize for data size and performance,
+    consider using `SERIAL` for your `id`-like columns. Even the `UNSIGNED INT` can
+    run out of range much quicker than you’d expect, and often at the worst possible
+    time.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SERIAL`数据类型可以用作`BIGINT UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE`的别名。除非必须优化数据大小和性能，否则考虑在类似`id`的列中使用`SERIAL`。即使是`UNSIGNED
+    INT`，其超出范围的速度也比你预期的快得多，并且通常出现在最糟糕的时候。'
+- en: 'Keep in mind that although it’s possible to store every integer as a `BIGINT`,
+    that’s wasteful in terms of storage space. Moreover, as we discussed, the `*width*`
+    parameter doesn’t constrain the range of values. To save space and put constraints
+    on stored values, you should use different integer types:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请记住，虽然可以将每个整数存储为`BIGINT`，但从存储空间的角度来看这是浪费的。此外，正如我们讨论过的，`*width*`参数并不限制值的范围。为了节省空间并对存储的值设置约束，应该使用不同的整数类型：
+- en: '`SMALLINT[(*width*)] [UNSIGNED] [ZEROFILL]`'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SMALLINT[(*width*)] [UNSIGNED] [ZEROFILL]`'
+- en: Stores small integers, with a range from –32,768 to 32,767 signed and from 0
+    to 65,535 unsigned. It takes 2 bytes of storage.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储小整数，带有带符号范围从–32,768到32,767和无符号范围从0到65,535。它需要2字节的存储空间。
+- en: '`TINYINT[(*width*)] [UNSIGNED] [ZEROFILL]`'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TINYINT[(*width*)] [UNSIGNED] [ZEROFILL]`'
+- en: The smallest numeric data type, storing even smaller integers. The range of
+    this type is –128 to 127 signed and 0 to 255 unsigned. It takes only 1 byte of
+    storage.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最小的数值数据类型，可以存储更小的整数。这种类型的范围是带符号的–128到127，无符号的0到255。它只需要1字节的存储空间。
+- en: '`BOOL[(*width*)]`'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`BOOL[(*width*)]`'
+- en: 'Short for `BOOLEAN`, and a synonym for `TINYINT(1)`. Usually, Boolean types
+    accept only two values: true or false. However, since `BOOL` in MySQL is an integer
+    type, you can store values from –128 to 127 in a `BOOL`. The value 0 will be treated
+    as false, and all nonzero values as true. It’s also possible to use special `true`
+    and `false` aliases for 1 and 0, respectively. Here are some examples:'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 缩写为`BOOLEAN`，是`TINYINT(1)`的同义词。通常，布尔类型只接受两个值：真或假。但是，由于MySQL中的`BOOL`是整数类型，你可以在`BOOL`中存储–128到127的值。值为0将被视为假，所有非零值将被视为真。还可以使用特殊的`true`和`false`别名来代表1和0。以下是一些例子：
+- en: '[PRE53]'
+  id: totrans-160
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: '[PRE54]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: '[PRE55]'
+  id: totrans-162
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: '[PRE56]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: '[PRE57]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: '[PRE58]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: '[PRE59]'
+  id: totrans-166
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: '[PRE60]'
+  id: totrans-167
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: '`MEDIUMINT[(*width*)] [UNSIGNED] [ZEROFILL]`'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`MEDIUMINT[(*width*)] [UNSIGNED] [ZEROFILL]`'
+- en: Stores values in the signed range of –8,388,608 to 8,388,607 and the unsigned
+    range of 0 to 16,777,215\. It takes 3 bytes of storage.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储有带符号范围从–8,388,608到8,388,607和无符号范围从0到16,777,215的值。它需要3字节的存储空间。
+- en: '`BIT[(*M*)]`'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`BIT[(*M*)]`'
+- en: Special type used to store bit values. `*M*` specifies the number of bits per
+    value and defaults to 1 if omitted. MySQL uses a `b'*value*` syntax for binary
+    values.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用于存储位值的特殊类型。`*M*` 指定每个值的位数，默认为1（如果省略）。MySQL 使用 `b'*value*` 语法来表示二进制值。
+- en: Fixed-point types
+  id: totrans-172
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 固定点类型
+- en: 'The `DECIMAL` and `NUMERIC` data types in MySQL are the same, so although we
+    will only describe `DECIMAL` here, this description also applies to `NUMERIC`.
+    The main difference between fixed-point and floating-point types is precision.
+    For fixed-point types, the value retrieved is identical to the value stored; this
+    isn’t always the case with types that contain decimal points, such as the `FLOAT`
+    and `DOUBLE` types described later. That is the most important property of the
+    `DECIMAL` data type, which is a commonly used numeric type in MySQL:'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 中，`DECIMAL` 和 `NUMERIC` 数据类型是相同的，因此虽然我们这里只描述 `DECIMAL`，但此描述也适用于 `NUMERIC`。固定点和浮点类型的主要区别在于精度。对于固定点类型，检索的值与存储的值相同；对于包含小数点的类型（例如后面描述的
+    `FLOAT` 和 `DOUBLE` 类型），情况并非总是如此。这是 `DECIMAL` 数据类型的最重要属性，它是 MySQL 中常用的数值类型之一：
+- en: '`DECIMAL[(*width*[,*decimals*])] [UNSIGNED] [ZEROFILL]`'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DECIMAL[(*width*[,*decimals*])] [UNSIGNED] [ZEROFILL]`'
+- en: Stores a fixed-point number such as a salary or distance, with a total of `*width*`
+    digits of which some smaller number are `*decimals*` that follow a decimal point.
+    For example, a column declared as `price DECIMAL(6,2)` can be used to store values
+    in the range –9,999.99 to 9,999.99\. `price DECIMAL(10,4)` would allow values
+    like 123,456.1234.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储固定点数，如工资或距离，总共有`*width*`位数，其中一些较小的数字跟随小数点。例如，声明为 `price DECIMAL(6,2)` 的列可用于存储范围内的值
+    -9,999.99 到 9,999.99。`price DECIMAL(10,4)` 允许像 123,456.1234 这样的值。
+- en: Prior to MySQL 5.7, if you tried to store a value outside this range, it would
+    be stored as the closest value in the allowed range. For example, 100 would be
+    stored as 99.99, and –100 would be stored as –99.99\. Starting with version 5.7.5,
+    however, the default SQL mode includes the mode `STRICT_TRANS_TABLES`, which prohibits
+    this and other unsafe behaviors. Using the old behavior is possible, but could
+    result in data loss.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 5.7 之前，如果尝试存储超出此范围的值，它将存储为允许范围内最接近的值。例如，100 将存储为 99.99，而 -100 将存储为 -99.99。然而，从版本
+    5.7.5 开始，默认的 SQL 模式包含 `STRICT_TRANS_TABLES` 模式，禁止此类和其他不安全的行为。使用旧的行为仍然可能，但可能导致数据丢失。
+- en: SQL modes are special settings that control the behavior of MySQL when it comes
+    to queries. For example, they can restrict “unsafe” behavior or affect how queries
+    are interpreted. For the purpose of learning MySQL, we recommend that you stick
+    to the defaults, as they are safe. Changing SQL modes may be required for compatibility
+    with legacy applications across MySQL releases.
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQL 模式是特殊设置，控制 MySQL 在查询时的行为。例如，它们可以限制“不安全”行为或影响查询的解释方式。为了学习 MySQL，建议您保持默认设置，因为它们是安全的。根据
+    MySQL 的发布版本，可能需要更改 SQL 模式以与旧应用程序兼容。
+- en: The `*width*` parameter is optional, and a value of 10 is assumed when it is
+    omitted. The number of `*decimals*` is also optional, and when omitted, a value
+    of 0 is assumed; the maximum value of `*decimals*` may not exceed the value of
+    `*width*`. The maximum value of `*width*` is 65, and the maximum value of `*decimals*`
+    is 30.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*width*` 参数是可选的，当省略时默认为10。`*decimals*` 的数量也是可选的，当省略时默认为0；`*decimals*` 的最大值不得超过
+    `*width*` 的值。`*width*` 的最大值为65，`*decimals*` 的最大值为30。'
+- en: 'If you’re storing only positive values, you can use the `UNSIGNED` keyword
+    as described for `INT`. If you want zero-padding, use the `ZEROFILL` keyword for
+    the same behavior as described for `INT`. The keyword `DECIMAL` has three identical,
+    interchangeable alternatives: `DEC`, `NUMERIC`, and `FIXED`.'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果只存储正值，可以像`INT`一样使用 `UNSIGNED` 关键字。如果需要零填充，可以使用 `ZEROFILL` 关键字，与`INT`中描述的行为相同。`DECIMAL`
+    关键字有三个相同且可互换的替代词：`DEC`、`NUMERIC` 和 `FIXED`。
+- en: Values in `DECIMAL` columns are stored using a binary format. This format uses
+    4 bytes for every nine digits.
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`DECIMAL`列中存储的值采用二进制格式。该格式对于每九位数字使用4字节。
+- en: Floating-point types
+  id: totrans-181
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 浮点类型
+- en: 'In addition to the fixed-point `DECIMAL` type described in the previous section,
+    there are two other types that support decimal points: `DOUBLE` (also known as
+    `REAL`) and `FLOAT`. They’re designed to store approximate numeric values rather
+    than the exact values stored by `DECIMAL`.'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了上一节中描述的固定点 `DECIMAL` 类型外，还有两种支持小数点的类型：`DOUBLE`（也称为 `REAL`）和 `FLOAT`。它们设计用于存储近似数值而不是
+    `DECIMAL` 存储的精确值。
+- en: 'Why would you want approximate values? The answer is that many numbers with
+    a decimal point are approximations of real quantities. For example, suppose you
+    earn $50,000 per annum and you want to store it as a monthly wage. When you convert
+    this to a per-month amount, it’s $4,166 plus 66 and 2/3 cents. If you store this
+    as $4,166.67, it’s not exact enough to convert to a yearly wage (since 12 multiplied
+    by $4,166.67 is $50,000.04). However, if you store 2/3 with enough decimal places,
+    it’s a closer approximation. You’ll find that it is accurate enough to correctly
+    multiply to obtain the original value in a high-precision environment such as
+    MySQL, using only a bit of rounding. That’s where `DOUBLE` and `FLOAT` are useful:
+    they let you store values such as 2/3 or pi with a large number of decimal places,
+    allowing accurate approximate representations of exact quantities. You can later
+    use the `ROUND()` function to restore the results to a given precision.'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为什么要使用近似值？答案是许多带有小数点的数字都是真实量的近似值。例如，假设您的年收入为$50,000，并且希望将其存储为月工资。当您将其转换为每月金额时，是$4,166加上66和2/3美分。如果将此存储为$4,166.67，则不精确到足以转换为年薪（因为12乘以$4,166.67是$50,000.04）。但是，如果以足够多的小数位数存储2/3，则是一个更接近的近似值。您将发现，在像MySQL这样的高精度环境中，仅需进行少量舍入，就足以正确地乘以以获得原始值。这就是
+    `DOUBLE` 和 `FLOAT` 有用的地方：它们允许您存储诸如2/3或pi等值，带有大量小数位数，从而精确地近似表示确切量。稍后，您可以使用 `ROUND()`
+    函数将结果恢复到给定的精度。
+- en: 'Let’s continue the previous example using `DOUBLE`. Suppose you create a table
+    as follows:'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们继续上一个示例，使用 `DOUBLE`。假设您创建了以下表：
+- en: '[PRE61]'
+  id: totrans-185
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: '[PRE62]'
+  id: totrans-186
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: 'You can now insert the monthly wage using:'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在可以使用以下方式插入月工资：
+- en: '[PRE63]'
+  id: totrans-188
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: '[PRE64]'
+  id: totrans-189
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: 'And see what’s stored:'
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并查看存储内容：
+- en: '[PRE65]'
+  id: totrans-191
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: '[PRE66]'
+  id: totrans-192
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: 'However, when you multiply it to obtain a yearly value, you get a high-precision
+    approximation:'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，当您将其乘以以获得年度值时，会得到一个高精度的近似值：
+- en: '[PRE67]'
+  id: totrans-194
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: '[PRE68]'
+  id: totrans-195
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: 'To get the original value back, you still need to perform rounding with the
+    desired precision. For example, your business might require precision to five
+    decimal places. In this case, you could restore the original value with:'
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要恢复原始值，您仍然需要以所需的精度执行舍入。例如，您的业务可能要求精确到五位小数点位数。在这种情况下，您可以使用以下方法将原始值恢复：
+- en: '[PRE69]'
+  id: totrans-197
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: '[PRE70]'
+  id: totrans-198
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: 'But precision to eight decimal places would not result in the original value:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是精确到八位小数点位数不会得到原始值：
+- en: '[PRE71]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: '[PRE72]'
+  id: totrans-201
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: It’s important to understand the imprecise and approximate nature of floating-point
+    data types.
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理解浮点数据类型的不精确和近似性质是非常重要的。
+- en: 'Here are the details of the `FLOAT` and `DOUBLE` types:'
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是 `FLOAT` 和 `DOUBLE` 类型的详细信息：
+- en: '`FLOAT[(*width*, *decimals*)] [UNSIGNED] [ZEROFILL]` or `FLOAT[(*precision*)]
+    [UNSIGNED] [ZEROFILL]`'
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`FLOAT[(*宽度*, *小数位数*)] [UNSIGNED] [ZEROFILL]` 或 `FLOAT[(*精度*)] [UNSIGNED] [ZEROFILL]`'
+- en: 'Stores floating-point numbers. It has two optional syntaxes: the first allows
+    an optional number of `*decimals*` and an optional display `*width*`, and the
+    second allows an optional `*precision*` that controls the accuracy of the approximation
+    measured in bits. Without parameters (the typical usage), the type stores small,
+    4-byte, single-precision floating-point values. When `*precision*` is between
+    0 and 24, the default behavior occurs. When `*precision*` is between 25 and 53,
+    the type behaves like `DOUBLE`. The `*width*` parameter has no effect on what
+    is stored, only on what is displayed. The `UNSIGNED` and `ZEROFILL` options behave
+    as for `INT`.'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储浮点数。它有两种可选的语法：第一种允许可选的`*小数位数*`和可选的显示`*宽度*`，第二种允许可选的`*精度*`，该精度控制以比特为单位的近似精度。在没有参数的情况下（典型用法），该类型存储小型的、4字节的单精度浮点数值。当`*精度*`在0到24之间时，采用默认行为。当`*精度*`在25到53之间时，该类型的行为类似于`DOUBLE`。`*宽度*`参数不影响存储内容，只影响显示内容。`UNSIGNED`
+    和 `ZEROFILL` 选项的行为与 `INT` 类型相同。
+- en: '`DOUBLE[(*width*, *decimals*)] [UNSIGNED] [ZEROFILL]`'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DOUBLE[(*宽度*, *小数位数*)] [UNSIGNED] [ZEROFILL]`'
+- en: 'Stores floating-point numbers. It allows specification of an optional number
+    of `*decimals*` and an optional display `*width*`. Without parameters (the typical
+    usage), the type stores normal 8-byte, double-precision floating-point values.
+    The `*width*` parameter has no effect on what is stored, only on what is displayed.
+    The `UNSIGNED` and `ZEROFILL` options behave as for `INT`. The `DOUBLE` type has
+    two identical synonyms: `REAL` and `DOUBLE PRECISION`.'
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储浮点数。允许指定可选的`*小数位数*`和可选的显示`*宽度*`。在没有参数的情况下（典型用法），该类型存储普通的8字节双精度浮点数值。`*宽度*`参数不影响存储内容，只影响显示内容。`UNSIGNED`
+    和 `ZEROFILL` 选项的行为与 `INT` 类型相同。`DOUBLE` 类型有两个相同的同义词：`REAL` 和 `DOUBLE PRECISION`。
+- en: String types
+  id: totrans-208
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 字符串类型
+- en: 'String data types are used to store text and, less obviously, binary data.
+    MySQL supports the following string types:'
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 字符串数据类型用于存储文本和不那么明显的二进制数据。MySQL 支持以下字符串类型：
+- en: '`[NATIONAL] VARCHAR(*width*) [CHARACTER SET *charset_name*] [COLLATE *collation_name*]`'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`[国家] VARCHAR(*width*) [字符集 *charset_name*] [排序 *collation_name*]`'
+- en: Probably the single most commonly used string type, `VARCHAR` stores variable-length
+    strings up to a maximum `*width*`. The maximum value of `*width*` is 65,535 characters.
+    Most of the information applicable to this type will apply to other string types
+    as well.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可能是最常用的字符串类型之一，`VARCHAR` 可以存储长度可变的字符串，最大长度为 `*width*`。`*width*` 的最大值为 65,535
+    个字符。大部分适用于该类型的信息也适用于其他字符串类型。
+- en: The `CHAR` and `VARCHAR` types are very similar, but there are a few important
+    distinctions. `VARCHAR` incurs one or two extra bytes of overhead to store the
+    value of the string, depending on whether the value is smaller or larger than
+    255 bytes. Note that this size is different from the string length in characters,
+    as certain characters might require up to 4 bytes of space. It might seem obvious,
+    then, that `VARCHAR` is less efficient. However, that is not always true. As `VARCHAR`
+    can store strings of arbitrary length (up to the `*width*` defined), shorter strings
+    will require less storage space than a `CHAR` of similar length.
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`CHAR` 和 `VARCHAR` 类型非常相似，但有几个重要的区别。`VARCHAR` 需要额外的一到两个字节的开销来存储字符串的值，具体取决于值是大于还是小于
+    255 字节。注意这个大小与字符长度不同，因为某些字符可能需要最多 4 个字节的空间。因此，`VARCHAR` 看起来效率较低并不总是正确的。因为 `VARCHAR`
+    可以存储任意长度的字符串（最多定义为 `*width*`），比起相似长度的 `CHAR`，较短的字符串将需要更少的存储空间。'
+- en: 'Another difference between `CHAR` and `VARCHAR` is their handling of trailing
+    spaces. `VARCHAR` retains trailing spaces up to the specified column width and
+    will truncate the excess, producing a warning. As will be shown later, `CHAR`
+    values are right-padded to the column width, and the trailing spaces aren’t preserved.
+    For `VARCHAR`, trailing spaces are significant unless they are trimmed and will
+    count as unique values. Let’s demonstrate:'
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`CHAR` 和 `VARCHAR` 之间的另一个差异是它们对尾随空格的处理。`VARCHAR` 保留尾随空格直到指定的列宽，并将多余部分截断，会产生警告。稍后将展示，`CHAR`
+    值会右填充到列宽，并且不会保留尾随空格。对于 `VARCHAR`，尾随空格是重要的，除非它们被修剪，并且将计为唯一值。让我们演示一下：'
+- en: '[PRE73]'
+  id: totrans-214
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: '[PRE74]'
+  id: totrans-215
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: '[PRE75]'
+  id: totrans-216
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: '[PRE76]'
+  id: totrans-217
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: '[PRE77]'
+  id: totrans-218
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: '[PRE78]'
+  id: totrans-219
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: 'The second row we inserted has a trailing space, and since the `*width*` for
+    column `d` is 2, that space counts toward the uniqueness of a row. If we try inserting
+    a row with two trailing spaces, however:'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们插入的第二行有一个尾随空格，由于列 `d` 的 `*width*` 为 2，该空格对行的唯一性计数起作用。然而，如果我们尝试插入一个有两个尾随空格的行：
+- en: '[PRE79]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: '[PRE80]'
+  id: totrans-222
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: 'MySQL refuses to accept the new row. `VARCHAR(2)` implicitly truncates trailing
+    spaces beyond the set `*width*`, so the value stored changes from `"a "` (with
+    a double space after *a*) to `"a "` (with a single space after *a*). Since we
+    already have a row with such a value, a duplicate entry error is reported. This
+    behavior for `VARCHAR` and `TEXT` can be controlled by changing the column collation.
+    Some collations, like `latin1_bin`, have the `PAD SPACE` attribute, meaning that
+    upon retrieval they are padded to the `*width*` with spaces. This doesn’t affect
+    storage, but does affect uniqueness checks as well as how the `GROUP BY` and `DISTINCT`
+    operators work, which we’ll discuss in [Chapter 5](ch05.xhtml#CH5_ADV1). You can
+    check whether a collation is `PAD SPACE` or `NO PAD` by running the `SHOW COLLATION`
+    command, as we’ve shown in [“Collation and Character Sets”](#SEC-COLLATIONS).
+    Let’s see the effect in action by creating a table with a `PAD SPACE` collation:'
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 拒绝接受新行。`VARCHAR(2)` 会隐式截断超出设定 `*width*` 的尾随空格，因此存储的值会从 `"a "`（*a* 后有双空格）变为
+    `"a "`（*a* 后只有单空格）。由于已经存在这样一个值的行，报告了重复条目错误。可以通过更改列排序规则来控制 `VARCHAR` 和 `TEXT` 的此行为。一些排序规则，如
+    `latin1_bin`，具有 `PAD SPACE` 属性，意味着在检索时它们会用空格填充到 `*width*`。这不影响存储，但会影响唯一性检查以及 `GROUP
+    BY` 和 `DISTINCT` 操作符的工作方式，我们将在[第 5 章](ch05.xhtml#CH5_ADV1)中讨论。您可以通过运行 `SHOW COLLATION`
+    命令来检查排序规则是否为 `PAD SPACE` 或 `NO PAD`，正如我们在[“排序规则和字符集”](#SEC-COLLATIONS)中所示。让我们通过创建一个具有
+    `PAD SPACE` 排序规则的表来查看其效果：
+- en: '[PRE81]'
+  id: totrans-224
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: '[PRE82]'
+  id: totrans-225
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: '[PRE83]'
+  id: totrans-226
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: '[PRE84]'
+  id: totrans-227
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE84]'
+- en: '[PRE85]'
+  id: totrans-228
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE85]'
+- en: '[PRE86]'
+  id: totrans-229
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE86]'
+- en: 'The `NO PAD` collation is a new addition of MySQL 8.0\. In prior releases of
+    MySQL, which you may still often see in use, every collation implicitly has the
+    `PAD SPACE` attribute. Therefore, in MySQL 5.7 and prior releases, your only option
+    to preserve trailing spaces is to use a binary type: `VARBINARY` or `BLOB`.'
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`NO PAD` 排序规则是 MySQL 8.0 的新添加。在之前的 MySQL 版本中，你可能经常看到的每种排序规则都隐含具有 `PAD SPACE`
+    属性。因此，在 MySQL 5.7 及之前的版本中，保留尾部空格的唯一选择是使用二进制类型：`VARBINARY` 或 `BLOB`。'
+- en: Note
+  id: totrans-231
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Both the `CHAR` and `VARCHAR` data types disallow storage of values longer than
+    `*width*`, unless strict SQL mode is disabled (i.e., if neither `STRICT_ALL_TABLES`
+    or `STRICT_TRANS_TABLES` is enabled). With the protection disabled, values longer
+    than `*width*` are truncated, and a warning is shown. We don’t recommend enabling
+    legacy behavior, as it might result in data loss.
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`CHAR` 和 `VARCHAR` 数据类型都不允许存储超过 `*width*` 的值，除非禁用严格 SQL 模式（即未启用 `STRICT_ALL_TABLES`
+    或 `STRICT_TRANS_TABLES`）。禁用保护后，超过 `*width*` 的值将被截断，并显示警告。我们不建议启用旧版行为，因为可能导致数据丢失。'
+- en: Sorting and comparison of the `VARCHAR`, `CHAR`, and `TEXT` types happens according
+    to the collation of the character set assigned. You can see that it is possible
+    to specify the character set, as well as the collation for each individual string-type
+    column. It’s also possible to specify the `binary` character set, which effectively
+    converts `VARCHAR` into `VARBINARY`. Don’t mistake the `binary` charset for a
+    `BINARY` attribute for a charset; the latter is a MySQL-only shorthand to specify
+    a binary (`_bin`) collation.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`VARCHAR`、`CHAR` 和 `TEXT` 类型的排序和比较根据分配的字符集的排序规则进行。您可以看到，可以为每个单独的字符串类型列指定字符集和排序规则。还可以指定
+    `binary` 字符集，有效地将 `VARCHAR` 转换为 `VARBINARY`。不要将 `binary` 字符集误认为是字符集的 `BINARY`
+    属性；后者是 MySQL 的一种仅用于指定二进制（`_bin`）排序规则的简写。'
+- en: 'What’s more, it’s possible to specify a collation directly in the `ORDER BY`
+    clause. Available collations will depend on the character set of the column. Continuing
+    with the `test_varchar_pad_collation` table, it’s possible to store an ä symbol
+    there and then see the effect collations make on the string ordering:'
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，可以在 `ORDER BY` 子句中直接指定排序规则。可用的排序规则将取决于列的字符集。继续使用 `test_varchar_pad_collation`
+    表，可以在其中存储一个 `ä` 符号，然后查看排序规则对字符串排序的影响：
+- en: '[PRE87]'
+  id: totrans-235
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE87]'
+- en: '[PRE88]'
+  id: totrans-236
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE88]'
+- en: '[PRE89]'
+  id: totrans-237
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE89]'
+- en: '[PRE90]'
+  id: totrans-238
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE90]'
+- en: '[PRE91]'
+  id: totrans-239
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE91]'
+- en: '[PRE92]'
+  id: totrans-240
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE92]'
+- en: 'The `NATIONAL` (or its equivalent short form, `NCHAR`) attribute is a standard
+    SQL way to specify that a string-type column must use a predefined character set.
+    MySQL uses `utf8` as this charset. It’s important to note that MySQL 5.7 and 8.0
+    disagree on what exactly `utf8` is, however: the former uses it as an alias for
+    `utf8mb3`, and the latter for `utf8mb4`. Thus, it is best to not use the `NATIONAL`
+    attribute, as well as ambiguous aliases. The best practice with any text-related
+    columns and data is to be as unambiguous and specific as possible.'
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`NATIONAL`（或其等效的缩写形式 `NCHAR`）属性是指定字符串类型列必须使用预定义字符集的标准 SQL 方式。MySQL 使用 `utf8`
+    作为此字符集。重要的是要注意 MySQL 5.7 和 8.0 在 `utf8` 的具体定义上存在差异：前者将其用作 `utf8mb3` 的别名，后者则用于
+    `utf8mb4`。因此，最好不要使用 `NATIONAL` 属性以及含糊不清的别名。对于任何涉及文本列和数据的最佳实践是尽可能明确和具体。'
+- en: '`[NATIONAL] CHAR(*width*) [CHARACTER SET *charset_name*] [COLLATE *collation_name*]`'
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`[国家] CHAR(*width*) [字符集 *charset_name*] [排序规则 *collation_name*]`'
+- en: '`CHAR` stores a fixed-length string (such as a name, address, or city) of length
+    `*width*`. If a `*width*` is not provided, `CHAR(1)` is assumed. The maximum value
+    of `*width*` is 255\. As with `VARCHAR`, values in `CHAR` columns are always stored
+    at the specified length. A single letter stored in a `CHAR(255)` column will take
+    255 bytes (in the `latin1` charset) and will be padded with spaces. The padding
+    is removed when reading the data, unless the `PAD_CHAR_TO_FULL_LENGTH` SQL mode
+    is enabled. It’s worth mentioning again that this means that strings stored in
+    `CHAR` columns will lose all of their trailing spaces.'
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`CHAR` 存储长度固定的字符串（例如姓名、地址或城市），长度为 `*width*`。如果未提供 `*width*`，则假定为 `CHAR(1)`。`*width*`
+    的最大值为 255。与 `VARCHAR` 一样，`CHAR` 列中的值始终存储在指定的长度上。存储在 `CHAR(255)` 列中的单个字母将占用 255
+    字节（在 `latin1` 字符集下），并且会填充空格。读取数据时会移除填充，除非启用了 `PAD_CHAR_TO_FULL_LENGTH` SQL 模式。再次强调，这意味着存储在
+    `CHAR` 列中的字符串将丢失所有尾部空格。'
+- en: 'In the past, the `*width*` of a `CHAR` column was often associated a size in
+    bytes. That’s not always the case now, and it’s definitely not the case by default.
+    Multibyte character sets, such as the default `utf8mb4` in MySQL 8.0, can result
+    in much larger values. InnoDB will actually encode fixed-length columns as variable-length
+    columns if their maximum size exceeds 768 bytes. Thus, in MySQL 8.0, by default
+    InnoDB will store a `CHAR(255)` column as it would a `VARCHAR` column. Here’s
+    an example:'
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在过去，`CHAR`列的`*width*`通常与字节大小相关联。 现在情况并非总是如此，而且默认情况下也不是如此。 例如，默认的MySQL 8.0中的多字节字符集，如`utf8mb4`，可能导致更大的值。
+    如果最大大小超过768字节，则InnoDB实际上将固定长度列编码为可变长度列。 因此，在MySQL 8.0中，默认情况下InnoDB将`CHAR(255)`列存储为`VARCHAR`列。
+    以下是一个例子：
+- en: '[PRE93]'
+  id: totrans-245
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE93]'
+- en: '[PRE94]'
+  id: totrans-246
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE94]'
+- en: '[PRE95]'
+  id: totrans-247
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE95]'
+- en: '[PRE96]'
+  id: totrans-248
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE96]'
+- en: '[PRE97]'
+  id: totrans-249
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE97]'
+- en: '[PRE98]'
+  id: totrans-250
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE98]'
+- en: '[PRE99]'
+  id: totrans-251
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE99]'
+- en: '[PRE100]'
+  id: totrans-252
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE100]'
+- en: As the values are left-aligned and right-padded with spaces, and any trailing
+    spaces aren’t considered for `CHAR` at all, it’s impossible to compare strings
+    consisting of spaces alone. If you find yourself in a situation in which that’s
+    important, `VARCHAR` is the data type to use.
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于值左对齐并在右侧填充空格，并且根本不考虑`CHAR`中的任何尾随空格，因此无法比较仅由空格组成的字符串。 如果发现自己处于这种情况下是重要的，`VARCHAR`是要使用的数据类型。
+- en: '`BINARY[(*width*)]` and `VARBINARY(*width*)`'
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`BINARY[(*width*)]`和`VARBINARY(*width*)`'
+- en: These types are very similar to `CHAR` and `VARCHAR` but store binary strings.
+    Binary strings have the special `binary` character set and collation, and sorting
+    them is dependent on the numeric values of the bytes in the values stored. Instead
+    of character strings, byte strings are stored. In the earlier discussion of `VARCHAR`
+    we described the `binary` charset and `BINARY` attribute. Only the `binary` charset
+    “converts” a `VARCHAR` or `CHAR` into its respective `BINARY` form. Applying the
+    `BINARY` attribute to a charset will not change the fact that character strings
+    are stored. Unlike with `VARCHAR` and `CHAR`, `*width*` here is exactly the number
+    of bytes. When `*width*` is omitted for `BINARY`, it defaults to 1.
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些类型与`CHAR`和`VARCHAR`非常相似，但存储二进制字符串。 二进制字符串具有特殊的`binary`字符集和排序规则，排序依赖于存储的值的字节的数值。
+    存储字节字符串而不是字符字符串。 在前面讨论`VARCHAR`时，我们描述了`binary`字符集和`BINARY`属性。 仅`binary`字符集将`VARCHAR`或`CHAR`“转换”为其相应的`BINARY`形式。
+    将`BINARY`属性应用于字符集不会改变存储字符字符串的事实。 与`VARCHAR`和`CHAR`不同，`*width*`在这里确切地是字节数。 对于`BINARY`，当省略`*width*`时，默认为1。
+- en: Like with `CHAR`, data in the `BINARY` column is padded on the right. However,
+    being a binary data, it’s padded using zero bytes, usually written as `0x00` or
+    `\0`. `BINARY` treats a space as a significant character, not padding. If you
+    need to store data that might end in zero bytes that are significant to you, use
+    the `VARBINARY` or `BLOB` types.
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与`CHAR`类似，`BINARY`列中的数据在右侧填充。 但是，作为二进制数据，它使用零字节进行填充，通常写为`0x00`或`\0`。 `BINARY`将空格视为显著字符，而不是填充。
+    如果您需要存储可能以对您重要的零字节结尾的数据，请使用`VARBINARY`或`BLOB`类型。
+- en: 'It is important to keep the concept of binary strings in mind when working
+    with both of these data types. Even though they’ll accept strings, they aren’t
+    synonyms for data types using text strings. For example, you cannot change the
+    case of the letters stored, as that concept doesn’t really apply to binary data.
+    That becomes quite clear when you consider the actual data stored. Let’s look
+    at an example:'
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用这两种数据类型时，牢记二进制字符串的概念至关重要。 尽管它们接受字符串，但它们不是使用文本字符串的数据类型的同义词。 例如，您无法更改存储的字母的大小写，因为该概念实际上不适用于二进制数据。
+    当您考虑实际存储的数据时，这一点变得非常明显。 让我们看一个例子：
+- en: '[PRE101]'
+  id: totrans-258
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE101]'
+- en: '[PRE102]'
+  id: totrans-259
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE102]'
+- en: '[PRE103]'
+  id: totrans-260
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE103]'
+- en: '[PRE104]'
+  id: totrans-261
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE104]'
+- en: '[PRE105]'
+  id: totrans-262
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE105]'
+- en: '[PRE106]'
+  id: totrans-263
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE106]'
+- en: '[PRE107]'
+  id: totrans-264
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE107]'
+- en: '[PRE108]'
+  id: totrans-265
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE108]'
+- en: 'Note how the MySQL command-line client actually shows values of binary types
+    in hex format. We believe that this is much better than the silent conversions
+    that were performed prior to MySQL 8.0, which might’ve resulted in misunderstanding.
+    To get the actual text data back, you have to explicitly cast the binary data
+    to text:'
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意MySQL命令行客户端实际上以十六进制格式显示二进制类型的值。 我们认为这比在MySQL 8.0之前执行的沉默转换要好得多，这可能导致误解。 要获取实际的文本数据，您必须将二进制数据显式转换为文本：
+- en: '[PRE109]'
+  id: totrans-267
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE109]'
+- en: '[PRE110]'
+  id: totrans-268
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE110]'
+- en: You can also see that `BINARY` padding was converted to spaces when casting
+    was performed.
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`BINARY`填充在转换执行时会被转换为空格。'
+- en: '`BLOB[(*width*)]` and `TEXT[(*width*)] [CHARACTER SET *charset_name*] [COLLATE
+    *collation_name*]`'
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`BLOB[(*width*)]`和`TEXT[(*width*)] [CHARACTER SET *charset_name*] [COLLATE
+    *collation_name*]`'
+- en: '`BLOB` and `TEXT` are commonly used data types for storing large data. You
+    may think of `BLOB` as a `VARBINARY` holding as much data as you like, and the
+    same for `TEXT` and `VARCHAR`. The `BLOB` and `TEXT` types can store up to 65,535
+    bytes or characters, respectively. As usual, note that multibyte charsets do exist.
+    The `*width*` attribute is optional, and when it is specified, MySQL actually
+    will change the `BLOB` or `TEXT` data type to whatever the smallest type capable
+    of holding that amount of data is. For example, `BLOB(128)` will result in `TINYBLOB`
+    being used:'
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`BLOB` 和 `TEXT` 是常用的用于存储大数据的数据类型。可以将 `BLOB` 视为可以容纳任意数据的 `VARBINARY`，`TEXT`
+    和 `VARCHAR` 同理。`BLOB` 和 `TEXT` 类型分别可以存储最多 65,535 个字节或字符。请注意，多字节字符集确实存在。`*width*`
+    属性是可选的，当指定时，MySQL 实际上会将 `BLOB` 或 `TEXT` 数据类型更改为能够容纳该数据量的最小类型。例如，`BLOB(128)` 将导致使用
+    `TINYBLOB`：'
+- en: '[PRE111]'
+  id: totrans-272
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE111]'
+- en: '[PRE112]'
+  id: totrans-273
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE112]'
+- en: '[PRE113]'
+  id: totrans-274
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE113]'
+- en: '[PRE114]'
+  id: totrans-275
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE114]'
+- en: For the `BLOB` type and related types, data is treated exactly as it would be
+    in the case of `VARBINARY`. That is, no character set is assumed, and comparison
+    and sorting are based on the numeric values of the actual bytes stored. For `TEXT`,
+    you may specify the exact desired charset and collation. For both types and their
+    variants, no padding is performed on `INSERT`, and no trimming is performed on
+    `SELECT`, making them ideal for storing data exactly as it is. In addition, a
+    `DEFAULT` clause is not permitted, and when an index is created on a `BLOB` or
+    `TEXT` column, a prefix must be defined limiting the length of the indexed values.
+    We talk more about that in [“Keys and Indexes”](#SEC-KEYS_AND_INDEXES).
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 `BLOB` 类型及相关类型，数据的处理与 `VARBINARY` 相同。也就是说，不假设字符集，并且基于实际存储的字节的数值进行比较和排序。对于
+    `TEXT`，可以指定确切的字符集和排序规则。对于这两种类型及其变体，在 `INSERT` 时不进行填充，在 `SELECT` 时不进行修剪，非常适合精确存储数据。此外，不允许使用
+    `DEFAULT` 子句，并且在 `BLOB` 或 `TEXT` 列上创建索引时，必须定义一个前缀，限制索引值的长度。我们在 [“键和索引”](#SEC-KEYS_AND_INDEXES)
+    中会详细讨论这一点。
+- en: One potential difference between `BLOB` and `TEXT` is their handling of trailing
+    spaces. As we’ve shown already, `VARCHAR` and `TEXT` may pad strings depending
+    on the collation used. `BLOB` and `VARBINARY` both use the `binary` character
+    set with a single `binary` collation with no padding and are impervious to collation
+    mixups and related issues. Sometimes, it can be a good choice to use these types
+    for additional safety. In addition to that, prior to MySQL 8.0, these were the
+    only types that preserved trailing spaces.
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`BLOB` 和 `TEXT` 之间的一个潜在区别是它们对尾随空格的处理方式。正如我们已经展示的那样，根据使用的排序规则，`VARCHAR` 和 `TEXT`
+    可能会填充字符串。`BLOB` 和 `VARBINARY` 都使用 `binary` 字符集和单一的 `binary` 排序规则，不进行填充，并且不受排序规则混淆及相关问题的影响。有时，使用这些类型可以增加额外的安全性。除此之外，在
+    MySQL 8.0 之前，这些类型是唯一保留尾随空格的类型。'
+- en: '`TINYBLOB` and `TINYTEXT [CHARACTER SET *charset_name*] [COLLATE *collation_name*]`'
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TINYBLOB` 和 `TINYTEXT [字符集 *charset_name*] [排序规则 *collation_name*]`'
+- en: These are identical to `BLOB` and `TEXT`, respectively, except that a maximum
+    of 255 bytes or characters can be stored.
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些类型与 `BLOB` 和 `TEXT` 完全相同，只是最多可以存储 255 个字节或字符。
+- en: '`MEDIUMBLOB` and `MEDIUMTEXT [CHARACTER SET *charset_name*] [COLLATE *collation_name*]`'
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`MEDIUMBLOB` 和 `MEDIUMTEXT [字符集 *charset_name*] [排序规则 *collation_name*]`'
+- en: These are identical to `BLOB` and `TEXT`, respectively, except that a maximum
+    of 16,777,215 bytes or characters can be stored. The types `LONG` and `LONG VARCHAR`
+    map to the `MEDIUMTEXT` data type for compatibility.
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些类型与 `BLOB` 和 `TEXT` 完全相同，只是最多可以存储 16,777,215 个字节或字符。类型 `LONG` 和 `LONG VARCHAR`
+    映射到 `MEDIUMTEXT` 数据类型，以保持兼容性。
+- en: '`LONGBLOB` and `LONGTEXT [CHARACTER SET *charset_name*] [COLLATE *collation_name*]`'
+  id: totrans-282
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LONGBLOB` 和 `LONGTEXT [字符集 *charset_name*] [排序规则 *collation_name*]`'
+- en: These are identical to `BLOB` and `TEXT`, respectively, except that a maximum
+    of 4 GB of data can be stored. Note that this is a hard limit even in case of
+    `LONGTEXT`, and thus the number of characters in multibyte charsets can be less
+    than 4,294,967,295\. The effective maximum size of the data that can be stored
+    by a client will be limited by the amount of available memory as well as the value
+    of the `max_packet_size` variable, which defaults to 64 MiB.
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些类型与 `BLOB` 和 `TEXT` 完全相同，只是最多可以存储 4 GB 的数据。请注意，即使是在 `LONGTEXT` 的情况下，这也是一个硬性限制，因此多字节字符集中的字符数可能少于
+    4,294,967,295。客户端可以存储的数据的有效最大大小将受到可用内存量以及 `max_packet_size` 变量值（默认为 64 MiB）的限制。
+- en: '`ENUM(**value1**[,**value2**[, …]]) [CHARACTER SET *charset_name*] [COLLATE
+    *collation_name*]`'
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ENUM(**value1**[,**value2**[, …]]) [字符集 *charset_name*] [排序规则 *collation_name*]`'
+- en: This type stores a list, or *enumeration*, of string values. A column of type
+    `ENUM` can be set to a value from the list `*value1*`, `*value2*`, and so on,
+    up to a maximum of 65,535 different values. While the values are stored and retrieved
+    as strings, what’s stored in the database is an integer representation. The `ENUM`
+    column can contain `NULL` values (stored as `NULL`), the empty string `''` (stored
+    as `0`), or any of the valid elements (stored as `1`, `2`, `3`, and so on). You
+    can prevent `NULL` values from being accepted by declaring the column as `NOT
+    NULL` when creating the table.
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种类型存储一组字符串值的列表，或*枚举*。`ENUM`类型的列可以设置为列表`*value1*`、`*value2*`等中的一个值，最多可达到65,535个不同的值。虽然这些值以字符串形式存储和检索，但在数据库中存储的是整数表示。`ENUM`列可以包含`NULL`值（存储为`NULL`）、空字符串`''`（存储为`0`）或任何有效元素（存储为`1`、`2`、`3`等）。您可以通过在创建表时将列声明为`NOT
+    NULL`来阻止接受`NULL`值。
+- en: 'This type offers a compact way of storing values from a list of predefined
+    values, such as state or country names. Consider this example using fruit names;
+    the name can be any one of the predefined values `Apple`, `Orange`, or `Pear`
+    (in addition to `NULL` and the empty string):'
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种类型提供了一种紧凑的方式来存储预定义值列表中的值，例如州或国家名称。考虑以下使用水果名称的示例；名称可以是预定义值`Apple`、`Orange`或`Pear`（以及`NULL`和空字符串）中的任何一个：
+- en: '[PRE115]'
+  id: totrans-287
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE115]'
+- en: '[PRE116]'
+  id: totrans-288
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE116]'
+- en: '[PRE117]'
+  id: totrans-289
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE117]'
+- en: '[PRE118]'
+  id: totrans-290
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE118]'
+- en: 'If you try inserting a value that’s not in the list, MySQL produces an error
+    to tell you that it didn’t store the data you asked:'
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果尝试插入不在列表中的值，MySQL会产生错误，告诉您它没有存储您请求的数据：
+- en: '[PRE119]'
+  id: totrans-292
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE119]'
+- en: '[PRE120]'
+  id: totrans-293
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE120]'
+- en: 'A list of several allowed values isn’t accepted either:'
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 也不接受几个允许的值列表：
+- en: '[PRE121]'
+  id: totrans-295
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE121]'
+- en: '[PRE122]'
+  id: totrans-296
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE122]'
+- en: 'Displaying the contents of the table, you can see that no invalid values were
+    stored:'
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 显示表的内容，您会看到没有存储无效值：
+- en: '[PRE123]'
+  id: totrans-298
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE123]'
+- en: '[PRE124]'
+  id: totrans-299
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE124]'
+- en: 'Earlier versions of MySQL produced a warning instead of an error and stored
+    an empty string in place of an invalid value. That behavior can be enabled by
+    disabling the default strict SQL mode. It’s also possible to specify a default
+    value other than the empty string:'
+  id: totrans-300
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL的早期版本会产生警告而不是错误，并在无效值的位置存储空字符串。通过禁用默认的严格SQL模式可以启用该行为。还可以指定除空字符串以外的默认值：
+- en: '[PRE125]'
+  id: totrans-301
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE125]'
+- en: '[PRE126]'
+  id: totrans-302
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE126]'
+- en: '[PRE127]'
+  id: totrans-303
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE127]'
+- en: '[PRE128]'
+  id: totrans-304
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE128]'
+- en: '[PRE129]'
+  id: totrans-305
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE129]'
+- en: '[PRE130]'
+  id: totrans-306
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE130]'
+- en: Here, not specifying a value results in the default value `Pear` being stored.
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，不指定值会导致存储默认值`Pear`。
+- en: '`SET( *value1* [, *value2* [, …]]) [CHARACTER SET *charset_name*] [COLLATE
+    *collation_name*]`'
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SET( *value1* [, *value2* [, …]]) [CHARACTER SET *charset_name*] [COLLATE
+    *collation_name*]`'
+- en: 'This type stores a set of string values. A column of type `SET` can be set
+    to zero or more values from the list `*value1*`, `*value2*`, and so on, up to
+    a maximum of 64 different values. While the values are strings, what’s stored
+    in the database is an integer representation. `SET` differs from `ENUM` in that
+    each row can store only one `ENUM` value in a column, but can store multiple `SET`
+    values. This type is useful for storing a selection of choices from a list, such
+    as user preferences. Consider this example using fruit names; the name can be
+    any combination of the predefined values:'
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种类型存储一组字符串值。`SET`类型的列可以设置为列表`*value1*`、`*value2*`等中的零个或多个值，最多可达到64个不同的值。虽然这些值是字符串，但在数据库中存储的是整数表示。`SET`与`ENUM`不同之处在于每行只能在列中存储一个`ENUM`值，但可以存储多个`SET`值。这种类型适用于从列表中存储选择的选项，例如用户偏好。考虑以下使用水果名称的示例；名称可以是预定义值的任意组合：
+- en: '[PRE131]'
+  id: totrans-310
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE131]'
+- en: '[PRE132]'
+  id: totrans-311
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE132]'
+- en: '[PRE133]'
+  id: totrans-312
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE133]'
+- en: '[PRE134]'
+  id: totrans-313
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE134]'
+- en: '[PRE135]'
+  id: totrans-314
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE135]'
+- en: '[PRE136]'
+  id: totrans-315
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE136]'
+- en: '[PRE137]'
+  id: totrans-316
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE137]'
+- en: '[PRE138]'
+  id: totrans-317
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE138]'
+- en: '[PRE139]'
+  id: totrans-318
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE139]'
+- en: '[PRE140]'
+  id: totrans-319
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE140]'
+- en: Again, note that we can store multiple values from the set in a single field
+    and that an empty string is stored for invalid input.
+  id: totrans-320
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再次注意，我们可以在单个字段中存储来自集合的多个值，并且对于无效输入会存储空字符串。
+- en: As with numeric types, we recommend that you always choose the smallest possible
+    type to store values. For example, if you’re storing a city name, use `CHAR` or
+    `VARCHAR` rather than, say, the `TEXT` type. Having shorter columns helps keep
+    your table size down, which in turns helps performance when the server has to
+    search through a table.
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与数值类型一样，我们建议始终选择最小可能的类型来存储值。例如，如果要存储城市名称，请使用`CHAR`或`VARCHAR`而不是`TEXT`类型。较短的列有助于减小表的大小，从而在服务器需要搜索表时提高性能。
+- en: Using a fixed size with the `CHAR` type is often faster than using a variable
+    size with `VARCHAR`, since the MySQL server knows where each row starts and ends
+    and can quickly skip over rows to find the one it needs. However, with fixed-length
+    fields, any space that you don’t use is wasted. For example, if you allow up to
+    40 characters in a city name, then `CHAR(40)` will always use up 40 characters,
+    no matter how long the city name actually is. If you declare the city name to
+    be `VARCHAR(40)`, then you’ll use up only as much space as you need, plus 1 byte
+    to store the name’s length. If the average city name is 10 characters long, this
+    means that using a variable-length field will take up on average 29 fewer bytes
+    per entry. This can make a big difference if you’re storing millions of addresses.
+  id: totrans-322
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用固定大小的 `CHAR` 类型通常比使用可变大小的 `VARCHAR` 类型更快，因为 MySQL 服务器知道每行的起始和结束位置，并且可以快速跳过行以找到需要的行。然而，对于固定长度字段来说，未使用的空间将会被浪费。例如，如果允许城市名最多为
+    40 个字符，则 `CHAR(40)` 将始终使用 40 个字符，无论实际的城市名有多长。如果声明城市名为 `VARCHAR(40)`，则只会使用所需的空间，再加上
+    1 个字节来存储名称的长度。如果平均城市名长度为 10 个字符，这意味着使用可变长度字段每个条目将平均少占用 29 个字节的空间。如果要存储数百万个地址，这可能会产生很大的差异。
+- en: In general, if storage space is at a premium or you expect large variations
+    in the length of strings that are to be stored, use a variable-length field; if
+    performance is a priority, use a fixed-length field.
+  id: totrans-323
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，如果存储空间有限或者预期字符串长度变化较大，请使用可变长度字段；如果性能是优先考虑的因素，请使用固定长度字段。
+- en: Date and time types
+  id: totrans-324
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 日期和时间类型
+- en: 'These types serve the purpose of storing particular timestamps, dates, or time
+    ranges. Particular care should be taken when dealing with time zones. We will
+    try to explain the details, but it’s worth rereading this section and the documentation
+    later, when you need to actually work with time zones. The date and time types
+    in MySQL are:'
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些类型用于存储特定的时间戳、日期或时间范围。在处理时区时需要特别注意。我们将尽力解释细节，但当您真正需要处理时区时，建议重新阅读本节和文档。
+- en: '`DATE`'
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DATE`'
+- en: 'Stores and displays a date in the format `*YYYY-MM-DD*` for the range 1000-01-01
+    to 9999-12-31\. Dates must always be input as year, month, day triples, but the
+    format of the input can vary, as shown in the following examples:'
+  id: totrans-327
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用 `*YYYY-MM-DD*` 格式存储和显示日期范围为 1000-01-01 至 9999-12-31 的日期。日期必须始终以年、月、日的三元组输入，但输入的格式可以有所不同，如下例所示：
+- en: '`*YYYY-MM-DD*` or `*YY-MM-DD*`'
+  id: totrans-328
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*YYYY-MM-DD*` 或 `*YY-MM-DD*`'
+- en: It’s optional whether you provide two-digit or four-digit years. We strongly
+    recommend that you use the four-digit version to avoid confusion about the century.
+    In practice, if you use the two-digit version, you’ll find that 70 to 99 are interpreted
+    as 1970 to 1999, and 00 to 69 are interpreted as 2000 to 2069.
+  id: totrans-329
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提供两位数年份或四位数年份都是可选的。我们强烈建议使用四位数版本以避免世纪混淆。实际上，如果使用两位数版本，您会发现 70 至 99 被解释为 1970
+    至 1999 年，而 00 至 69 被解释为 2000 至 2069 年。
+- en: '`*YYYY/MM/DD*`, `*YYYY:MM:DD*`, `*YY-MM-DD*`, or other punctuated formats'
+  id: totrans-330
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*YYYY/MM/DD*`, `*YYYY:MM:DD*`, `*YY-MM-DD*` 或其他带标点的格式'
+- en: MySQL allows any punctuation characters to separate the components of a date.
+    We recommend using dashes and, again, avoiding two-digit years.
+  id: totrans-331
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 允许使用任何标点符号来分隔日期的各个组成部分。我们建议使用破折号，并再次避免使用两位数的年份。
+- en: '`*YYYY-M-D*`, `*YYYY-MM-D*`, or `*YYYY-M-DD*`'
+  id: totrans-332
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*YYYY-M-D*`, `*YYYY-MM-D*` 或 `*YYYY-M-DD*`'
+- en: When punctuation is used (again, any punctuation character is allowed), single-digit
+    days and months can be specified as such. For example, February 2, 2006, can be
+    specified as `2006-2-2`. The two-digit year equivalents are available, but not
+    recommended.
+  id: totrans-333
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当使用标点符号时（再次强调，允许使用任何标点符号），可以指定单个数字的天和月。例如，2006 年 2 月 2 日可以指定为 `2006-2-2`。同样提供了两位数年份的等效形式，但不建议使用。
+- en: '`*YYYYMMDD*` or `*YYMMDD*`'
+  id: totrans-334
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*YYYYMMDD*` 或 `*YYMMDD*`'
+- en: Punctuation can be omitted in both date styles, but the digit sequences must
+    be six or eight digits in length.
+  id: totrans-335
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这两种日期格式可以省略标点符号，但数字序列必须是六位或八位长度。
+- en: 'You can also input a date by providing both a date and time in the formats
+    described later for `DATETIME` and `TIMESTAMP`, but only the date component is
+    stored in a `DATE` column. Regardless of the input type, the storage and display
+    type is always `*YYYY-MM-DD*`. The *zero date* `0000-00-00` is allowed in all
+    versions and can be used to represent an unknown or dummy value. If an input date
+    is out of range, the zero date is stored. However, only MySQL versions up to and
+    including 5.6 allow that by default. Both 5.7 and 8.0 by default set SQL modes
+    that prohibit this behavior: `STRICT_TRANS_TABLES`, `NO_ZERO_DATE`, and `NO_ZERO_IN_DATE`.'
+  id: totrans-336
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以通过提供`DATETIME`和`TIMESTAMP`后面描述的格式来输入日期和时间的组合，但只有日期组件存储在`DATE`列中。无论输入类型如何，存储和显示类型始终为`*YYYY-MM-DD*`。*零日期*
+    `0000-00-00`在所有版本中都被允许，并且可用于表示未知或虚拟值。如果输入日期超出范围，则存储零日期。但是，只有MySQL版本包括和之前的5.6默认设置允许此行为：`STRICT_TRANS_TABLES`、`NO_ZERO_DATE`和`NO_ZERO_IN_DATE`。
+- en: 'If you’re using an older version of MySQL, we recommend that you add these
+    modes to your current session:'
+  id: totrans-337
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您正在使用较旧版本的MySQL，我们建议您将这些模式添加到当前会话中：
+- en: '[PRE141]'
+  id: totrans-338
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE141]'
+- en: Tip
+  id: totrans-339
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: You can also set the `sql_mode` variable on a global server level and in the
+    configuration file. This variable must list every mode you want to be enabled.
+  id: totrans-340
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以在全局服务器级别和配置文件中设置`sql_mode`变量。该变量必须列出您要启用的每个模式。
+- en: 'Here are some examples of inserting dates on a MySQL 8.0 server with default
+    settings:'
+  id: totrans-341
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里有一些使用MySQL 8.0默认设置插入日期的示例：
+- en: '[PRE142]'
+  id: totrans-342
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE142]'
+- en: '[PRE143]'
+  id: totrans-343
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE143]'
+- en: '[PRE144]'
+  id: totrans-344
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE144]'
+- en: '[PRE145]'
+  id: totrans-345
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE145]'
+- en: '[PRE146]'
+  id: totrans-346
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE146]'
+- en: '[PRE147]'
+  id: totrans-347
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE147]'
+- en: '[PRE148]'
+  id: totrans-348
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE148]'
+- en: '[PRE149]'
+  id: totrans-349
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE149]'
+- en: '[PRE150]'
+  id: totrans-350
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE150]'
+- en: '[PRE151]'
+  id: totrans-351
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE151]'
+- en: 'Once `INSERT` statements are executed, the table will have the following data:'
+  id: totrans-352
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦执行`INSERT`语句，表将包含以下数据：
+- en: '[PRE152]'
+  id: totrans-353
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE152]'
+- en: '[PRE153]'
+  id: totrans-354
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE153]'
+- en: 'MySQL protected you from having “bad” data stored in your table. Sometimes
+    you may need to preserve the actual input and manually process it later. You can
+    do that by removing the aforementioned SQL modes from the list of modes in the
+    `sql_mode` variable. In that case, after running the previous `INSERT` statements,
+    you would end up with the following data:'
+  id: totrans-355
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL可以防止"坏"数据存储在您的表中。有时候您可能需要保留实际的输入并稍后手动处理它。您可以通过从`sql_mode`变量的模式列表中移除上述SQL模式来实现。在这种情况下，在运行前面的`INSERT`语句后，您将得到以下数据：
+- en: '[PRE154]'
+  id: totrans-356
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE154]'
+- en: '[PRE155]'
+  id: totrans-357
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE155]'
+- en: Note again that the date is displayed in the `*YYYY-MM-DD*` format, regardless
+    of how it was input.
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再次注意，日期显示为`*YYYY-MM-DD*`格式，无论输入方式如何。
+- en: '`TIME [*fraction*]`'
+  id: totrans-359
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TIME [*fraction*]`'
+- en: Stores a time in the format `*HHH:MM:SS*` for the range –838:59:59 to 838:59:59\.
+    This is useful for storing the duration of some activity. The values that can
+    be stored are outside the range of the 24-hour clock to allow large differences
+    between time values (up to 34 days, 22 hours, 59 minutes, and 59 seconds) to be
+    computed and stored. `*fraction*` in `TIME` and other related data types specifies
+    the fractional seconds precision in the range 0 to 6\. The default value is 0,
+    meaning that no fractional seconds are preserved.
+  id: totrans-360
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以`*HHH:MM:SS*`格式存储时间范围为–838:59:59至838:59:59。这对于存储某些活动的持续时间非常有用。可以存储的值超出了24小时制时钟的范围，以允许计算和存储时间值之间的大差异（最多34天22小时59分钟59秒）。在`TIME`和其他相关数据类型中，`*fraction*`指定了分数秒精度范围为0至6。默认值为0，表示不保存分数秒。
+- en: 'Times must always be input in the order *days*, *hours*, *minutes*, *seconds*,
+    using the following formats:'
+  id: totrans-361
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 时间必须按照*天*、*小时*、*分钟*、*秒*的顺序输入，使用以下格式：
+- en: '`*DD HH:MM:SS[.fraction]*`, `*HH:MM:SS[.fraction]*`, `*DD HH:MM*`, `*HH:MM*`,
+    `*DD HH*`, or `*SS[.fraction]*`'
+  id: totrans-362
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*DD HH:MM:SS[.fraction]*`、`*HH:MM:SS[.fraction]*`、`*DD HH:MM*`、`*HH:MM*`、`*DD
+    HH*`或`*SS[.fraction]*`'
+- en: '`*DD*` represents a one-digit or two-digit value of days in the range 0 to
+    34\. The `*DD*` value is separated from the hour value, `*HH*`, by a space, while
+    the other components are separated by a colon. Note that `*MM:SS*` is not a valid
+    combination, since it cannot be disambiguated from `*HH:MM*`. If the `TIME` definition
+    doesn’t specify `*fraction*` or sets it to 0, inserting fractional seconds will
+    result in values being rounded to the nearest second.'
+  id: totrans-363
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*DD*`表示0到34范围内的一位或两位数字的天值。`*DD*`值与小时值`*HH*`之间用空格分隔，而其他组件之间用冒号分隔。请注意，`*MM:SS*`不是有效的组合，因为它不能与`*HH:MM*`区分开来。如果`TIME`定义不指定`*fraction*`或将其设置为0，则插入分数秒将导致值被四舍五入到最近的秒。'
+- en: For example, if you insert `2 13:25:58.999999` into a `TIME` column with a `*fraction*`
+    of 0, the value `61:25:59` is stored, since the sum of 2 days (48 hours) and 13
+    hours is 61 hours. Starting with MySQL 5.7, the default SQL mode set prohibits
+    insertion of incorrect values. However, it is possible to enable the older behavior.
+    Then, if you try inserting a value that’s out of bounds, a warning is generated,
+    and the value is limited to the maximum time available. Similarly, if you try
+    inserting an invalid value, a warning is generated and the value is set to zero.
+    You can use the `SHOW WARNINGS` command to report the details of the warning generated
+    by the previous SQL statement. Our recommendation is to stick to the default strict
+    SQL mode. Unlike with the `DATE` type, there’s seemingly no benefit to allowing
+    incorrect `TIME` entries, apart from easier error management on the application
+    side and maintaining legacy behaviors.
+  id: totrans-364
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，如果在 `TIME` 列中插入 `2 13:25:58.999999`，带有 `*小数*` 为 0，则存储值为 `61:25:59`，因为 2 天（48
+    小时）加上 13 小时等于 61 小时。从 MySQL 5.7 开始，默认 SQL 模式设置禁止插入不正确的值。然而，可以启用旧版行为。然后，如果尝试插入超出范围的值，则会生成警告，并且该值被限制为最大可用时间。类似地，如果尝试插入无效值，则会生成警告，并且该值被设置为零。您可以使用
+    `SHOW WARNINGS` 命令报告上一个 SQL 语句生成的警告的详细信息。我们建议保持默认严格的 SQL 模式。与 `DATE` 类型不同，允许不正确的
+    `TIME` 条目似乎没有任何好处，除了在应用程序端更容易管理错误和保持旧版行为。
+- en: 'Let’s try all these out in practice:'
+  id: totrans-365
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们在实践中尝试所有这些：
+- en: '[PRE156]'
+  id: totrans-366
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE156]'
+- en: '[PRE157]'
+  id: totrans-367
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE157]'
+- en: '[PRE158]'
+  id: totrans-368
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE158]'
+- en: '[PRE159]'
+  id: totrans-369
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE159]'
+- en: '[PRE160]'
+  id: totrans-370
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE160]'
+- en: '[PRE161]'
+  id: totrans-371
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE161]'
+- en: '[PRE162]'
+  id: totrans-372
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE162]'
+- en: '[PRE163]'
+  id: totrans-373
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE163]'
+- en: '[PRE164]'
+  id: totrans-374
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE164]'
+- en: '[PRE165]'
+  id: totrans-375
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE165]'
+- en: '`*H:M:S*`, and single-, double-, and triple-digit combinations'
+  id: totrans-376
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*H:M:S*` 和单、双、三位数字组合'
+- en: 'You can use different combinations of digits when inserting or updating data;
+    MySQL converts them into the internal time format and displays them consistently.
+    For example, `1:1:3` is equivalent to `01:01:03`. Different numbers of digits
+    can be mixed; for example, `1:12:3` is equivalent to `01:12:03`. Consider these
+    examples:'
+  id: totrans-377
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在插入或更新数据时，可以使用不同的数字组合；MySQL 将它们转换为内部时间格式并一致显示。例如，`1:1:3` 等同于 `01:01:03`。可以混合不同数量的数字；例如，`1:12:3`
+    等同于 `01:12:03`。考虑以下示例：
+- en: '[PRE166]'
+  id: totrans-378
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE166]'
+- en: '[PRE167]'
+  id: totrans-379
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE167]'
+- en: '[PRE168]'
+  id: totrans-380
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE168]'
+- en: '[PRE169]'
+  id: totrans-381
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE169]'
+- en: '[PRE170]'
+  id: totrans-382
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE170]'
+- en: '[PRE171]'
+  id: totrans-383
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE171]'
+- en: Note that hours are shown with two digits for values within the range –99 to
+    99.
+  id: totrans-384
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，小时显示为两位数，范围在 -99 到 99 之间。
+- en: '`*HHMMSS*`, `*MMSS*`, and `*SS*`'
+  id: totrans-385
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*HHMMSS*`、`*MMSS*` 和 `*SS*`'
+- en: Punctuation can be omitted, but the digit sequences must be two, four, or six
+    digits in length. Note that the rightmost pair of digits is always interpreted
+    as a `*SS*` (seconds) value, the second rightmost pair (if present) as `*MM*`
+    (minutes), and the third rightmost pair (if present) as `*HH*` (hours). The result
+    is that a value such as `1222` is interpreted as 12 minutes and 22 seconds, not
+    12 hours and 22 minutes.
+  id: totrans-386
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 标点可以省略，但数字序列必须是两位、四位或六位数字长度。注意，最右边的数字对始终被解释为 `*SS*`（秒）值，右数第二对（如果存在）被解释为 `*MM*`（分钟），右数第三对（如果存在）被解释为
+    `*HH*`（小时）。结果是，例如 `1222` 被解释为 12 分钟 22 秒，而不是 12 小时 22 分。
+- en: You can also input a time by providing both a date and time in the formats described
+    for `DATETIME` and `TIMESTAMP`, but only the time component is stored in a `TIME`
+    column. Regardless of the input type, the storage and display type is always `*HH:MM:SS*`.
+    The *zero time* `00:00:00` can be used to represent an unknown or dummy value.
+  id: totrans-387
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以通过提供 `DATETIME` 和 `TIMESTAMP` 的描述格式的日期和时间来输入时间，但只有时间部分存储在 `TIME` 列中。无论输入类型如何，存储和显示类型始终为
+    `*HH:MM:SS*`。*零时间* `00:00:00` 可用于表示未知或虚拟值。
+- en: '`TIMESTAMP[(*fraction*)]`'
+  id: totrans-388
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`时间戳[（*小数*）]`'
+- en: Stores and displays a date and time pair in the format `*YYYY-MM-DD HH:MM:SS[.fraction][time
+    zone offset]*` for the range 1970-01-01 00:00:01.000000 to `2038-01-19 03:14:07.999999`.
+    This type is very similar to the `DATETIME` type, but there are a few differences.
+    Both types accept a time zone modifier to the input value MySQL 8.0, and both
+    types will store and present the data in the same way to any client in the same
+    time zone. However, the values in `TIMESTAMP` columns are internally always stored
+    in the UTC time zone, making it possible to get a local time zone automatically
+    for clients in different time zones. That on its own is a very important distinction
+    to remember. Arguably, `TIMESTAMP` is more convenient to use when dealing with
+    different time zones.
+  id: totrans-389
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储和显示格式为 `*YYYY-MM-DD HH:MM:SS[.fraction][time zone offset]*` 的日期和时间对，范围从 1970-01-01
+    00:00:01.000000 到 `2038-01-19 03:14:07.999999`。这种类型与 `DATETIME` 类型非常相似，但有一些区别。两种类型都可以接受一个时区修饰符作为输入值
+    MySQL 8.0，并且两种类型将以相同的方式存储和呈现数据给同一时区内的任何客户端。但是，`TIMESTAMP` 列中的值始终在 UTC 时区内部存储，使得在处理不同时区的客户端时可以自动获取本地时区。这本身是一个非常重要的区别需要记住。可以说，`TIMESTAMP`
+    在处理不同时区时更方便使用。
+- en: Prior to MySQL 5.6, only the `TIMESTAMP` type supported automatic initialization
+    and update. Moreover, only a single such column per a given table could do that.
+    However, starting with 5.6, both `TIMESTAMP` and `DATETIME` support the behaviors,
+    and any number of columns can do so.
+  id: totrans-390
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 5.6 之前，仅 `TIMESTAMP` 类型支持自动初始化和更新。此外，每个给定表中只能有一个这样的列。但是，从 5.6 开始，`TIMESTAMP`
+    和 `DATETIME` 都支持这些行为，并且可以有任意数量的列执行此操作。
+- en: 'Values stored in a `TIMESTAMP` column always match the template `*YYYY-MM-DD
+    HH:MM:SS[.fraction][time zone offset]*`, but the values can be provided in a wide
+    range of formats:'
+  id: totrans-391
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储在 `TIMESTAMP` 列中的值始终匹配模板 `*YYYY-MM-DD HH:MM:SS[.fraction][time zone offset]*`，但可以以多种格式提供值：
+- en: '`*YYYY-MM-DD HH:MM:SS*` or `*YY-MM-DD HH:MM:SS*`'
+  id: totrans-392
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*YYYY-MM-DD HH:MM:SS*` 或 `*YY-MM-DD HH:MM:SS*`'
+- en: "The date and time components follow the same relaxed restrictions as the `DATE`\
+    \ and `TIME` components described previously. This includes allowance for any\
+    \ punctuation characters, including (unlike for `TIME`) flexibility in the punctuation\
+    \ used in the time component. For example, `\x960\x97` is valid."
+  id: totrans-393
+  prefs: []
+  type: TYPE_NORMAL
+  zh: "日期和时间组件遵循与之前描述的`DATE`和`TIME`组件相同的宽松限制。这包括允许任何标点字符，包括（与`TIME`不同）时间组件中使用标点灵活性。例如，`\x96\
+    0\x97` 是有效的。"
+- en: '`*YYYYMMDDHHMMSS*` or `*YYMMDDHHMMSS*`'
+  id: totrans-394
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`*YYYYMMDDHHMMSS*` 或 `*YYMMDDHHMMSS*`'
+- en: Punctuation can be omitted, but the string should be either 12 or 14 digits
+    in length. We recommend using only the unambiguous 14-digit version, for the reasons
+    discussed for the `DATE` type. You can specify values with other lengths without
+    providing separators, but we don’t recommend doing so.
+  id: totrans-395
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以省略标点符号，但字符串的长度应为 12 或 14 位数字。出于与 `DATE` 类型相同的原因，我们建议仅使用明确的 14 位版本。您可以指定其他长度的值而不提供分隔符，但我们不建议这样做。
+- en: 'Let’s look at the automatic-update feature in more detail. You control this
+    by adding the following attributes to the column definition when creating a table,
+    or later, as we’ll explain in [“Altering Structures”](#MOD-SEC-ALTER):'
+  id: totrans-396
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们更详细地看看自动更新功能。你可以通过在创建表时或稍后修改时，向列定义中添加以下属性来控制此功能，我们将在[“修改结构”](#MOD-SEC-ALTER)中详细解释：
+- en: If you want the timestamp to be set only when a new row is inserted into the
+    table, add `DEFAULT CURRENT_TIMESTAMP` to the end of the column declaration.
+  id: totrans-397
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果你希望时间戳仅在将新行插入表中时设置，可以在列声明的末尾添加`DEFAULT CURRENT_TIMESTAMP`。
+- en: If you don’t want a default timestamp but would like the current time to be
+    used whenever the data in a row is updated, add `ON UPDATE CURRENT_TIMESTAMP`
+    to the end of the column declaration.
+  id: totrans-398
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果你不希望有默认时间戳，但希望每当行中的数据更新时使用当前时间，可以在列声明的末尾添加`ON UPDATE CURRENT_TIMESTAMP`。
+- en: If you want both of the above—that is, you want the timestamp set to the current
+    time in each new row and whenever an existing row is modified—add `DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP` to the end of the column declaration.
+  id: totrans-399
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果你希望以上两者同时实现——即，希望时间戳在每个新行中设为当前时间，并在修改现有行时也设为当前时间——在列声明的末尾添加`DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP`。
+- en: If you do not specify `DEFAULT NULL` or `NULL` for a `TIMESTAMP` column, it
+    will have `0` as the default value.
+  id: totrans-400
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果对于`TIMESTAMP`列不指定`DEFAULT NULL`或`NULL`，它将以`0`作为默认值。
+- en: '`YEAR[(4)]`'
+  id: totrans-401
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`YEAR[(4)]`'
+- en: Stores a four-digit year in the range 1901 to 2155, as well as the *zero year*,
+    0000\. Illegal values are converted to the zero year. You can input year values
+    as either strings (such as `'2005'`) or integers (such as `2005`). The `YEAR`
+    type requires 1 byte of storage space.
+  id: totrans-402
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储一个位于1901到2155年之间的四位数年份，以及 *零年*，0000。非法值会被转换为零年。您可以将年份值输入为字符串（如 `'2005'`）或整数（如
+    `2005`）。`YEAR` 类型需要1字节的存储空间。
+- en: In earlier versions of MySQL, it was possible to specify the `*digits*` parameter,
+    passing either `2` or `4`. The two-digit version stored values from 70 to 69,
+    representing 1970 to 2069\. MySQL 8.0 doesn’t support the two-digit `YEAR` type,
+    and specifying the `*digits*` parameter for display purposes is deprecated.
+  id: totrans-403
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在早期的 MySQL 版本中，可以指定`*digits*`参数，传递`2`或`4`。两位数版本存储的值从70到69，表示1970到2069年。MySQL
+    8.0 不支持两位数的 `YEAR` 类型，并且为了显示目的而指定 `*digits*` 参数已被弃用。
+- en: '`DATETIME[(*fraction*)]`'
+  id: totrans-404
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DATETIME[(*fraction*)]`'
+- en: Stores and displays a date and time pair in the format `*YYYY-MM-DD HH:MM:SS[.fraction][time
+    zone offset]*` for the range `1000-01-01` `00:00:00` to `9999-12-31 23:59:59`.
+    As for `TIMESTAMP`, the value stored always matches the template `*YYYY-MM-DD
+    HH:MM:SS*`, but the value can be input in the same formats listed in the `TIMESTAMP`
+    description. If you assign only a date to a `DATETIME` column, the zero time `00:00:00`
+    is assumed. If you assign only a time to a `DATETIME` column, the zero date `0000-00-00`
+    is assumed. This type has the same automatic update features as `TIMESTAMP`. Unless
+    the `NOT NULL` attribute is specified for a `DATETIME` column, a `NULL` value
+    is the default; otherwise, the default is `0`. Unlike for `TIMESTAMP`, `DATETIME`
+    values aren’t converted to the UTC time zone for storage.
+  id: totrans-405
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以`*YYYY-MM-DD HH:MM:SS[.fraction][time zone offset]*`格式存储和显示日期和时间对，范围从`1000-01-01
+    00:00:00`到`9999-12-31 23:59:59`。对于 `TIMESTAMP`，存储的值总是匹配模板`*YYYY-MM-DD HH:MM:SS*`，但值可以以
+    `TIMESTAMP` 描述中列出的相同格式输入。如果只向 `DATETIME` 列分配日期，则假定零时间`00:00:00`。如果只向 `DATETIME`
+    列分配时间，则假定零日期`0000-00-00`。该类型具有与 `TIMESTAMP` 相同的自动更新特性。除非为 `DATETIME` 列指定 `NOT
+    NULL` 属性，否则 `NULL` 值为默认值；否则，默认值为 `0`。与 `TIMESTAMP` 不同，`DATETIME` 值不会转换为 UTC 时区进行存储。
+- en: Other types
+  id: totrans-406
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 其他类型
+- en: Currently, as of MySQL 8.0, the spatial and `JSON` data types fall under this
+    broad category. Using these is a quite advanced topic, and we won’t cover them
+    in depth.
+  id: totrans-407
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，截至 MySQL 8.0，空间和 `JSON` 数据类型归入这一广泛类别。使用这些是一个非常高级的主题，我们不会深入讨论它们。
+- en: Spatial data types are concerned with storing geometrical objects, and MySQL
+    has types corresponding to OpenGIS classes. Working with these types is a topic
+    worth a book on its own.
+  id: totrans-408
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 空间数据类型涉及存储几何对象，MySQL 有与 OpenGIS 类对应的类型。处理这些类型是一个值得单独撰写一本书的主题。
+- en: 'The `JSON` data type allows native storage of valid JSON documents. Before
+    MySQL 5.7, JSON was usually stored in a `TEXT` or a similar column. However, that
+    has a lot of disadvantages: for example, documents aren’t validated, and no storage
+    optimization is performed (all JSON is just stored in its text form). With the
+    native `JSON` type, it’s stored in binary format. If we were to summarize in one
+    sentence: use the `JSON` data type for JSON, dear reader.'
+  id: totrans-409
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`JSON` 数据类型允许原生存储有效的 JSON 文档。在 MySQL 5.7 之前，JSON 通常存储在 `TEXT` 或类似的列中。然而，这有许多缺点：例如，文档不会被验证，也不会进行存储优化（所有
+    JSON 只是以文本形式存储）。使用原生的 `JSON` 类型，则以二进制格式存储。如果我们要总结成一句话：亲爱的读者，请为 JSON 使用 `JSON`
+    数据类型。'
+- en: Keys and Indexes
+  id: totrans-410
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 键和索引
+- en: You’ll find that almost all tables you use will have a `PRIMARY KEY` clause
+    declared in their `CREATE TABLE` statement, and sometimes multiple `KEY` clauses.
+    The reasons why you need a primary key and secondary keys were discussed in [Chapter 2](ch02.xhtml#CH2_DESIGN).
+    This section discusses how primary keys are declared, what happens behind the
+    scenes when you do so, and why you might want to also create other keys and indexes
+    on your data.
+  id: totrans-411
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您会发现，您使用的几乎所有表都在其 `CREATE TABLE` 语句中声明了 `PRIMARY KEY` 子句，有时还有多个 `KEY` 子句。为什么需要主键和次要键的原因在
+    [第二章](ch02.xhtml#CH2_DESIGN) 中已经讨论过。本节讨论了如何声明主键，当您这样做时背后发生的事情，以及为什么您可能还希望在您的数据上创建其他键和索引。
+- en: A *primary key* uniquely identifies each row in a table. Even more importantly,
+    for the default InnoDB storage engine, a primary key is also used as a *clustered
+    index*. That means that all of the actual table data is stored in an index structure.
+    That is different from MyISAM, which stores data and indexes separately. When
+    a table is using a clustered index, it’s called a clustered table. As we said,
+    in a clustered table each row is stored within an index, compared to being stored
+    in what’s usually called a *heap*. Clustering a table results in its rows being
+    sorted according to the clustered index ordering and actually physically stored
+    within the leaf pages of that index. There can’t be more than one clustered index
+    per table. For such tables, secondary indexes refer to records in the clustered
+    index instead of the actual table rows. That generally results in improved query
+    performance, though it can be detrimental to writes. InnoDB does not allow you
+    to choose between clustered and nonclustered tables; this is a design decision
+    that you cannot change.
+  id: totrans-412
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*主键* 在表中唯一标识每一行。更重要的是，对于默认的 InnoDB 存储引擎，主键也用作*聚集索引*。这意味着所有实际的表数据都存储在一个索引结构中。这与
+    MyISAM 不同，后者将数据和索引分开存储。当表使用聚集索引时，称为聚集表。在聚集表中，每一行都存储在一个索引内，而不是通常所说的*堆*中。对表进行聚集将导致其行根据聚集索引的顺序排序，并实际物理存储在该索引的叶子页中。每个表不能有多于一个聚集索引。对于这样的表，二级索引引用聚集索引中的记录，而不是实际的表行。这通常会提高查询性能，尽管可能对写入性能有所损害。InnoDB
+    不允许您在聚集和非聚集表之间进行选择；这是您无法更改的设计决策。'
+- en: Primary keys are generally a recommended part of any database design, but for
+    InnoDB they are necessary. In fact, if you do not specify a `PRIMARY KEY` clause
+    when creating an InnoDB table, MySQL will use the first `UNIQUE NOT NULL` column
+    as a base for the clustered index. If no such column is available, a hidden clustered
+    index is created, based on ID values assigned by InnoDB to each row.
+  id: totrans-413
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 主键通常是任何数据库设计的推荐部分，但对于 InnoDB 来说是必需的。事实上，如果在创建 InnoDB 表时不指定 `PRIMARY KEY` 子句，MySQL
+    将使用第一个 `UNIQUE NOT NULL` 列作为聚集索引的基础。如果没有这样的列可用，则创建一个隐藏的聚集索引，基于由 InnoDB 分配给每行的
+    ID 值。
+- en: Given that InnoDB is MySQL’s default storage engine and a de facto standard
+    nowadays, we will concentrate on its behavior in this chapter. Alternative storage
+    engines like MyISAM, MEMORY, or MyRocks will be discussed in [“Alternative Storage
+    Engines”](ch07.xhtml#ADV2-SEC-STORAGEENGINES).
+  id: totrans-414
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 鉴于 InnoDB 是 MySQL 的默认存储引擎并且是当今的事实标准，我们将在本章集中讨论其行为。备选存储引擎如 MyISAM、MEMORY 或 MyRocks
+    将在 [“备选存储引擎”](ch07.xhtml#ADV2-SEC-STORAGEENGINES) 中进行讨论。
+- en: As mentioned previously, when a primary key is defined, it becomes a clustered
+    index, and all data in the table is stored in the leaf blocks of that index. InnoDB
+    uses B-tree indexes (more specifically, the B+tree variant), with the exception
+    of indexes on spatial data types, which use the R-tree structure. Other storage
+    engines might implement different index types, but when a table’s storage engine
+    is not specified, you can assume that all indexes are B-trees.
+  id: totrans-415
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，当定义主键时，它将成为一个聚集索引，表中的所有数据都存储在该索引的叶子块中。InnoDB 使用 B 树索引（更具体地说是 B+ 树变体），除了空间数据类型的索引使用
+    R 树结构。其他存储引擎可能实现不同类型的索引，但如果未指定表的存储引擎，则可以假定所有索引都是 B 树。
+- en: Having a clustered index, or in other words having index-organized tables, speeds
+    up queries and sorts involving the primary key columns. However, a downside is
+    that modifying columns in a primary key is expensive. Thus, a good design will
+    require a primary key based on columns that are frequently used for filtering
+    in queries but are rarely modified. Remember that having no primary key at all
+    will result in InnoDB using an implicit cluster index; thus, if you’re not sure
+    what columns to pick for a primary key, consider using a synthetic `id`-like column.
+    For example, the `SERIAL` data type might fit well in that case.
+  id: totrans-416
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有一个聚集索引，或者换句话说，有索引组织的表，可以加快涉及主键列的查询和排序。然而，一个缺点是修改主键列是昂贵的。因此，一个好的设计将需要一个基于经常用于查询过滤但很少修改的列的主键。请记住，如果根本没有主键，InnoDB
+    将使用隐式的聚集索引；因此，如果你不确定要选择哪些列作为主键，考虑使用类似`id`的合成列。例如，`SERIAL` 数据类型在这种情况下可能非常合适。
+- en: Stepping away from InnoDB’s internal details, when you declare a primary key
+    for a table in MySQL, it creates a structure that stores information about where
+    the data from each row in the table is stored. This information is called an *index*,
+    and its purpose is to speed up searches that use the primary key. For example,
+    when you declare `PRIMARY KEY (actor_id)` in the `actor` table in the `sakila`
+    database, MySQL creates a structure that allows it to find rows that match a specific
+    `actor_id` (or a range of identifiers) extremely quickly.
+  id: totrans-417
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 离开InnoDB的内部细节，当您在MySQL中为表声明主键时，它会创建一个存储有关表中每行数据存储位置信息的结构。此信息称为*索引*，其目的是加快使用主键进行搜索的速度。例如，在`sakila`数据库的`actor`表中声明`PRIMARY
+    KEY (actor_id)`时，MySQL创建一个结构，允许它非常快速地找到与特定`actor_id`（或一系列标识符）匹配的行。
+- en: 'This is useful to match actors to films or films to categories, for example.
+    You can display the indexes available on a table using the `SHOW INDEX` (or `SHOW
+    INDEXES`) command:'
+  id: totrans-418
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这对于匹配演员与电影或电影与类别非常有用。可以使用`SHOW INDEX`（或`SHOW INDEXES`）命令显示表上可用的索引：
+- en: '[PRE172]'
+  id: totrans-419
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE172]'
+- en: '[PRE173]'
+  id: totrans-420
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE173]'
+- en: The *cardinality* is the number of unique values in the index; for an index
+    on a primary key, this is the same as the number of rows in the table.
+  id: totrans-421
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*基数*是索引中唯一值的数量；对于主键索引，这与表中行的数量相同。'
+- en: Note that all columns that are part of a primary key must be declared as `NOT
+    NULL`, since they must have a value for the row to be valid. Without the index,
+    the only way to find rows in the table is to read each one from disk and check
+    whether it matches the `category_id` you’re searching for. For tables with many
+    rows, this exhaustive, sequential searching is extremely slow. However, you can’t
+    just index everything; we’ll come back to this point at the end of this section.
+  id: totrans-422
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，所有作为主键一部分的列都必须声明为`NOT NULL`，因为它们必须具有值才能使行有效。如果没有索引，查找表中的行的唯一方法是从磁盘读取每一行，并检查它是否与您正在搜索的`category_id`匹配。对于行数很多的表，这种详尽的顺序搜索非常慢。但是，您不能只是索引一切；我们将在本节末尾回到这一点。
+- en: 'You can create other indexes on the data in a table. You do this so that other
+    searches (whether on other columns or combinations of columns) are fast, and to
+    avoid sequential scans. For example, take the `actor` table again. Apart from
+    having a primary key on `actor_id`, it also has a secondary key on `last_name`
+    to improve searching by an actor’s last name:'
+  id: totrans-423
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以在表中的数据上创建其他索引。这样做是为了使其他搜索（无论是在其他列上还是在列的组合上）都能快速进行，并避免顺序扫描。例如，再次看看`actor`表。除了在`actor_id`上有主键之外，还在`last_name`上有一个辅助键，以改善按演员姓氏搜索的效率：
+- en: '[PRE174]'
+  id: totrans-424
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE174]'
+- en: '[PRE175]'
+  id: totrans-425
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE175]'
+- en: You can see the keyword `KEY` is used to tell MySQL that an extra index is needed.
+    Alternatively, you can use the word `INDEX` in place of `KEY`. Following that
+    keyword is an index name, and then the column to index is included in parentheses.
+    You can also add indexes after tables are created—in fact, you can pretty much
+    change anything about a table after its creation. This is discussed in [“Altering
+    Structures”](#MOD-SEC-ALTER).
+  id: totrans-426
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以看到关键字`KEY`用于告诉MySQL需要额外的索引。或者，您可以在`KEY`的位置使用`INDEX`。在关键字之后是索引名称，然后是包含在括号中的索引列。您也可以在创建表后添加索引——实际上，您几乎可以更改表的任何内容。这在[“修改结构”](#MOD-SEC-ALTER)中讨论。
+- en: 'You can build an index on more than one column. For example, consider the following
+    table, which is a modified table from `sakila`:'
+  id: totrans-427
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以在多个列上建立索引。例如，考虑以下来自`sakila`的修改后的表：
+- en: '[PRE176]'
+  id: totrans-428
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE176]'
+- en: '[PRE177]'
+  id: totrans-429
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE177]'
+- en: You can see that we’ve added a primary key index on the `customer_id` identifier
+    column, and we’ve also added another index—called `idx_names_email`—that includes
+    the `first_name`, `last_name`, and `email` columns in this order. Let’s now consider
+    how you can use that extra index.
+  id: totrans-430
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以看到，我们在`customer_id`标识符列上添加了主键索引，还添加了另一个名为`idx_names_email`的索引，按照`first_name`、`last_name`和`email`列的顺序包含在内。现在让我们考虑如何使用这个额外的索引。
+- en: 'You can use the `idx_names_email` index for fast searching by combinations
+    of the three name columns. For example, it’s useful in the following query:'
+  id: totrans-431
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以利用`idx_names_email`索引快速搜索三个名称列的组合。例如，在以下查询中非常有用：
+- en: '[PRE178]'
+  id: totrans-432
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE178]'
+- en: 'We know it helps the search, because all the columns listed in the index are
+    used in the query. You can use the `EXPLAIN` statement to check whether what you
+    think should happen is in fact happening:'
+  id: totrans-433
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们知道它有助于搜索，因为索引中列出的所有列都在查询中使用。您可以使用`EXPLAIN`语句检查您认为应该发生的事情是否确实发生了：
+- en: '[PRE179]'
+  id: totrans-434
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE179]'
+- en: '[PRE180]'
+  id: totrans-435
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE180]'
+- en: You can see that MySQL reports that the `possible_keys` are `idx_names_email`
+    (meaning that the index could be used for this query) and that the `key` that
+    it’s decided to use is `idx_names_email`. So, what you expect and what is happening
+    are the same, and that’s good news! You’ll find out more about the `EXPLAIN` statement
+    in [Chapter 7](ch07.xhtml#CH7_DOING_MORE).
+  id: totrans-436
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以看到 MySQL 报告的 `possible_keys` 是 `idx_names_email`（这意味着该索引可以用于此查询），它决定使用的 `key`
+    是 `idx_names_email`。所以，您期望的和实际发生的是一样的，这是个好消息！您将在[第7章](ch07.xhtml#CH7_DOING_MORE)中了解更多关于
+    `EXPLAIN` 语句的内容。
+- en: 'The index we’ve created is also useful for queries on only the `first_name`
+    column. For example, it can be used by the following query:'
+  id: totrans-437
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们创建的索引还可用于仅涉及 `first_name` 列的查询。例如，它可用于以下查询：
+- en: '[PRE181]'
+  id: totrans-438
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE181]'
+- en: You can use `EXPLAIN` again to check whether the index is being used. The reason
+    it can be used is because the `first_name` column is the first one listed in the
+    index. In practice, this means that the index *clusters*, or stores together,
+    information about rows for all people with the same first name, and so the index
+    can be used to find anyone with a matching first name.
+  id: totrans-439
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以再次使用 `EXPLAIN` 来检查索引是否被使用。它可以被使用的原因是 `first_name` 列是索引中列出的第一列。在实践中，这意味着索引会将所有具有相同名字的人的行信息*聚集*或存储在一起，因此可以使用索引来查找任何具有匹配名字的人。
+- en: 'The index can also be used for searches involving combinations of first name
+    and last name, for exactly the same reasons we’ve just discussed. The index clusters
+    together people with the same first name, and it clusters people with identical
+    first names by last name. So, it can be used for this query:'
+  id: totrans-440
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引还可以用于涉及名字和姓氏组合的搜索，原因与刚刚讨论的相同。索引将具有相同名字的人聚集在一起，并将相同名字的人按姓氏聚集在一起。因此，它可用于此查询：
+- en: '[PRE182]'
+  id: totrans-441
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE182]'
+- en: 'However, the index can’t be used for this query because the leftmost column
+    in the index, `first_name`, does not appear in the query:'
+  id: totrans-442
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，此查询无法使用索引，因为索引中最左列 `first_name` 在查询中不存在：
+- en: '[PRE183]'
+  id: totrans-443
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE183]'
+- en: 'The index should help narrow down the set of rows to a smaller set of possible
+    answers. For MySQL to be able to use an index, the query needs to meet both the
+    following conditions:'
+  id: totrans-444
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引应帮助缩小结果集，使其变为可能的答案的更小集合。要使 MySQL 能够使用索引，查询必须同时满足以下两个条件：
+- en: The leftmost column listed in the `KEY` (or `PRIMARY KEY`) clause must be in
+    the query.
+  id: totrans-445
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在查询中必须包含在 `KEY`（或 `PRIMARY KEY`）子句中列出的最左列。
+- en: The query must contain no `OR` clauses for columns that aren’t indexed.
+  id: totrans-446
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 查询中不能包含未建立索引的列的 `OR` 条件。
+- en: Again, you can always use the `EXPLAIN` statement to check whether an index
+    can be used for a particular query.
+  id: totrans-447
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同样，您始终可以使用 `EXPLAIN` 语句来检查特定查询是否可以使用索引。
+- en: 'Before we finish this section, here are a few ideas on how to choose and design
+    indexes. When you’re considering adding an index, think about the following:'
+  id: totrans-448
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在完成本节之前，以下是一些关于选择和设计索引的想法。在考虑添加索引时，请考虑以下几点：
+- en: Indexes cost space on disk, and they need to be updated whenever data changes.
+    If your data changes frequently, or lots of data changes when you do make a change,
+    indexes will slow the process down. However, in practice, since `SELECT` statements
+    (data reads) are usually much more common than other statements (data modifications),
+    indexes are usually beneficial.
+  id: totrans-449
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 索引占用磁盘空间，并且在数据更改时需要更新。如果您的数据频繁更改，或者在进行更改时更改了大量数据，索引将减慢这一过程。然而，实际上，由于 `SELECT`
+    语句（数据读取）通常比其他语句（数据修改）更常见，索引通常是有益的。
+- en: Only add an index that’ll be used frequently. Don’t bother indexing columns
+    before you see what queries your users and your applications need. You can always
+    add indexes afterward.
+  id: totrans-450
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 只添加经常使用的索引。在确定用户和应用程序需要的查询之前，不要为列添加索引。之后可以随时添加索引。
+- en: If all columns in an index are used in all queries, list the column with the
+    highest number of duplicates at the left of the `KEY` clause. This minimizes index
+    size.
+  id: totrans-451
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果索引中的所有列都在所有查询中使用，则列出具有最高重复项数的列，放在 `KEY` 子句的最左边。这样可以最小化索引大小。
+- en: The smaller the index, the faster it’ll be. If you index large columns, you’ll
+    get a larger index. This is a good reason to ensure your columns are as small
+    as possible when you design your tables.
+  id: totrans-452
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 索引越小，速度越快。如果对大列建立索引，索引也会变大。这就是设计表时确保列尽可能小的一个好理由。
+- en: For long columns, you can use only a prefix of the values from a column to create
+    the index. You can do this by adding a value in parentheses after the column definition,
+    such as `KEY idx_names_email (first_name(3), last_name(2), email(10))`. This means
+    that only the first 3 characters of `first_name` are indexed, then the first 2
+    characters of `last_name`, and then 10 characters from `email`. This is a significant
+    savings over indexing 140 characters from the three columns! When you do this,
+    your index will be less able to uniquely identify rows, but it’ll be much smaller
+    and still reasonably good at finding matching rows. Using a prefix is mandatory
+    for long types like `TEXT`.
+  id: totrans-453
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于长列，您可以仅使用列中的前缀创建索引。您可以通过在列定义后面加上括号中的值来实现此目的，例如`KEY idx_names_email (first_name(3),
+    last_name(2), email(10))`。这意味着仅对`first_name`的前3个字符进行索引，然后是`last_name`的前2个字符，最后是`email`的10个字符。与从三列中索引140个字符相比，这节省了大量空间！这样做会使您的索引无法唯一标识行，但它会变得更小，仍然可以有效地找到匹配的行。对于像`TEXT`这样的长类型，使用前缀是强制的。
+- en: To wrap up this section, we need to discuss some peculiarities regarding secondary
+    keys in InnoDB. Remember that all the table data is stored in the leaves of the
+    clustered index. That means, using the `actor` example, that if we need to get
+    the `first_name` data when filtering by `last_name`, even though we can use `idx_actor_last_name`
+    for quick filtering, we will need to access the data by the primary key. As a
+    consequence, each secondary key in InnoDB has all of the primary key columns appended
+    to its definition implicitly. Having unnecessarily long primary keys in InnoDB
+    thus results in significantly bloated secondary keys.
+  id: totrans-454
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结束本节时，我们需要讨论InnoDB中关于次要键的一些特殊情况。请记住，所有表数据都存储在聚集索引的叶子节点中。这意味着，使用`actor`示例，如果我们需要通过`last_name`进行过滤时获取`first_name`数据，即使我们可以使用`idx_actor_last_name`进行快速过滤，我们仍需要通过主键访问数据。因此，在InnoDB中，每个次要键的定义隐式地附加了所有主键列。因此，在InnoDB中不必要地长主键会导致次要键显著膨胀。
+- en: 'This can also be seen in the `EXPLAIN` output (note the `Extra: Using index`
+    in the first output of the first command):'
+  id: totrans-455
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '这一点在`EXPLAIN`输出中也可以看到（注意第一个命令的第一个输出中的`Extra: Using index`）：'
+- en: '[PRE184]'
+  id: totrans-456
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE184]'
+- en: '[PRE185]'
+  id: totrans-457
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE185]'
+- en: '[PRE186]'
+  id: totrans-458
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE186]'
+- en: '[PRE187]'
+  id: totrans-459
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE187]'
+- en: Effectively, `idx_actor_last_name` is a *covering index* for the first query,
+    meaning that InnoDB can extract all the required data from that index alone. However,
+    for the second query, InnoDB will have to do an additional lookup of a clustered
+    index to get the value for the `first_name` column.
+  id: totrans-460
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事实上，`idx_actor_last_name`是第一个查询的*覆盖索引*，这意味着InnoDB可以仅从该索引中提取所有所需的数据。但是，对于第二个查询，InnoDB将需要额外查找聚集索引以获取`first_name`列的值。
+- en: The AUTO_INCREMENT Feature
+  id: totrans-461
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 自增特性
+- en: 'MySQL’s proprietary `AUTO_INCREMENT` feature allows you to create a unique
+    identifier for a row without running a `SELECT` query. Here’s how it works. Let’s
+    take the simplified `actor` table again:'
+  id: totrans-462
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL的专有`AUTO_INCREMENT`特性允许您为行创建唯一标识符，而无需运行`SELECT`查询。它是如何工作的？让我们再次看看简化的`actor`表：
+- en: '[PRE188]'
+  id: totrans-463
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE188]'
+- en: '[PRE189]'
+  id: totrans-464
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE189]'
+- en: 'It’s possible to insert rows into that table without specifying the `actor_id`:'
+  id: totrans-465
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以在不指定`actor_id`的情况下向该表中插入行：
+- en: '[PRE190]'
+  id: totrans-466
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE190]'
+- en: '[PRE191]'
+  id: totrans-467
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE191]'
+- en: '[PRE192]'
+  id: totrans-468
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE192]'
+- en: '[PRE193]'
+  id: totrans-469
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE193]'
+- en: '[PRE194]'
+  id: totrans-470
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE194]'
+- en: '[PRE195]'
+  id: totrans-471
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE195]'
+- en: 'When you view the data in this table, you can see that each row has a value
+    assigned for the `actor_id` column:'
+  id: totrans-472
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您查看此表中的数据时，可以看到每行为`actor_id`列分配了一个值：
+- en: '[PRE196]'
+  id: totrans-473
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE196]'
+- en: '[PRE197]'
+  id: totrans-474
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE197]'
+- en: Each time a new row is inserted, a unique value for the `actor_id` column is
+    created for that new row.
+  id: totrans-475
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每次插入新行时，都会为`actor_id`列创建一个唯一值。
+- en: Consider how this feature works. You can see that the `actor_id` column is declared
+    as an integer with the clauses `NOT NULL AUTO_INCREMENT`. `AUTO_INCREMENT` tells
+    MySQL that when a value isn’t provided for this column, the value allocated should
+    be one more than the maximum currently stored in the table. The `AUTO_INCREMENT`
+    sequence begins at 1 for an empty table.
+  id: totrans-476
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 考虑这个特性是如何工作的。您可以看到，`actor_id`列被声明为带有`NOT NULL AUTO_INCREMENT`子句的整数。`AUTO_INCREMENT`告诉MySQL，当没有为此列提供值时，分配的值应该比当前表中存储的最大值大一。对于空表，`AUTO_INCREMENT`序列从1开始。
+- en: The `NOT NULL` clause is required for `AUTO_INCREMENT` columns; when you insert
+    `NULL` (or 0, though this isn’t recommended), the MySQL server automatically finds
+    the next available identifier and assigns it to the new row. You can manually
+    insert negative values if the column was not defined as `UNSIGNED`; however, for
+    the next automatic increment, MySQL will simply use the largest (positive) value
+    in the column, or start from 1 if there are no positive values.
+  id: totrans-477
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于`AUTO_INCREMENT`列，必须使用`NOT NULL`子句；当插入`NULL`（或0，尽管不建议这样做）时，MySQL服务器会自动查找下一个可用的标识符，并将其分配给新行。如果列未定义为`UNSIGNED`，则可以手动插入负值；然而，对于下一个自动增量，MySQL将简单地使用列中的最大（正）值，或者如果没有正值，则从1开始。
+- en: 'The `AUTO_INCREMENT` feature has the following requirements:'
+  id: totrans-478
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`AUTO_INCREMENT`特性有以下要求：'
+- en: The column it is used on must be indexed.
+  id: totrans-479
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它所用的列必须被索引。
+- en: The column it is used on cannot have a `DEFAULT` value.
+  id: totrans-480
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它所用的列不能有默认值。
+- en: There can be only one `AUTO_INCREMENT` column per table.
+  id: totrans-481
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 每个表只能有一个`AUTO_INCREMENT`列。
+- en: MySQL supports different storage engines; we’ll talk more about these in [“Alternative
+    Storage Engines”](ch07.xhtml#ADV2-SEC-STORAGEENGINES). When using the nondefault
+    MyISAM table type, you can use the `AUTO_INCREMENT` feature on keys that comprise
+    multiple columns. In effect, you can have multiple independent counters within
+    a single `AUTO_INCREMENT` column. However, this is not possible with InnoDB.
+  id: totrans-482
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL支持不同的存储引擎；我们将在[“备用存储引擎”](ch07.xhtml#ADV2-SEC-STORAGEENGINES)中详细讨论这些内容。在使用非默认的MyISAM表类型时，可以在由多列组成的键上使用`AUTO_INCREMENT`特性。实际上，您可以在单个`AUTO_INCREMENT`列内拥有多个独立的计数器。然而，在InnoDB中是不可能的。
+- en: 'While the `AUTO_INCREMENT` feature is useful, it isn’t portable to other database
+    environments, and it hides the logical steps for creating new identifiers. It
+    can also lead to ambiguity; for example, dropping or truncating a table will reset
+    the counter, but deleting selected rows (with a `WHERE` clause) doesn’t reset
+    the counter. Moreover, if a row is inserted inside a transaction but then that
+    transaction is rolled back, an identifier will be used up anyway. As an example,
+    let’s create the table `count` that contains an auto-incrementing field `counter`:'
+  id: totrans-483
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然`AUTO_INCREMENT`特性很有用，但它在其他数据库环境中并不具备可移植性，并且隐藏了创建新标识符的逻辑步骤。它还可能导致歧义；例如，删除或截断表会重置计数器，但使用`WHERE`子句删除选定行则不会重置计数器。此外，如果在事务中插入了一行但然后回滚该事务，则标识符仍然会被使用。举个例子，让我们创建包含自动增量字段`counter`的表`count`：
+- en: '[PRE198]'
+  id: totrans-484
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE198]'
+- en: '[PRE199]'
+  id: totrans-485
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE199]'
+- en: '[PRE200]'
+  id: totrans-486
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE200]'
+- en: '[PRE201]'
+  id: totrans-487
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE201]'
+- en: '[PRE202]'
+  id: totrans-488
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE202]'
+- en: '[PRE203]'
+  id: totrans-489
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE203]'
+- en: 'Inserting several values works as expected. Now, let’s delete a few rows and
+    then add six new rows:'
+  id: totrans-490
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 插入多个值的工作效果如预期。现在，让我们删除几行，然后添加六行新数据：
+- en: '[PRE204]'
+  id: totrans-491
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE204]'
+- en: '[PRE205]'
+  id: totrans-492
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE205]'
+- en: '[PRE206]'
+  id: totrans-493
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE206]'
+- en: '[PRE207]'
+  id: totrans-494
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE207]'
+- en: '[PRE208]'
+  id: totrans-495
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE208]'
+- en: '[PRE209]'
+  id: totrans-496
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE209]'
+- en: 'Here, we see that the counter is not reset and continues from 7\. If, however,
+    we truncate the table, thus removing all of the data, the counter is reset to
+    1:'
+  id: totrans-497
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们看到计数器未被重置，并继续从7开始。然而，如果我们截断表，从而删除所有数据，计数器将被重置为1：
+- en: '[PRE210]'
+  id: totrans-498
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE210]'
+- en: '[PRE211]'
+  id: totrans-499
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE211]'
+- en: '[PRE212]'
+  id: totrans-500
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE212]'
+- en: '[PRE213]'
+  id: totrans-501
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE213]'
+- en: '[PRE214]'
+  id: totrans-502
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE214]'
+- en: '[PRE215]'
+  id: totrans-503
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE215]'
+- en: 'To summarize: `AUTO_INCREMENT` guarantees a sequence of transactional and monotonically
+    increasing values. However, it does not in any way guarantee that each individual
+    identifier provided will exactly follow the previous one. Usually, this behavior
+    of `AUTO_INCREMENT` is clear enough and should not be a problem. However, if your
+    particular use case requires a counter that guarantees no gaps, you should consider
+    using some kind of workaround. Unfortunately, it’ll likely be implemented on the
+    application side.'
+  id: totrans-504
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总结一下：`AUTO_INCREMENT`保证了事务性和单调递增值序列。然而，它并不以任何方式保证每个提供的单个标识符会严格遵循前一个标识符。通常，`AUTO_INCREMENT`的这种行为已经足够清晰，不应该是一个问题。然而，如果您的特定用例要求计数器保证没有间隙，您应该考虑使用某种解决方法。不幸的是，这可能会在应用程序端实现。
+- en: Altering Structures
+  id: totrans-505
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 修改结构
+- en: We’ve shown you all the basics you need for creating databases, tables, indexes,
+    and columns. In this section, you’ll learn how to add, remove, and change columns,
+    databases, tables, and indexes in structures that already exist.
+  id: totrans-506
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经向您展示了创建数据库、表、索引和列所需的所有基础知识。在本节中，您将学习如何在已经存在的结构中添加、删除和更改列、数据库、表和索引。
+- en: Adding, Removing, and Changing Columns
+  id: totrans-507
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 添加、删除和更改列
+- en: You can use the `ALTER TABLE` statement to add new columns to a table, remove
+    existing columns, and change column names, types, and lengths.
+  id: totrans-508
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用`ALTER TABLE`语句向表中添加新列，删除现有列，并更改列名、类型和长度。
+- en: 'Let’s begin by considering how you modify existing columns. Consider an example
+    in which we rename a table column. The `language` table has a column called `last_update`
+    that contains the time the record was modified. To change the name of this column
+    to `last_updated_time`, you would write:'
+  id: totrans-509
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们从考虑如何修改现有列开始。考虑一个示例，我们将重命名表列。`language`表有一个名为`last_update`的列，其中包含记录修改时间。要将此列名更改为`last_updated_time`，您应该编写：
+- en: '[PRE216]'
+  id: totrans-510
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE216]'
+- en: '[PRE217]'
+  id: totrans-511
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE217]'
+- en: This particular example utilizes the *online DDL* feature of MySQL. What actually
+    happens behind the scenes is that MySQL only modifies metadata and doesn’t need
+    to actually rewrite the table in any way. You can see that by the lack of affected
+    rows. Not all DDL statements can be performed online, so this won’t be the case
+    with many of the changes you make.
+  id: totrans-512
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个特定示例利用了MySQL的*在线DDL*功能。实际上背后发生的是MySQL仅修改了元数据，而不需要以任何方式重写表。通过受影响行数的缺失可以看出这一点。并非所有DDL语句都可以在线执行，因此在许多您进行的更改中可能不会出现这种情况。
+- en: Note
+  id: totrans-513
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: DDL stands for data definition language, and in the context of SQL it’s a subset
+    of syntax and statements used to create, modify, and delete schema objects such
+    as databases, tables, indexes, and columns. `CREATE TABLE` and `ALTER TABLE` are
+    both DDL operations, for example.
+  id: totrans-514
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DDL代表数据定义语言，在SQL的上下文中，它是用于创建、修改和删除模式对象（如数据库、表、索引和列）的语法和语句的子集。例如，`CREATE TABLE`和`ALTER
+    TABLE`都是DDL操作。
+- en: Executing DDL statements requires special internal mechanisms, including special
+    locking—this is a good thing, as you probably wouldn’t like tables changing while
+    your queries are running! These special locks are called metadata locks in MySQL,
+    and we give a detailed overview of how they work in [“Metadata Locks”](ch06.xhtml#CH6_TRANSACTION_LOCKING_METADATA).
+  id: totrans-515
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 执行DDL语句需要特殊的内部机制，包括特殊的锁定——这是一件好事，因为您可能不希望在运行查询时表发生变化！这些特殊锁在MySQL中称为元数据锁，我们在[“元数据锁”](ch06.xhtml#CH6_TRANSACTION_LOCKING_METADATA)中详细介绍了它们的工作原理。
+- en: 'Note that all DDL statements, including those that execute through online DDL,
+    require metadata locks to be obtained. In that sense, online DDL statements are
+    not so “online,” but they won’t lock the target table entirely while they are
+    running. Executing DDL statements on a running system under load is a risky venture:
+    even a statement that should execute almost instantaneously may wreak havoc. We
+    recommend that you read carefully about metadata locking in [Chapter 6](ch06.xhtml#CH6_TRANSACTION_LOCKING)
+    and in the link to [MySQL documentation](https://oreil.ly/xNZYg), and experiment
+    with running different DDL statements with and without concurrent load. That may
+    not be too important while you’re learning MySQL, but we think it’s worth cautioning
+    you up front. With that covered, let’s get back to our `ALTER` of the `language`
+    table.'
+  id: totrans-516
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意所有DDL语句，包括通过在线DDL执行的语句，都需要获取元数据锁。从这个意义上说，在线DDL语句并不那么“在线”，但它们在运行时不会完全锁定目标表。在负载运行的系统上执行DDL语句是一次冒险：即使是应该几乎立即执行的语句，也可能造成严重破坏。我们建议您仔细阅读[第6章](ch06.xhtml#CH6_TRANSACTION_LOCKING)中关于元数据锁的内容以及[MySQL文档](https://oreil.ly/xNZYg)中的链接，并尝试在有和无并发负载的情况下运行不同的DDL语句。在学习MySQL时，这可能并不是太重要，但我们认为提前告诫您是值得的。说了这些，让我们回到我们对`language`表进行的`ALTER`操作。
+- en: 'You can check the result with the `SHOW COLUMNS` statement:'
+  id: totrans-517
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用`SHOW COLUMNS`语句检查结果：
+- en: '[PRE218]'
+  id: totrans-518
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE218]'
+- en: '[PRE219]'
+  id: totrans-519
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE219]'
+- en: 'In the previous example we used the `ALTER TABLE` statement with the `RENAME
+    COLUMN` keyword. That is a MySQL 8.0 feature. We could alternatively use `ALTER
+    TABLE` with the `CHANGE` keyword for compatibility:'
+  id: totrans-520
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的示例中，我们使用了带有`RENAME COLUMN`关键字的`ALTER TABLE`语句。这是MySQL 8.0的功能。为了兼容性，我们也可以使用带有`CHANGE`关键字的`ALTER
+    TABLE`：
+- en: '[PRE220]'
+  id: totrans-521
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE220]'
+- en: '[PRE221]'
+  id: totrans-522
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE221]'
+- en: 'In this example, you can see that we provided four parameters to the `ALTER
+    TABLE` statement with the `CHANGE` keyword:'
+  id: totrans-523
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此示例中，您可以看到我们向带有`CHANGE`关键字的`ALTER TABLE`语句提供了四个参数：
+- en: The table name, `language`
+  id: totrans-524
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 表名，`language`
+- en: The original column name, `last_update`
+  id: totrans-525
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 原始列名，`last_update`
+- en: The new column name, `last_updated_time`
+  id: totrans-526
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 新列名，`last_updated_time`
+- en: The column type, `TIMESTAMP`, with a lot of extra attributes, which are necessary
+    to avoid changing the original definition
+  id: totrans-527
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 列类型，`TIMESTAMP`，带有许多额外的属性，这些属性是必需的，以避免改变原始定义
+- en: You must provide all four; that means you need to respecify the type and any
+    clauses that go with it. In this example, as we’re using MySQL 8.0 with the default
+    settings, `TIMESTAMP` no longer has explicit defaults. As you can see, using `RENAME
+    COLUMN` is much easier than `CHANGE`.
+  id: totrans-528
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您必须提供所有四个参数；这意味着您需要重新指定类型和任何相关的子句。在这个例子中，由于我们使用的是默认设置的 MySQL 8.0，`TIMESTAMP`不再具有显式的默认值。如您所见，使用`RENAME
+    COLUMN`比`CHANGE`要简单得多。
+- en: 'If you want to modify the type and clauses of a column, but not its name, you
+    can use the `MODIFY` keyword:'
+  id: totrans-529
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您想要修改列的类型和子句，但不修改其名称，可以使用`MODIFY`关键字：
+- en: '[PRE222]'
+  id: totrans-530
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE222]'
+- en: '[PRE223]'
+  id: totrans-531
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE223]'
+- en: 'You can also do this with the `CHANGE` keyword, but by specifying the same
+    column name twice:'
+  id: totrans-532
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以使用`CHANGE`关键字，但需指定相同的列名两次：
+- en: '[PRE224]'
+  id: totrans-533
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE224]'
+- en: '[PRE225]'
+  id: totrans-534
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE225]'
+- en: 'Be careful when you’re modifying types:'
+  id: totrans-535
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 修改类型时请小心：
+- en: Don’t use incompatible types, since you’re relying on MySQL to successfully
+    convert data from one format to another (for example, converting an `INT` column
+    to a `DATETIME` column isn’t likely to do what you hoped).
+  id: totrans-536
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不要使用不兼容的类型，因为您依赖 MySQL 成功地将数据从一种格式转换为另一种格式（例如，将`INT`列转换为`DATETIME`列可能不会达到您的预期效果）。
+- en: Don’t truncate the data unless that’s what you want. If you reduce the size
+    of a type, the values will be edited to match the new width, and you can lose
+    data.
+  id: totrans-537
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 除非您需要这样做，否则不要截断数据。如果缩小类型的大小，值将被编辑以匹配新的宽度，可能会丢失数据。
+- en: 'Suppose you want to add an extra column to an existing table. Here’s how to
+    do it with the `ALTER TABLE` statement:'
+  id: totrans-538
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您想要向现有表添加额外的列。以下是使用`ALTER TABLE`语句的方法：
+- en: '[PRE226]'
+  id: totrans-539
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE226]'
+- en: '[PRE227]'
+  id: totrans-540
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE227]'
+- en: 'You must supply the `ADD` keyword, the new column name, and the column type
+    and clauses. This example adds the new column, `native_name`, as the last column
+    in the table, as shown with the `SHOW COLUMNS` statement:'
+  id: totrans-541
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您必须提供`ADD`关键字、新列名以及列类型和子句。此示例将新列`native_name`添加为表中的最后一列，如`SHOW COLUMNS`语句所示：
+- en: '[PRE228]'
+  id: totrans-542
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE228]'
+- en: '[PRE229]'
+  id: totrans-543
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE229]'
+- en: 'If you want it to instead be the first column, use the `FIRST` keyword as follows:'
+  id: totrans-544
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您希望它作为第一列，使用`FIRST`关键字如下：
+- en: '[PRE230]'
+  id: totrans-545
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE230]'
+- en: '[PRE231]'
+  id: totrans-546
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE231]'
+- en: '[PRE232]'
+  id: totrans-547
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE232]'
+- en: '[PRE233]'
+  id: totrans-548
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE233]'
+- en: 'If you want it added in a specific position, use the `AFTER` keyword:'
+  id: totrans-549
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您希望它添加到特定位置，请使用`AFTER`关键字：
+- en: '[PRE234]'
+  id: totrans-550
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE234]'
+- en: '[PRE235]'
+  id: totrans-551
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE235]'
+- en: '[PRE236]'
+  id: totrans-552
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE236]'
+- en: '[PRE237]'
+  id: totrans-553
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE237]'
+- en: 'To remove a column, use the `DROP` keyword followed by the column name. Here’s
+    how to get rid of the newly added `native_name` column:'
+  id: totrans-554
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要删除列，请使用`DROP`关键字，后跟列名。以下是如何去除新添加的`native_name`列的方法：
+- en: '[PRE238]'
+  id: totrans-555
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE238]'
+- en: '[PRE239]'
+  id: totrans-556
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE239]'
+- en: This removes both the column structure and any data contained in that column.
+    It also removes the column from any indexes it was in; if it’s the only column
+    in the index, the index is dropped, too. You can’t remove a column if it’s the
+    only one in a table; to do this, you drop the table instead, as explained in [“Deleting
+    Structures”](#MOD-SEC-DELETE). Be careful when dropping columns, because when
+    the structure of a table changes, you will generally have to modify any `INSERT`
+    statements that you use to insert values in a particular order. For more on this,
+    see [“The INSERT Statement”](ch03.xhtml#BAS-SEC-INSERT).
+  id: totrans-557
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将删除列结构及其中包含的任何数据。它还将从包含该列的任何索引中删除列；如果它是索引中的唯一列，则也会删除索引。如果一张表中只有一列，则无法删除该列；此时应删除整个表，如[“删除结构”](#MOD-SEC-DELETE)中所述。删除列时要小心，因为表结构更改时，通常需要修改任何用于按特定顺序插入值的`INSERT`语句。有关更多信息，请参阅[“INSERT
+    语句”](ch03.xhtml#BAS-SEC-INSERT)。
+- en: 'MySQL allows you to specify multiple alterations in a single `ALTER TABLE`
+    statement by separating them with commas. Here’s an example that adds a new column
+    and adjusts another:'
+  id: totrans-558
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 允许您在单个`ALTER TABLE`语句中指定多个修改，通过逗号分隔它们。以下是一个示例，添加新列并调整另一个列：
+- en: '[PRE240]'
+  id: totrans-559
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE240]'
+- en: '[PRE241]'
+  id: totrans-560
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE241]'
+- en: Note that this time, you can see that six records were changed. In the previous
+    `ALTER TABLE` commands, MySQL reported that no rows were affected. The difference
+    is that this time, we’re not performing an online DDL operation, because changing
+    any column’s type will always result in a table being rebuilt. We recommend reading
+    about [online DDL operations](https://oreil.ly/EEOw0) in the Reference Manual
+    when planning your changes. Combining online and offline operations will result
+    in an offline operation.
+  id: totrans-561
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，这次您可以看到已更改了六条记录。在先前的`ALTER TABLE`命令中，MySQL 报告未影响任何行。不同之处在于，这次我们未执行在线 DDL
+    操作，因为更改任何列的类型将始终导致表被重建。我们建议在计划更改时阅读有关[在线 DDL 操作](https://oreil.ly/EEOw0)的参考手册。组合在线和离线操作将导致离线操作。
+- en: When not using online DDL or when any of the modifications is “offline,” it’s
+    very efficient to join multiple modifications in a single operation. That potentially
+    saves the cost of creating a new table, copying data from the old table to the
+    new table, dropping the old table, and renaming the new table with the name of
+    the old table for each modification individually.
+  id: totrans-562
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在不使用在线DDL或任何修改是“离线”的情况下，将多个修改操作合并为单个操作非常高效。这样做可能会节省创建新表、将数据从旧表复制到新表、删除旧表并将新表重命名为旧表名的成本。
+- en: Adding, Removing, and Changing Indexes
+  id: totrans-563
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 添加、删除和更改索引
+- en: As we discussed previously, it’s often hard to know what indexes are useful
+    before the application you’re building is used. You might find that a particular
+    feature of the application is much more popular than you expected, causing you
+    to evaluate how to improve performance for the associated queries. You’ll therefore
+    find it useful to be able to add, alter, and remove indexes on the fly after your
+    application is deployed. This section shows you how. Note that modifying indexes
+    does not affect the data stored in a table.
+  id: totrans-564
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们之前讨论的，通常很难在构建应用程序之前知道哪些索引是有用的。您可能会发现应用程序的某个特定功能比预期更受欢迎，这会导致您评估如何改进相关查询的性能。因此，您会发现在应用程序部署后能够动态添加、修改和删除索引非常有用。本节将向您展示如何操作。请注意，修改索引不会影响表中存储的数据。
+- en: 'We’ll start with adding a new index. Imagine that the `language` table is frequently
+    queried using a `WHERE` clause that specifies the `name`. To speed up these queries,
+    you’ve decided to add a new index, which you’ve named `idx_name`. Here’s how you
+    add it after the table is created:'
+  id: totrans-565
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将从添加新索引开始。假设经常使用`language`表，并使用指定`name`的`WHERE`子句进行查询。为了加快这些查询的速度，您决定添加一个名为`idx_name`的新索引。以下是如何在创建表后添加它的方法：
+- en: '[PRE242]'
+  id: totrans-566
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE242]'
+- en: '[PRE243]'
+  id: totrans-567
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE243]'
+- en: 'Again, you can use the terms `KEY` and `INDEX` interchangeably. You can check
+    the results with the `SHOW CREATE TABLE` statement:'
+  id: totrans-568
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同样，您可以交替使用`KEY`和`INDEX`这两个术语。您可以使用`SHOW CREATE TABLE`语句检查结果：
+- en: '[PRE244]'
+  id: totrans-569
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE244]'
+- en: '[PRE245]'
+  id: totrans-570
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE245]'
+- en: 'As expected, the new index forms part of the table structure. You can also
+    specify a primary key for a table after it’s created:'
+  id: totrans-571
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 新索引如预期地成为表结构的一部分。在创建表后，您还可以为表指定主键：
+- en: '[PRE246]'
+  id: totrans-572
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE246]'
+- en: '[PRE247]'
+  id: totrans-573
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE247]'
+- en: '[PRE248]'
+  id: totrans-574
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE248]'
+- en: '[PRE249]'
+  id: totrans-575
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE249]'
+- en: '[PRE250]'
+  id: totrans-576
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE250]'
+- en: '[PRE251]'
+  id: totrans-577
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE251]'
+- en: 'Now let’s consider how to remove an index. To remove a non-primary key index,
+    you do the following:'
+  id: totrans-578
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们考虑如何删除索引。要删除非主键索引，执行以下操作：
+- en: '[PRE252]'
+  id: totrans-579
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE252]'
+- en: '[PRE253]'
+  id: totrans-580
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE253]'
+- en: 'You can drop a primary key index as follows:'
+  id: totrans-581
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 删除主键索引的方法如下：
+- en: '[PRE254]'
+  id: totrans-582
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE254]'
+- en: '[PRE255]'
+  id: totrans-583
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE255]'
+- en: 'MySQL won’t allow you to have multiple primary keys in a table. If you want
+    to change the primary key, you’ll have to remove the existing index before adding
+    the new one. However, we know that it’s possible to group DDL operations. Consider
+    this example:'
+  id: totrans-584
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL不允许在表中有多个主键。如果要更改主键，必须先删除现有的索引，然后再添加新的。不过，我们知道可以将DDL操作进行分组。考虑以下示例：
+- en: '[PRE256]'
+  id: totrans-585
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE256]'
+- en: '[PRE257]'
+  id: totrans-586
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE257]'
+- en: 'You can’t modify an index once it’s been created. However, sometimes you’ll
+    want to; for example, you might want to reduce the number of characters indexed
+    from a column or add another column to the index. The best method to do this is
+    to drop the index and then create it again with the new specification. For example,
+    suppose you decide that you want the `idx_name` index to include only the first
+    10 characters of the `artist_name`. Simply do the following:'
+  id: totrans-587
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦创建了索引，就无法修改它。但有时您可能会需要；例如，您可能希望减少从列索引的字符数或向索引中添加另一个列。执行此操作的最佳方法是删除索引，然后使用新的规范重新创建索引。例如，假设您决定只将`idx_name`索引包含艺术家名`artist_name`的前10个字符。只需执行以下操作：
+- en: '[PRE258]'
+  id: totrans-588
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE258]'
+- en: '[PRE259]'
+  id: totrans-589
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE259]'
+- en: Renaming Tables and Altering Other Structures
+  id: totrans-590
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 重命名表格和修改其他结构
+- en: 'We’ve seen how to modify columns and indexes in a table; now let’s see how
+    to modify tables themselves. It’s easy to rename a table. Suppose that you want
+    to rename `language` to `languages`. Use the following command:'
+  id: totrans-591
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经看到如何修改表中的列和索引；现在让我们看看如何修改表本身。重命名表很容易。假设您想将`language`重命名为`languages`，请使用以下命令：
+- en: '[PRE260]'
+  id: totrans-592
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE260]'
+- en: '[PRE261]'
+  id: totrans-593
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE261]'
+- en: The `TO` keyword is optional.
+  id: totrans-594
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TO`关键字是可选的。'
+- en: 'There are several other things you can do with `ALTER` statements, including:'
+  id: totrans-595
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`ALTER`语句还可以执行其他几项操作，包括：
+- en: Change the default character set and collation order for a database, a table,
+    or a column.
+  id: totrans-596
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 更改数据库、表格或列的默认字符集和排序规则。
+- en: Manage and change constraints. For example, you can add and remove foreign keys.
+  id: totrans-597
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 管理和更改约束。例如，您可以添加和删除外键。
+- en: Add partitioning to a table, or alter the current partitioning definition.
+  id: totrans-598
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 向表添加分区，或修改当前分区定义。
+- en: Change the storage engine of a table.
+  id: totrans-599
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 更改表的存储引擎。
+- en: 'You can find more about these operations in the MySQL Reference Manual, in
+    the sections on the [`ALTER DATABASE`](https://oreil.ly/2FpoZ) and [`ALTER TABLE`](https://oreil.ly/68PA3)
+    statements. An alternative shorter notation for the same statement is `RENAME
+    TABLE`:'
+  id: totrans-600
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在 MySQL 参考手册的[` ALTER DATABASE`](https://oreil.ly/2FpoZ)和[` ALTER TABLE`](https://oreil.ly/68PA3)章节找到更多关于这些操作的信息。相同语句的另一种更简短的表示法是`
+    RENAME TABLE`：
+- en: '[PRE262]'
+  id: totrans-601
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE262]'
+- en: '[PRE263]'
+  id: totrans-602
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE263]'
+- en: 'One thing that it’s not possible to alter is a name of a particular database.
+    However, if you’re using the InnoDB engine, you can use `RENAME` to move tables
+    between databases:'
+  id: totrans-603
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有一件事是不可能改变特定数据库的名称。然而，如果你使用 InnoDB 引擎，你可以使用` RENAME`来在不同数据库之间移动表：
+- en: '[PRE264]'
+  id: totrans-604
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE264]'
+- en: '[PRE265]'
+  id: totrans-605
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE265]'
+- en: '[PRE266]'
+  id: totrans-606
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE266]'
+- en: '[PRE267]'
+  id: totrans-607
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE267]'
+- en: '[PRE268]'
+  id: totrans-608
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE268]'
+- en: '[PRE269]'
+  id: totrans-609
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE269]'
+- en: '[PRE270]'
+  id: totrans-610
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE270]'
+- en: '[PRE271]'
+  id: totrans-611
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE271]'
+- en: '[PRE272]'
+  id: totrans-612
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE272]'
+- en: '[PRE273]'
+  id: totrans-613
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE273]'
+- en: '[PRE274]'
+  id: totrans-614
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE274]'
+- en: '[PRE275]'
+  id: totrans-615
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE275]'
+- en: Deleting Structures
+  id: totrans-616
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 删除结构
+- en: In the previous section, we showed how you can delete columns and rows from
+    a database; now we’ll describe how to remove databases and tables.
+  id: totrans-617
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前一节中，我们展示了如何从数据库中删除列和行；现在我们将描述如何删除数据库和表。
+- en: Dropping Databases
+  id: totrans-618
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 删除数据库
+- en: 'Removing, or *dropping*, a database is straightforward. Here’s how you drop
+    the `sakila` database:'
+  id: totrans-619
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 移除或*删除*一个数据库是直接的。这是你如何删除` sakila`数据库：
+- en: '[PRE276]'
+  id: totrans-620
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE276]'
+- en: '[PRE277]'
+  id: totrans-621
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE277]'
+- en: The number of rows returned in the response is the number of tables removed.
+    You should take care when dropping a database, since all its tables, indexes,
+    and columns are deleted, as are all the associated disk-based files and directories
+    that MySQL uses to maintain them.
+  id: totrans-622
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 响应中返回的行数是删除的表的数量。删除数据库时应当小心，因为它的所有表、索引和列都会被删除，MySQL 用于维护它们的所有关联磁盘文件和目录也会被删除。
+- en: 'If a database doesn’t exist, trying to drop it causes MySQL to report an error.
+    Let’s try dropping the `sakila` database again:'
+  id: totrans-623
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果一个数据库不存在，尝试删除它会导致 MySQL 报告一个错误。让我们再次尝试删除` sakila`数据库：
+- en: '[PRE278]'
+  id: totrans-624
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE278]'
+- en: '[PRE279]'
+  id: totrans-625
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE279]'
+- en: 'You can avoid the error, which is useful when including the statement in a
+    script, by using the `IF EXISTS` phrase:'
+  id: totrans-626
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以通过使用` IF EXISTS`短语来避免错误，这在将语句包含在脚本中时非常有用：
+- en: '[PRE280]'
+  id: totrans-627
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE280]'
+- en: '[PRE281]'
+  id: totrans-628
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE281]'
+- en: You can see that a warning is reported since the `sakila` database has already
+    been dropped.
+  id: totrans-629
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到一个警告被报告，因为` sakila`数据库已经被删除。
+- en: Removing Tables
+  id: totrans-630
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 删除表
+- en: 'Removing tables is as easy as removing a database. Let’s create and remove
+    a table from the `sakila` database:'
+  id: totrans-631
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 删除表和删除数据库一样简单。让我们从` sakila`数据库创建并删除一个表：
+- en: '[PRE282]'
+  id: totrans-632
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE282]'
+- en: '[PRE283]'
+  id: totrans-633
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE283]'
+- en: '[PRE284]'
+  id: totrans-634
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE284]'
+- en: '[PRE285]'
+  id: totrans-635
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE285]'
+- en: 'Don’t worry: the `0 rows affected` message is misleading. You’ll find the table
+    is definitely gone.'
+  id: totrans-636
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不要担心：` 0 rows affected`消息是误导性的。你会发现表确实已经消失了。
+- en: 'You can use the `IF EXISTS` phrase to prevent errors. Let’s try dropping the
+    `temp` table again:'
+  id: totrans-637
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以使用` IF EXISTS`短语来防止错误。让我们再次尝试删除` temp`表：
+- en: '[PRE286]'
+  id: totrans-638
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE286]'
+- en: '[PRE287]'
+  id: totrans-639
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE287]'
+- en: 'As usual, you can investigate the warning with the `SHOW WARNINGS` statement:'
+  id: totrans-640
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 和往常一样，你可以用` SHOW WARNINGS`语句来调查警告：
+- en: '[PRE288]'
+  id: totrans-641
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE288]'
+- en: '[PRE289]'
+  id: totrans-642
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE289]'
+- en: 'You can drop more than one table in a single statement by the separating table
+    names with commas:'
+  id: totrans-643
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在单个语句中通过用逗号分隔表名来删除多个表：
+- en: '[PRE290]'
+  id: totrans-644
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE290]'
+- en: '[PRE291]'
+  id: totrans-645
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE291]'
+- en: In this case there are three warnings because none of these tables existed.
+  id: totrans-646
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下有三个警告，因为这些表都不存在。

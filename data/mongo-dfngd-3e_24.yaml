@@ -1,0 +1,917 @@
+- en: Chapter 19\. An Introduction to MongoDB Security
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第 19 章。MongoDB 安全简介
+- en: 'To protect your MongoDB cluster and the data it holds, you will want to employ
+    the following security measures:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了保护您的 MongoDB 集群及其保存的数据，您将希望采取以下安全措施：
+- en: Enable authorization and enforce authentication
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 启用授权并强制认证
+- en: Encrypt communication
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 加密通信
+- en: Encrypt data
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 加密数据
+- en: This chapter demonstrates how to address the first two security measures with
+    a tutorial on using MongoDB’s support for x.509 to configure authentication and
+    transport layer encryption to ensure secure communications among clients and servers
+    in a MongoDB replica set. We will touch on encrypting data at the storage layer
+    in a later chapter.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章展示如何使用 MongoDB 对 x.509 的支持来配置认证和传输层加密，以确保 MongoDB 副本集中客户端和服务器之间的安全通信。我们将在后续章节中讨论在存储层加密数据的方法。
+- en: MongoDB Authentication and Authorization
+  id: totrans-6
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MongoDB 的认证和授权
+- en: While authentication and authorization are closely connected, it is important
+    to note that authentication is distinct from authorization. The purpose of authentication
+    is to verify the identity of a user, while authorization determines the verified
+    user’s access to resources and operations.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然认证和授权密切相关，但重要的是要注意认证与授权是不同的。认证的目的是验证用户的身份，而授权则确定经过验证的用户对资源和操作的访问权限。
+- en: Authentication Mechanisms
+  id: totrans-8
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 认证机制
+- en: Enabling authorization on a MongoDB cluster enforces authentication and ensures
+    users can only perform actions they are authorized for, as determined by their
+    roles. The Community version of MongoDB provides support for SCRAM (Salted Challenge
+    Response Authentication Mechanism) and x.509 certificate authentication. In addition
+    to SCRAM and x.509, MongoDB Enterprise supports Kerberos authentication and LDAP
+    proxy authentication. See the [documentation](https://oreil.ly/RQ5Jp) for details
+    on the various authentication mechanisms that MongoDB supports. In this chapter,
+    we will focus on x.509 authentication. An x.509 digital certificate uses the widely
+    accepted x.509 public key infrastructure (PKI) standard to verify that a public
+    key belongs to the presenter.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MongoDB 集群上启用授权强制认证，并确保用户只能执行其角色授权的操作。MongoDB 的社区版支持 SCRAM（Salted Challenge
+    Response Authentication Mechanism）和 x.509 证书认证。除了 SCRAM 和 x.509 之外，MongoDB 企业版还支持
+    Kerberos 认证和 LDAP 代理认证。有关 MongoDB 支持的各种认证机制的详细信息，请参阅[文档](https://oreil.ly/RQ5Jp)。在本章中，我们将重点介绍
+    x.509 认证。x.509 数字证书使用广泛接受的 x.509 公钥基础设施（PKI）标准来验证公钥属于呈现者。
+- en: Authorization
+  id: totrans-10
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 授权
+- en: When adding a user in MongoDB, you must create the user in a specific database.
+    That database is the authentication database for the user; you can use any database
+    for this purpose. The username and authentication database serves as a unique
+    identifier for a user. However, a user’s privileges are not limited to their authentication
+    database. When creating a user, you can specify the operations the user may perform
+    on any resources to which they should have access. Resources include the cluster,
+    databases, and collections.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MongoDB 中添加用户时，必须在特定数据库中创建用户。该数据库是用户的认证数据库；您可以使用任何数据库来完成此操作。用户名和认证数据库作为用户的唯一标识符。但是，用户的权限不仅限于其认证数据库。创建用户时，可以指定用户可以对其应具有访问权限的任何资源执行的操作。资源包括集群、数据库和集合。
+- en: 'MongoDB provides a number of built-in roles that grant commonly needed permissions
+    for database users. These include the following:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 提供了多个内置角色，为数据库用户授予常见所需权限。其中包括以下内容：
+- en: '`read`'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`read`'
+- en: 'Read data on all nonsystem collections and on the following system collections:
+    *system.indexes*, *system.js*, and *system.namespaces.*'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在所有非系统集合上读取数据，以及在*system.indexes*、*system.js*和*system.namespaces*系统集合上读取数据。
+- en: '`readWrite`'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`readWrite`'
+- en: Provides same privileges as `read`, plus the ability to modify data on all nonsystem
+    collections and the *system.js* collection.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提供与`read`相同的权限，以及在所有非系统集合和*system.js*集合上修改数据的能力。
+- en: '`dbAdmin`'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`dbAdmin`'
+- en: Perform administrative tasks such as schema-related tasks, indexing, and gathering
+    statistics (does not grant privileges for user and role management).
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 执行与模式相关的管理任务，如索引和收集统计信息（不授予用户和角色管理的权限）。
+- en: '`userAdmin`'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`userAdmin`'
+- en: Create and modify roles and users on the current database.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建和修改当前数据库上的角色和用户。
+- en: '`dbOwner`'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`dbOwner`'
+- en: Combines the privileges granted by the *readWrite*, *dbAdmin*, and *userAdmin*
+    roles.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结合了*readWrite*、*dbAdmin*和*userAdmin*角色授予的权限。
+- en: '`clusterManager`'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`clusterManager`'
+- en: Perform management and monitoring actions on the cluster.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在集群上执行管理和监控操作。
+- en: '`clusterMonitor`'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`clusterMonitor`'
+- en: Provides read-only access to monitoring tools such as the MongoDB Cloud Manager
+    and Ops Manager monitoring agent.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提供只读访问权限，例如 MongoDB Cloud Manager 和 Ops Manager 监控代理的监控工具。
+- en: '`hostManager`'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`hostManager`'
+- en: Monitor and manage servers.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 监控和管理服务器。
+- en: '`clusterAdmin`'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`clusterAdmin`'
+- en: Combines the privileges granted by the *clusterManager*, *clusterMonitor*, and
+    *hostManager* roles, plus the *dropDatabase* action.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结合 *clusterManager*、*clusterMonitor* 和 *hostManager* 角色授予的权限，以及 *dropDatabase*
+    操作。
+- en: '`backup`'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`backup`'
+- en: Provides sufficient privileges to use the MongoDB Cloud Manager backup agent
+    or the Ops Manager backup agent, or to use *mongodump* to back up an entire *mongod*
+    instance.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提供足够的权限使用 MongoDB Cloud Manager 备份代理或 Ops Manager 备份代理，或使用 *mongodump* 对整个 *mongod*
+    实例进行备份。
+- en: '`restore`'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`restore`'
+- en: Provides privileges needed to restore data from backups that do not include
+    *system.profile* collection data.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提供从不包括 *system.profile* 集合数据的备份中恢复数据所需的权限。
+- en: '`readAnyDatabase`'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`readAnyDatabase`'
+- en: Provides same privileges as *read* on all databases except *local* and *config*,
+    plus the *listDatabases* action on the cluster as a whole.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提供与 *read* 权限相同的所有数据库的特权，除了 *local* 和 *config*，还包括整个集群的 *listDatabases* 操作。
+- en: '`readWriteAnyDatabase`'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`readWriteAnyDatabase`'
+- en: Provides same privileges as *readWrite* on all databases except *local* and
+    *config*, plus the *listDatabases* action on the cluster as a whole.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提供与 *readWrite* 权限相同的所有数据库的特权，除了 *local* 和 *config*，还包括整个集群的 *listDatabases*
+    操作。
+- en: '`userAdminAnyDatabase`'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`userAdminAnyDatabase`'
+- en: Provides same privileges as *userAdmin* on all databases except *local* and
+    *config* (effectively a superuser role).
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提供与 *userAdmin* 权限相同的所有数据库的特权，除了 *local* 和 *config*（实质上是超级用户角色）。
+- en: '`dbAdminAnyDatabase`'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`dbAdminAnyDatabase`'
+- en: Provides same privileges as *dbAdmin* on all databases except *local* and *config*,
+    plus the *listDatabases* action on the cluster as a whole.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提供与 *dbAdmin* 权限相同的所有数据库的特权，除了 *local* 和 *config*，还包括整个集群的 *listDatabases* 操作。
+- en: '`root`'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`root`'
+- en: Provides access to the operations and all the resources of the *readWriteAnyDatabase*,
+    *dbAdminAnyDatabase*, *userAdminAnyDatabase*, *clusterAdmin*, *restore*, and *backup*
+    roles combined.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提供操作和所有资源的权限，这些权限结合了 *readWriteAnyDatabase*、*dbAdminAnyDatabase*、*userAdminAnyDatabase*、*clusterAdmin*、*restore*
+    和 *backup* 角色。
+- en: You may also create what are known as “user-defined roles,” which are custom
+    roles that group together authorization to perform specific operations and label
+    them with a name so that you may grant this set of permissions to multiple users
+    easily.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以创建所谓的“用户定义角色”，这些角色是自定义角色，将执行特定操作的授权组合在一起，并使用名称标记，以便您可以轻松地将此权限集合授予多个用户。
+- en: A deep dive on built-in roles or user-defined roles is beyond the scope of this
+    chapter. However, this introduction should give you a pretty good idea of what’s
+    possible with MongoDB authorization. For greater detail, please see [the authorization
+    section of the MongoDB documentation](https://docs.mongodb.com/manual/core/authorization/).
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 深入研究内置角色或用户定义角色超出了本章的范围。但是，此介绍应该让您对 MongoDB 授权的可能性有了很好的了解。更详细的信息，请参阅 [MongoDB
+    文档中的授权部分](https://docs.mongodb.com/manual/core/authorization/)。
+- en: To ensure that you can add new users as needed, you must first create an admin
+    user. MongoDB does not create a default root or admin user when enabling authentication
+    and authorization, regardless of the authentication mode you are using (x.509
+    is no exception).
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确保根据需要添加新用户，必须首先创建管理员用户。无论您使用哪种认证模式（x.509 也不例外），MongoDB 在启用认证和授权时都不会创建默认的 root
+    或 admin 用户。
+- en: In MongoDB, authentication and authorization are not enabled by default. You
+    must explicitly enable them by using the `--auth` option to the `mongod` command
+    or specifying a value of `"enabled"` for the `security.authorization` setting
+    in a MongoDB config file.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MongoDB 中，默认情况下未启用认证和授权。您必须使用 `mongod` 命令的 `--auth` 选项或在 MongoDB 配置文件中的 `security.authorization`
+    设置中指定值 `"enabled"` 明确启用它们。
+- en: To configure a replica set, first bring it up without authentication and authorization
+    enabled, then create the admin user and the users you’ll need for each client.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要配置副本集，请先在未启用认证和授权的情况下启动它，然后创建管理员用户和每个客户端所需的用户。
+- en: Using x.509 Certificates to Authenticate Both Members and Clients
+  id: totrans-50
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用 x.509 证书对成员和客户端进行认证
+- en: Given that all production MongoDB clusters are composed of multiple members,
+    to secure a cluster, it is essential that all services communicating within the
+    cluster authenticate with one another. Each member of a replica set must authenticate
+    with the others in order to exchange data. Likewise, clients must authenticate
+    with the primary and any secondaries that they communicate with.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 鉴于所有生产MongoDB集群由多个成员组成，为了保护集群，所有在集群内部通信的服务都必须进行相互认证。副本集的每个成员必须与其他成员进行身份验证，以便交换数据。同样，客户端必须与主服务器和任何次要服务器进行身份验证才能进行通信。
+- en: For x.509, it’s necessary that a trusted certification authority (CA) sign all
+    certificates. Signing certifies that the named subject of a certificate owns the
+    public key associated with that certificate. A CA acts as a trusted third party
+    to prevent man-in-the-middle attacks.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于x.509，有必要让一个受信任的认证机构（CA）签署所有证书。签署证明了证书主题的命名主体拥有与该证书关联的公钥。CA充当可信第三方，以防止中间人攻击。
+- en: '[Figure 19-1](#x509) depicts x.509 authentication used to secure a three-member
+    MongoDB replica set. Note the authentication among the client and members of the
+    replica set and the trust relationships with the CA.'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图19-1](#x509)展示了用于保护三成员MongoDB副本集的x.509身份验证。请注意客户端与副本集成员之间的认证以及与CA的信任关系。'
+- en: '![](Images/mdb3_1901.png)'
+  id: totrans-54
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1901.png)'
+- en: Figure 19-1\. Overview of the trust hierarchy for X.509 authentication for the
+    three-member replica set used in this chapter
+  id: totrans-55
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图19-1. 本章使用的三成员副本集的X.509身份验证信任层次结构概述
+- en: The members and the client each have their own certificate signed by the CA.
+    For production use, your MongoDB deployment should use valid certificates generated
+    and signed by a single certificate authority. You or your organization can generate
+    and maintain an independent certificate authority, or you can use certificates
+    generated by a third-party TLS/SSL vendor.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个成员和客户端都有自己由CA签名的证书。对于生产环境使用，您的MongoDB部署应该使用由单个证书颁发机构生成和签名的有效证书。您或您的组织可以生成和维护独立的证书颁发机构，或者可以使用第三方TLS/SSL供应商生成的证书。
+- en: 'We will refer to certificates used for internal authentication to verify membership
+    in a cluster as member certificates. Both member certificates and client certificates
+    (used to authenticate clients) have a structure resembling the following:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将用于内部认证以验证集群成员资格的证书称为成员证书。成员证书和客户端证书（用于验证客户端）的结构如下所示：
+- en: '[PRE0]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'For use with x.509 authentication in MongoDB, member certificates must have
+    the following properties:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在MongoDB中使用x.509身份验证时，成员证书必须具备以下属性：
+- en: A single CA must issue all x.509 certificates for the members of the cluster.
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 单个CA必须为集群成员颁发所有x.509证书。
+- en: 'The Distinguished Name (`DN`), found in the subject of the member certificate,
+    must specify a nonempty value for at least one of the following attributes: Organization
+    (`O`), Organizational Unit (`OU`), or Domain Component (`DC`).'
+  id: totrans-61
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 成员证书主题中的专有名称（`DN`）必须为以下至少一个属性指定非空值：组织（`O`）、组织单位（`OU`）或域组件（`DC`）。
+- en: The `O`, `OU`, and `DC` attributes must match those from the certificates for
+    the other cluster members.
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`O`、`OU`和`DC`属性必须与其他集群成员的证书中的属性匹配。'
+- en: The Common Name (`CN`) or a Subject Alternative Name (`SAN`) must match the
+    hostname of the server used by the other members of the cluster.
+  id: totrans-63
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`CN`（Common Name）或主体备用名称（`SAN`）必须与集群中其他成员使用的服务器主机名匹配。'
+- en: A Tutorial on MongoDB Authentication and Transport Layer Encryption
+  id: totrans-64
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MongoDB身份验证和传输层加密教程
+- en: In this tutorial we will set up a root CA and an intermediate CA. Best practice
+    recommends signing the server and client certificates with the intermediate CA.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本教程中，我们将设置一个根CA和一个中间CA。最佳实践建议使用中间CA签署服务器和客户端证书。
+- en: Establish a CA
+  id: totrans-66
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 建立CA
+- en: Before we can generate signed certificates for the members of our replica set,
+    we must first address the issue of a certificate authority. As mentioned previously,
+    we can either generate and maintain an independent certificate authority or use
+    certificates generated by a third-party TLS/SSL vendor. We will generate our own
+    CA to use for the running example in this chapter. Note that you may access all
+    the code examples in this chapter from the GitHub repository maintained for this
+    book. The examples are drawn from a script you can use to deploy a secure replica
+    set. You’ll see comments from this script throughout these examples.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们可以为复制集的成员生成签名证书之前，我们必须首先解决证书颁发机构的问题。如前所述，我们可以生成并维护独立的证书颁发机构，也可以使用第三方TLS/SSL供应商生成的证书。我们将生成自己的CA以在本章的运行示例中使用。请注意，您可以从为本书维护的GitHub存储库中访问本章中的所有代码示例。这些示例来自您可以用于部署安全复制集的脚本。您将在这些示例中看到来自此脚本的注释。
+- en: Generate a root CA
+  id: totrans-68
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 生成根CA
+- en: To generate our CA, we will use OpenSSL. To follow along, please make sure you
+    have access to OpenSSL on your local machine.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要生成我们的CA，我们将使用OpenSSL。请确保您的本地计算机上有OpenSSL可用。
+- en: A root CA is at the top of the certificate chain. This is the ultimate source
+    of trust. Ideally, a third-party CA should be used. However, in the case of an
+    isolated network (typical in a large enterprise environment) or for testing purposes,
+    you’ll need to use a local CA.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根CA位于证书链的顶部。这是信任的最终来源。理想情况下，应该使用第三方CA。然而，在隔离网络（大型企业环境中典型情况）或测试目的中，您将需要使用本地CA。
+- en: 'First, we’ll initialize some variables:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们将初始化一些变量：
+- en: '[PRE1]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Then, we’ll create a key pair and store it in the file *root-ca.key*:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，我们将创建一个密钥对并将其存储在文件 *root-ca.key* 中：
+- en: '[PRE2]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Next, we’ll create a configuration file to hold our OpenSSL settings that we
+    will use to generate the certificates:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将创建一个配置文件来保存我们将用于生成证书的OpenSSL设置：
+- en: '[PRE3]'
+  id: totrans-76
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Then, using the `openssl req` command, we will create the root certificate.
+    Since the root is the very top of the authority chain, we’ll self-sign this certificate
+    using the private key we created in the previous step (stored in *root-ca.key*).
+    The `-x509` option tells the `openssl req` command we want to self-sign the certificate
+    using the private key supplied to the `-key` option. The output is a file called
+    *root-ca.crt*:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，使用 `openssl req` 命令，我们将创建根证书。由于根是权限链的顶部，我们将使用上一步中创建的私钥（存储在 *root-ca.key*
+    中）自签此证书。 `-x509` 选项告诉 `openssl req` 命令，我们要使用提供给 `-key` 选项的私钥自签名证书。输出是一个名为 *root-ca.crt*
+    的文件：
+- en: '[PRE4]'
+  id: totrans-78
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'If you take a look at the *root-ca.crt* file, you’ll find that it contains
+    the public certificate for the root CA. You can verify the contents by taking
+    a look at a human-readable version of the certificate produced by this command:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您查看 *root-ca.crt* 文件，您会发现它包含根CA的公共证书。您可以通过查看此命令生成的证书的可读版本来验证其内容：
+- en: '[PRE5]'
+  id: totrans-80
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'The output from this command will resemble the following:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此命令的输出将类似于以下内容：
+- en: '[PRE6]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Create an intermediate CA for signing
+  id: totrans-83
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 创建用于签署的中间CA
+- en: Now that we’ve created our root CA, we will create an intermediate CA for signing
+    member and client certificates. An intermediate CA is nothing more than a certificate
+    signed using our root certificate. It is a best practice to use an intermediate
+    CA to sign server (i.e., member) and client certificates. Typically, a CA will
+    use different intermediate CAs for signing different categories of certificates.
+    If the intermediate CA is compromised and the certificate needs to be revoked,
+    only a portion of the trust tree is affected instead of all certificates signed
+    by the CA, as would be the case if the root CA were used to sign all certificates.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经创建了我们的根CA，我们将创建一个中间CA来签署成员和客户证书。中间CA只是使用我们的根证书签署的证书。最佳实践是使用中间CA来签署服务器（即成员）和客户端证书。通常，CA会使用不同的中间CA来签署不同类别的证书。如果中间CA被
+    compromise 并且证书需要被撤销，只会影响信任树的一部分，而不是由CA签署的所有证书，这种情况会发生在根CA用于签署所有证书的情况下。
+- en: '[PRE7]'
+  id: totrans-85
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Note that in the statements above we are using the `openssl req` command followed
+    by the `openssl ca` command to sign our signing certificate using our root certificate.
+    The `openssl req` command creates a signing request and the `openssl ca` command
+    uses that request as input to create a signed intermediate (signing) certificate.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在上述语句中，我们使用了`openssl req`命令，然后使用`openssl ca`命令对我们的签名证书进行签名，使用我们的根证书。`openssl
+    req`命令创建签名请求，`openssl ca`命令使用该请求作为输入创建一个已签名的中间（签名）证书。
+- en: As a last step in creating our signing CA, we will concatenate our root certificate
+    (containing our root public key) and signing certificate (containing our signing
+    public key) into a single pem file. This file will be supplied to our mongod or
+    client process later as the value of the `--tlsCAFile` option.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在创建签名CA的最后一步中，我们将我们的根证书（包含我们的根公钥）和签名证书（包含我们的签名公钥）串联成一个单独的pem文件。稍后，此文件将作为`--tlsCAFile`选项的值提供给我们的mongod或客户端进程。
+- en: '[PRE8]'
+  id: totrans-88
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: With the root CA and signing CA set up, we are now ready to create the member
+    and client certificates used for authentication in our MongoDB cluster.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用设置的根CA和签名CA，我们现在可以创建用于MongoDB集群认证的成员和客户端证书。
+- en: Generate and Sign Member Certificates
+  id: totrans-90
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 生成并签署成员证书
+- en: Member certificates are typically referred to as x.509 server certificates.
+    Use this type of certificate for *mongod* and *mongos* processes. Members of a
+    MongoDB cluster use these certificates to verify membership in the cluster. Stated
+    another way, one *mongod* authenticates itself with other members of a replica
+    set using a server certificate.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 成员证书通常称为x.509服务器证书。对*mongod*和*mongos*进程使用此类证书。MongoDB集群的成员使用这些证书来验证其在集群中的成员资格。换句话说，一个*mongod*使用服务器证书向复制集的其他成员进行身份验证。
+- en: To generate certificates for the members of our replica set, we will use a `for`
+    loop to generate multiple certificates.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为我们的副本集成员生成证书，我们将使用`for`循环生成多个证书。
+- en: '[PRE9]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Three steps are involved with each certificate:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个证书涉及三个步骤：
+- en: Use the *openssl genrsa* command to create a new key pair.
+  id: totrans-95
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用*openssl genrsa*命令创建新的密钥对。
+- en: Use the *openssl req* command to generate a signing request for the key.
+  id: totrans-96
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用*openssl req*命令为密钥生成一个签名请求。
+- en: Use the *openssl x509* command to sign and output a certificate using the signing
+    CA.
+  id: totrans-97
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用*openssl x509*命令使用签名CA签署并输出证书。
+- en: Notice the variable `$ou_member`. This signifies the difference between server
+    certificates and client certificates. Server and client certificates must differ
+    in the organization part of the Distinguished Names. More specifically, they must
+    differ in at least one of the O, OU, or DC values.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意变量`$ou_member`。这表示服务器证书和客户端证书之间的差异。服务器和客户端证书在Distinguished Names的组织部分必须不同。更具体地说，它们必须在至少一个O、OU或DC值上有所不同。
+- en: Generate and Sign Client Certificates
+  id: totrans-99
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 生成并签署客户端证书
+- en: Client certificates are used by the mongo shell, MongoDB Compass, MongoDB utilities
+    and tools and, of course, by applications using a MongoDB driver. Generating client
+    certificates follows essentially the same process as for member certificates.
+    The one difference is our use of the variable `$ou_client`. This ensure that the
+    combination of the O, OU, and DC values will be different from those of the server
+    certificates generated above.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 客户端证书由mongo shell、MongoDB Compass、MongoDB工具和应用程序使用MongoDB驱动程序使用。生成客户端证书基本上遵循与成员证书相同的过程。唯一的区别在于我们使用的变量`$ou_client`。这确保了O、OU和DC值的组合与上述生成的服务器证书不同。
+- en: '[PRE10]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: Bring Up the Replica Set Without Authentication and Authorization Enabled
+  id: totrans-102
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 启动不带认证和授权启用的副本集
+- en: We can start each member of our replica set without auth enabled as follows.
+    Previously, when working with replica sets we’ve not enabled auth so this should
+    look familiar. Here again we are making use of a few variables we defined in [“Generate
+    a root CA”](#generateRootca) (or see the full script for this chapter) and a loop
+    to launch each member (*mongod*) of our replica set.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以像下面这样启动我们的每个副本集成员而不启用auth。之前在处理副本集时，我们没有启用auth，因此这看起来应该很熟悉。在这里，我们再次使用了我们在[“生成根CA”](#generateRootca)中定义的一些变量（或者查看本章节的完整脚本），以及一个循环来启动每个副本集成员（*mongod*）。
+- en: '[PRE11]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: Once each *mongod* has started, we can then initialize a replica set using these
+    *mongod*s.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦每个*mongod*启动，我们可以使用这些*mongod*初始化一个副本集。
+- en: '[PRE12]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: Note that the code above simply constructs a series of commands, stores these
+    commands in a JavaScript file, and then runs the *mongo* shell to execute the
+    small script that was created. Together, these commands, when executed in the
+    *mongo* shell, will connect to the *mongod* running on port 27017 (value of the
+    `$mongodb_port` variable set in [“Generate a root CA”](#generateRootca)), initiate
+    the replica set, and then add each of the other two *mongod*s (on ports 27018
+    and 27019) to the replica set.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，上面的代码仅仅构建了一系列命令，将这些命令存储在一个JavaScript文件中，然后运行*mongo* shell来执行创建的小脚本。当这些命令在*mongo*
+    shell中执行时，它们将连接到运行在端口27017上的*mongod*（在[“生成根CA”](#generateRootca)中设置的`$mongodb_port`变量的值），启动副本集，然后将其他两个*mongod*（在端口27018和27019上）添加到副本集中。
+- en: Create the Admin User
+  id: totrans-108
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 创建管理员用户
+- en: Now, we’ll create an admin user based on one of the client certificates we created
+    in [“Generate and Sign Client Certificates”](#generateSCC). We will authenticate
+    as this user when connecting from the *mongo* shell or another client to perform
+    administrative tasks. To authenticate with a client certificate, you must first
+    add the value of the subject from the client certificate as a MongoDB user. Each
+    unique x.509 client certificate corresponds to a single MongoDB user; i.e., you
+    cannot use a single client certificate to authenticate more than one MongoDB user.
+    We must add the user in the $external database; i.e., the authentication database
+    is the $external database.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们将基于我们在[“生成和签署客户端证书”](#generateSCC)中创建的客户端证书之一来创建一个管理员用户。我们将在连接到*mongo*
+    shell或其他客户端以执行管理任务时，作为此用户进行身份验证。要使用客户端证书进行身份验证，必须首先将客户端证书的主题值添加为MongoDB用户。每个唯一的x.509客户端证书对应一个单独的MongoDB用户；即，您不能使用单个客户端证书来验证多个MongoDB用户。我们必须在$external数据库中添加用户；即，认证数据库是$external数据库。
+- en: First, we’ll get the subject from our client certificate using the *openssl
+    x509* command.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们将使用*openssl x509*命令从我们的客户端证书中获取主题。
+- en: '[PRE13]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'This should result in the following output:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这应该导致以下输出：
+- en: '[PRE14]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: To create our admin user, we’ll first connect to the primary of our replica
+    set using the *mongo* shell.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要创建我们的管理员用户，我们将首先使用*mongo* shell连接到我们副本集的主节点。
+- en: '[PRE15]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'From within the *mongo* shell, we will issue the following command:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在*mongo* shell内部，我们将发出以下命令：
+- en: '[PRE16]'
+  id: totrans-117
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: Note the use of the $external database in this command and the fact that we’ve
+    specified the subject of our client certificate as the user name.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意在这个命令中使用的$external数据库，以及我们已指定我们客户证书的主题作为用户名。
+- en: Restart the Replica Set with Authentication and Authorization Enabled
+  id: totrans-119
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 以启用认证和授权的方式重新启动副本集
+- en: Now that we have an admin user, we can restart the replica set with authentication
+    and authorization enabled and connect as a client. Without a user of any kind,
+    it would be impossible to connect to a replica set with auth enabled.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们有了一个管理员用户，我们可以以启用认证和授权的方式重新启动副本集，并作为客户端连接。没有任何类型的用户，连接到启用了认证的副本集是不可能的。
+- en: Let’s stop the replica set in it’s current form (without auth enabled).
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们停止当前形式的副本集（未启用认证）。
+- en: '[PRE17]'
+  id: totrans-122
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'We are now ready to restart the replica set with auth enabled. In a production
+    environment, we would copy each of the certificate and key files to their corresponding
+    hosts. Here we’re doing everything on localhost to make things easier. To initiate
+    a secure replica set we will add the following command-line options to each invocation
+    of *mongod*:'
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们准备通过启用认证重新启动副本集。在生产环境中，我们将每个证书和密钥文件复制到它们对应的主机上。在这里，我们在localhost上做所有事情以使事情更简单。为了启动安全的副本集，我们将在每次调用*mongod*时添加以下命令行选项：
+- en: '`--tlsMode`'
+  id: totrans-124
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`--tlsMode`'
+- en: '`--clusterAuthMode`'
+  id: totrans-125
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`--clusterAuthMode`'
+- en: '`--tlsCAFile`—root CA file (root-ca.key)'
+  id: totrans-126
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`--tlsCAFile`—根CA文件（root-ca.key）'
+- en: '`--tlsCertificateKeyFile`—certificate file for the *mongod*'
+  id: totrans-127
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`--tlsCertificateKeyFile`—*mongod*的证书文件'
+- en: '`--tlsAllowInvalidHostnames`—only used for testing; allows invalid hostnames'
+  id: totrans-128
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`--tlsAllowInvalidHostnames`—仅用于测试；允许无效主机名'
+- en: Here the file we provide as the value of the `tlsCAFile` option is used to establish
+    a trust chain. As you recall the *root-ca.key* file contains the certificate of
+    the root CA as well as the signing CA. By providing this file to the *mongod*
+    process, we are stating our desire to trust the certificate contained in this
+    file as well as all other certificates signed by these certificates.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们提供作为`tlsCAFile`选项值的文件用于建立信任链。正如您回忆的*root-ca.key*文件包含根CA和签名CA的证书。通过将此文件提供给*mongod*进程，我们表明希望信任此文件中包含的证书以及由这些证书签名的所有其他证书。
+- en: Okay, let’s do this.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 好的，让我们开始吧。
+- en: '[PRE18]'
+  id: totrans-131
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: And with that, we have a three-member replica set secured using x.509 certificates
+    for authentication and transport-layer encryption. The only thing left to do is
+    to connect with the mongo shell. We’ll use the client1 certificate to authenticate,
+    because that is the certificate for which we created an admin user.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 x.509 证书对认证和传输层加密的三节点副本集已经安全设置完成。现在唯一剩下的就是使用 mongo shell 进行连接。我们将使用 client1
+    证书进行认证，因为这是我们创建管理员用户的证书。
+- en: '[PRE19]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: Once connected, we encourage you to experiment by inserting some data to a collection.
+    You should also attempt to connect using any other user (e.g., using the `client2.pem`).
+    Connections attempts will result in errors like the following.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 连接成功后，我们鼓励您尝试向集合插入一些数据。您还应尝试使用其他用户连接（例如使用 `client2.pem`）。连接尝试会导致以下类似的错误。
+- en: '[PRE20]'
+  id: totrans-135
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'In the tutorial in this chapter, we’ve looked at an example of using x.509
+    certificates as a basis for authentication and to encrypt communication among
+    clients and members of a replica set. The same procedure works for sharded clusters
+    as well. With respect to securing a MongoDB cluster, please keep the following
+    in mind:'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章节的教程中，我们已经看过使用 x.509 证书作为认证基础和用于加密客户端和副本集成员之间通信的示例。同样的方法也适用于分片集群。关于保护 MongoDB
+    集群安全，请牢记以下事项：
+- en: The directories, root CA and signing CA, as well as the host itself where you
+    generate and sign certificates for the member machines or clients, should be protected
+    from unauthorized access.
+  id: totrans-137
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在生成和签署成员机器或客户端证书的主机上，需要保护目录、根 CA 和签名 CA，以防止未经授权的访问。
+- en: For simplicity, the root CA and signing CA keys are not password protected in
+    this tutorial. In production it is necessary to use passwords to protect the key
+    from unauthorized use.
+  id: totrans-138
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 为简单起见，在本教程中，根 CA 和签名 CA 密钥没有设置密码保护。在生产环境中，有必要使用密码保护密钥，以防止未经授权的使用。
+- en: We encourage you to download and experiment with the demo scripts we have provided
+    for this chapter in the book’s GitHub repository.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们鼓励您下载并尝试本书章节在 GitHub 仓库中提供的演示脚本。

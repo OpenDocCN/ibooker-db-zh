@@ -1,0 +1,2380 @@
+- en: Chapter 21\. Query Performance
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第21章 查询性能
+- en: 21.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 21.0 引言
+- en: Indexes are utilized to find rows quickly if they are created and used as intended.
+    Here are the main reasons to use indexes.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果创建并按预期使用，索引用于快速查找行。以下是使用索引的主要原因。
+- en: Utilize `WHERE` clause in `SELECT` statement efficiently to find rows.
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 高效利用`SELECT`语句中的`WHERE`子句来查找行。
+- en: Find the best query execution plan by the index’s uniqueness of values stored
+    in a given column, known as cardinality, and the least number of rows returned.
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过索引中存储的值的唯一性（称为基数）和返回的最少行数来找到最佳的查询执行计划。
+- en: Enable the join operations between different tables.
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 启用不同表之间的连接操作。
+- en: Indexes are vital to efficiently scanning and searching for values in tables.
+    Without them, MySQL would need to read all of the rows in a given table when performing
+    a query. Due to different table sizes, MySQL has to bring all the data read from
+    the table to memory, and it can only sort, filter, and return values of the selected
+    data. This operation may require additional resources to copy data to a new temporary
+    table to perform sort operations. Indexes are crucial to query performance; hence
+    non-indexed tables are a considerable overhead to a database unless they are small
+    reference tables.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引对于高效地扫描和搜索表中的值至关重要。没有索引，当执行查询时，MySQL需要读取给定表中的所有行。由于不同的表大小，MySQL必须将从表中读取的所有数据带入内存，并且仅能对选择的数据进行排序、过滤和返回值。此操作可能需要额外的资源将数据复制到新的临时表以执行排序操作。索引对查询性能至关重要；因此，未索引的表对数据库而言是一个重大负担，除非它们是小型参考表。
+- en: For a fast query performance, a primary key for each table representing one
+    or more columns is required. While using the InnoDB storage engine, the table’s
+    data is physically ordered to do fast lookups and sorts using primary key columns.
+    The ideal table design uses a covering index where the query results are computed
+    using index columns. Most of the indexes used by MySQL are stored in B-trees which
+    allows fast data access due to reduced data access time.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了快速查询性能，每个表都需要一个代表一个或多个列的主键。在使用InnoDB存储引擎时，表的数据是物理排序的，以便使用主键列进行快速查找和排序。理想的表设计使用覆盖索引，在查询结果中使用索引列进行计算。MySQL使用的大多数索引存储在B树中，这使得由于减少数据访问时间而实现快速数据访问成为可能。
+- en: If the table is big in data size and does not have any keys creating an extra
+    field like `table_name_id` as a primary key can bring a considerable benefit in
+    setting unique pointers doing join operations. InnoDB tables always have a clustered
+    index representing a primary key, if not already created by a user. A clustered
+    index is a table where the data and the rows are stored in the table’s order on
+    the key values in one direction.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果表的数据量很大，并且没有任何键创建额外的字段，如`table_name_id`作为主键，在进行连接操作时可以带来显著的好处。InnoDB表始终具有代表主键的聚簇索引，如果用户尚未创建。聚簇索引是一个表，其中数据和行按照主键值的顺序存储在表中的一方向。
+- en: Note
+  id: totrans-9
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'If no WHERE clause is used in a query, it’s a full table scan for MySQL optimizer.
+    For example:'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果查询中没有使用WHERE子句，则MySQL优化器将进行全表扫描。例如：
+- en: '[PRE0]'
+  id: totrans-11
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: This does not change whether index exists or not for the `customer` table.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这不会改变`customer`表是否存在索引。
+- en: 'The following are some key terms you’ll need to know before getting started
+    with index strategies:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在开始使用索引策略之前，以下是一些您需要了解的关键术语：
+- en: Table Scan
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表扫描
+- en: The table scan means reading all rows in the given table while performing a
+    query. A developer should avoid full table scans as much as possible, including
+    doing `COUNT(*)` operations.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表扫描意味着在执行查询时读取给定表中的所有行。开发人员应尽量避免全表扫描，包括执行`COUNT(*)`操作。
+- en: Tree traversal
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 树遍历
+- en: The tree traversal is a method that indexes uses to access data in hops. Indexes
+    goal is to make minimum hops via traversal to fetch data. Fewer the number of
+    leaf nodes faster the index traversal.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 树遍历是索引用于访问数据的一种方法。索引的目标是通过遍历尽量少的跳跃来获取数据。叶节点越少，索引遍历速度越快。
+- en: Leaf Nodes
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 叶节点
+- en: Leaf Nodes is part of the B-tree index structure. They maintain the changes
+    in the index as data changes. They establish a doubly linked list to connect index
+    leaf nodes.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 叶节点是B树索引结构的一部分。它们随着数据变化而维护索引的变化。它们建立了一个双向链接列表以连接索引叶节点。
+- en: B-tree Structure
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: B树结构
+- en: B-tree is a self-balancing tree data structure that keeps data sorted and allows
+    searches, sequential access, insertions, and deletions in logarithmic time. The
+    B-tree is a generalization of a binary search tree in that a node can have more
+    than two children.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: B树是一种自平衡树数据结构，它保持数据排序并允许以对数时间进行搜索、顺序访问、插入和删除。B树是二叉搜索树的一种泛化形式，一个节点可以有多于两个的子节点。
+- en: While the B-tree index is commonly used among MySQL storage engines, different
+    kinds of data structures are used for hash indexes. Hash indexes have different
+    characteristics and have it’s own use cases. Consult [“Comparison of B-Tree and
+    Hash Indexes”](https://dev.mysql.com/doc/refman/8.0/en/index-btree-hash.html)
+    in the MySQL User Reference Manual for further details.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然B树索引通常在MySQL存储引擎中使用，但哈希索引使用不同类型的数据结构。哈希索引具有不同的特性，并且具有其自己的用例。有关详细信息，请参阅MySQL用户参考手册中的[“B-Tree和Hash索引比较”](https://dev.mysql.com/doc/refman/8.0/en/index-btree-hash.html)。
+- en: Warning
+  id: totrans-23
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: While indexes help retrieve rows faster, over-creating or keeping unused indexes
+    is a burden to the database’s I/O operation. Every index leaf page ( lowest level
+    of the index where all of the keys for the index appear in sorted order) must
+    be maintained for all `UPDATE`/`INSERT`/`DELETE` operations hence creating extra
+    overhead.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然索引有助于更快地检索行，但是过度创建或保留未使用的索引会对数据库的I/O操作构成负担。每个索引叶页（索引的最低级别，其中所有键按排序顺序出现）必须针对所有`UPDATE`/`INSERT`/`DELETE`操作进行维护，因此会产生额外的开销。
+- en: 21.1 Creating Indexes
+  id: totrans-25
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 21.1 创建索引
+- en: Problem
+  id: totrans-26
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Your query is very slow to respond.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您的查询响应非常慢。
+- en: Solution
+  id: totrans-28
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Create an index on your column to retrieve just the rows you are seeking.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在您的列上创建一个索引，以仅检索您正在寻找的行。
+- en: Discussion
+  id: totrans-30
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Tables without indexes are just logbook data written randomly with no reference
+    to look up. As a result most of the queries to such tables are slow. The exception
+    only applies to reference tables with a limited number of rows depending on schema
+    design.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 没有索引的表只是随机写入的日志数据，没有查找的参考。因此，对这样的表的大多数查询都很慢。唯一的例外是仅适用于具有有限行数的参考表，具体取决于模式设计。
+- en: MySQL recommends giving each table a Primary Key column with `NOT NULL` characteristic
+    for each row.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL建议为每个表的每一行都提供一个具有`NOT NULL`特性的主键列。
+- en: We have a table called `top_names` from `Names_2010Census.csv` data.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们有一张名为`top_names`的表，来自`Names_2010Census.csv`数据。
+- en: '[PRE1]top_names[PRE2]top_name[PRE3]name_rank[PRE4]name_count[PRE5]prop100k[PRE6]cum_prop100k[PRE7]pctwhite[PRE8]pctblack[PRE9]pctapi[PRE10]pctaian[PRE11]pct2prace[PRE12]pcthispanic[PRE13]'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[PRE1]top_names[PRE2]top_name[PRE3]name_rank[PRE4]name_count[PRE5]prop100k[PRE6]cum_prop100k[PRE7]pctwhite[PRE8]pctblack[PRE9]pctapi[PRE10]pctaian[PRE11]pct2prace[PRE12]pcthispanic[PRE13]'
+- en: 'And you load the data:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后加载数据：
+- en: '[PRE14]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Now that we have created and loaded our table, we can proceed with the following
+    query.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经创建并加载了我们的表，可以继续进行以下查询。
+- en: '[PRE15]'
+  id: totrans-38
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: As you can see below, MySQL has to do full table scan to find any rows in this
+    table outside of its `PRIMARY KEY`.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如下所示，MySQL必须对该表进行完整的表扫描，以查找其`PRIMARY KEY`之外的任何行。
+- en: '[PRE16]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: Our sample query seeks a string match on the `top_name` field; hence having
+    an index on this type of data will increase query performance. First we create
+    an index to meet `WHERE` clause of this query.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的示例查询在`top_name`字段上寻找字符串匹配；因此，在这种数据类型上创建索引将提高查询性能。首先，我们创建一个索引以满足该查询的`WHERE`子句。
+- en: '[PRE17]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: We then check if the optimizer has chosen this new index for the same query.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们检查优化器是否选择了同一查询的这个新索引。
+- en: '[PRE18]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: Dropping indexes may be required for few reasons. After you make sure the index
+    is no longer needed or needs to be recreated, you may drop them using the following
+    syntax.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可能需要删除索引的原因有几个。确保不再需要索引或需要重新创建索引后，可以使用以下语法删除它们。
+- en: '[PRE19]'
+  id: totrans-46
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 21.2 Creating Surrogate Primary Key
+  id: totrans-47
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 21.2 创建代理主键
+- en: Problem
+  id: totrans-48
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Table without Primary Key is not performant enough.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 没有主键的表性能不够好。
+- en: Solution
+  id: totrans-50
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Add Primary Key to all InnoDB tables.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在所有InnoDB表上添加主键。
+- en: Discussion
+  id: totrans-52
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'A primary key gives you a way to uniquely identify a row in the table. In case
+    of InnoDB, a primary key is synonymous with a clustered index: a special index
+    that stores row data. When an InnoDB table is created by a user without explicitly
+    defining a primary key, InnoDB takes the first unique index that in an index with
+    B-Tree structure exists in the table and makes it the clustered index. A clustered
+    index is also often referred as physically order of the records on disk. A clustered
+    index is a table stored in and if no unique index exists, InnoDB creates a surrogate
+    key, called `GEN_CLUST_INDEX` on an automatically generated unique 6-bytes identifier.'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 主键为您提供了在表中唯一标识行的方式。在InnoDB中，主键等同于聚集索引：一种特殊的索引，用于存储行数据。当用户在没有明确定义主键的情况下创建InnoDB表时，InnoDB会选择表中存在的第一个带有B-Tree结构的唯一索引，并将其作为聚集索引。聚集索引通常也称为记录在磁盘上的物理顺序。如果没有唯一索引存在，则InnoDB会创建一个名为`GEN_CLUST_INDEX`的代理键，这是一个自动生成的唯一6字节标识符。
+- en: When InnoDB creates secondary indexes, it is useful to resolve queries because
+    it copies primary key columns to each secondary index row. If primary key is unnecessarily
+    large all secondary indexes would be large as well. Therefore it is very important
+    to choose suitable column for the primary key.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当InnoDB创建辅助索引时，复制主键列到每个辅助索引行是有用的，因为它能解决查询。如果主键不必要地大，则所有辅助索引也会很大。因此，选择适合的列作为主键非常重要。
+- en: In our example on [Recipe 21.1](#nch-queryperf-queryperf-create-index), natural
+    primary key is `top_name` that takes 26 bytes. Defining `top_name` as a primary
+    key will increase size of every row in the secondary index by 26 bytes. Therefore
+    we show here a technique of creating 4-byte integer surrogate keys with property
+    `AUTO_INCREMENT`, so it increases monotonically. It is also better than surrogate
+    key that InnoDB creates explicitly, because it is smaller and we have full control
+    over its values.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的示例中，在[Recipe 21.1](#nch-queryperf-queryperf-create-index)中，自然主键是`top_name`，占用26字节。将`top_name`定义为主键将使每个辅助索引中的每一行的大小增加26字节。因此，我们在这里展示了一种创建4字节整数代理键的技术，其属性为`AUTO_INCREMENT`，因此它是单调递增的。这比InnoDB显式创建的代理键更好，因为它更小且我们完全控制其值。
+- en: Our table is comparatively small but for large tables such difference could
+    be critical. Besides space, larger indexes require more time to search through.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的表相对较小，但对于大表，这种差异可能是关键的。除了空间外，更大的索引需要更多时间进行搜索。
+- en: This table is missing a field with a `PRIMARY KEY`. The best way to include
+    one this table is to add an `id` field with properties `AUTO INCREMENT NOT NULL`.
+    Ideally, you would create this in advance of loading any data to the table to
+    order table in the tablespace physically.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这张表缺少一个带有`PRIMARY KEY`的字段。包含这种表的最佳方法是添加一个具有`AUTO INCREMENT NOT NULL`属性的`id`字段。理想情况下，在加载任何数据到表之前创建这个字段，以便在表空间中物理上对表进行排序。
+- en: '[PRE20]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: Although the following is a complete index scan, it will use the new `PRIMARY
+    KEY` field we have created to count the number of rows in the table.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管以下是一个完整的索引扫描，它将使用我们创建的新`PRIMARY KEY`字段来计算表中行的数量。
+- en: '[PRE21]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: See Also
+  id: totrans-61
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: For additional information about, see MySQL documentation for further details
+    on [Primary Key Optimization.](https://dev.mysql.com/doc/refman/8.0/en/primary-key-optimization.html)
+    .
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 若要获取更多信息，请参阅MySQL文档中关于[主键优化](https://dev.mysql.com/doc/refman/8.0/en/primary-key-optimization.html)的详细信息。
+- en: 21.3 Maintaining Indexes
+  id: totrans-63
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 21.3 索引维护
+- en: Problem
+  id: totrans-64
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know if existing indexes are effective for your queries and drop
+    those which are not.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想知道现有的索引是否对您的查询有效，并且丢弃那些无效的索引。
+- en: Solution
+  id: totrans-66
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Learn basic index operations.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 学习基本的索引操作。
+- en: Discussion
+  id: totrans-68
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: To better control your data, use indexes efficiently by studying data and access
+    types of your schema. To continue our example from the previous recipe, we will
+    examine existing indexes for `top_names` table.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了更好地控制您的数据，通过研究模式数据和访问类型有效地使用索引。继续我们之前示例中的例子，我们将检查`top_names`表的现有索引。
+- en: '[PRE22]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: Here, what matters most is the `cardinality` of the index. Indexes are better
+    utilized if the column has many different values. So, in short, indexes are inefficient
+    on boolean and redundant values.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，最重要的是索引的基数。如果列具有许多不同的值，则索引的利用率会更高。总之，索引在布尔和冗余值上效率低下。
+- en: In our case, cardinality of the index `idx_names` is close to the cardinality
+    of the primary key. This shows that the index has good selectivity. Actually,
+    this index could be also `unique` that we can confirm by querying number of the
+    distinct values in this column.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的情况中，`idx_names` 索引的基数接近主键的基数。这显示该索引具有良好的选择性。实际上，这个索引也可以是 `unique` 的，我们可以通过查询该列中不同值的数量来确认。
+- en: '[PRE23]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: Since we’ve already created an index on the `top_name` column, we can drop that
+    index, then create a new, unique one. First to drop the index execute following
+    command.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于我们已经在 `top_name` 列上创建了一个索引，我们可以删除该索引，然后创建一个新的唯一索引。首先执行以下命令来删除索引。
+- en: '[PRE24]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: Alternatively, `ALTER TABLE` syntax can also be used.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，也可以使用 `ALTER TABLE` 语法。
+- en: '[PRE25]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'To create a unique index specify keyword `UNIQUE` for the `CREATE INDEX` command:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 若要在 `CREATE INDEX` 命令中创建唯一索引，请指定关键字 `UNIQUE`：
+- en: '[PRE26]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: You can rename an existing index created on the table.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以重命名在表上创建的现有索引。
+- en: '[PRE27]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: Warning
+  id: totrans-82
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Not all `index` operations are In Place; some index operations will cause table
+    rebuild, which may negatively impact the server’s performance for large data sizes.
+    Care must be taken before executing DDL operations. DDL (Data Definition Language)
+    implies changing the structure of table definition as known as the database schema.
+    For further details please consult [MySQL Documentation.](https://dev.mysql.com/doc/refman/8.0/en/innodb-online-ddl-operations.html#online-ddl-index-operations)
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并非所有的索引操作都是原地的；一些索引操作会导致表重建，这可能会对大数据量下的服务器性能产生负面影响。在执行 DDL 操作之前必须小心。DDL（数据定义语言）指的是更改表定义或称为数据库架构的结构。详细信息请参阅
+    [MySQL Documentation.](https://dev.mysql.com/doc/refman/8.0/en/innodb-online-ddl-operations.html#online-ddl-index-operations)
+- en: 21.4 Deciding When a Query Can Use an Index
+  id: totrans-84
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 21.4 决定查询何时可以使用索引
+- en: Problem
+  id: totrans-85
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Your table has an index, but queries are still slow.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您的表有一个索引，但查询仍然很慢。
+- en: Solution
+  id: totrans-87
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Check query plan using `EXPLAIN` to make sure right index is used.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `EXPLAIN` 检查查询计划，确保使用了正确的索引。
+- en: Discussion
+  id: totrans-89
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Indexes are part of query plans to access data faster by using the shortest
+    possible path. When MySQL optimizer makes a decision, it considers indexes, cardinality,
+    number of rows, and more. Here’s an example of a query where index exists for
+    a column but MySQL can not utilize it.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引是查询计划的一部分，通过最短可能的路径访问数据以加快访问速度。当 MySQL 优化器做出决策时，它考虑索引、基数、行数等因素。以下是一个查询的示例，其中存在一个列的索引，但
+    MySQL 无法利用它。
+- en: '[PRE28]'
+  id: totrans-91
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: From the `Explain` plan output, We have no index that matches the key criteria
+    of the query. There are indexes on this table and looks like we’ll need another
+    index on `name_rank` field.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从 `Explain` 计划输出来看，我们没有符合查询关键条件的索引。表上有索引，看起来我们需要在 `name_rank` 字段上再创建一个索引。
+- en: '[PRE29]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'Check the query plan again after creating the new index:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建新索引后再次检查查询计划：
+- en: '[PRE30]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: Our query is seeking for a `name_rank` that is less than ten from the `top_names`
+    table. Without newly created `idx_name_rank` on the `name_rank` column, the optimizer
+    has to evaluate all the 161604 rows in the table to filter 11 rows in return.
+    With the index in place it accesses just those 11 rows.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的查询在 `top_names` 表中寻找小于十的 `name_rank`。如果没有新创建的 `idx_name_rank` 索引，优化器必须评估表中的所有
+    161604 行才能返回 11 行。有了索引，它只需访问这 11 行。
+- en: 21.5 Deciding Order for Multiple Column Indexes
+  id: totrans-97
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 21.5 决定多列索引的顺序
+- en: Problem
+  id: totrans-98
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to speed up your multiple column query.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望加快多列查询的速度。
+- en: Solution
+  id: totrans-100
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use covering index with multiple columns.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用包含多列的覆盖索引。
+- en: Discussion
+  id: totrans-102
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Best query performance can be achieved if query results are computed entirely
+    from the index pages without reading the actual table data. A covering index is
+    a solution for queries referencing more than one column. This type of index contains
+    the required data; hence, it does not need to execute additional reads on the
+    table.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果查询结果完全是从索引页计算而不是读取实际表数据，则可以实现最佳查询性能。覆盖索引是针对引用多个列的查询的解决方案。这种类型的索引包含所需的数据，因此不需要在表上执行额外的读取。
+- en: In the following example, we have a query that requires having a filter on one
+    column (`name_rank`) and sort by another column (`name_count`).
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下示例中，我们有一个查询，需要在一个列（`name_rank`）上添加过滤器，并按另一个列（`name_count`）排序。
+- en: '[PRE31]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: We will create an index on the columns that we think are required for the optimizer
+    to choose the fstest path.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将在认为优化器选择最快路径所需的列上创建一个索引。
+- en: '[PRE32]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: In this case, MySQL cannot use the index against the following query and it
+    ends up needing to do a full table scan again. The reason is, despite having both
+    columns of the query in the filter the, index is ordered reverse.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，MySQL 无法对以下查询使用索引，最终需要再次执行全表扫描。原因是，尽管查询的两列都在过滤器中，但索引的顺序是反向的。
+- en: '[PRE33]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: To demonstrate why the order of index columns matters, let’s look at the following
+    example.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了演示索引列顺序的重要性，让我们看下面的例子。
+- en: 'For the: ``KEY `idx_name_rank_count` (`name_rank`,`name_count`)`` first drop
+    the previous index in reverse order and create a new one.'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 ``KEY `idx_name_rank_count` (`name_rank`,`name_count`)``，首先按相反顺序删除先前的索引，然后创建一个新索引。
+- en: '[PRE34]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: '[PRE35]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: We have created a covering index for both columns our SELECT statement proposes
+    on name_rank and name_count filters.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已为我们的 `SELECT` 语句提议的 `name_rank` 和 `name_count` 过滤器创建了覆盖索引。
+- en: '[PRE36]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: As you can see from the `EXPLAIN` output, the optimizer chooses `idx_name_rank_count`
+    for this query with a new covering index.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如您从 `EXPLAIN` 输出中可以看到的那样，优化器为此查询选择了 `idx_name_rank_count`，并创建了一个新的覆盖索引。
+- en: 21.6 Using Ascending and Descending Indexes
+  id: totrans-117
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 21.6 使用升序和降序索引
+- en: Problem
+  id: totrans-118
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to scan your data in ascending or descending order without a performance
+    penalty.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望在没有性能惩罚的情况下按升序或降序扫描数据。
+- en: Solution
+  id: totrans-120
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use ascending and descending indexes.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用升序和降序索引。
+- en: Discussion
+  id: totrans-122
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL can scan indexes in reverse order with a performance penalty due to index
+    pages being physically ordered. In order to create a matching index for the `ORDER
+    BY` clause, use `DESC` for descending, `ASC` for ascending index types.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 可以以反向顺序扫描索引，这会导致性能下降，因为索引页面是物理排序的。为了为 `ORDER BY` 子句创建匹配的索引，使用 `DESC` 表示降序，`ASC`
+    表示升序索引类型。
+- en: The ideal query performance comes from when you can avoid scanning an index
+    backward. It’s also a combination of sorting and filtering with the `DESC` indexes.
+    When MySQL optimizer chooses a query plan, it evaluates if it can take advantage
+    of these when the query needs descending order.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理想的查询性能来源于避免反向扫描索引。这也是排序和使用 `DESC` 索引进行过滤的结合体。当 MySQL 优化器选择查询计划时，它评估是否可以在需要降序时利用这些优势。
+- en: Remember descending indexes are supported for the InnoDB storage engine, and
+    there are some limitations to its use.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请记住，降序索引仅受 InnoDB 存储引擎支持，并且在使用时存在一些限制。
+- en: 'Also, descending indexes have the following properties:'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，降序索引具有以下特性：
+- en: They are supported by all data types.
+  id: totrans-127
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它们受所有数据类型支持。
+- en: The `DISTINCT` clause can use any index with a matching column.
+  id: totrans-128
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`DISTINCT` 子句可以使用具有匹配列的任何索引。'
+- en: They can be used for `MIN()`/`MAX()` optimization when not used in conjunction
+    with the `GROUP BY` clause.
+  id: totrans-129
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它们可以在不与 `GROUP BY` 子句一起使用时用于 `MIN()`/`MAX()` 优化。
+- en: They are only limited to `BTREE` and `HASH` indexes.
+  id: totrans-130
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它们仅限于 `BTREE` 和 `HASH` 索引。
+- en: They are not supported for `FULLTEXT` or `SPATIAL` index types.
+  id: totrans-131
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它们不支持 `FULLTEXT` 或 `SPATIAL` 索引类型。
+- en: The following example starts with creating covering index for our desired sorting
+    for fields.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下示例从创建所需字段的覆盖索引开始。
+- en: '[PRE37]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: '[PRE38]top_name[PRE39],[PRE40]prop100k[PRE41],[PRE42]cum_prop100k[PRE43]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[PRE38]top_name[PRE39],[PRE40]prop100k[PRE41],[PRE42]cum_prop100k[PRE43]'
+- en: After creating the covering index for all `ORDER BY` clauses, optimizer columns
+    choose the `idx_desc_01`. This is particularly good for index optimization and
+    sorting.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在为所有 `ORDER BY` 子句创建覆盖索引后，优化器选择 `idx_desc_01`。这对于索引优化和排序特别有利。
+- en: '[PRE44]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: When we do `SELECT * FROM top_names`, instead of specifying columns order by
+    `top_name` field, it uses previously created index, and by default, it is ascending
+    order.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们执行 `SELECT * FROM top_names` 时，而不是指定 `top_name` 字段的列顺序，它使用先前创建的索引，默认为升序排列。
+- en: '[PRE45]'
+  id: totrans-138
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: To demonstrate the use of descending indexes, we will create a new index and
+    use `DESC` to apply that.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了演示降序索引的使用，我们将创建一个新索引，并使用 `DESC` 应用它。
+- en: '[PRE46]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: Again using top_name with another column `prop100k` to illustrate the use of
+    `DESC` index on the `top_name` column.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再次使用 `top_name` 和另一列 `prop100k` 来说明在 `top_name` 列上使用 `DESC` 索引的用法。
+- en: '[PRE47]'
+  id: totrans-142
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: Note
+  id: totrans-143
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Order matters as MySQL use the left-most order rule for the indexes compared
+    to `ORDER BY` clause. Changing the order of columns in the composite index will
+    change the behavior of the query result. Also, be careful on using `SELECT * FROM`
+    when sorting by multiple fields as `*` will use the column order from table definition,
+    which may end up with different fields than the `ORDER BY` clause intends to.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 顺序很重要，因为 MySQL 使用左侧最左匹配规则来与`ORDER BY`子句中的索引进行比较。在复合索引中更改列的顺序将改变查询结果的行为。此外，在排序多个字段时小心使用`SELECT
+    * FROM`，因为`*`将使用表定义中的列顺序，可能导致与`ORDER BY`子句意图不符的字段。
+- en: 21.7 Using Function-Based Indexes
+  id: totrans-145
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 21.7 使用基于函数的索引
+- en: Problem
+  id: totrans-146
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You need to search or sort by an expression but MySQL calculates result of the
+    expression for each row, therefore cannot use indexes. Performance of the query
+    is poor.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要按表达式搜索或排序，但 MySQL 为每行计算表达式的结果，因此无法使用索引。查询的性能较差。
+- en: Solution
+  id: totrans-148
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use functional indexes.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用功能索引。
+- en: Discussion
+  id: totrans-150
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Some types of information are more easily analyzed using not the original values,
+    but an expression computed from them. For example, column `size` in the table
+    `mail` stores size in bytes that is hard to interpret on first glance. It would
+    be much easier to work with if using kilobytes (`KB`) instead. However, you may
+    not want to lose precision that storage in bytes provides.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有些类型的信息更容易通过不是原始值而是从它们计算得到的表达式来分析。例如，表`mail`中的列`size`存储的是字节大小，在第一次查看时很难解释。如果使用千字节(`KB`)会更容易处理。但是，您可能不想失去存储在字节中提供的精度。
+- en: You can have both precision and usability if you store data in bytes and use
+    expressions to query the table. For example, to find messages that are larger
+    than 100 KB, use the following query.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您将数据存储在字节中并使用表达式查询表，则可以兼顾精度和可用性。例如，要查找大于 100 KB 的消息，请使用以下查询。
+- en: '[PRE48]'
+  id: totrans-153
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: However, MySQL would not be able to use index on the column `size` to resolve
+    this query, because it calculates expression for each row. To resolve this issue
+    use function-based indexes.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，MySQL 无法使用列`size`上的索引来解决此查询，因为它为每行计算表达式。为解决此问题，请使用基于函数的索引。
+- en: 'The syntax of the function-based index is:'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数索引的语法如下：
+- en: '[PRE49]'
+  id: totrans-156
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'Mind double brackets: if you omit one pair, MySQL will think you are passing
+    a column name instead of the expression and will return an error.'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意双括号：如果省略一对括号，MySQL 将认为您传递的是列名而不是表达式，并返回错误。
+- en: Let’s create an index on `ROUND(size/1024)` and check if MySQL will use it to
+    resolve the query.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们在`ROUND(size/1024)`上创建一个索引，并检查 MySQL 是否会使用它来解决查询。
+- en: '[PRE50]'
+  id: totrans-159
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: 'The index will not be used to resolve the query because function `ROUND` returns
+    data in the `NEWDECIMAL` type for values that have floating point and `100` is
+    `LONGLONG`. You can examine the result if start *mysql* client with the option
+    `--column-type-info`:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该索引将不会被用于解决查询，因为函数`ROUND`返回具有浮点的数据类型`NEWDECIMAL`和`100`是`LONGLONG`。如果您使用选项`--column-type-info`启动
+    *mysql* 客户端，您可以检查结果：
+- en: '[PRE51]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: Tip
+  id: totrans-162
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 小贴士
+- en: We need to use command *unbuffer*, because *mysql* buffers `--column-type-info`
+    result and it cannot be piped to *grep* otherwise.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们需要使用命令*unbuffer*，因为*mysql*会缓冲`--column-type-info`的结果，否则不能将其传输到*grep*。
+- en: To clarify,to force MySQL to use the index,you need to compare result of the
+    expression with a floating point value.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了澄清，强制 MySQL 使用索引，您需要将表达式的结果与浮点值进行比较。
+- en: '[PRE52]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: Alternatively, cast the result of the function `ROUND` to the integer value
+    when creating the index. And this also forces MySQL to use the index to resolve
+    the query.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，在创建索引时将函数`ROUND`的结果转换为整数值。这也会强制 MySQL 使用索引来解决查询。
+- en: '[PRE53]'
+  id: totrans-167
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 21.8 Using Indexes on Generated Columns with JSON Data
+  id: totrans-168
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 21.8 使用生成列上的索引与 JSON 数据
+- en: Problem
+  id: totrans-169
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to perform search inside JSON data but it is slow.
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想在 JSON 数据内执行搜索，但速度较慢。
+- en: Solution
+  id: totrans-171
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a generated column, created from an expression that searches for a JSON
+    value and an index on this column.
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用一个从搜索 JSON 值的表达式创建的生成列，并在此列上创建索引。
+- en: Discussion
+  id: totrans-173
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: In this recipe we will discuss a table `book_authors`.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个示例中，我们将讨论一个表`book_authors`。
+- en: '[PRE54]'
+  id: totrans-175
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: The table contains book records per author in the JSON column.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表中包含每位作者的书籍记录在 JSON 列中。
+- en: '[PRE55]'
+  id: totrans-177
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: If you want to search for a specific author you may consider searching by their
+    name and lastname.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果要搜索特定作者，可以考虑按其名和姓进行搜索。
+- en: '`CREATE INDEX` command creates an index on a column in the table. JSON data
+    stored in a single column, therefore any index, created with simple `CREATE INDEX`
+    command would index whole JSON document while you may need to search only part
+    of it.'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`CREATE INDEX`命令在表的列上创建索引。JSON数据存储在单列中，因此使用简单的`CREATE INDEX`命令创建的任何索引都将索引整个JSON文档，而您可能只需要搜索其中的一部分。'
+- en: More over, `CREATE INDEX` command will fail for the JSON column.
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，`CREATE INDEX`命令将无法用于JSON列。
+- en: '[PRE56]'
+  id: totrans-181
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: Solution for this issue would be use of a generated column and creating index
+    on it. Values in generated columns are created using expression, defined at the
+    column creation time.
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 解决此问题的方法是使用生成列并在其上创建索引。生成列的值是在列创建时定义的表达式生成的。
+- en: '[PRE57]'
+  id: totrans-183
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: 'In this example we created a column, generated from the expression `JSON_EXTRACT(author,
+    ''$.lastname'')`. We can also use operators `->` and `->>` to extract JSON value:'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此示例中，我们创建了一个从表达式`JSON_EXTRACT(author, '$.lastname')`生成的列。我们还可以使用运算符`->`和`->>`来提取JSON值：
+- en: '[PRE58]'
+  id: totrans-185
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: We used function `JSON_UNQUOTE` and operator `->>` in our expressions to remove
+    trailing quotes in author’s names if they exist.
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在表达式中使用了函数`JSON_UNQUOTE`和运算符`->>`来删除作者姓名末尾的引号（如果存在）。
+- en: Two new columns `name` and `lastname` do not take any space and generated each
+    time when a query accesses the table.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 两个新列`name`和`lastname`不占用空间，并且每次查询访问表时都会生成。
+- en: Tip
+  id: totrans-188
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: 'If you want to improve performance of your `SELECT` queries in price of additional
+    storage and slowness at the write time define generated columns with keyworkd
+    `STORED`. In this case expression would be executed only once: when values, used
+    in the expression, are inserted or modified and then physically stored on the
+    disk.'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果要通过增加存储空间和写入时的延迟来提高`SELECT`查询性能，请定义带有关键字`STORED`的生成列。在这种情况下，表达式仅在插入或修改时执行一次，并且物理存储在磁盘上。
+- en: Now we can create an index on our new generated columns.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们可以在新生成的列上创建索引。
+- en: '[PRE59]'
+  id: totrans-191
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: To access data using newly created index refer new columns as any other column.
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用新创建的索引访问数据时，请将新列视为其他任何列。
+- en: '[PRE60]'
+  id: totrans-193
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: '`EXPLAIN` confirms that the new index is used.'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`EXPLAIN`确认新索引的使用情况。'
+- en: '[PRE61]'
+  id: totrans-195
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: See Also
+  id: totrans-196
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 另请参阅
+- en: For additional information about using JSON in MySQL, see [Chapter 19](ch19.xhtml#nch-json).
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于在MySQL中使用JSON的更多信息，请参见[第19章](ch19.xhtml#nch-json)。
+- en: 21.9 Using Full Text Indexes
+  id: totrans-198
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 21.9 使用全文索引
+- en: Problem
+  id: totrans-199
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to take advantage of keyword search, but queries on text fields are
+    slow.
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望利用关键词搜索，但文本字段的查询速度较慢。
+- en: Solution
+  id: totrans-201
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use `FULLTEXT` indexes for full-text searches.
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`FULLTEXT`索引进行全文搜索。
+- en: Discussion
+  id: totrans-203
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL supports `FULLTEXT` indexes for limited but on popular storage engines
+    such as InnoDB and MyISAM. Although neither of the storage engines are originally
+    designed to index large text operations, they can still use them to comb performance
+    for specific queries.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL支持`FULLTEXT`索引，但仅限于流行的存储引擎（如InnoDB和MyISAM）。尽管这两种存储引擎原本不设计用于索引大文本操作，但仍可用于特定查询的性能优化。
+- en: '`FULLTEXT` indexes have two other conditions.'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`FULLTEXT`索引还有另外两个条件。'
+- en: It can only be used it for `CHAR`, `VARCHAR`, or `TEXT` columns.
+  id: totrans-206
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 它只能用于`CHAR`、`VARCHAR`或`TEXT`列。
+- en: It can only use when `MATCH()` or `AGAINST()` clause in a `SELECT` statement.
+  id: totrans-207
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 只能在`SELECT`语句中的`MATCH()`或`AGAINST()`子句中使用。
+- en: In MySQL, `MATCH()` function performs a full-text search by accepting a comma-separated
+    list of columns where `AGAINST()` takes a string to search.
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在MySQL中，`MATCH()`函数通过接受一个逗号分隔的列名列表来执行全文搜索，而`AGAINST()`则接受一个要搜索的字符串。
+- en: Note
+  id: totrans-209
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: '`FULLTEXT` index can be used with a combination of B-tree index on the same
+    column as their purpose is different. `FULLTEXT` is for finding keywords versus
+    matching values in the field.'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`FULLTEXT`索引可以与同一列上的B-tree索引结合使用，因为它们的目的不同。`FULLTEXT`用于查找关键词，而不是匹配字段中的值。'
+- en: '`FULLTEXT` text searches also have three different modes:'
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`FULLTEXT`文本搜索也有三种不同的模式：'
+- en: Natural language mode (default) is the search mode for simple phrases.
+  id: totrans-212
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 自然语言模式（默认）是用于简单短语的搜索模式。
+- en: '[PRE62]'
+  id: totrans-213
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: '`Boolean mode` is for using boolean operators in search mode. Recall that the
+    same strategy discussed in [Recipe 7.17](ch07.xhtml#nch-strings-strings-full-text-boolean)
+    similarly use of operators here.'
+  id: totrans-214
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`布尔模式`用于在搜索模式中使用布尔运算符。回想一下，与[Recipe 7.17](ch07.xhtml#nch-strings-strings-full-text-boolean)中讨论的策略类似，在这里也使用了操作符。'
+- en: '[PRE63]'
+  id: totrans-215
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: '`Query expansion mode` is the search mode for similar or related values to
+    a search expression. In short, this mode will return relevant matches against
+    a searched keyword.'
+  id: totrans-216
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`Query expansion mode` 是用于搜索与搜索表达式相似或相关值的搜索模式。简而言之，这种模式将返回与搜索关键词相关的匹配项。'
+- en: '[PRE64]'
+  id: totrans-217
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: InnoDB storage engine can take advantage of the following optimizations.
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB 存储引擎可以利用以下优化。
+- en: Queries that only return the `ID` field of the search rank. Search rank is defined
+    as relevance rank as a measure to show how good is the match.
+  id: totrans-219
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 只返回搜索排名的 `ID` 字段的查询。搜索排名定义为关联性排名，用作显示匹配质量的度量。
+- en: Queries that sort the matching rows in descending order
+  id: totrans-220
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对匹配行进行降序排序的查询
+- en: The optimizer will choose the none fulltext index on the `top_name` column.
+    This is due to the query being written to optimize InnoDB’s b-tree index with
+    pattern matching instead of literal comparison. For more information, see [Recipe
+    7.10](ch07.xhtml#nch-strings-strings-pat-sql). This type of query is very efficient
+    given the data type we have in this example with indexed unique string values
+    in this `top_name` column.
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 优化器将选择在 `top_name` 列上选择非全文索引。这是因为查询被编写为优化 InnoDB 的 B-Tree 索引，使用模式匹配而不是文字比较。有关更多信息，请参见[Recipe
+    7.10](ch07.xhtml#nch-strings-strings-pat-sql)。在这个示例中，这种类型的查询非常高效，因为我们的数据类型具有在
+    `top_name` 列中索引的唯一字符串值。
+- en: '[PRE65]'
+  id: totrans-222
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: '[PRE66]'
+  id: totrans-223
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: '[PRE67]'
+  id: totrans-224
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: Now if we try a pattern match against the same column, we will be able to utilize
+    full text index for the given column.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，如果我们尝试对同一列进行模式匹配，我们将能够利用给定列的全文索引。
+- en: '[PRE68]'
+  id: totrans-226
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: In this case, we can see MySQL chooses to use the `FULLTEXT` index. Although
+    it’s useful to have `FULLTEXT` index availability in MySQL, it comes with many
+    restrictions. Please refer to MySQL documentation for further details on [Full-Text
+    Restrictions.](https://dev.mysql.com/doc/refman/8.0/en/fulltext-restrictions.html)
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，我们可以看到 MySQL 选择使用`FULLTEXT`索引。尽管在 MySQL 中拥有`FULLTEXT`索引是有用的，但它带来了许多限制。请参考
+    MySQL 文档了解[全文检索的限制](https://dev.mysql.com/doc/refman/8.0/en/fulltext-restrictions.html)的详细信息。
+- en: Note
+  id: totrans-228
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Despite the availability of full-text indexes in the InnoDB storage engine,
+    there may be better alternatives in the market to take this off of MySQL workload
+    and put it on another optimized storage system.
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管 InnoDB 存储引擎中有全文索引，但在市场上可能有更好的选择来减轻 MySQL 的工作负荷，并将其放在另一个优化的存储系统中。
+- en: 21.10 Utilizing Spatial Indexes and Geographical Data
+  id: totrans-230
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 21.10 利用空间索引和地理数据
+- en: Problem
+  id: totrans-231
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to store and query geographic coordinates effectively.
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望有效地存储和查询地理坐标。
+- en: Solution
+  id: totrans-233
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use MySQL’s improved Spatial Reference System.
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 MySQL 的改进空间参考系统。
+- en: Discussion
+  id: totrans-235
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL 8 contains all SRS (Spatial Reference System) identifications from EPSG
+    (European Petroleum Survey Group) agency. These SRS identifications are stored
+    with a unique name and SRID in `information_schema`.
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 8 包含来自 EPSG（欧洲石油调查集团）机构的所有 SRS（空间参考系统）标识。这些 SRS 标识以唯一名称和 SRID 存储在 `information_schema`
+    中。
+- en: These systems represent different variations of geographic data references.
+    You can query details of these from `information_schema`.
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些系统代表了地理数据参考的不同变体。您可以从 `information_schema` 查询这些的详细信息。
+- en: '[PRE69]'
+  id: totrans-238
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: SRS_ID 4326 represents widespread web map projections used in Google Maps, OpenStreetMaps,
+    etc., whereas 4326 is GPS coordinates used for tracking locations.
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SRS_ID 4326 表示广泛使用的网络地图投影，如谷歌地图、OpenStreetMaps 等，而 4326 则是用于跟踪位置的 GPS 坐标。
+- en: Let’s say we have point of interest data that we keep in our database. We will
+    create a table and load sample data to it using SRID 4326
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们有兴趣点数据存储在我们的数据库中。我们将创建一张表，并使用 SRID 4326 加载样本数据到其中。
+- en: '[PRE70]'
+  id: totrans-241
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: Now create an index on the geometry column.
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在在几何列上创建索引。
+- en: '[PRE71]'
+  id: totrans-243
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: We will demonstrate how to measure the distance between these two points of
+    interest.
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将演示如何测量这两个兴趣点之间的距离。
+- en: '[PRE72]'
+  id: totrans-245
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: This is a representation of a straight line between these two points of interest.
+    Of course, this isn’t a car route planning example; this is more like a bird’s
+    flight from point A to B in meters.
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是两个兴趣点之间的直线表示。当然，这不是汽车路径规划的示例；这更像是从点 A 到点 B 的鸟瞰飞行距离（以米为单位）。
+- en: Let’s check what MySQL used as query optimization.
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们检查 MySQL 在查询优化中使用了什么。
+- en: '[PRE73]'
+  id: totrans-248
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: Since the `ST_Distance` function does not use a table to calculate distance
+    between these two locations, it does not use a table in the query; hence there’s
+    no index optimization allowed.
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于 `ST_Distance` 函数不使用表来计算两个位置之间的距离，它在查询中不使用表；因此不允许进行索引优化。
+- en: You can further improve on the distance calculation about Earth spherical shape
+    should be using `ST_Distance_Sphere`, which will result in slightly different
+    results.
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以进一步改进关于地球球形的距离计算，应使用`ST_Distance_Sphere`，这将导致略有不同的结果。
+- en: '[PRE74]'
+  id: totrans-251
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: Let’s say we have a polygon around Istanbul for covering our target search area.
+    The required polygon coordinates can be generated via another application.
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们有一个围绕伊斯坦布尔的多边形，用于覆盖我们的目标搜索区域。可以通过另一个应用程序生成所需的多边形坐标。
+- en: '[PRE75]'
+  id: totrans-253
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: 'This time we’ll search points of interest using `ST_Within` function from that
+    polygon area. There are many functions built into MySQL’s Spatial Reference implementation.
+    For details please refer to MySQL documentation [Spatial Analysis Functions.](https://dev.mysql.com/doc/refman/8.0/en/spatial-analysis-functions.html)
+    Spatial functions can be grouped into few categories such:'
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这次我们将使用`ST_Within`函数从该多边形区域搜索兴趣点。MySQL的空间引用实现内置了许多函数。详情请参阅MySQL文档[空间分析函数](https://dev.mysql.com/doc/refman/8.0/en/spatial-analysis-functions.html)。空间函数可以分为几类，例如：
+- en: Create geometries in various formats.
+  id: totrans-255
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 以各种格式创建几何。
+- en: Convert geometries between formats.
+  id: totrans-256
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在各种格式之间转换几何。
+- en: Access qualitative and quantitative properties of geometry.
+  id: totrans-257
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 访问几何的定性和定量属性。
+- en: Describe relations between two geometries.
+  id: totrans-258
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 描述两个几何之间的关系。
+- en: Create new geometries from existing ones.
+  id: totrans-259
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从现有几何创建新几何。
+- en: These functions allow developers to get faster access to the data and better
+    utilize spatial analysis within MySQL.
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些函数允许开发人员更快地访问数据，并更好地利用MySQL中的空间分析。
+- en: In the following query, we are utilizing both `ST_AsText` and `ST_Within` functions
+    at the same time.
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下面的查询中，我们同时使用`ST_AsText`和`ST_Within`函数。
+- en: '[PRE76] ` [PRE77] ` [PRE78]towers[PRE79]position[PRE80],` `@``poly``)` `;`'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[PRE76] ` [PRE77] ` [PRE78]towers[PRE79]position[PRE80],` `@``poly``)` `;`'
+- en: +--------+----------------+------------------------+ | poi_id | name           |
+    towers                 |
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------+----------------+------------------------+ | poi_id | 名称           |
+    塔                   |
+- en: +--------+----------------+------------------------+ |      1 | Maiden's Tower
+    | POINT(41.0211 29.0041) |
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------+----------------+------------------------+ |      1 | 少女塔          |
+    POINT(41.0211 29.0041) |
+- en: '|      2 | Galata Tower   | POINT(41.0256 28.9742) |'
+  id: totrans-265
+  prefs: []
+  type: TYPE_TB
+  zh: '|      2 | 加拉塔塔          | POINT(41.0256 28.9742) |'
+- en: +--------+----------------+------------------------+ 2 rows in set (0.00 sec)
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------+----------------+------------------------+ 2 行集（0.00 秒）
+- en: '[PRE81]'
+  id: totrans-267
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: mysql> `EXPLAIN`  `SELECT`  `poi_id``,` `name``,`
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `EXPLAIN`  `SELECT`  `poi_id``,` `name``,`
+- en: -> `ST_AsText``([PRE82]position[PRE83])` `AS` `` ` [PRE84] ` `` `FROM` `poi`
+    `WHERE` `ST_Within``(` `` ` [PRE85] ` [PRE86]
+  id: totrans-269
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `ST_AsText``([PRE82]position[PRE83])` `AS` `` ` [PRE84] ` `` `FROM` `poi`
+    `WHERE` `ST_Within``(` `` ` [PRE85] ` [PRE86]
+- en: 21.11 Creating and Using Histograms
+  id: totrans-270
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 21.11 创建和使用直方图
+- en: Problem
+  id: totrans-271
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to join two or more tables,but MySQL’s optimizer does not choose the
+    right query plan.
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要连接两个或更多表，但MySQL的优化器未选择正确的查询计划。
+- en: Solution
+  id: totrans-273
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use optimizer histograms to aid decision making.
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用优化器直方图来辅助决策。
+- en: Discussion
+  id: totrans-275
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Indexes are helpful for resolving query plans but they could not always be used
+    to create the best query execution plan. This applies to situations when the optimizer
+    needs to identify order in which to join two or more tables.
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引有助于解决查询计划，但它们并不总是用于创建最佳的查询执行计划。当优化器需要确定两个或更多表的连接顺序时，情况就会如此。
+- en: Assume you have two tables. One stores product categories in a shop and another
+    stores sales data. Number of categories is small while number of sold items is
+    huge. You may have a dozen categories and millions of sold items. When you join
+    two tables MySQL has to decide which table to query first. If it queries small
+    table first it has to retrieve all items in the selected category, then filter
+    them. If number of items in the selected category is huge and number of filtered
+    items is small query would be not effective. On the other side, if you need items
+    from the single category while range, selected from the larger table, returns
+    many rows from all categories you will have to discard them all except single
+    category.
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您有两个表。一个存储商店中的产品类别，另一个存储销售数据。类别数量少，而已售出的物品数量巨大。您可能有数十个类别和数百万个已售出的物品。当您连接两个表时，MySQL必须决定首先查询哪个表。如果它首先查询小表，它必须检索所选类别中的所有物品，然后过滤它们。如果所选类别中的物品数量巨大，而过滤后的物品数量较少，则查询将不会有效。另一方面，如果您需要来自较大表的范围内的单个类别的物品，并且所选范围返回所有类别的许多行，则您将不得不丢弃除单个类别之外的所有行。
+- en: One of solutions to this issue is to have a combined index that takes category
+    id and condition in the larger table. But this solution may not work for complicated
+    queries when such a combined index is not applicable to the combinarion of the
+    `WHERE` condition and `JOIN` clause.
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 解决此问题的一个方法是在较大表中使用将类别ID和`WHERE`条件及`JOIN`子句组合的联合索引。但是，当此联合索引不适用于`WHERE`条件和`JOIN`子句的组合时，此解决方案可能无效。
+- en: 'Another issue with indexes is that they operate by cardinality: number of unique
+    values in the index. But when data distribution is not even optimizer can make
+    false conclusions when uses cardinality only. Assume you have one million items
+    with certain characteristic and 10 items with another one. If the optimizer decides
+    to select data that satisfy first condition the query would take much more time
+    if compare with one that first selects items that satisfy the second one. Unfortunately
+    it is not possible to make correct conclusion using information about cardinality
+    only.'
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个索引的问题在于它们根据基数（唯一值的数量）进行操作。但当数据分布不均匀时，优化器仅使用基数可能会得出错误的结论。假设您有一百万个具有某种特征的项目和十个具有另一种特征的项目。如果优化器决定选择满足第一个条件的数据，则与首先选择满足第二个条件的数据相比，查询将需要更多的时间。不幸的是，仅通过基数的信息无法得出正确的结论。
+- en: To resolve this issue MySQL 8.0 introduces optimizer histograms. They are a
+    lightweight data structure that store information about how many unique values
+    exist in each data bucket.
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了解决这个问题，MySQL 8.0 引入了优化器直方图。它们是一种轻量级数据结构，用于存储每个数据桶中存在多少个唯一值的信息。
+- en: To illustrate how optimizer histograms work let’s consider a table of six rows.
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了说明优化器直方图的工作原理，让我们考虑一个包含六行的表。
+- en: '[PRE87]'
+  id: totrans-282
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE87]'
+- en: As you see the table contains one row with value 1, two rows with value 2 and
+    three rows with value 3.
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如您所见，该表包含一个值为1的行，两个值为2的行和三个值为3的行。
+- en: If we run `EXPLAIN` on queries, selecting different rows in this table we will
+    notice that number of rows, filtered from the result is same no matter which value
+    we are looking for.
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们在查询中选择此表中的不同行并运行`EXPLAIN`，我们将注意到从结果中过滤的行数是相同的，无论我们寻找哪个值。
+- en: '[PRE88]'
+  id: totrans-285
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE88]'
+- en: Number of filtered rows shows how many rows would be filtered from the retrieved
+    result. Since our table does not have indexes MySQL first retrieves all rows from
+    the table then filters those which satisfy condition. Without any hint optimizer
+    thinks that MySQL will leave only one row from the result no matter which condition
+    we use.
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 过滤的行数显示从检索结果中将被过滤的行数。由于我们的表没有索引，MySQL 首先从表中检索所有行，然后过滤满足条件的行。在没有任何提示的情况下，优化器认为MySQL将从结果中留下只一行，无论使用哪个条件。
+- en: Let’s create a histogram and check if it changes anything.
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建一个直方图，检查是否有任何变化。
+- en: '[PRE89]'
+  id: totrans-288
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE89]'
+- en: Histograms are stored in the data dictionary table `column_statistics` and can
+    be examined by querying table `COLUMN_STATISTICS` in Information Schema.
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 直方图存储在数据字典表`column_statistics`中，并且可以通过查询信息模式中的`COLUMN_STATISTICS`表来检查。
+- en: '[PRE90]'
+  id: totrans-290
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE90]'
+- en: Three buckets contain information about data ranges. Value 1 takes 1/6 of the
+    table (one row out of six), values 1 and 2 both take a half (0.5) of the table
+    and together with value 3 they fill the table. Number of items in each bucket
+    stored as fraction of one. Field `number-of-buckets-specified` contains number
+    of buckets, specified at the histogram creation time. Default value is 100 but
+    you are free to specify any number between 1 and 1024\. If number of unique elements
+    in the column exceeds number of buckets `histogram-type` will change from `singleton`
+    to `equi-height` and each bucket could contain a range of values instead of only
+    one in case of `singleton`.
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 三个桶包含关于数据范围的信息。值1占表的1/6（六分之一）（六行中的一行），值1和2各占一半（0.5）的表，并与值3一起填充表。每个桶中的项目数量存储为一的分数。字段`number-of-buckets-specified`包含在创建直方图时指定的桶数。默认值为100，但您可以自由地指定介于1和1024之间的任何数字。如果列中唯一元素的数量超过桶的数量，则`histogram-type`将从`singleton`更改为`equi-height`，并且每个桶可以包含值范围，而不是仅在`singleton`情况下包含一个值。
+- en: Histograms affect the value for the `filtered` field in the `EXPLAIN` output.
+  id: totrans-292
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 直方图会影响`EXPLAIN`输出中`filtered`字段的值。
+- en: In the example below values for the filtered rows correct and reflect content
+    of the table. In case if we search value 1, five of six table rows are predicted
+    to be removed from the result set, which correct. For the value 2 only two rows
+    (33.33%) would be left in the result, and in case of value 3 half of the table
+    will be filtered.
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下面的示例中，过滤行的值是正确的，并反映了表的内容。如果我们搜索值1，则预计将从结果集中删除六个表行中的五个，这是正确的。对于值2，只有两行（33.33%）将留在结果集中，而对于值3，表的一半将被过滤。
+- en: '[PRE91]'
+  id: totrans-294
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE91]'
+- en: 'Histograms do not help to access data: they are statistic only, not physical
+    structure like indexes. They, instead, affect query execution plan and, particularly,
+    order of tables joined. For example, if we decide to join `histograms` table with
+    itself order will be different depending from the condition.'
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 直方图不会帮助访问数据：它们只是统计信息，不是像索引那样的物理结构。它们影响查询执行计划，特别是表连接的顺序。例如，如果我们决定将 `histograms`
+    表与自身连接，根据条件顺序会有所不同。
+- en: '[PRE92]'
+  id: totrans-296
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE92]'
+- en: 'The true power of histograms are demonstrated on large tables. The companion
+    GitHub repository has data for two tables: `goods_shops` and `goods_characteristics`.
+    They are created without histograms by default while having indexes.'
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 直方图的真正威力在于大表上得到了展示。相关的GitHub仓库有两个表的数据：`goods_shops` 和 `goods_characteristics`。它们默认情况下没有使用直方图，但有索引。
+- en: '[PRE93]'
+  id: totrans-298
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE93]'
+- en: If we want to find number of laptops with screen size that is less than 13 inches
+    and the manufacturer one of Lenovo, Dell, Toshiba, Samsung or Acer, available
+    by Premium or Urgent delivery in Moscow or Kiev we may use a following query.
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们想找到屏幕尺寸小于13英寸且制造商是联想、戴尔、东芝、三星或宏碁中的一家的笔记本电脑的数量，并且可以通过高级或紧急交付在莫斯科或基辅获取，我们可以使用以下查询。
+- en: '[PRE94]'
+  id: totrans-300
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE94]'
+- en: The query took over 6 minutes, which is quite long for two tables of less than
+    half-million rows. Reason for this is that table `goods_shops` contains just few
+    rows that satisfy condition for the shop location and delivery options while table
+    `goods_characteristics` has much more rows that satisfy laptop size and manufacturer
+    condition. In such a situation it would be better to select data from the table
+    `goods_shops` first while optimizers decides opposite.
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询耗时超过6分钟，对于少于50万行的两个表来说，这是相当长的时间。原因在于 `goods_shops` 表只包含少数满足商店位置和交付选项条件的行，而
+    `goods_characteristics` 表中有更多满足笔记本电脑尺寸和制造商条件的行。在这种情况下，最好先从 `goods_shops` 表中选择数据，而优化器则选择了相反的方法。
+- en: '[PRE95]'
+  id: totrans-302
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE95]'
+- en: Indexes would not help here, because they use cardinality that is same for the
+    any value in the indexed column. Here is when histograms can show their power.
+  id: totrans-303
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引在这里不会起作用，因为它们使用的基数对于索引列中的任何值都是相同的。这就是直方图可以展示其威力的时候。
+- en: '[PRE96]'
+  id: totrans-304
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE96]'
+- en: Once a histogram is created, the optimizer joins tables in the effective order
+    and query takes slightly more than one second instead of six minutes in the previous
+    run.
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦创建了直方图，优化器按照有效的顺序连接表，并且查询时间略长于之前的运行中的六秒钟。
+- en: See Also
+  id: totrans-306
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: 'For additional information about using histograms in MySQL, see [Billion Goods
+    in Few Categories: How Histograms Save a Life?](https://www.percona.com/resources/webinars/billion-goods-few-categories-how-histograms-save-life).'
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '有关在MySQL中使用直方图的更多信息，请参阅[Billion Goods in Few Categories: How Histograms Save
+    a Life?](https://www.percona.com/resources/webinars/billion-goods-few-categories-how-histograms-save-life)。'
+- en: 21.12 Writing Performant Queries
+  id: totrans-308
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 21.12 编写高性能查询
+- en: Problem
+  id: totrans-309
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to write efficient queries.
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望编写高效的查询。
+- en: Solution
+  id: totrans-311
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Study how MySQL accesses data and adjust your queries to help MySQL perform
+    its job faster.
+  id: totrans-312
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 研究MySQL如何访问数据，并调整您的查询以帮助MySQL更快地完成其工作。
+- en: Discussion
+  id: totrans-313
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: As we’ve seen in this chapter, there are many iterations of index implementation
+    in MySQL. While, we take advantage of these index types, we also need to know
+    how MySQL accesses data. The optimizer is a very advanced part of MySQL but still
+    does not always make correct decisions. When it doesn’t choose the right path,
+    we’ll end up with poor query performance, which may lead to degraded service or
+    outage in our applications at production. The best way to writing performant queries
+    is to know how MySQL accesses data.
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在本章中所看到的，MySQL中索引实现有许多迭代。虽然我们利用了这些索引类型，但我们也需要知道MySQL如何访问数据。优化器是MySQL中非常先进的部分，但仍然不能总是做出正确的决策。当它没有选择正确的路径时，我们将面临查询性能不佳的问题，这可能导致生产中的服务降级或中断。编写高性能查询的最佳方式是了解MySQL如何访问数据。
+- en: The other point here is being at scale is different than using the application
+    in a monolith environment. As the concurrency increases with data size, the decision
+    optimizer will choose the fastest data route that will be more complex to handle.
+  id: totrans-315
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个要点是，在规模上的不同与在单体环境中使用应用程序不同。随着并发性增加和数据规模，决策优化器将选择更复杂但更快的数据路由。
+- en: MySQL uses a cost-based model to estimate the cost of various operations during
+    query execution in the following order.
+  id: totrans-316
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL使用基于成本的模型来估计查询执行过程中各种操作的成本，顺序如下。
+- en: Find the optimal method.
+  id: totrans-317
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 找到最佳方法。
+- en: Check if the access method useful.
+  id: totrans-318
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 检查访问方法是否有用。
+- en: Estimate the cost of using the access method.
+  id: totrans-319
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 估算使用访问方法的成本。
+- en: Select the lowest cost access method possible.
+  id: totrans-320
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 选择可能的最低成本访问方法。
+- en: 'Here’s the order of Query Execution that MySQL chooses:'
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是MySQL选择的查询执行顺序：
+- en: Table Scan
+  id: totrans-322
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 表扫描
+- en: Index Scan
+  id: totrans-323
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 索引扫描
+- en: Index Lookup
+  id: totrans-324
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 索引查找
+- en: Range Scan
+  id: totrans-325
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 范围扫描
+- en: Index Merge
+  id: totrans-326
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 索引合并
+- en: Loose Index Scan
+  id: totrans-327
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 松散索引扫描
+- en: The following are some known reasons for slow index lookups for those still
+    using an index with poor performance outcomes.
+  id: totrans-328
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是一些已知的使用索引但性能差的慢索引查找的原因。
+- en: Low cardinality
+  id: totrans-329
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 低基数性
+- en: When data is not diverse enough to identify a fast traversal, MySQL will end
+    up doing a full table scan.
+  id: totrans-330
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当数据不足以识别快速遍历时，MySQL最终会执行全表扫描。
+- en: Large data sets
+  id: totrans-331
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大数据集
+- en: Returning large data sets often causes problems. Even if they are correctly
+    filtered they may be useless as your application can’t process them fast enough.
+    Only target data that are needed in your query and filter the rest out.
+  id: totrans-332
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 返回大数据集通常会导致问题。即使它们经过正确过滤，由于应用程序无法快速处理它们，它们可能是无用的。只针对查询中需要的数据，并过滤其余数据。
+- en: Multiple index traversal
+  id: totrans-333
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 多索引遍历
+- en: If you have a query hitting multiple indexes, the extra I/O operation hopping
+    through pages will lead to slow query performance.
+  id: totrans-334
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果查询命中多个索引，通过页面进行额外的I/O操作会导致查询性能变慢。
+- en: Non-leading column lookup
+  id: totrans-335
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 非主导列查找
+- en: If you do not use the leading column for a covering index, a covering index
+    cannot be used.
+  id: totrans-336
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果不使用主导列来创建覆盖索引，则无法使用覆盖索引。
+- en: Data type mismatch
+  id: totrans-337
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据类型不匹配
+- en: Indexes can not help if data types don’t match when querying columns.
+  id: totrans-338
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当查询列的数据类型不匹配时，索引无法帮助。
+- en: Character Set / Collation mismatch
+  id: totrans-339
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 字符集/校对规则不匹配
+- en: Data access should be unified around the character set and collation of the
+    query.
+  id: totrans-340
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据访问应统一围绕查询的字符集和校对规则进行。
+- en: Suffix lookup
+  id: totrans-341
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 后缀查找
+- en: Looking for a suffix will degrade performance significantly.
+  id: totrans-342
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查找后缀会显著降低性能。
+- en: Index as argument
+  id: totrans-343
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引作为参数
+- en: Using an indexed column as an argument will not efficiently use the index.
+  id: totrans-344
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用索引列作为参数将不能有效使用该索引。
+- en: Stale Statistics
+  id: totrans-345
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 过期统计信息
+- en: MySQL updates statistics based on the index cardinality. This helps the optimizer
+    to make decisions for the fastest path possible.
+  id: totrans-346
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL根据索引基数更新统计信息。这有助于优化器做出尽可能快的路径决策。
+- en: MySQL Bug
+  id: totrans-347
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL错误
+- en: It’s rare, but a possible. MySQL bug can cause slow index lookups.
+  id: totrans-348
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种情况很少见，但可能存在MySQL的错误，可能导致索引查找变慢。
+- en: Query types
+  id: totrans-349
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 查询类型
+- en: When designing the application it is useful to recognize common query patterns,
+    when they can be applied and when not.
+  id: totrans-350
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在设计应用程序时，识别常见的查询模式及其适用性和非适用性是有用的。
+- en: Point Select
+  id: totrans-351
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 点选
+- en: One of the fastest methods to access your data is to do a point select targeting
+    indexed column directly. In this case, the optimizer already knows the page that
+    your data sits on if the index exists in that column.
+  id: totrans-352
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 访问数据的最快方法之一是直接针对索引列进行点选，这种情况下，如果索引存在于该列中，优化器已经知道数据所在的页面。
+- en: '[PRE97]'
+  id: totrans-353
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE97]'
+- en: in this case,`names_id` column, is the Primary Key column of the table, so the
+    access is straight to that page’s path by the optimizer.
+  id: totrans-354
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，`names_id`列是表的主键列，因此优化器直接访问该页面路径。
+- en: Range Select
+  id: totrans-355
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 范围选择
+- en: This type of `SELECT` is when you need a range of rows from your data set. MySQL
+    can still use an index to access the data directly using the index on the same
+    column as in `WHERE` clause of the query. This type of access method uses a single
+    index or subset of values from an index or indexes. The range index is also known
+    as using single or multi-part index utilization. In the following example, the
+    optimizer uses comparison on `name_rank` field with `<` and `>` operators. Also,
+    for all index types, `AND` or `OR` combinations will be a range condition. For
+    MySQL fastest lookup is Primary Key. Remember this is also the physical order
+    of the table.
+  id: totrans-356
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当需要从数据集中获取一系列行时，就会使用这种`SELECT`。MySQL仍然可以使用索引直接访问数据，使用与查询的`WHERE`子句中相同列的索引。这种访问方法使用单个索引或来自索引的值子集。范围索引也被称为使用单个或多个部分索引。在以下示例中，优化器使用`name_rank`字段的`<`和`>`运算符进行比较。对于所有索引类型，`AND`或`OR`组合都将成为范围条件。对于MySQL来说，最快的查找是主键。记住这也是表的物理顺序。
+- en: '[PRE98]'
+  id: totrans-357
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE98]'
+- en: Covering Indexes
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 覆盖索引
+- en: Covering indexes are indexes that could be used to resolve the query without
+    accessing rows data. To make sure other supporting indexes cover your query, we
+    should use secondary indexes at times. An index should be leftmost first and each
+    additional field in a composite key. Query should not access columns that do not
+    exist in the index (see [Recipe 21.5](#nch-queryperf-queryperf-index-mulitple)).
+  id: totrans-359
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 覆盖索引是可以用于解析查询而无需访问行数据的索引。为了确保其他支持索引覆盖您的查询，我们有时应该使用次要索引。索引应该从最左边的字段开始，并且每个附加字段在复合键中。查询不应访问索引中不存在的列（参见[Recipe
+    21.5](https://wiki.example.org/nch-queryperf-queryperf-index-mulitple)）。
+- en: The following example, index used to resolve query condition without accessing
+    table data but in the end table data is accessed, because we asked for the `top_name`
+    column that does not exist in the index. Statement `Using index condition` in
+    the `Extra` field of the `EXPLAIN` output confirms that.
+  id: totrans-360
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面的示例中，索引用于解析查询条件而不访问表数据，但最终仍访问了表数据，因为我们要求的`top_name`列在索引中不存在。在`EXPLAIN`输出的`Extra`字段中，语句`Using
+    index condition`确认了这一点。
+- en: '[PRE99]'
+  id: totrans-361
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE99]'
+- en: This query uses covering index. Statement `Using index` confirms that. A primary
+    key is already part of the covering index; hence no need to include `names_id`
+    into the covering index.
+  id: totrans-362
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此查询使用了覆盖索引。语句`Using index`确认了这一点。主键已经是覆盖索引的一部分，因此不需要将`names_id`包含在覆盖索引中。
+- en: '[PRE100]'
+  id: totrans-363
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE100]'
+- en: Data type matching
+  id: totrans-364
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据类型匹配
+- en: Data types are another crucial fact to use indexes efficiently. Using numeric
+    for numeric comparison is essential for the optimizer. The following query is
+    a bad example of how MySQL does not like this data type conversion when it comes
+    down to `names_id` an `INTEGER` field with string. Below please see the warning
+    message we get.
+  id: totrans-365
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据类型是有效使用索引的另一个关键因素。对于优化器而言，使用数字进行数值比较至关重要。以下查询是一个不好的例子，展示了当涉及到具有字符串的`names_id`字段的数据类型转换时，MySQL并不喜欢这种情况。请看下面我们得到的警告消息。
+- en: '[PRE101]'
+  id: totrans-366
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE101]'
+- en: While the query may return results MySQL has to perform job to convert string
+    into number and loose precision.
+  id: totrans-367
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当查询返回结果时，MySQL必须执行任务将字符串转换为数字并丢失精度。
+- en: Negative conditions
+  id: totrans-368
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 负条件
+- en: Often times most efficient indexes can not be used for these types of queries.
+    This is because MySQL has to select all rows from the table or index, then filter
+    those which are not in the list.
+  id: totrans-369
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这些类型的查询中，通常最有效的索引无法使用。这是因为MySQL必须从表或索引中选择所有行，然后过滤那些不在列表中的行。
+- en: 'Avoid negative clauses if possible as they are inefficient:'
+  id: totrans-370
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果可能的话，尽量避免使用否定子句，因为它们效率低下：
+- en: '`IS NOT`'
+  id: totrans-371
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`IS NOT`'
+- en: '`IS NOT NULL`'
+  id: totrans-372
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`IS NOT NULL`'
+- en: '`NOT IN`'
+  id: totrans-373
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`NOT IN`'
+- en: '`NOT LIKE`'
+  id: totrans-374
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`NOT LIKE`'
+- en: '[PRE102]'
+  id: totrans-375
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE102]'
+- en: ORDER BY operations
+  id: totrans-376
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ORDER BY操作
+- en: Sorting operations can be expensive as the data set grows, especially if the
+    query cannot use index to resolve `ORDER BY`.
+  id: totrans-377
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 排序操作可能会随着数据集的增长变得昂贵，特别是如果查询无法使用索引来解析`ORDER BY`。
+- en: '[PRE103]'
+  id: totrans-378
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE103]'
+- en: The same applies to the `LIMIT` operations. These type of queries usually return
+    a small set of data with high cost.
+  id: totrans-379
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同样适用于`LIMIT`操作。这类查询通常返回少量数据，但成本很高。
+- en: '[PRE104]'
+  id: totrans-380
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE104]'
+- en: Query above selects large number of rows and then discards most of them.
+  id: totrans-381
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上面的查询选择大量行，然后丢弃其中大多数。
+- en: JOINs
+  id: totrans-382
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 连接
+- en: Join operations are an original way of combining or referencing data from two
+    or more tables. While SQL joins serve a particular purpose, they can create a
+    cartesian product on query results if not used properly. Using `INNER` joins to
+    filter only the intersection of tables in `SELECT` statement is highly advised
+    versus `LEFT JOIN`s. Although using `INNER JOIN` is not always possible to comply
+    with the required business logic. In those cases, still targeting indexed fields
+    will benefit query execution time.
+  id: totrans-383
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 连接操作是一种将来自两个或多个表的数据进行组合或引用的原始方法。虽然 SQL 连接服务于特定目的，但如果不正确使用，它们可能会在查询结果上创建笛卡尔积。强烈建议在
+    `SELECT` 语句中使用 `INNER` 连接来仅过滤表的交集，而不是使用 `LEFT JOIN`。尽管使用 `INNER JOIN` 并不总能符合所需的业务逻辑。在这些情况下，仍然针对索引字段进行目标查询将有利于查询执行时间。
+- en: '[PRE105]'
+  id: totrans-384
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE105]'
+- en: Tip
+  id: totrans-385
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: In MySQL `JOIN` is a synonymous of `INNER JOIN`.
+  id: totrans-386
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 中，`JOIN` 是 `INNER JOIN` 的同义词。
+- en: To help the optimizer to choose the best possible path to access your data by
+    creating correct indexes and writing efficient queries. This type of approach
+    will improve your throughput overall. Add only indexes you need and don’t over-index
+    tables. Avoiding duplicate indexes another best practice to achieve performant
+    queries. Identify if the same indexes in your table may cause a slow down on both
+    reads and writes.
+  id: totrans-387
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了帮助优化器通过创建正确的索引和编写高效的查询来选择访问数据的最佳路径。这种方法将全面提高你的吞吐量。只添加你需要的索引，不要对表进行过度索引。避免重复索引是实现高性能查询的另一种最佳实践。识别你的表中是否存在相同的索引可能会导致读写都变慢。

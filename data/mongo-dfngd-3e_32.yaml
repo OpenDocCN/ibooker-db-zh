@@ -1,0 +1,246 @@
+- en: Appendix B. MongoDB Internals
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 附录 B. MongoDB 内部
+- en: It is not necessary to understand MongoDB’s internals to use it effectively,
+    but they may be of interest to developers who wish to work on tools, contribute,
+    or simply understand what’s happening under the hood. This appendix covers some
+    of the basics. The MongoDB source code is available at [*https://github.com/mongodb/mongo*](https://github.com/mongodb/mongo).
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 若要有效地使用 MongoDB，无需理解其内部机制，但对希望开发工具、贡献代码或简单了解系统底层运行情况的开发者可能会感兴趣。本附录介绍了一些基础知识。MongoDB
+    源代码可在[*https://github.com/mongodb/mongo*](https://github.com/mongodb/mongo)获取。
+- en: BSON
+  id: totrans-2
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: BSON
+- en: Documents in MongoDB are an abstract concept—the concrete representation of
+    a document varies depending on the driver/language being used. Because documents
+    are used extensively for communication in MongoDB, there also needs to be a representation
+    of documents that is shared by all drivers, tools, and processes in the MongoDB
+    ecosystem. That representation is called Binary JSON, or BSON (no one knows where
+    the J went).
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 中的文档是一个抽象概念，具体的文档表示取决于所使用的驱动程序/语言。由于文档在 MongoDB 中广泛用于通信，因此需要一种所有驱动程序、工具和过程都能共享的文档表示。这种表示称为二进制
+    JSON 或 BSON（没有人知道 J 去了哪里）。
+- en: BSON is a lightweight binary format capable of representing any MongoDB document
+    as a string of bytes. The database understands BSON, and BSON is the format in
+    which documents are saved to disk.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: BSON 是一种轻量级的二进制格式，能够将任何 MongoDB 文档表示为一串字节。数据库理解 BSON，并且 BSON 是文档保存到磁盘的格式。
+- en: When a driver is given a document to insert, use as a query, and so on, it will
+    encode that document to BSON before sending it to the server. Likewise, documents
+    being returned to the client from the server are sent as BSON strings. This BSON
+    data is decoded by the driver to its native document representation before being
+    returned to the client.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当驱动程序收到要插入的文档、用作查询等任务时，它会在将其发送到服务器之前将该文档编码为 BSON。同样，从服务器返回给客户端的文档也以 BSON 字符串形式发送。驱动程序将这些
+    BSON 数据解码为其本机文档表示形式，然后返回给客户端。
+- en: 'The BSON format has three primary goals:'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: BSON 格式有三个主要目标：
+- en: Efficiency
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 效率
+- en: BSON is designed to represent data efficiently, without using much extra space.
+    In the worst case BSON is slightly less efficient than JSON, and in the best case
+    (e.g., when storing binary data or large numerics), it is much more efficient.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: BSON 被设计为高效地表示数据，几乎不使用额外的空间。在最坏的情况下，BSON 稍微不如 JSON 高效，在最好的情况下（例如存储二进制数据或大型数字时），它则比
+    JSON 高效得多。
+- en: Traversability
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 遍历性能
+- en: In some cases, BSON does sacrifice space efficiency to make the format easier
+    to traverse. For example, string values are prefixed with a length rather than
+    relying on a terminator to signify the end of a string. This traversability is
+    useful when the MongoDB server needs to introspect documents.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某些情况下，BSON 会牺牲空间效率以使格式更易于遍历。例如，字符串值会以长度前缀的方式存储，而不是依赖终止符来表示字符串的结束。这种遍历性能在 MongoDB
+    服务器需要自省文档时非常有用。
+- en: Performance
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能
+- en: Finally, BSON is designed to be fast to encode to and decode from. It uses C-style
+    representations for types, which are fast to work with in most programming languages.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，BSON 被设计为快速编码和解码。它使用 C 风格的类型表示，在大多数编程语言中都能快速处理。
+- en: For the exact BSON specification, see [*http://www.bsonspec.org*](http://www.bsonspec.org).
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于 BSON 的详细规范，请参见[*http://www.bsonspec.org*](http://www.bsonspec.org)。
+- en: Wire Protocol
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 网络协议
+- en: Drivers access the MongoDB server using a lightweight TCP/IP wire protocol.
+    The protocol is documented on the [MongoDB documentation site](https://oreil.ly/rVJAr)
+    but basically consists of a thin wrapper around BSON data. For example, an insert
+    message consists of 20 bytes of header data (which includes a code telling the
+    server to perform an insert and the message length), the collection name to insert
+    into, and a list of BSON documents to insert.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 驱动程序使用轻量级的 TCP/IP 网络协议访问 MongoDB 服务器。该协议在[MongoDB 文档站点](https://oreil.ly/rVJAr)有文档记录，但基本上是
+    BSON 数据的薄包装。例如，插入消息包括 20 字节的头数据（包括告知服务器执行插入操作的代码和消息长度）、要插入的集合名称以及要插入的 BSON 文档列表。
+- en: Data Files
+  id: totrans-16
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据文件
+- en: Inside the MongoDB data directory, which is */data/db/* by default, a separate
+    file will be stored for each collection and each index. The filenames do not correspond
+    to the names of the collections or indexes, but you can use the `stats` within
+    the *mongo* shell to identify the related file for a specific collection. The
+    `"wiredTiger.uri"` field will contain the name of the file to look for in the
+    MongoDB data directory.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MongoDB 数据目录（默认为 */data/db/*）中，每个集合和索引都会存储在单独的文件中。文件名不对应集合或索引的名称，但可以使用 *mongo*
+    shell 中的 `stats` 来识别特定集合的相关文件。`"wiredTiger.uri"` 字段将包含要在 MongoDB 数据目录中查找的文件名。
+- en: 'Using `stats` on the *sample_mflix* database for the *movies* collection provides
+    “collection-14--2146526997547809066” as result in the `"wiredTiger.uri"` field:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 *sample_mflix* 数据库上使用 `stats` 对 *movies* 集合执行时，`"wiredTiger.uri"` 字段将给出 “collection-14--2146526997547809066”
+    作为结果：
+- en: '[PRE0]'
+  id: totrans-19
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'The file’s details can then be verified within the MongoDB data directory:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后可以在 MongoDB 数据目录中验证文件的详细信息：
+- en: '[PRE1]'
+  id: totrans-21
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'It’s possible to use the aggregation framework to find the URI for each index
+    in a specific collection using the following:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以使用聚合框架来查找特定集合中每个索引的 URI，方法如下：
+- en: '[PRE2]'
+  id: totrans-23
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: WiredTiger stores each collection or index in a single arbitrarily large file.
+    The only limits that impact the potential maximum size of this file are filesystem
+    size limits.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: WiredTiger 将每个集合或索引存储在单个任意大的文件中。影响此文件潜在最大大小的唯一限制是文件系统大小限制。
+- en: WiredTiger writes a new copy of the full document whenever that document is
+    updated. The old copy on disk is flagged for reuse and will eventually be overwritten
+    at a future point, typically during the next checkpoint. This recycles the space
+    used within the WiredTiger file. The `compact` command can be run to move the
+    data within this file to the start, leaving empty space at the end. At regular
+    intervals, WiredTiger removes this excess empty space by truncating the file.
+    At the end of the compaction process, the excess space is returned to the filesystem.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每当更新文档时，WiredTiger 都会写入该文档的新副本。磁盘上的旧副本会被标记为可重用，并且通常在下一个检查点期间被重写。这样可以回收 WiredTiger
+    文件中使用的空间。可以运行`compact`命令来将此文件中的数据移动到开头，从而在末尾留下空白空间。定期间隔时，WiredTiger 通过截断文件来移除这些多余的空白空间。在压缩过程结束时，多余的空间将被返回给文件系统。
+- en: Namespaces
+  id: totrans-26
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 命名空间
+- en: Each database is organized into *namespaces*, which are mapped to WiredTiger
+    files. This abstraction separates the storage engine’s internal details from the
+    MongoDB query layer.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个数据库都组织成 *命名空间*，这些命名空间映射到 WiredTiger 文件。这种抽象将存储引擎的内部细节与 MongoDB 查询层分离。
+- en: WiredTiger Storage Engine
+  id: totrans-28
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: WiredTiger 存储引擎
+- en: 'The default storage engine for MongoDB is the WiredTiger storage engine. When
+    the server starts up, it opens the data files and begins the checkpointing and
+    journaling processes. It works in conjunction with the operating system, whose
+    responsibility is focused on paging data in and out as well as flushing data to
+    disk. This storage engine has several important properties:'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 的默认存储引擎是 WiredTiger 存储引擎。服务器启动时，它会打开数据文件并开始检查点和日志处理过程。它与操作系统协同工作，后者负责页面数据的进出以及将数据刷新到磁盘。这个存储引擎具有几个重要属性：
+- en: Compression is on by default for collections and for indexes. The default compression
+    algorithm is Google’s snappy. Other options include Facebook’s Zstandard (zstd)
+    and zlib, or indeed no compression. This minimizes storage use in the database
+    at the expense of additional CPU requirements.
+  id: totrans-30
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 默认情况下，对集合和索引启用了压缩。默认压缩算法为 Google 的 snappy。其他选项包括 Facebook 的 Zstandard（zstd）和
+    zlib，或者不进行压缩。这可以在增加 CPU 要求的情况下最大限度地减少数据库中的存储使用。
+- en: Document-level concurrency allows for updates on different documents from multiple
+    clients in a collection as the same time. WiredTiger uses MultiVersion Concurrency
+    Control (MVCC) to isolate read and write operations to ensure clients see a consistent
+    point-in-time view of the data at the start of an operation.
+  id: totrans-31
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 文档级并发允许多个客户端在集合中同时更新不同文档。WiredTiger 使用多版本并发控制（MVCC）来隔离读写操作，确保客户端在操作开始时看到数据的一致时间点视图。
+- en: Checkpointing creates a consistent point-in-time snapshot of the data and occurs
+    every 60 seconds. It involves writing all the data in the snapshot to disk and
+    updating the related metadata.
+  id: totrans-32
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 检查点创建数据的一致时间点快照，并且每 60 秒执行一次。它涉及将快照中的所有数据写入磁盘并更新相关元数据。
+- en: Journaling with checkpointing ensures there is no point in time where data might
+    be lost if there was a failure of a *mongod* process. WiredTiger uses a write-ahead
+    log (journal) that stores modifications before they are applied.
+  id: totrans-33
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用检查点技术进行日志记录确保在*mongod*进程失败时不会丢失任何数据。WiredTiger 使用预写日志（日志）在应用修改之前存储这些修改。

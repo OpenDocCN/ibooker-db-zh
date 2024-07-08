@@ -1,0 +1,384 @@
+- en: Chapter 8\. Transactions
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第8章。事务
+- en: 'Transactions are logical groups of processing in a database, and each group
+    or transaction can contain one or more operations such as reads and/or writes
+    across multiple documents. MongoDB supports ACID-compliant transactions across
+    multiple operations, collections, databases, documents, and shards. In this chapter,
+    we introduce transactions, define what ACID means for a database, highlight how
+    you use these in your applications, and provide tips for tuning transactions in
+    MongoDB. We will cover:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务是数据库中的逻辑处理组，每个组或事务可以包含一个或多个操作，如跨多个文档的读取和/或写入。MongoDB支持跨多个操作、集合、数据库、文档和分片的ACID合规事务。在本章中，我们介绍事务，定义数据库中ACID的含义，突出显示如何在应用程序中使用它们，并提供调整MongoDB中事务的提示。我们将涵盖：
+- en: What a transaction is
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 事务的定义
+- en: How to use transactions
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何使用事务
+- en: Tuning transaction limits for your application
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 调整应用程序的事务限制
+- en: Introduction to Transactions
+  id: totrans-5
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 事务简介
+- en: As we mentioned above, a transaction is a logical unit of processing in a database
+    that includes one or more database operations, which can be read or write operations.
+    There are situations where your application may require reads and writes to multiple
+    documents (in one or more collections) as part of this logical unit of processing.
+    An important aspect of a transaction is that it is never partially completed—it
+    either succeeds or fails.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如上文所述，事务是数据库中的一个逻辑处理单元，包括一个或多个数据库操作，可以是读取或写入操作。在处理的这个逻辑单元中，您的应用程序可能需要对多个文档（一个或多个集合中的多个文档）进行读取和写入。事务的一个重要方面是它永远不会部分完成——它要么成功，要么失败。
+- en: Note
+  id: totrans-7
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: In order to use transactions, your MongoDB deployment must be on MongoDB version
+    4.2 or later and your MongoDB drivers must be updated for MongoDB 4.2 or later.
+    MongoDB provides a [Driver Compatibility Reference page](https://oreil.ly/Oe9NE)
+    that you can use to ensure your MongoDB Driver version is compatible.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用事务，您的MongoDB部署必须在MongoDB版本4.2或更高版本，并且您的MongoDB驱动程序必须更新到MongoDB 4.2或更高版本。MongoDB提供了一个[驱动程序兼容性参考页面](https://oreil.ly/Oe9NE)，您可以使用它来确保您的MongoDB驱动程序版本兼容。
+- en: A Definition of ACID
+  id: totrans-9
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: ACID的定义
+- en: ACID is the accepted set of properties a transaction must meet to be a “true”
+    transaction. ACID is an acronym for Atomicity, Consistency, Isolation, and Durability.
+    ACID transactions guarantee the validity of your data and of your database’s state
+    even where power failures or other errors occur.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ACID是事务必须满足的一组接受的属性，以成为“真正”的事务。ACID是原子性（Atomicity）、一致性（Consistency）、隔离性（Isolation）和持久性（Durability）的首字母缩写。ACID事务保证数据的有效性及数据库状态的一致性，即使发生断电或其他错误。
+- en: Atomicity ensures that all operations inside a transaction will either be applied
+    or nothing will be applied. A transaction can never be partially applied; either
+    it is committed or it aborts.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 原子性确保事务内部的所有操作要么全部应用，要么全部不应用。事务永远不会部分应用；它要么被提交，要么中止。
+- en: Consistency ensures that if a transaction succeeds, the database will move from
+    one consistent state to the next consistent state.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一致性确保如果事务成功，数据库将从一个一致状态移动到下一个一致状态。
+- en: Isolation is the property that permits multiple transactions to run at the same
+    time in your database. It guarantees that a transaction will not view the partial
+    results of any other transaction, which means multiple parallel transactions will
+    have the same results as running each of the transactions sequentially.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 隔离性是允许多个事务同时在数据库中运行的属性。它保证一个事务不会查看任何其他事务的部分结果，这意味着多个并行事务将具有与按顺序运行每个事务相同的结果。
+- en: Durability ensures that when a transaction is committed all data will persist
+    even in the case of a system failure.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 持久性确保当事务提交时，所有数据都将持久存在，即使系统故障也是如此。
+- en: A database is said to be ACID-compliant when it ensures that all these properties
+    are met and that only successful transactions can be processed. In situations
+    where a failure occurs before a transaction is completed, ACID compliance ensures
+    that no data will be changed.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库在确保满足所有这些属性并且仅处理成功事务时，被称为符合ACID标准。在事务完成之前发生故障的情况下，ACID合规性确保数据不会被更改。
+- en: MongoDB is a distributed database with ACID compliant transactions across replica
+    sets and/or across shards. The network layer adds an additional level of complexity.
+    The engineering team at MongoDB provided [several chalk and talk videos](https://www.mongodb.com/transactions)
+    that describe how they implemented the necessary features to support ACID transactions.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB是一个分布式数据库，支持跨副本集和/或分片的ACID兼容事务。网络层增加了额外的复杂性。MongoDB工程团队提供了[几个黑板讲解视频](https://www.mongodb.com/transactions)，描述了他们如何实现支持ACID事务所需的必要功能。
+- en: How to Use Transactions
+  id: totrans-17
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 如何使用事务
+- en: MongoDB provides two APIs to use transactions. The first is a similar syntax
+    to relational databases (e.g., `start_transaction` and `commit_transaction`) called
+    the core API and the second is called the callback API, which is the recommended
+    approach to using transactions.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB提供两个API来使用事务。第一个API与关系型数据库类似（例如，`start_transaction`和`commit_transaction`），称为核心API；第二个称为回调API，是使用事务的推荐方法。
+- en: The core API does not provide retry logic for the majority of errors and requires
+    the developer to code the logic for the operations, the transaction commit function,
+    and any retry and error logic required.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 核心API不提供大多数错误的重试逻辑，并要求开发者编写操作逻辑、事务提交函数以及任何必要的重试和错误处理逻辑。
+- en: The callback API provides a single function that wraps a large degree of functionality
+    when compared to the core API, including starting a transaction associated with
+    a specified logical session, executing a function supplied as the callback function,
+    and then committing the transaction (or aborting on error). This function also
+    includes retry logic that handle commit errors. The callback API was added in
+    MongoDB 4.2 to simplify application development with transactions as well as make
+    it easier to add application retry logic to handle any transaction errors.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 回调API提供一个函数，它比核心API包含更多功能，包括启动与指定逻辑会话相关联的事务、执行作为回调函数提供的函数，然后提交事务（或在错误时中止）。此函数还包括处理提交错误的重试逻辑。回调API在MongoDB
+    4.2中添加，旨在简化使用事务的应用程序开发，同时使添加应用程序重试逻辑以处理任何事务错误变得更加容易。
+- en: In both APIs, the developer is responsible for starting the logical session
+    that will be used by the transaction. Both APIs require operations in a transaction
+    to be associated with a specific logical session (i.e., pass in the session to
+    each operation). A logical session in MongoDB tracks the time and sequencing of
+    the operations in the context of the entire MongoDB deployment. A logical session
+    or server session is part of the underlying framework used by client sessions
+    to support retryable writes and causal consistency in MongoDB—both of these features
+    were added in MongoDB version 3.6 as part of the foundation required to support
+    transactions. A specific sequence of read and write operations that have a causal
+    relationship reflected by their ordering is defined as a causally consistent client
+    session in MongoDB. A client session is started by an application and used to
+    interact with a server session.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这两个API中，开发者负责启动将用于事务的逻辑会话。两个API要求事务中的操作与特定的逻辑会话相关联（即，将会话传递给每个操作）。MongoDB中的逻辑会话跟踪操作的时间和顺序，这些操作在整个MongoDB部署的上下文中。逻辑会话或服务器会话是客户端会话使用的基础框架的一部分，用于支持可重试写入和因果一致性。这些功能作为支持事务所需的基础的一部分，已经在MongoDB版本3.6中添加。在MongoDB中，具有因果关系的读写操作序列被定义为因果一致的客户端会话。客户端会话由应用程序启动并用于与服务器会话交互。
+- en: In 2019, six senior engineers from MongoDB published a paper at the SIGMOD 2019
+    conference entitled [“Implementation of Cluster-wide Logical Clock and Causal
+    Consistency in MongoDB”](https://oreil.ly/IFLvm).^([1](ch08.xhtml#idm45882358533432))
+    This paper provides a deeper technical explanation of the mechanics behind logical
+    sessions and causal consistency in MongoDB. The paper documents the efforts from
+    a multiteam, multiyear engineering project. The work involved changing aspects
+    of the storage layer, adding a new replication consensus protocol, modifying the
+    sharding architecture, refactoring sharding cluster metadata, and adding a global
+    logical clock. These changes provide the foundation required by the database before
+    ACID-compliant transactions can be added.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 2019 年，MongoDB 的六名高级工程师在 SIGMOD 2019 大会上发表了题为[“在 MongoDB 中实现集群范围逻辑时钟和因果一致性”的论文](https://oreil.ly/IFLvm)。^([1](ch08.xhtml#idm45882358533432))
+    该论文深入解释了 MongoDB 中逻辑会话和因果一致性背后的机制。论文记录了一个跨多团队、多年的工程项目的努力。这项工作涉及改变存储层的方面，添加新的复制一致性协议，修改分片架构，重构分片集群元数据，并添加全局逻辑时钟。这些变更为数据库提供了在实现
+    ACID 符合事务之前所需的基础。
+- en: The complexity and additional coding required in applications are the main reasons
+    to recommend the callback API over the core API. These differences between the
+    APIs are summarized in [Table 8-1](#table-transactions-1).
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 推荐回调 API 而不是核心 API 的主要原因是应用程序中所需的复杂性和额外编码。这些 API 之间的差异在[表 8-1](#table-transactions-1)中总结。
+- en: Table 8-1\. Comparison of Core API versus Callback API
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 8-1\. 核心 API 与回调 API 的比较
+- en: '| Core API | Callback API |'
+  id: totrans-25
+  prefs: []
+  type: TYPE_TB
+  zh: '| 核心 API | 回调 API |'
+- en: '| --- | --- |'
+  id: totrans-26
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| Requires explicit call to start the transaction and commit the transaction.
+    | Starts a transaction, executes the specified operations, and commits (or aborts
+    on error). |'
+  id: totrans-27
+  prefs: []
+  type: TYPE_TB
+  zh: '| 需要显式调用以开始事务并提交事务。 | 开始一个事务，执行指定的操作，并提交（或在出错时中止）。 |'
+- en: '| Does not incorporate error-handling logic for TransientTransactionError and
+    UnknownTransactionCommitResult, and instead provides the flexibility to incorporate
+    custom error handling for these errors. | Automatically incorporates error-handling
+    logic for TransientTransactionError and UnknownTransactionCommitResult. |'
+  id: totrans-28
+  prefs: []
+  type: TYPE_TB
+  zh: '| 不含有处理 `TransientTransactionError` 和 `UnknownTransactionCommitResult` 的错误处理逻辑，而是提供了灵活性以便为这些错误添加自定义错误处理。
+    | 自动包含了处理 `TransientTransactionError` 和 `UnknownTransactionCommitResult` 的错误处理逻辑。
+    |'
+- en: '| Requires explicit logical session to be passed to API for the specific transaction.
+    | Requires explicit logical session to be passed to API for the specific transaction.
+    |'
+  id: totrans-29
+  prefs: []
+  type: TYPE_TB
+  zh: '| 需要将显式逻辑会话传递给特定事务的 API。 | 需要将显式逻辑会话传递给特定事务的 API。 |'
+- en: 'To understand the differences between these two APIs, we can compare the APIs
+    using a simple transaction example for an ecommerce site where an order is placed
+    and the corresponding items are removed from the available stock as they are sold.
+    This involves two documents in different collections in a single transaction.
+    The two operations, which will be the core of our transaction example, are:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要理解这两个 API 之间的差异，我们可以使用一个简单的电子商务站点事务示例来比较这些 API，在这个示例中，订单被下单并在销售时从可用库存中移除相应的商品。这涉及到单个事务中不同集合的两个文档。我们事务示例的核心操作将是：
+- en: '[PRE0]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'First, let’s see how the core API can be used in Python for our transaction
+    example. The two operations of our transaction are highlighted in Step 1 of the
+    program listing below:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，让我们看看如何在 Python 中为我们的事务示例使用核心 API。我们事务的两个操作在以下程序清单的第 1 步中被突出显示：
+- en: '[PRE1]'
+  id: totrans-33
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Now, let’s look at how the the callback API can be used in Python for this
+    same transaction example. The two operations of our transaction are highlighted
+    in Step 1 of the program listing below:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们看看如何在 Python 中使用回调 API 来完成同样的事务示例。我们事务的两个操作在以下程序清单的第 1 步中被突出显示：
+- en: '[PRE2]'
+  id: totrans-35
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Note
+  id: totrans-36
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: In MongoDB multidocument transactions, you may only perform read/write (CRUD)
+    operations on existing collections or databases. As shown in our example, you
+    must first create a collection outside of a transaction if you wish to insert
+    it into a transaction. Create, drop, or index operations are not permitted in
+    a transaction.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MongoDB 的多文档事务中，您只能对现有集合或数据库执行读/写（CRUD）操作。如我们的示例所示，如果您希望将其插入到事务中，您必须首先在事务之外创建集合。不允许创建、删除或索引操作在事务中执行。
+- en: Tuning Transaction Limits for Your Application
+  id: totrans-38
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 为您的应用程序调整事务限制
+- en: There are a few parameters that are important to be aware of when using transactions.
+    They can be adjusted to ensure your application can make the optimal use of transactions.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用事务时，有几个重要的参数需要注意。它们可以进行调整，以确保您的应用程序能够最优化地使用事务。
+- en: Timing and Oplog Size Limits
+  id: totrans-40
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 时间和Oplog大小限制
+- en: There are two main categories of limits in MongoDB transactions. The first relates
+    to timing limits of the transaction, controlling how long a specific transaction
+    can run, the time a transaction will wait to acquire locks, and the maximum length
+    that all transactions will run. The second category specifically relates to the
+    MongoDB oplog entry and size limits for an individual entry.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB事务中存在两个主要类别的限制。第一个与事务的时间限制有关，控制特定事务可以运行的时间，事务等待获取锁的时间以及所有事务将运行的最大长度。第二个类别特别与MongoDB
+    oplog条目和单个条目的大小限制相关。
+- en: Time limits
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 时间限制
+- en: The default maximum runtime of a transaction is one minute or less. This can
+    be increased by modifying the limit controlled by `transactionLifetime``LimitSeconds`
+    at a `mongod` instance level. In the case of sharded clusters, the parameter must
+    be set on all shard replica set members. After this time has elapsed, a transaction
+    will be considered expired and will be aborted by a cleanup process, which runs
+    periodically. The cleanup process will run once every 60 seconds or every `transactionLifetimeLimitSeconds/2`,
+    whichever is lower.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务的默认最大运行时间是一分钟或更短。可以通过修改由`mongod`实例级别的`transactionLifetimeLimitSeconds`控制的限制来增加此时间。在分片集群的情况下，必须在所有分片副本集成员上设置此参数。超过此时间后，事务将被视为过期，并将由定期运行的清理过程中止。清理过程每60秒运行一次，或者每`transactionLifetimeLimitSeconds/2`，以较低者为准。
+- en: To explicitly set a time limit on a transaction, it is recommended that you
+    specify a `maxTimeMS` on `commitTransaction`. If `maxTimeMS` is not set then `transactionLifetimeLimitSeconds`
+    will be used or if it is set but would exceed `transactionLifetimeLimitSeconds`
+    then `transactionLifetimeLimitSeconds` will be used instead.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 若要在事务上明确设置时间限制，建议在`commitTransaction`上指定`maxTimeMS`。如果未设置`maxTimeMS`，则将使用`transactionLifetimeLimitSeconds`，或者如果设置了但超出`transactionLifetimeLimitSeconds`，则将使用`transactionLifetimeLimitSeconds`。
+- en: The default maximum time a transaction will wait to acquire the locks it needs
+    for the operations in the transaction is 5 ms. This can be increased by modifying
+    the limit controlled by `maxTransactionLockRequestTimeoutMillis`. If the transaction
+    is unable to acquire the locks within this time, it will abort. `maxTransactionLockRequestTimeoutMillis`
+    can be set to `0`, `-1`, or a number greater than `0`. Setting it to `0` means
+    a transaction will abort if it is unable to immediately acquire all the locks
+    it requires. A setting of `-1` will use the operation-specific timeout as specified
+    by `maxTimeMS`. Any number greater than `0` configures the wait time to that time
+    in seconds as the specified period that a transaction will attempt to acquire
+    the required locks.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务在运行操作所需的锁之前等待的默认最大时间是5毫秒。可以通过修改由`maxTransactionLockRequestTimeoutMillis`控制的限制来增加此时间。如果事务在此时间内无法获取所需的锁，则会中止。`maxTransactionLockRequestTimeoutMillis`可以设置为`0`、`-1`或大于`0`的数字。将其设置为`0`意味着如果事务无法立即获取所需的所有锁，则会中止。设置为`-1`将使用由`maxTimeMS`指定的操作特定超时。任何大于`0`的数字将配置等待时间为以秒为单位的指定时间，作为事务尝试获取所需锁的期间。
+- en: Oplog size limits
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Oplog大小限制
+- en: MongoDB will create as many oplog entries as required for the write operations
+    in a transaction. However, each oplog entry must be within the BSON document size
+    limit of 16MB.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB将为事务中的写操作创建所需的操作日志（oplog）条目。然而，每个oplog条目必须在16MB的BSON文档大小限制内。
+- en: Transactions provide a useful feature in MongoDB to ensure consistency, but
+    they should be used with the rich document model. The flexibility of this model
+    and using best practices such as schema design patterns will help avoid the use
+    of transactions for most situations. Transactions are a powerful feature, best
+    used sparingly in your applications.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务在MongoDB中提供了一个有用的功能，用于确保一致性，但应该与丰富的文档模型一起使用。这种模型的灵活性以及使用诸如模式设计等最佳实践将有助于避免在大多数情况下使用事务。事务是一个强大的功能，在应用程序中最好节制使用。
+- en: ^([1](ch08.xhtml#idm45882358533432-marker)) The authors are Misha Tyulenev,
+    staff software engineer for sharding; Andy Schwerin, vice president for Distributed
+    Systems; Asya Kamsky, principal product manager for Distributed Systems; Randolph
+    Tan, senior software engineer for sharding; Alyson Cabral, product manager for
+    Distributed Systems; and Jack Mulrow, software engineer for sharding.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch08.xhtml#idm45882358533432-marker)) 本文的作者是分片的高级软件工程师Misha Tyulenev；分布式系统副总裁Andy
+    Schwerin；分布式系统首席产品经理Asya Kamsky；分片的高级软件工程师Randolph Tan；分布式系统产品经理Alyson Cabral；以及分片的软件工程师Jack
+    Mulrow。

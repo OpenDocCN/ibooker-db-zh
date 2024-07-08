@@ -1,0 +1,2367 @@
+- en: Chapter 23\. Monitoring the MySQL Server
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第 23 章。监控 MySQL 服务器
+- en: 23.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 23.0 简介
+- en: 'This chapter covers how to monitor the MySQL Server using various command line
+    tools:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章介绍如何使用各种命令行工具监控 MySQL 服务器：
+- en: The mysqladmin interface
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: mysqladmin 接口
+- en: System variables
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 系统变量
+- en: Status variables
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 状态变量
+- en: Information and Performance Schemas
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 信息和性能模式
+- en: Storage engines diagnostics
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 存储引擎诊断
+- en: Log files
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 日志文件
+- en: This chapter doesn’t cover managing administrative tasks. Instead, it focuses
+    on the server’s observability. Administrators or developers should evaluate outcomes
+    from various command line tools on the MySQL server carefully before taking action
+    and modifying configuration changes listed in [Chapter 22](ch22.xhtml#nch-admin).
+    Rather it discusses what you can find out, and how, by surveying the types of
+    information available and how to use that information to answer questions. The
+    purpose is not so much to consider specific monitoring problems to illustrate
+    your options so you can begin to answer your questions, whatever they are. In
+    the case of reactive monitoring on an issue, follow one of the below options.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章不涵盖管理任务。相反，它专注于服务器的可观察性。管理员或开发人员在采取行动和修改 [第 22 章](ch22.xhtml#nch-admin) 中列出的配置更改之前，应仔细评估
+    MySQL 服务器上各种命令行工具的结果。它讨论了您可以了解的内容及其调查类型信息以及如何使用该信息来回答问题。其目的不是考虑特定的监控问题，而是展示您的选择，以便您开始回答您的问题，无论是什么情况。在响应性监控问题的情况下，请选择以下其中一种选项。
+- en: Determine which of the available information sources pertain to the problem
+    at hand.
+  id: totrans-10
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 确定哪些可用的信息源与手头的问题相关。
+- en: 'Choose an approach for using the information: Are you asking a one-time question?
+    If so, maybe a few interactive queries are sufficient. If you’re trying to solve
+    an issue that may recur or for which you need continuous monitoring, a program-oriented
+    approach is better. Will a script written entirely in SQL do the job, or do you
+    need to write a program that queries the server and performs additional manipulation
+    of the information obtained? (This is typical for operations that cannot be done
+    in pure SQL, that have special output formatting requirements, and so forth.)
+    If a task must run periodically, maybe you need to set up a scheduled event or
+    *cron* job. For browser display, write a web script.'
+  id: totrans-11
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 选择一种使用信息的方法：您是否提出了一个一次性的问题？如果是这样，也许几个交互式查询就足够了。如果您正在尝试解决可能会重复出现或需要持续监控的问题，最好采用面向程序的方法。一个完全使用
+    SQL 编写的脚本能否完成任务，或者您是否需要编写一个查询服务器并对获取的信息进行额外处理的程序？（这在纯 SQL 无法完成的操作，具有特殊的输出格式要求等情况下很典型。）如果一个任务必须定期运行，也许您需要设置一个定期事件或
+    *cron* 作业。对于浏览器显示，请编写一个 Web 脚本。
+- en: Note
+  id: totrans-12
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Some of the techniques shown here require administrative access, such as accessing
+    log files in operating system `MySQL` or use statements that require the `SUPER`
+    privilege. For this reason, to carry out the operations described here, you’ll
+    likely need to connect to the server as `root` rather than as `cbuser` or grant
+    SUPER to cbuser. MySQL installation created ‘root'@'localhost’ superuser account
+    that has all privileges as the database user.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里展示的一些技术需要管理员访问权限，例如访问操作系统中的 MySQL 日志文件或使用需要 `SUPER` 特权的语句。因此，为了执行这里描述的操作，您可能需要连接到服务器作为
+    `root` 用户，而不是 `cbuser` 用户，或者授予 `cbuser` SUPER 权限。MySQL 安装创建了一个名为 ‘root'@'localhost’
+    的超级用户账户，该账户作为数据库用户拥有所有权限。
+- en: 23.1 Why Monitor MySQL Server?
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 23.1 为什么要监控 MySQL 服务器？
+- en: Problem
+  id: totrans-15
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to monitor the server to capture its state, which allows you to verify
+    or change settings explained in [Chapter 22](ch22.xhtml#nch-admin) . Knowing the
+    state of MySQL server’s wait events and status counters reveals so much information
+    about the server limits. Wait events are performance indicators of the server.
+    Monitoring can be utilized in two different areas. The most common reasons for
+    monitoring needs are troubleshooting errors, crashes or failures. The others may
+    include better utilization of hardware layer used for available resources such
+    as memory, I/O subsystem, CPU utilization and network bandwidth. Due to hardware
+    limitations MySQL can suffer significant degradation in performance hence hardware
+    plays important role in database operations.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望监视服务器以捕获其状态，从而验证或更改在 [第22章](ch22.xhtml#nch-admin) 中解释的设置。了解 MySQL 服务器的等待事件和状态计数器的状态可以提供大量关于服务器限制的信息。等待事件是服务器的性能指标。监控可以在两个不同的领域中使用。监控需求最常见的原因是故障排除错误、崩溃或故障。其他原因可能包括更好地利用用于内存、I/O
+    子系统、CPU 利用率和网络带宽的可用资源的硬件层。由于硬件限制，MySQL 可能会在性能上遭受显著降级，因此硬件在数据库操作中起着重要作用。
+- en: Solution
+  id: totrans-17
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: To monitor MySQL server use built-in functionality of MySQL client with the
+    power of other built in tools like mysaladmin.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要监视 MySQL 服务器，请使用 MySQL 客户端的内置功能和其他内置工具（如 mysaladmin）。
+- en: Discussion
+  id: totrans-19
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: As your MySQL server runs, you want to learn if underlying hardware performing
+    well with your needs.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您的 MySQL 服务器运行时，您希望了解底层硬件是否满足您的需求。
+- en: Operating System
+  id: totrans-21
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 操作系统
+- en: Before getting into MySQL specific monitoring and troubleshooting it’s recommended
+    to verify Operating System (OS) vitals accordingly. In four main categories Memory,
+    Input/Output (I/O), CPU and Network resources can be considered major impacts
+    to MySQL’s operational behaviour.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在进入特定于 MySQL 的监控和故障排除之前，建议根据需要验证操作系统（OS）的关键状态。在四个主要类别内存、输入/输出（I/O）、CPU 和网络资源可以被视为
+    MySQL 操作行为的主要影响因素。
+- en: Memory Utilization
+  id: totrans-23
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 内存利用
+- en: Memory utilization of *mysqld* can be checked via the OS command line. It’s
+    essential to have a dedicated MySQL host for each server; hence there’s no race
+    for OS resources, including memory. The rule of thumb is to have up to %80 memory
+    allocated for a dedicated MySQL server, but you must check your workload and data
+    size to calculate the memory needed.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysqld* 的内存利用情况可以通过操作系统命令行检查。每个服务器都应有专用的 MySQL 主机，因此没有竞争操作系统资源，包括内存。经验法则是为专用
+    MySQL 服务器分配高达 %80 的内存，但您必须检查您的工作负载和数据大小以计算所需的内存。'
+- en: '[PRE0]'
+  id: totrans-25
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: You may confirm this via *sys* schema using *mysql* client.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过 *sys* 模式使用 *mysql* 客户端来确认这一点。
+- en: '[PRE1]'
+  id: totrans-27
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: Also watch out for Virtual Memory utilization and make sure your host OS is
+    not swapping in the first place.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还要注意虚拟内存的利用情况，并确保主机操作系统首先不进行交换。
+- en: '[PRE2]'
+  id: totrans-29
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: The following OS configuration regarding memory utilization is crucial to MySQL’s
+    memory allocation. Make sure these to have been configured accordingly.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于内存利用的以下操作系统配置对 MySQL 的内存分配至关重要。确保已相应配置这些内容。
+- en: swappiness
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: swappiness
+- en: This is a concept of allowing physical memory to be moved to a swap area by
+    kernel. It’s recommended to set this value to 1 (one) hence allow kernel to perform
+    minimum amount of swapping.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个允许物理内存移动到交换区的概念，由内核执行。建议将此值设置为 1（一个），以便内核执行最少量的交换。
+- en: '[PRE3]'
+  id: totrans-33
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: NUMA
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: NUMA
+- en: This is a concept of balancing memory between each CPU cores. MySQL 8 supports
+    enabling [NUMA](https://dev.mysql.com/doc/refman/8.0/en/innodb-parameters.html#sysvar_innodb_numa_interleave)
+    interleaved mode when multiple cores are available. This value is OFF by default.
+    By enabling NUMA to interleave mode operating system, allocated memory to be balanced
+    amongst CPU cores for better utilization.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个在多个 CPU 核心可用时支持启用 [NUMA](https://dev.mysql.com/doc/refman/8.0/en/innodb-parameters.html#sysvar_innodb_numa_interleave)
+    交错模式的概念。此值默认为关闭。通过启用 NUMA 交错模式，操作系统在多个 CPU 核心之间平衡分配内存，以实现更好的利用。
+- en: '[PRE4]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: OOM killer
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: OOM killer
+- en: In Linux systems, MySQL generally has a concept called Out of Memory killer
+    controlled by the kernel. This is to prevent the possible runaway process in Operating
+    Systems to avoid race conditions and a server crash. Since MySQL and its optimized
+    memory buffers are memory hogs, the Operating System may often kill the mysqld
+    process to avert a system-wide crash if not adjusted. As we mentioned earlier,
+    we can control how much memory MySQL should allocate from the operating system.
+    Still, if OOM kicks in, it’s possible to configure on system level or altogether
+    disable (not recommended).
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Linux 系统中，MySQL 通常有一个由内核控制的内存杀手概念，即防止操作系统中可能出现的暴走进程，以避免竞争条件和服务器崩溃。由于 MySQL
+    及其优化的内存缓冲区是内存占用量巨大的，操作系统可能会经常杀死 mysqld 进程，以避免系统范围的崩溃，如果未进行调整。正如我们之前提到的，我们可以控制
+    MySQL 从操作系统分配多少内存。但是，如果发生内存溢出，可能可以在系统级别配置或完全禁用（不建议）。
+- en: '[PRE5]'
+  id: totrans-39
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: File System Cache
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文件系统缓存
+- en: Operating systems will use cache for all memory operations, while MySQL has
+    it’s own optimized caches including InnoDB Buffer Pool. Since there is no need
+    to cache data twice we opt out of using File System Cache by setting innodb_flush_method
+    to O_DIRECT and its value needs to be changed at startup.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 操作系统将为所有内存操作使用缓存，而 MySQL 则具有自己优化的缓存，包括 InnoDB 缓冲池。由于没有必要对数据进行两次缓存，我们通过将 innodb_flush_method
+    设置为 O_DIRECT 来选择不使用文件系统缓存，并且其值需要在启动时进行更改。
+- en: Warning
+  id: totrans-42
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: While O_DIRECT flush method works with most installations, it does not work
+    well with all storages subsystems. You may need to test it before setting this
+    value.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然 O_DIRECT 刷新方法适用于大多数安装，但并不适用于所有存储子系统。在设置此值之前，您可能需要进行测试。
+- en: '[PRE6]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: I/O Utilization
+  id: totrans-45
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: I/O 利用率
+- en: I/O performance is vital for MySQL Database. Data is read from disks and written
+    back causes I/O operation. Depending on the available buffers’ size, all the data
+    processed within buffers eventually flushed to disk, which is a very costly operation
+    in terms of data transfer. Although the data is cached at the very best has to
+    be flushed to the disk regularly. Also, large data sets that don’t fit in the
+    memory will have to be read from disks. In modern hardware, we do benefit from
+    Solid State. Disks (SSD) for better performance, but it’s beneficial to know where
+    the underlying bottlenecks are. You may use *iotop* to observe the I/O impact
+    per process on the system; hence may drill down each method for a specific operation.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: I/O 性能对于 MySQL 数据库至关重要。数据从磁盘读取并写回会导致 I/O 操作。根据可用缓冲区的大小，所有在缓冲区内处理的数据最终都会被刷新到磁盘，这在数据传输方面是非常昂贵的操作。尽管数据在最佳情况下被缓存，也必须定期刷新到磁盘上。此外，无法完全存入内存的大数据集必须从磁盘读取。在现代硬件中，我们通过固态硬盘（SSD）获得了更好的性能，但了解底层瓶颈的位置仍然是有益的。您可以使用
+    *iotop* 观察系统上每个进程的 I/O 影响，因此可以深入了解每个操作的方法。
+- en: Note
+  id: totrans-47
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: You can use the *iotop* utility interactively to monitor I/O operations. In
+    this example we see disk activity for one of the MySQL threads.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以交互地使用 *iotop* 工具来监视 I/O 操作。在这个例子中，我们看到了一个 MySQL 线程的磁盘活动。
+- en: '[PRE7]'
+  id: totrans-49
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'In the meantime we can check the process list from MySQL Command Line Interface
+    to see what’s taking priority over other threads:'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与此同时，我们可以从 MySQL 命令行界面检查进程列表，看看哪些线程优先级较高：
+- en: '[PRE8]'
+  id: totrans-51
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Also we can pin point the process id to identify details about the query for
+    this example.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还可以精确地确定进程 ID，以获取关于此查询的详细信息。
+- en: '[PRE9]'
+  id: totrans-53
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: We can also gather further information about this thread from performance_schema
+    by querying ‘table_io_waits_summary_by_table’ which aggregates all table I/O wait
+    events, as generated by the wait/io/table/sql/handler instrument.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还可以通过查询 'table_io_waits_summary_by_table' 从 performance_schema 中收集关于此线程的更多信息，该表汇总了所有表
+    I/O 等待事件，由 wait/io/table/sql/handler 仪表生成。
+- en: 'The `table_io_waits_summary_by_table` table has the following columns to indicate
+    how the table aggregates events: `OBJECT_TYPE`, `OBJECT_SCHEMA`, and `OBJECT_NAME`.
+    These columns have the same meaning as in the `events_waits_current` table. They
+    identify the table to which the row applies. This table also contains information
+    on following groups:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`table_io_waits_summary_by_table` 表具有以下列，用于指示表聚合事件的方式：`OBJECT_TYPE`、`OBJECT_SCHEMA`
+    和 `OBJECT_NAME`。这些列的含义与 `events_waits_current` 表中相同。它们标识适用于哪个表的行。此表还包含有关以下组的信息：'
+- en: '`COUNT_*`'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`COUNT_*`'
+- en: How many times a user requested reads/writes/waits from this table.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从此表中请求读取/写入/等待的用户有多少次。
+- en: '`SUM_*`'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SUM_*`'
+- en: How many reads/writes in total requests from this table.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此表的总读/写请求数有多少次。
+- en: '`MIN_*/MAX_*/AVG_*`'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`MIN_*/MAX_*/AVG_*`'
+- en: Minimum, maximum and average values for this table.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此表的最小、最大和平均值。
+- en: '[PRE10]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: This table is also used by the `schema_table_statistics%` views in *sys* schema.
+    (For further reading, please refer to the documentation at [table_io_waits_summary_by_table](https://dev.mysql.com/doc/mysql-perfschema-excerpt/5.6/en/performance-schema-table-io-waits-summary-by-table-table.html)
+    )
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此表还被*sys*模式中的`schema_table_statistics%`视图使用。 （有关详细信息，请参阅[table_io_waits_summary_by_table](https://dev.mysql.com/doc/mysql-perfschema-excerpt/5.6/en/performance-schema-table-io-waits-summary-by-table-table.html)的文档）
+- en: '[PRE11]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: Network Utilization
+  id: totrans-65
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 网络利用率
+- en: The network is also very important part of database configuration. Often times
+    test and development systems run on local configuration which omits network hops
+    between the nodes. If MySQL is running on a dedicated host all request to the
+    database will be coming to via application layer or proxy server. Since monitoring
+    requires continuous data flow it’s better to utilize a tool that has time series
+    historical data at any given time for at least 30 days worth of data to analyze.
+    For this we highly recommend [Percona Monitoring and Management (PMM)](https://www.percona.com/software/database-tools/percona-monitoring-and-management)
+    for monitoring network utilization, as shown in [Figure 23-1](#pmm_network_img)
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网络也是数据库配置中非常重要的一部分。通常，测试和开发系统在本地配置上运行，省略了节点之间的网络跳跃。如果 MySQL 运行在专用主机上，所有对数据库的请求将通过应用程序层或代理服务器进行。由于监控需要持续的数据流，最好使用具有至少
+    30 天历史数据的时间序列工具来进行分析。为此，我们强烈推荐使用[Percona 监控与管理工具 (PMM)](https://www.percona.com/software/database-tools/percona-monitoring-and-management)来监控网络利用率，如图[23-1](#pmm_network_img)所示。
+- en: '![](Images/msc4_2301.png)'
+  id: totrans-67
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/msc4_2301.png)'
+- en: Figure 23-1\. Percona Monitoring and Management - MySQL Instance Summary
+  id: totrans-68
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 23-1\. Percona 监控与管理 - MySQL 实例摘要
+- en: 23.2 Discovering Sources of MySQL Monitoring Information
+  id: totrans-69
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 23.2 发现 MySQL 监控信息的来源
+- en: Problem
+  id: totrans-70
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to check how the server is operating with available resources.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望检查服务器在可用资源下的运行情况。
+- en: Solution
+  id: totrans-72
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Let the server tell you about itself using built-in utilities.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让服务器使用内置实用程序告诉您自己的情况。
+- en: Discussion
+  id: totrans-74
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: As your MySQL server runs, you’ll have questions about aspects of its operation
+    or performance. Or maybe it’s *not* running and you want to know why.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当 MySQL 服务器运行时，您可能会对其操作或性能的某些方面有疑问。或者它可能*未*在运行，您想知道原因。
+- en: 'To find out what information sources are available so that you can evaluate
+    which are applicable and how usable they are for particular questions, here are
+    few built-in utilities and information resources to check:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要了解可用的信息源，以便评估其适用性及其对特定问题的可用性，以下是几个内置实用程序和信息资源可供查看：
+- en: System variables tell you how the server is configured. ([Recipe 22.1](ch22.xhtml#nch-admin-server-config)
+    covers how to check these values.)
+  id: totrans-77
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 系统变量告诉您服务器的配置方式。([Recipe 22.1](ch22.xhtml#nch-admin-server-config)详细介绍了如何检查这些值。)
+- en: Status variables provide information about operations the server is performing,
+    such as number of statements executed, number of disk accesses, memory use, or
+    cache efficiency. Status information can help indicate when configuration changes
+    are needed, such as increasing the size of a too-small buffer to improve performance,
+    or decreasing the size of an underused resource to reduce the server’s memory
+    footprint.
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 状态变量提供有关服务器正在执行的操作的信息，例如执行的语句数量，磁盘访问次数，内存使用情况或缓存效率。状态信息可以帮助指示何时需要进行配置更改，例如增加过小的缓冲区大小以提高性能，或减少少用资源的大小以减少服务器的内存占用。
+- en: 'The Performance Schema is designed for monitoring and provides a wealth of
+    measurements, from high-level information such as which clients are connected
+    down to fine-grained information such as which locks a statement holds or which
+    files it has open. The Performance Schema is enabled by default since MySQL 5.7\.
+    For prior versions to use the Performance Schema, it must be enabled. To enable
+    it explicitly at server startup, use this configuration setting:'
+  id: totrans-79
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 性能模式专为监控而设计，并提供丰富的测量数据，从高级信息（例如连接的客户端）到细粒度信息（例如语句持有的锁或打开的文件）。性能模式自 MySQL 5.7
+    起默认启用。在先前版本中使用性能模式，必须启用它。要在服务器启动时显式启用它，请使用以下配置设置：
+- en: '[PRE12]'
+  id: totrans-80
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: '`As Performance Schema` focuses on performance data of the MySQL Server and
+    can be used similarly for highly specific or complex queries, including joins.It
+    also helps to clarify everything runtime'
+  id: totrans-81
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`由于性能模式`专注于 MySQL 服务器的性能数据，并可以用于类似于高度特定或复杂查询，包括联接。它还有助于在运行时澄清一切'
+- en: '[PRE13]'
+  id: totrans-82
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: Sys schema is a unique schema that does not contain physical tables but views
+    and stored routines over Performance Schema tables. Performance Schema provides
+    memory instrumentation information that could be much easier accessed by using
+    views in *SYS* schema. For memory usage, it is much easier to use *SYS* schema;
+    therefore, we recommend using five views that provide memory allocation details.
+  id: totrans-83
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Sys schema 是一个独特的模式，不包含物理表，而是 Performance Schema 表上的视图和存储过程。 Performance Schema
+    提供了内存仪表化信息，通过 *SYS* 模式中的视图可以更轻松地访问。对于内存使用情况，使用 *SYS* 模式要容易得多；因此，我们建议使用提供内存分配详细信息的五个视图。
+- en: '[PRE14]'
+  id: totrans-84
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: '`SHOW` statements and tables in the `PERFORMANCE_SCHEMA` database provide information
+    ranging from processes running in the server to active storage engines and plug-ins
+    to system and status variables. In many cases, these two sources provide the same
+    or similar information, but in different display formats. (For example, the `SHOW`
+    `PLUGINS` statement and the `PLUGINS` table are related.) Familiarity with both
+    sources helps you choose which is more usable in a given situation:'
+  id: totrans-85
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`PERFORMANCE_SCHEMA` 数据库中的 `SHOW` 语句和表提供的信息范围从服务器中运行的进程到活动存储引擎和插件再到系统和状态变量。在许多情况下，这两个来源提供相同或类似的信息，但显示格式不同。
+    （例如，`SHOW` `PLUGINS` 语句和 `PLUGINS` 表相关联。）熟悉这两个来源帮助您选择在特定情况下更易于使用的那个：'
+- en: 'For interactive use, `SHOW` is often more convenient because it involves less
+    typing than `PERFORMANCE_SCHEMA` queries. Compare these two statements, which
+    produce the same result:'
+  id: totrans-86
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于交互式使用，`SHOW` 通常比 `PERFORMANCE_SCHEMA` 查询更方便，因为输入更少。比较这两个产生相同结果的语句：
+- en: '[PRE15]'
+  id: totrans-87
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: '[PRE16]'
+  id: totrans-88
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: '`INFORMATION_SCHEMA` queries use `SELECT`, which is more expressive than `SHOW`
+    and can be used for highly specific or complex queries, including joins.'
+  id: totrans-89
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`INFORMATION_SCHEMA` 查询使用 `SELECT`，比 `SHOW` 更具表达力，可以用于非常具体或复杂的查询，包括连接。'
+- en: '[PRE17]'
+  id: totrans-90
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: '`SHOW` output cannot be saved using only SQL. Should you require further processing
+    of an `PERFORMANCE_SCHEMA` query result, you can use `INSERT` `INTO` … `SELECT`
+    to save the results in a table for further analysis (see [Recipe 6.2](ch06.xhtml#nch-tblmgmt-tblmgmt-into-table)).
+    To obtain an individual value, assign a scalar subquery result to a variable:'
+  id: totrans-91
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SHOW` 输出不能仅通过 SQL 保存。如果您需要进一步处理 `PERFORMANCE_SCHEMA` 查询结果，可以使用 `INSERT` `INTO`
+    … `SELECT` 将结果保存到表中以供进一步分析（参见 [Recipe 6.2](ch06.xhtml#nch-tblmgmt-tblmgmt-into-table)）。要获取单个值，将标量子查询结果赋给变量：'
+- en: '[PRE18]'
+  id: totrans-92
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Some storage engines make information available about themselves. InnoDB, for
+    example, has its own system and status variables. It also provides its own `INFORMATION_SCHEMA`
+    tables and a set of InnoDB Monitors. The `INFORMATION_SCHEMA` tables provide more
+    structured information, and are thus more amenable to analysis using SQL, if they
+    contain the information you want. To see which InnoDB-related tables are available,
+    use this statement:'
+  id: totrans-93
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一些存储引擎可以提供有关自身的信息。例如，InnoDB 有自己的系统和状态变量。它还提供了自己的 `INFORMATION_SCHEMA` 表和一组 InnoDB
+    Monitors。 `INFORMATION_SCHEMA` 表提供更结构化的信息，因此更适合使用 SQL 进行分析，如果它们包含您想要的信息。要查看哪些与
+    InnoDB 相关的表可用，请使用此语句：
+- en: '[PRE19]'
+  id: totrans-94
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'The Monitors produce unstructured output. You can eyeball it, but for programmatic
+    use, you must parse or extract the information somehow. In some cases, a simple
+    *grep* command might suffice:'
+  id: totrans-95
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: Monitors 生成非结构化输出。您可以用眼睛看，但对于程序使用，必须以某种方式解析或提取信息。在某些情况下，简单的 *grep* 命令可能足够：
+- en: '[PRE20]'
+  id: totrans-96
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'Server logs provide several types of information. Here are some suggestions
+    for using them:'
+  id: totrans-97
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 服务器日志提供多种类型的信息。以下是使用它们的一些建议：
+- en: The error log alerts you to severe problems the server encounters. It’s most
+    suited to visual inspection because messages can originate from anywhere in the
+    server and there is no fixed format to aid programmatic analysis. It’s often only
+    the last part of the file that’s of interest, anyway, because you typically check
+    this file to find the reason for the most recent problems. These problems may
+    include corrupted table causing crash or even related to *mysql_upgrade* not ran
+    further causing issues.
+  id: totrans-98
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 错误日志会警示服务器遇到的严重问题。它最适合视觉检查，因为消息可能来自服务器的任何位置，并且没有固定的格式来帮助程序化分析。通常，只有文件的最后部分是感兴趣的，因为您通常检查此文件以查找最近问题的原因。这些问题可能包括导致崩溃的损坏表，甚至与未运行
+    *mysql_upgrade* 进一步引起的问题有关。
+- en: The general query log indicates what queries clients are running. It can aid
+    in assessing the nature of the server’s workload. It is the only log that captures
+    everything; hence care must be taken when enabling this log. Depending on the
+    server’s activity, it may fill up disk space quickly and cause very heavy I/O,
+    making things worse while monitoring MySQL. A suggestion is to enable online when
+    needed and disable afterward.
+  id: totrans-99
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一般查询日志显示客户端运行的查询。它有助于评估服务器工作负载的性质。它是唯一捕获所有内容的日志；因此在启用此日志时必须小心。根据服务器的活动情况，它可能会快速填满磁盘空间并造成非常严重的I/O，导致在监视MySQL时事情变得更糟。建议根据需要在线启用，然后在之后禁用。
+- en: The slow log contains queries that may be inefficient. It can help you find
+    candidates for optimization.
+  id: totrans-100
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 慢查询日志包含可能效率低下的查询。它可以帮助您找到优化的候选项。
+- en: The server is able to write the general query and slow query logs to files,
+    tables, or both. Log tables facilitate analysis better than the files; they are
+    more structured and hence subject to analysis using SQL statements. The contents
+    are also easier to interpret. Each query row in the `general_log` table shows
+    the user associated with it. With the logfile, users are named only on connection
+    lines. To identify a user’s queries, you must extract the connection ID from the
+    connection line and look for subsequent query lines with the same ID.
+  id: totrans-101
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 服务器能够将一般查询和慢查询日志写入文件、表或两者。日志表比文件更有利于分析；它们更为结构化，因此可以使用SQL语句进行分析。内容也更容易解释。`general_log`表中的每个查询行显示与其关联的用户。使用日志文件时，用户仅在连接行上命名。要识别用户的查询，必须从连接行中提取连接ID，并查找具有相同ID的后续查询行。
+- en: In addition, log tables are managed by the CSV storage engine, so the table
+    datafiles are written in comma-separated values format. Look in the *mysql* directory
+    under the server’s data directory for files named *general_log.CSV* and *slow_log.CSV*.
+    You can process them with tools that read CSV files.
+  id: totrans-102
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 此外，日志表由CSV存储引擎管理，因此表数据文件以逗号分隔值格式写入。在服务器数据目录下的*mysql*目录中查找名为*general_log.CSV*和*slow_log.CSV*的文件。您可以使用读取CSV文件的工具处理它们。
+- en: To get information from a log, it must be enabled (see [Recipe 22.3](ch22.xhtml#nch-admin-server-logs)
+    for instructions).
+  id: totrans-103
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 要从日志中获取信息，必须启用它（参见[Recipe 22.3](ch22.xhtml#nch-admin-server-logs)获取指南）。
+- en: 'The `EXPLAIN` statement can be useful for checking long-running queries. Although
+    `EXPLAIN` is most often used to see execution plans for prospective queries, MySQL
+    5.7.2 and up has the capability of using `EXPLAIN` to examine queries currently
+    executing in other sessions. If a query seems to be stuck, this may help you understand
+    why. Use `SHOW` `PROCESSLIST` or the `INFORMATION_SCHEMA` `PROCESSLIST` table
+    to determine the connection ID of the session running the problem query, then
+    point `EXPLAIN` at it:'
+  id: totrans-104
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`EXPLAIN`语句可用于检查运行时间较长的查询。尽管通常用于查看潜在查询的执行计划，但MySQL 5.7.2及更高版本能够使用`EXPLAIN`来检查其他会话中当前执行的查询。如果查询似乎被卡住，这可能帮助您理解原因。使用`SHOW
+    PROCESSLIST`或`INFORMATION_SCHEMA`中的`PROCESSLIST`表确定运行问题查询的会话连接ID，然后指向该会话执行`EXPLAIN`：'
+- en: '[PRE21]'
+  id: totrans-105
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: '`EXPLAIN` can produce output in tabular, tree or `JSON` format. The latter
+    can be parsed and manipulated by standard JSON modules in your programming language
+    of choice.'
+  id: totrans-106
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`EXPLAIN`可以生成表格、树形或`JSON`格式的输出。后者可以通过您选择的编程语言中的标准JSON模块进行解析和操作。'
+- en: 23.3 Checking Server Uptime and Progress
+  id: totrans-107
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 23.3 检查服务器运行时间和进度
+- en: Problem
+  id: totrans-108
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know if the server is running, and if so, how long it has been up.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想知道服务器是否正在运行，如果是，它已经运行了多长时间。
+- en: Solution
+  id: totrans-110
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use mysqladmin and MySQL CLI utilities to find out if it’s up.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用mysqladmin和MySQL CLI工具查找它是否启动。
+- en: Discussion
+  id: totrans-112
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'To tell whether the server is running, just try connecting to it. If the connection
+    succeeds or you get an error that’s from the server itself, the server is up.
+    *mysqladmin* `ping` is a good choice here, for interactive use or from within
+    shell scripts. This result indicates the server is running although you should
+    be alerted by the monitoring system that server is down::'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要判断服务器是否正在运行，只需尝试连接它。如果连接成功或收到来自服务器本身的错误，服务器正在运行。*mysqladmin* `ping`在这里是一个不错的选择，可供交互使用或在Shell脚本中使用。这个结果表明服务器正在运行，尽管您应该通过监控系统被警告服务器已宕机：
+- en: '[PRE22]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'This connection attempt fails, but the server itself returns the second error
+    message, so it’s not down:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这次连接尝试失败，但服务器本身返回了第二个错误消息，所以它并没有宕机：
+- en: '[PRE23]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'This result indicates complete connection failure; the server is down:'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个结果表明完全连接失败；服务器宕机了：
+- en: '[PRE24]'
+  id: totrans-118
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: If the server is not up, check the error log to find out why.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果服务器没有启动，请检查错误日志找出原因。
+- en: 'If the server is up, its uptime (in seconds) can be determined multiple ways:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果服务器正在运行，可以通过多种方式确定它的运行时间（以秒为单位）：
+- en: 'Use *mysqladmin* `status`:'
+  id: totrans-121
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '使用 *mysqladmin* `status`:'
+- en: '[PRE25]'
+  id: totrans-122
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: A disadvantage of this approach for programmatic use is that you must parse
+    the output to extract the value of interest.
+  id: totrans-123
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 该方法在程序使用上的一个缺点是你必须解析输出以提取感兴趣的值。
+- en: 'Examine the `Uptime` status variable:'
+  id: totrans-124
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 检查 `Uptime` 状态变量：
+- en: '[PRE26]'
+  id: totrans-125
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: Use built-in CLI command to show status of the current connection
+  id: totrans-126
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 使用内置的 CLI 命令来显示当前连接的状态
+- en: '[PRE27]'
+  id: totrans-127
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: A server not running is obviously cause for concern. But there may be issues
+    even if it is running. If you frequently find that server uptime resets in the
+    absence of scheduled restarts, something may be causing the server to exit, and
+    you should investigate. Again, check the error log to see why.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 显然服务器没有运行是值得关注的原因。但即使它正在运行，可能也会出现问题。如果你经常发现在没有计划重启的情况下服务器正常运行时间重置，可能有些原因导致服务器退出，你应该调查一下。再次检查错误日志以查看原因。
+- en: As your MySQL server runs, you’ll have questions about aspects of its operation
+    or performance. Or maybe it’s *not* running and you want to know why.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你的 MySQL 服务器运行时，你可能会对其操作或性能的各个方面有疑问。或者它 *没有* 运行，你想知道原因。
+- en: 23.4 Troubleshooting Server Start Problems
+  id: totrans-130
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 23.4 解决服务器启动问题
+- en: Problem
+  id: totrans-131
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: The server quits shortly after it’s started, and you want to know what caused
+    it and what you can do about it.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务器在启动后很快退出，你想知道是什么原因导致了这一情况以及你可以采取什么措施。
+- en: Solution
+  id: totrans-133
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Check the error log for details.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 检查错误日志以获取详细信息。
+- en: Discussion
+  id: totrans-135
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'If the server stops shortly after you start it, a likely cause is a misconfiguration
+    in the server options file. The error log helps you here. But don’t be misled
+    by mere warnings, which do not signify that the server quit. For example, the
+    following message means only that *innodb_ft_min_token_size* need be corrected
+    to make the warning go away:'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果服务器在启动后不久就停止，可能的原因是服务器选项文件中的配置错误。错误日志会在这里帮助你。但不要被纯粹的警告所误导，这并不表示服务器已经退出。例如，以下消息仅表示
+    *innodb_ft_min_token_size* 需要更正以消除警告：
+- en: '[PRE28]'
+  id: totrans-137
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'Instead, check for [ERROR] lines, such as this:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相反，检查如下所示的 [ERROR] 行：
+- en: '[PRE29]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: As you can see server is complaining about a typo *innodb_ft_min_token_size*
+    that preventing it to start properly.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你所看到的，服务器抱怨有一个打字错误 *innodb_ft_min_token_size*，导致它无法正常启动。
+- en: 'Other server start problems are:'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其他服务器启动问题包括：
+- en: Misconfiguration of my.cnf variables.
+  id: totrans-142
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: my.cnf 变量的配置错误。
+- en: Multiple configuration files.
+  id: totrans-143
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 多个配置文件。
+- en: Missing operating system permissions.
+  id: totrans-144
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 缺少操作系统权限。
+- en: Incorrect path setting.
+  id: totrans-145
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不正确的路径设置。
+- en: Over allocating available memory.
+  id: totrans-146
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 超配可用内存。
+- en: Missing `mysql_upgrade` step after version upgrade.
+  id: totrans-147
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 升级后版本缺少 `mysql_upgrade` 步骤。
+- en: Note
+  id: totrans-148
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: As of version 8.0.16 *mysql_upgrade* is not needed anymore. But when upgrading
+    to any version prior 8.0.16 you must run this utility.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自 8.0.16 版本起，*mysql_upgrade* 不再需要。但在升级到任何 8.0.16 之前的版本时，您必须运行此实用程序。
+- en: 23.5 Determining the IO Utilization of the MySQL Server
+  id: totrans-150
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 23.5 确定 MySQL 服务器的 IO 利用率
+- en: Problem
+  id: totrans-151
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know the number of queries hitting MySQL server.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你想知道击中 MySQL 服务器的查询数量。
+- en: Solution
+  id: totrans-153
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Check utilization status variables for details.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 检查详细的利用率状态变量。
+- en: Discussion
+  id: totrans-155
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: This question might be prompted by simple curiosity, or there might be a performance
+    issue. Monitoring statement execution over time and summarizing the results can
+    reveal patterns, such as a time of day or day of the week when activity is cumbersome.
+    Perhaps several report generators are configured to start at the same time. Staggering
+    them will help your server by spreading the load. It is crucial to capture baseline
+    data to compare several reads for a given period.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个问题可能是简单好奇引起的，也可能是性能问题。随时间监视语句执行并总结结果可以揭示模式，比如活动笨重的某个时间或某天。也许几个报告生成器配置为同时启动。将它们错开启动将有助于通过分散负载来帮助服务器。捕获基线数据以比较给定时期的几个读取数据是至关重要的。
+- en: 'In programmatic context, you might write a long-running application that probes
+    the server periodically for the `Queries` and `Uptime` values, to determine a
+    running display of statement-execution activity. To avoid reconnecting each time
+    you issue the statements, ask the server for its session timeout period and probe
+    it at intervals shorter than that value. To get the session timeout value (in
+    seconds), use this statement:'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在编程上下文中，您可能会编写一个长时间运行的应用程序，定期探测服务器的`Queries`和`Uptime`值，以确定语句执行活动的运行情况。为了避免每次发出语句时重新连接，请询问服务器的会话超时期限，并在比该值更短的间隔内进行探测。要获取会话超时值（以秒为单位），请使用以下语句：
+- en: '[PRE30]'
+  id: totrans-158
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'The default value is 28,800 (8 hours). If it’s configured to a value shorter
+    than your desired probe interval, set it higher:'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认值是28,800（8小时）。如果配置的值比您期望的探测间隔短，请将其设置更高：
+- en: '[PRE31]'
+  id: totrans-160
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: The preceding discussion uses `Queries`, which indicates the total number of
+    statements executed. Options for more fine-grained analysis are available.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的讨论使用了`Queries`，表示执行的总语句数。还有更精细的分析选项可供选择。
+- en: The server maintains a set of `Com_`*`xxx`* status variables that count executions
+    of particular statements. For example, `Com_insert` and `Com_update` count `INSERT`
+    and `UPDATE` statements, respectively.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务器维护一组`Com_`*`xxx`*状态变量，用于计算特定语句的执行次数。例如，`Com_insert`和`Com_update`分别计数`INSERT`和`UPDATE`语句的执行次数。
+- en: '[PRE32]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: After MySQL version 5.7, some of the instruments in `information_schema` migrated
+    to `performance_schema`; hence querying `performance_schema` was advised for such
+    monitoring.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL版本5.7后，`information_schema`中的一些仪器迁移到了`performance_schema`，因此建议使用`performance_schema`进行此类监控查询。
+- en: Note
+  id: totrans-165
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Since Performance Schema has comprehensive details about events, it no longer
+    has *Com Stats* values.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于Performance Schema具有关于事件的详细信息，不再具有*Com Stats*值。
+- en: '[PRE33]'
+  id: totrans-167
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: You also may want to calculate Innodb Buffer Pool Cache hit ratio to answer
+    on a question how many requests to InnoDB could be resolved without disk access.
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以计算InnoDB缓冲池缓存命中率，以回答InnoDB可在不访问磁盘的情况下解决多少请求的问题。
+- en: 'To answer the this question, use status variable information:'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要回答这个问题，使用状态变量信息：
+- en: '[PRE34]'
+  id: totrans-170
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: Status variable `Innodb_buffer_pool_read_requests` holds value of how many times
+    SQL queries requested data from the InnoDB buffer pool. This value could be also
+    understood as a number of queries to InnoDB. Variable `Innodb_buffer_pool_reads`
+    holds the metric on how many such queries were resolved from the InnoDB buffer
+    pool without touching tablespace files on the disk.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 状态变量`Innodb_buffer_pool_read_requests`保存了SQL查询从InnoDB缓冲池请求数据的次数。这个值也可以理解为对InnoDB的查询次数。变量`Innodb_buffer_pool_reads`保存了解析这些查询而无需触及磁盘上表空间文件的指标。
+- en: '`SHOW GLOBAL STATUS` counts the number of queries since server startup, but
+    it’s a variable value. If you wait for certain amount of time and re-run the same
+    query you’ll have a hit/ratio.'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SHOW GLOBAL STATUS`计算自服务器启动以来的查询次数，但这是一个可变的值。如果您等待一定时间并重新运行相同的查询，您将得到一个命中率。'
+- en: '[PRE35]'
+  id: totrans-173
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: In this example InnoDB received `53626254 - 51504330 = 2121924` requests for
+    data, and was able to resolve `2214763 - 1830647 = 384116` requests using buffer
+    only. Thus InnoDB buffer pool hit ratio is `384116 / 2121924 = 0.18`. This means
+    that the server either just started and the InnoDB buffer pool does not contain
+    active data set yet. Or it is too small and InnoDB has to purge pages from the
+    buffer pool too often and then re-read them back. Ideally InnoDB buffer pool hit
+    ratio should be near 1 (one).
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个例子中，InnoDB收到了`53626254 - 51504330 = 2121924`次数据请求，并且仅使用缓冲区解析了`2214763 - 1830647
+    = 384116`个请求。因此，InnoDB缓冲池命中率为`384116 / 2121924 = 0.18`。这意味着服务器可能刚刚启动，InnoDB缓冲池还没有包含活跃数据集，或者缓冲池过小，导致InnoDB经常需要清除页面并重新读取。理想情况下，InnoDB缓冲池命中率应接近1（一个）。
+- en: Warning
+  id: totrans-175
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: If you have OLTP in memory workload you may have %100 of queries in memory.
+    The profile of the queries may change significantly which can make hit/ratio metric
+    surrogate. It’s insufficient to just to monitor hit ratio for in memory operations.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的OLTP内存工作负载，您可能会有100%的查询在内存中。查询的概要可能会显著变化，这可能使得命中率指标不准确。仅仅监视内存操作的命中率是不足够的。
+- en: 23.6 Determining MySQL Thread’s CPU Utilization
+  id: totrans-177
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 23.6 确定MySQL线程的CPU利用率
+- en: Problem
+  id: totrans-178
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to find the process causing high cpu utilization on your server.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想找出导致服务器高CPU利用率的进程。
+- en: Solution
+  id: totrans-180
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use `THREAD_OS_ID` value to corelate from Performance Schema’s `THREADS` table.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`THREAD_OS_ID`值来从Performance Schema的`THREADS`表中关联。
+- en: Discussion
+  id: totrans-182
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: The CPU utilization of the process is somewhat problematic in finding slowness
+    caused by an individual query. Sometimes this can be a runaway job or a running
+    process for a large data set. You may see this type of behavior on month ends
+    where a query or a job runs only once a month to process quarterly or statistical
+    computation. The `threads` table contains information about each thread created
+    after server start. It contains whether the thread is historical (if instrumented
+    see [Pre-Filtering by Thread](https://dev.mysql.com/doc/refman/8.0/en/performance-schema-thread-filtering.html).
+    ).
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 进程的CPU利用率在找出由单个查询引起的缓慢时有些问题。有时这可能是一个失控的作业或运行大数据集的进程。在月末，您可能会看到这种行为，其中查询或作业仅在每月运行一次以处理季度或统计计算。`threads`表包含在服务器启动后创建的每个线程的信息。它包含线程是否为历史记录（如果被检测到请参见[按线程预过滤](https://dev.mysql.com/doc/refman/8.0/en/performance-schema-thread-filtering.html)）。
+- en: '[PRE36]'
+  id: totrans-184
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'On Linux systems `THREAD_OS_ID` corresponds to the value of `gettid()` function.
+    This value is exposed to `top` or `proc` file system (/proc/[pid]/task/[tid]).
+    To help identify related `THREAD_OS_ID` there are few methods outside of scraping
+    `proc` file system by using built-in command line utilities. `ps -L aux` gives
+    enough detail with the corresponding thread using higher `CPU` then others. Parent
+    id of MySQL `mysqld_pid` can also be identified with `pidof mysqld` in conjunction
+    with `ps` command:'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Linux系统中，`THREAD_OS_ID`对应于`gettid()`函数的值。此值暴露在`top`或`proc`文件系统（/proc/[pid]/task/[tid]）中，以帮助识别相关的`THREAD_OS_ID`，还有通过使用内置命令行工具从`proc`文件系统中抓取。`ps
+    -L aux`提供了与使用更高`CPU`的相应线程相关的足够详细信息。MySQL的父ID `mysqld_pid`也可以通过结合使用`pidof mysqld`和`ps`命令来确定：
+- en: '[PRE37]'
+  id: totrans-186
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: This will give us the *thread_os_id* hint that we will use to figure out what
+    it is doing?
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将为我们提供一个*thread_os_id*的提示，我们将用它来弄清楚它在做什么？
+- en: '[PRE38]'
+  id: totrans-188
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'The other alternative would be using `pidstat` command (requires sysstat package).
+    First find the process id of *mysqld* and execute following: pidstat -t -p {mysqld_pid}'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种选择是使用`pidstat`命令（需要sysstat包）。首先找到*mysqld*的进程ID并执行以下操作：pidstat -t -p {mysqld_pid}
+- en: '[PRE39]'
+  id: totrans-190
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: We can see in our test run a *thread_os_id* is consuming %21 of CPU from above
+    output. In order to co-relate this with MySQL running threads we follow the *Performance
+    Schema Query*.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在测试运行中可以看到一个*thread_os_id*从上述输出中消耗了%21的CPU。为了将其与MySQL运行的线程相关联，我们遵循*性能模式查询*。
+- en: '[PRE40]'
+  id: totrans-192
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: See Also
+  id: totrans-193
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: For additional information about *THREADS* table please refer [The threads Table](https://dev.mysql.com/doc/mysql-perfschema-excerpt/8.0/en/performance-schema-threads-table.html).
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关*THREADS*表的更多信息，请参阅[threads表](https://dev.mysql.com/doc/mysql-perfschema-excerpt/8.0/en/performance-schema-threads-table.html)。
+- en: 23.7 Determining If MySQL Has Reached Its Connection Limits
+  id: totrans-195
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 23.7 确定MySQL是否已达到其连接限制
+- en: Problem
+  id: totrans-196
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know the limits of the MySQL server handling connections
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想知道MySQL服务器处理连接的限制
+- en: Solution
+  id: totrans-198
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Check the configuration parameters.
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 检查配置参数。
+- en: Discussion
+  id: totrans-200
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: It’s often the case that a server function is assessed using a combination of
+    configuration settings plus current operational status. Typically, the former
+    comes from system variables, whereas the latter comes from status variables. Connection
+    management is an example of this concept. The `max_connections` system variable
+    indicates the maximum number of simultaneous connections the server permits, and
+    the `Threads_connected` status variable shows how many clients are currently connected
+    and and the `Threads_running` status variable shows how many clients are currently
+    active. Furthermore `Threads_running` is very important value for following reasons.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，服务器函数的评估使用配置设置与当前操作状态的组合。前者通常来自系统变量，而后者来自状态变量。连接管理就是这个概念的一个例子。`max_connections`系统变量指示服务器允许的最大同时连接数，而`Threads_connected`状态变量显示当前连接的客户端数，`Threads_running`状态变量显示当前活动的客户端数。此外，`Threads_running`对于以下几个原因非常重要。
+- en: If number of running threads increases above number of CPU cores they start
+    to compete for CPU resources.
+  id: totrans-202
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果运行线程的数量增加到超过CPU核心数量，它们开始争夺CPU资源。
+- en: If two threads (no matter how many threads connected) compete for the same row,
+    table or other database object, engine-level table lock set at the server level
+    or metadata lock (MD) is in place.
+  id: totrans-203
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果两个线程（无论连接了多少线程）竞争同一行、表或其他数据库对象，则在服务器级别设置引擎级表锁或元数据锁（MD）。
+- en: Since MySQL is a single process application with multi-threaded architecture,
+    each connection creates a thread. To monitor maximum connections reached, issue
+    the following command.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于 MySQL 是单进程应用程序，具有多线程架构，每个连接创建一个线程。要监视达到的最大连接数，请执行以下命令。
+- en: '[PRE41]'
+  id: totrans-205
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: If `threads_connected` is regularly close to the value of `max_connections`,
+    you might need to bump up the value of the latter. If there is always a wide gap,
+    you can decrease `max_connections`. For further reading this post explains how
+    MySQL handles connections and its capabilities please refer [MySQL Connection
+    Handling and Scaling](https://mysqlserverteam.com/mysql-connection-handling-and-scaling/).
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果 `threads_connected` 经常接近 `max_connections` 的值，则可能需要增加后者的值。如果间隙总是很大，可以减少 `max_connections`。要进一步了解
+    MySQL 处理连接及其能力，请参阅[MySQL 连接处理和扩展](https://mysqlserverteam.com/mysql-connection-handling-and-scaling/)。
+- en: One area also impacts performance of MySQL is Mutex and Meta Data Locks on highly
+    concurrent environment. As seen above reading threads at some point will start
+    competing each other when same resources requested from the database. The way
+    InnoDB handles this is to put an exclusive lock on particular memory resource
+    that the other thread have to wait for same resource. While this is handled with
+    mutex operation in MySQL all DDL (Data Definition Language) as known as table
+    structure change operations handled with Meta Data Locks.
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 的性能也会受到互斥锁（Mutex）和元数据锁在高并发环境下的影响。如上所述，在某些时候，读取线程将开始竞争数据库请求相同资源时。InnoDB
+    处理此问题的方式是对特定的内存资源施加排他锁，其他线程必须等待相同资源。虽然 MySQL 中的互斥操作处理这一点，所有的数据定义语言（DDL，也就是表结构更改操作）均由元数据锁处理。
+- en: 23.8 Verifying that the Buffer Pool Is Sized Properly
+  id: totrans-208
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 23.8 确认缓冲池大小是否适当
+- en: Problem
+  id: totrans-209
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know the limits of the MySQL server handling connections.
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要了解 MySQL 服务器处理连接的限制。
+- en: Solution
+  id: totrans-211
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Determine storage engine memory allocation.
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确定存储引擎内存分配。
+- en: Discussion
+  id: totrans-213
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: The InnoDB storage engine has a data buffer. To keep physical I/O minimal, DBA
+    should make sure to utilize server memory efficiently. InnoDB Buffer Cache improves
+    index key lookups, and data read operations; hence most data access will occur
+    in memory.
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB 存储引擎具有数据缓冲区。为了最小化物理 I/O，DBA 应确保有效利用服务器内存。InnoDB 缓冲池提高索引键查找和数据读取操作的效率；因此，大多数数据访问将在内存中进行。
+- en: 'To determine the cache sizes, check the relevant system variables:'
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定缓存大小，请检查相关的系统变量：
+- en: '[PRE42]'
+  id: totrans-216
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: 'You can also use `SHOW` `VARIABLES` or the `PERFORMANCE_SCHEMA` `GLOBAL_VARIABLES`
+    table. For example:'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你还可以使用 `SHOW` `VARIABLES` 或 `PERFORMANCE_SCHEMA` `GLOBAL_VARIABLES` 表。例如：
+- en: '[PRE43]'
+  id: totrans-218
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'The efficiency measure that determines how well the read ratio is operating
+    is its hit rate: the rate at which read requests from the InnoDB Buffer Pool are
+    satisfied from the buffer pool without reading data from disk. If data is in the
+    cache, it’s a hit; if not, it’s a miss. The hit ratio is a high correlation but
+    not a guaranteed metric; hence OLTP (Online Transaction Processing) rate is more
+    important. It’s also possible to verify how well the InnoDB Buffer Pool is utilized
+    from data via Performance Schema.'
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 衡量读取比例运行情况的有效性指标是其命中率：从 InnoDB 缓冲池中满足读取请求的速率，而无需从磁盘读取数据。如果数据在缓存中，就是命中；如果不在，就是未命中。命中率是高度相关但不是保证的度量标准；因此
+    OLTP（在线事务处理）速率更为重要。还可以通过性能模式验证 InnoDB 缓冲池的利用情况。
+- en: '[PRE44]'
+  id: totrans-220
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: We can also determine memory allocation for the Buffer Pool using `sys` schema.
+    It’s crucial to configure Buffer Pool at startup to allocate memory resources
+    appropriately.
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还可以使用 `sys` 架构确定缓冲池的内存分配。在启动时配置缓冲池以适当分配内存资源至关重要。
+- en: '[PRE45]'
+  id: totrans-222
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: 'The required information can be obtained from either `SHOW` `STATUS` or the
+    `GLOBAL_STATUS` table. However, when executing queries within a program and saving
+    the results, we must account for differences between `SHOW` statements and selecting
+    from `performance_schema` tables. The following queries retrieve similar information,
+    but the column headings differ in letter case and sometimes in name, and variable
+    names differ in letter case:'
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所需的信息可以从 `SHOW` `STATUS` 或 `GLOBAL_STATUS` 表中获取。但是，在程序内执行查询并保存结果时，必须考虑 `SHOW`
+    语句和从 `performance_schema` 表中选择的差异。以下查询检索类似的信息，但是列标题在大小写和名称上有所不同，并且变量名称在大小写上也有所不同：
+- en: '[PRE46]'
+  id: totrans-224
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: To enable applications to be agnostic with respect to whether the variable information
+    comes from `SHOW` or `information_schema`, force variable names to a consistent
+    letter case and use that case in expressions that reference the variables. It
+    doesn’t matter which letter case you choose, as long as you use it consistently.
+    The following discussion uses uppercase.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使应用程序在变量信息来自 `SHOW` 还是 `information_schema` 时都能够保持不可知性，将变量名称强制统一为一个一致的字母大小写，并在引用变量的表达式中使用该大小写。选择任何大小写都无所谓，只要保持一致即可。以下讨论使用大写。
+- en: 'Here’s a simple routine (in Ruby) that takes a database handle, fetches the
+    status variables, and returns them as a hash of values keyed by names:'
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个简单的例程（使用 Ruby），它接受数据库句柄，获取状态变量，并将它们作为值键入名称的哈希返回：
+- en: '[PRE47]'
+  id: totrans-227
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: 'To get the information using a `SHOW` statement instead, replace the query
+    with this one:'
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用 `SHOW` 语句获取信息，可以用以下查询替换原来的查询：
+- en: '[PRE48]'
+  id: totrans-229
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: The code applies the `upcase` method to the variable names. That way, no matter
+    whether the routine uses `GLOBAL_STATUS` or `SHOW` to obtain the information,
+    the resulting hash has elements accessed by uppercase variable names.
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 代码对变量名称应用了 `upcase` 方法。这样，无论例程使用 `GLOBAL_STATUS` 还是 `SHOW` 获取信息，结果的哈希都可以通过大写变量名称访问元素。
+- en: 'To calculate a hit rate, pass the variable hash and the names of the reads
+    and requests variables to this routine:'
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要计算命中率，请将变量哈希和读取和请求变量的名称传递给此例程：
+- en: '[PRE49]'
+  id: totrans-232
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'Now we’re all set. Call the routines that fetch status information and calculate
+    the hit rates like this:'
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们准备好了。调用获取状态信息并计算命中率的例程如下：
+- en: '[PRE50]'
+  id: totrans-234
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: 'Run the script to see your server’s hit rates:'
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 运行脚本以查看服务器的命中率：
+- en: '[PRE51]'
+  id: totrans-236
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: 'For tasks involving system variables, code similar to `get_status_variables()`
+    suffices. This implementation uses the `GLOBAL_VARIABLES` table:'
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于涉及系统变量的任务，类似于 `get_status_variables()` 的代码足以满足要求。这个实现使用 `GLOBAL_VARIABLES`
+    表：
+- en: '[PRE52]'
+  id: totrans-238
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: 'To use `SHOW` instead, replace the query with this one:'
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用 `SHOW` 替换查询，请使用以下查询：
+- en: '[PRE53]'
+  id: totrans-240
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 23.9 Finding Information About the Storage Engine
+  id: totrans-241
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 23.9 查找关于存储引擎的信息
+- en: Problem
+  id: totrans-242
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to pin specific problem about MySQL’s pluggable storage engine architecture.
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要针对 MySQL 的可插入存储引擎架构的特定问题进行定位。
+- en: Solution
+  id: totrans-244
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use MySQL’s *mysql* client and interact with storage engine directly.
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 MySQL 的 *mysql* 客户端直接与存储引擎交互。
+- en: Discussion
+  id: totrans-246
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Now we’re all set. Call the `SHOW ENGINE` command from *mysql* client.
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们准备好了。从 *mysql* 客户端调用 `SHOW ENGINE` 命令。
+- en: '[PRE54]'
+  id: totrans-248
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: SHOW ENGINE
+  id: totrans-249
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: SHOW ENGINE
+- en: 'SHOW ENGINE displays operational information about a storage engine. It requires
+    the PROCESS privilege. The statement has these variants for INNODB:'
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SHOW ENGINE 显示有关存储引擎的操作信息。它需要 PROCESS 权限。该语句在 INNODB 方面有以下变体：
+- en: '[PRE55]'
+  id: totrans-251
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: The first command *SHOW ENGINE INNODB STATUS* shows extensive information about
+    InnoDB storage engine in sections. In order to digest this information it’s possible
+    to capture output of this command and parse it via command line.
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一个命令 *SHOW ENGINE INNODB STATUS* 显示有关 InnoDB 存储引擎的广泛信息。为了消化这些信息，可以捕获此命令的输出并通过命令行解析它。
+- en: '[PRE56]'
+  id: totrans-253
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: For example, it can reach the Buffer Pool Information easily with the same command.
+    This information is very useful when you need to acquire information fast, accurately,
+    and without any impact to running the server.
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，可以使用相同的命令轻松地访问缓冲池信息。当您需要快速、准确地获取信息且不对正在运行的服务器造成任何影响时，这些信息非常有用。
+- en: '[PRE57]'
+  id: totrans-255
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: If you are monitoring single event you may set the pager and repeatedly monitor
+    its value.
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您正在监视单个事件，可以设置分页器并重复监视其值。
+- en: '[PRE58]'
+  id: totrans-257
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: Let’s have a look at Mutex information on the idle system. The resulting *SHOW*
+    statement would be much longer as if threads compete for the resources.
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们来看看空闲系统上的 Mutex 信息。如果线程竞争资源，生成的 *SHOW* 语句会更长。
+- en: '[PRE59]'
+  id: totrans-259
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: '![](Images/msc4_2302.png)'
+  id: totrans-260
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/msc4_2302.png)'
+- en: Figure 23-2\. InnoDB Architecture *© 2021, Oracle Corporation and/or its affiliates.
+    (2021). InnoDB Architecture [Figure]. https://dev.mysql.com/doc/refman/8.0/en/innodb-architecture.html*
+  id: totrans-261
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: Figure 23-2\. InnoDB 架构 *© 2021, Oracle Corporation and/or its affiliates. (2021).
+    InnoDB Architecture [Figure]. https://dev.mysql.com/doc/refman/8.0/en/innodb-architecture.html*
+- en: As you can see above InnoDB consists of two types of structures. First part
+    In-Memory and the second part is in On-Disk. InnoDB utilizes host OS memory efficiently
+    by its internal memory management protocol. As mentioned in introduction section
+    of this chapter memory utilization is important factor in MySQL monitoring.
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如上所示，InnoDB 包括两种类型的结构。第一部分是内存中的，第二部分是在磁盘上的。InnoDB 通过其内部内存管理协议有效地利用主机操作系统的内存。正如本章节介绍中提到的，内存利用是
+    MySQL 监控中的重要因素。
+- en: As InnoDB is the far most complex and adopted storage engine in MySQL ecosystem
+    it also comes with *Components* for even further debugging internals. Although
+    this is an advanced topic it’s good know that you can add plugins to the MySQL
+    server. For future reading please refer to [MySQL Documentation.](https://dev.mysql.com/doc/refman/8.0/en/server-plugins.html)
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为MySQL生态系统中最复杂和广泛采用的存储引擎，InnoDB还配备了*Components*，用于进一步调试内部。虽然这是一个高级话题，但知道您可以向MySQL服务器添加插件是很好的。未来阅读请参考[MySQL文档。](https://dev.mysql.com/doc/refman/8.0/en/server-plugins.html)
+- en: 23.10 Using the Error Log File to Troubleshoot MySQL Server Crashes
+  id: totrans-264
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 23.10 使用错误日志文件来排查MySQL服务器崩溃
+- en: Problem
+  id: totrans-265
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: My application reports “MySQL Server has gone away” (error 2006).
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我的应用程序报告“MySQL服务器已断开连接”（错误2006）。
+- en: Solution
+  id: totrans-267
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: 'There are possible scenarios for this very common error. They include:'
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个非常常见的错误的可能场景。它们包括：
+- en: OOM (Out of Memory) Killer
+  id: totrans-269
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: OOM（内存耗尽）Killer
+- en: MySQL Signals
+  id: totrans-270
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL信号
+- en: Crashing bug
+  id: totrans-271
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 崩溃bug
+- en: Various other reasons such as server timeout, removed system files etc.
+  id: totrans-272
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 其他原因，如服务器超时、删除的系统文件等。
+- en: Sometimes even Error Log will be misleading to troubleshoot it. So it’s also
+    advised to check system logs such as /var/log/messages.
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时甚至错误日志也会误导进行故障排除。因此建议检查系统日志，如/var/log/messages。
+- en: Discussions
+  id: totrans-274
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: An error log is one of the most critical monitoring MySQL server statuses. From
+    startup to shutdown, it will log all events to this file. Pro-actively monitoring
+    this file will give enough information about the current and past events.
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 错误日志是监控MySQL服务器状态最关键的一部分。从启动到关闭，它将记录所有事件到这个文件中。主动监控这个文件将提供关于当前和过去事件的足够信息。
+- en: Note
+  id: totrans-276
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The error log is tunable in MySQL 8.0 and can be fine-tuned to log and filter
+    events by given criteria. For details please refer to [MySQL documentation.](https://dev.mysql.com/doc/refman/8.0/en/error-log-configuration.html)
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 错误日志在MySQL 8.0中是可调整的，并且可以通过给定的条件来记录和过滤事件。详情请参阅[MySQL文档。](https://dev.mysql.com/doc/refman/8.0/en/error-log-configuration.html)
+- en: Here are some pointers to the monitoring and finding solution to this error.
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面是监控和解决此错误的一些指针。
+- en: Server Crash
+  id: totrans-279
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 服务器崩溃
+- en: The server may have disconnected while executing a large query. The client has
+    timed out during a long running query in this case.
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务器在执行大查询时可能会断开连接。在这种情况下，客户端在长时间运行的查询期间超时。
+- en: '[PRE60]'
+  id: totrans-281
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: This maybe one of few reasons to check. Often times `max_allowed_packet` size
+    is too small for a large query like the above crashing *for* loop.
+  id: totrans-282
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这可能是要检查的几个原因之一。通常`max_allowed_packet`大小对于类似上面崩溃的*for*循环的大查询来说太小。
+- en: '[PRE61]'
+  id: totrans-283
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: Server Timeout
+  id: totrans-284
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 服务器超时
+- en: The connection between the application and the results of the query returning
+    for each request has a timeout variable. One of the common timeout variables to
+    monitor is *wait_timeout*.
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 应用程序与每个请求返回的查询结果之间的连接具有超时变量。监视的常见超时变量之一是*wait_timeout*。
+- en: '[PRE62]'
+  id: totrans-286
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: To demonstrate this we will set the `wait_timeout` value to very low of 4 seconds
+    and re run the same query.
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了演示这一点，我们将`wait_timeout`值设置为非常低的4秒，然后重新运行相同的查询。
+- en: '[PRE63]'
+  id: totrans-288
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: 23.11 Slow Query Log File
+  id: totrans-289
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 23.11 慢查询日志文件
+- en: Problem
+  id: totrans-290
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Using the slow query log to identify slow queries.
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用慢查询日志识别慢查询。
+- en: Solution
+  id: totrans-292
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Enable slow query log and set threshold to filter queries to address them.
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 启用慢查询日志并设置阈值以过滤查询以解决问题。
+- en: Discussion
+  id: totrans-294
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL can log all queries. By adjusting how slow queries are recorded, it’s
+    possible to capture all queries and digest them. The default Slow Query Logging
+    is set to 10 seconds, which means any query taking longer than 10 seconds is only
+    shown in the log file.
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL可以记录所有查询。通过调整慢查询记录的方式，可以捕获并分析所有查询。默认的慢查询日志设置为10秒，意味着任何超过10秒的查询只会在日志文件中显示。
+- en: You can control behavior of the slow query log using number of variables.
+  id: totrans-296
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用多个变量控制慢查询日志的行为。
+- en: '[PRE64]'
+  id: totrans-297
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: The most essential among them is `slow_query_log` that enables or disables slow
+    query logging. It is `OFF` by default.
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最重要的是`slow_query_log`，它启用或禁用慢查询日志记录。默认情况下是`OFF`。
+- en: Slow query log threshold is controlled with the variable `long_query_time`.
+    You may start tuning your queries that are logged with the default threshold and
+    then decrease it in steps. Finally set `long_query_time` to 0 to log all the queries.
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 慢查询日志阈值由变量`long_query_time`控制。您可以从默认阈值开始调整记录的查询，然后逐步减少。最后将`long_query_time`设置为0以记录所有查询。
+- en: Logging all the queries.
+  id: totrans-300
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 记录所有查询。
+- en: It is common practice to run slow query log with `long_query_time` set to 0\.
+    This way you will have information about performance of all the queries. Then
+    you can run such programs as *pt-query-digest* or *mysqldumpslow* that can create
+    digests of the queries.
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将`long_query_time`设置为0并运行慢查询日志是常见做法。这样您将获得所有查询性能的信息。然后，您可以运行诸如*pt-query-digest*或*mysqldumpslow*之类的程序来创建查询摘要。
+- en: To enable logging of all the queries set `long_query_time` to 0.
+  id: totrans-302
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要启用所有查询的记录，请将`long_query_time`设置为0。
+- en: '[PRE65]'
+  id: totrans-303
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: Now we’re ready to test simple query as it will log everything by having long_query_time=0.
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已准备好测试简单查询，因为将`long_query_time`设置为0会记录所有内容。
+- en: '[PRE66]'
+  id: totrans-305
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: 'In this example we may see that `Query_time` is pretty small that is expected,
+    because the table itself is small. But number of rows that MySQL had to examine
+    to resolve this query (`Rows_examined`) is greater (11) than the number of rows
+    that the query sent to the client (`Rows_sent: 6`). This means that there is a
+    very good chance that the query needs to be optimized.'
+  id: totrans-306
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '在此示例中，我们可以看到`Query_time`非常小，这是预期的，因为表本身很小。但MySQL需要检查的行数（`Rows_examined`）比查询发送到客户端的行数（`Rows_sent:
+    6`）要多（11）。这意味着有很大可能需要优化查询。'
+- en: We can start optimizing the query by running *EXPLAIN*.
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以通过运行*EXPLAIN*来开始优化查询。
+- en: '[PRE67]'
+  id: totrans-308
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: Warning
+  id: totrans-309
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Setting value of `long_query_time` to 0 enables logging of every single query..
+    You need to be careful on busy system where your file system either can be filled
+    or slowed down due to i/o operation.
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将`long_query_time`值设置为0会启用对每个单独查询的记录。在繁忙的系统上，您需要小心，因为您的文件系统可能因I/O操作而填满或变慢。
+- en: Do not use logging into the table when setting `long_query_time` to 0, because
+    storage engine CSV is not designed for working in high concurrent environments
+    and can affect performance as well.
+  id: totrans-311
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当将`long_query_time`设置为0时，请勿使用表格记录，因为CSV存储引擎不适用于高并发环境，并可能影响性能。
+- en: 23.12 Monitoring with the General Query Log
+  id: totrans-312
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 23.12 使用一般查询日志进行监控
+- en: Problem
+  id: totrans-313
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to identify what activity each client is engaged.
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望识别每个客户端所参与的活动。
+- en: Solution
+  id: totrans-315
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Enable general query log to to investigate them.
+  id: totrans-316
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 启用一般查询日志以进行调查。
+- en: Discussion
+  id: totrans-317
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL general query log is proof of record for what mysqld is doing. By enabling
+    this log, it allows administrator monitoring the how life of user connection interacts
+    with mysqld.
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL一般查询日志是mysqld正在执行的记录证明。通过启用此日志，管理员可以监控用户连接与mysqld的交互情况。
+- en: Warning
+  id: totrans-319
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: By enabling general query log you instruct MySQL server to log all the queries
+    it receives. You need to be careful on busy system where your file system either
+    can be filled or slowed down due to increased I/O operation.
+  id: totrans-320
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过启用一般查询日志，您指示MySQL服务器记录其接收到的所有查询。在繁忙的系统上，您需要小心，因为您的文件系统可能因增加的I/O操作而填满或变慢。
+- en: '[PRE68]'
+  id: totrans-321
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: To enable `general_log` in runtime use *SET* command.
+  id: totrans-322
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 若要在运行时启用`general_log`，请使用*SET*命令。
+- en: '[PRE69]'
+  id: totrans-323
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: 'Now we’re ready to monitor everything. This value is dynamic and we set at
+    runtime. If you want it to set it persistently at startup see [Recipe 22.1](ch22.xhtml#nch-admin-server-config):'
+  id: totrans-324
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已准备好监控所有事务。此值是动态的，并在运行时设置。如果您希望在启动时进行持久设置，请参阅[第22.1节](ch22.xhtml#nch-admin-server-config)：
+- en: '[PRE70]'
+  id: totrans-325
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: 'Connect another session and run following command while tailing the general
+    query log file:'
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 连接另一个会话并在尾随一般查询日志文件时运行以下命令：
+- en: '[PRE71]'
+  id: totrans-327
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: Note
+  id: totrans-328
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Unlike MySQL slow query log, general query log does not log query execution
+    time. Instead, it logs end to end clean record of what happens for each session
+    in sequential order. This information may be useful for debugging MySQL crashes
+    or figuring out what queries the application is sending.
+  id: totrans-329
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与MySQL慢查询日志不同，一般查询日志不记录查询执行时间。相反，它按顺序记录每个会话的完整记录。这些信息对于调试MySQL崩溃或查明应用程序发送的查询很有用。
+- en: 23.13 Using the Binary Log to Identify Changes
+  id: totrans-330
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 23.13 使用二进制日志来识别更改
+- en: Problem
+  id: totrans-331
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to track data changes for given period.
+  id: totrans-332
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望跟踪给定时间段内的数据更改。
+- en: Solution
+  id: totrans-333
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Enable binary log to investigate them.
+  id: totrans-334
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 启用二进制日志以进行调查。
+- en: Discussion
+  id: totrans-335
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL can log all data changes to a binary log format, which has three purposes.
+  id: totrans-336
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL可以将所有数据更改记录到二进制日志格式中，其具有三个目的。
+- en: Configure primary and replica setup. By enabling this feature we can setup MySQL
+    replicated topology explained in [Chapter 3](ch03.xhtml#nch-replication)
+  id: totrans-337
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 配置主副本设置。通过启用此功能，我们可以设置MySQL复制的拓扑结构，详见[第3章](ch03.xhtml#nch-replication)
+- en: Point-in-time recovery after full backup taken.
+  id: totrans-338
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在进行完整备份后进行时点恢复。
+- en: Troubleshooting or investigating an event for a specific time period
+  id: totrans-339
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对特定时间段内的事件进行故障排除或调查。
+- en: The binary log is enabled by setting `--log-bin` at startup. Setting this value
+    allows MySQL to track data changes to a binary log file. Logfile contains a set
+    of sequential log files along with an index file.
+  id: totrans-340
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过在启动时设置 `--log-bin` 来启用二进制日志。设置此值允许 MySQL 将数据更改追踪到一个二进制日志文件中。日志文件包括一组顺序日志文件和一个索引文件。
+- en: '[PRE72]'
+  id: totrans-341
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: $ `/usr/bin/mysqlbinlog  binlog.000003 -v |more`
+  id: totrans-342
+  prefs: []
+  type: TYPE_NORMAL
+  zh: $ `/usr/bin/mysqlbinlog  binlog.000003 -v |more`
+- en: '#210208 19:39:03 server id 1  end_log_pos 517272 CRC32 0x043a9ff4 ↩'
+  id: totrans-343
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '#210208 19:39:03 服务器 ID 1  end_log_pos 517272 CRC32 0x043a9ff4 ↩'
+- en: 'Write_rows: table id 112 flags: STMT_END_F'
+  id: totrans-344
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'Write_rows: 表 ID 112 标志: STMT_END_F'
+- en: INSERT INTO `test`.`sbtest1`
+  id: totrans-345
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: INSERT INTO `test`.`sbtest1`
+- en: SET
+  id: totrans-346
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 设置
+- en: '@1=1'
+  id: totrans-347
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: '@1=1'
+- en: '@2=21417'
+  id: totrans-348
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: '@2=21417'
+- en: '@3=''83868641912-28773972837-60736120486-75162659906-27563526494-↩'
+  id: totrans-349
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: '@3=''83868641912-28773972837-60736120486-75162659906-27563526494-↩'
+- en: 20381887404-41576422241-93426793964-56405065102-33518432330'
+  id: totrans-350
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 20381887404-41576422241-93426793964-56405065102-33518432330'
+- en: '@4=''67847967377-48000963322-62604785301-91415491898-96926520291'''
+  id: totrans-351
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: '@4=''67847967377-48000963322-62604785301-91415491898-96926520291'''
+- en: '[PRE73]'
+  id: totrans-352
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: /usr/bin/mysqlbinlog --start-datetime="2020-11-29 10:50:32"
+  id: totrans-353
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: /usr/bin/mysqlbinlog --start-datetime="2020-11-29 10:50:32"
+- en: binlog.000003 -v |more
+  id: totrans-354
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: binlog.000003 -v |more
+- en: '[PRE74]'
+  id: totrans-355
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: $ `/usr/bin/mysqlbinlog --start-datetime="2020-11-29 10:50:32"  binlog.000003
+    \`
+  id: totrans-356
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: $ `/usr/bin/mysqlbinlog --start-datetime="2020-11-29 10:50:32"  binlog.000003
+    \`
+- en: '> `-v| grep -i -e "update" -e "insert"`'
+  id: totrans-357
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '> `-v| grep -i -e "update" -e "insert"`'
+- en: '> `-e "delete" -e "drop" -e "alter"  |cut -c1-100 | tr ''[A-Z]'' ''[a-z]''`'
+  id: totrans-358
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '> `-e "delete" -e "drop" -e "alter"  |cut -c1-100 | tr ''[A-Z]'' ''[a-z]''`'
+- en: '> ``| sed -e "s/\t/ /g;s/\`//g;s/(.*$//;s/ set .*$//;s/ as .*$//"``'
+  id: totrans-359
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '> ``| sed -e "s/\t/ /g;s/\`//g;s/(.*$//;s/ set .*$//;s/ as .*$//"``'
+- en: '> `| sed -e "s/ where .*$//" | sort | uniq -c | sort -nr`'
+  id: totrans-360
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '> `| sed -e "s/ where .*$//" | sort | uniq -c | sort -nr`'
+- en: '50000 ### insert into test.sbtest9'
+  id: totrans-361
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '50000 ### 插入到 test.sbtest9'
+- en: '50000 ### insert into test.sbtest9'
+  id: totrans-362
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '50000 ### 插入到 test.sbtest9'
+- en: '50000 ### insert into test.sbtest8'
+  id: totrans-363
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '50000 ### 插入到 test.sbtest8'
+- en: '50000 ### insert into test.sbtest7'
+  id: totrans-364
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '50000 ### 插入到 test.sbtest7'
+- en: '...'
+  id: totrans-365
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '...'
+- en: '[PRE75]'
+  id: totrans-366
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'

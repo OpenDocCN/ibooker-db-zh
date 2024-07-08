@@ -1,0 +1,2092 @@
+- en: Chapter 4\. Access Patterns
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第4章 访问模式
+- en: '*Access patterns* describe how an application uses MySQL to access data. Changing
+    access patterns has a powerful effect on MySQL performance, but it usually requires
+    a greater level of effort than other optimizations. That’s why it’s the last leg
+    of the journey mapped out in [“Improving Query Response Time”](ch01.html#query-optimization):
+    first optimize queries, indexes, and data—then optimize access patterns. Before
+    we begin, let’s think again about the rocks from [Chapter 3](ch03.html#ch03).'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*访问模式*描述了应用程序如何使用MySQL访问数据。改变访问模式对MySQL性能有很大影响，但通常需要比其他优化更多的努力。这就是为什么它是[“提高查询响应时间”](ch01.html#query-optimization)中规划的最后一步：首先优化查询、索引和数据，然后再优化访问模式。在我们开始之前，让我们再次考虑来自[第3章](ch03.html#ch03)的岩石。'
+- en: Suppose you have a truck, which is analogous to MySQL. If used efficiently,
+    the truck makes moving any pile of rocks uphill easy. But if used inefficiently,
+    the truck provides little value, and it might even make the job take longer than
+    necessary. For example, you could use the truck to haul the cobbles *one by one*
+    up the hill. That’s easy for you (and the truck), but it’s terribly inefficient
+    and time-consuming. A truck is only as useful as the person who uses it. Likewise,
+    MySQL is only as useful as the application that uses it.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设你有一辆卡车，类比为MySQL。如果使用得当，卡车可以轻松地将任何一堆岩石搬上坡。但是如果使用不当，卡车就几乎没有价值，甚至可能比必要的工作时间更长。例如，你可以用卡车一次把卵石搬上山。这对你（和卡车）来说很容易，但效率极低且耗时。一个卡车的用处取决于使用者的能力。同样，MySQL的用处也取决于使用它的应用程序。
+- en: 'Sometimes, an engineer puzzles over why MySQL isn’t running faster. For example,
+    when MySQL is executing 5,000 QPS and the engineer wonders why it’s not executing
+    9,000 QPS instead. Or when MySQL is using 50% CPU and the engineer wonders why
+    it’s not using 90% CPU instead. The engineer is unlikely to find an answer because
+    they’re focused on the effect (MySQL) rather than the cause: the application.
+    Metrics like QPS and CPU usage say very little—almost nothing—about MySQL; they
+    only reflect how the application uses MySQL.'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时，工程师会困惑于为什么MySQL运行得不够快。例如，当MySQL执行5000次查询每秒时，工程师想知道为什么它不能执行9000次查询每秒。或者当MySQL使用50%的CPU时，工程师想知道为什么它不能使用90%的CPU。工程师很难找到答案，因为他们关注的是影响（MySQL），而不是原因：应用程序。像QPS和CPU使用率这样的指标对于MySQL几乎没有什么意义，它们只反映了应用程序如何使用MySQL。
+- en: Tip
+  id: totrans-4
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: MySQL is only as fast and efficient as the application that uses it.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL的速度和效率取决于使用它的应用程序。
+- en: 'An application can outgrow the capacity of a *single* MySQL instance, but again:
+    that says more about the application than MySQL because there are innumerable
+    large, high-performance applications using a single MySQL instance. Without a
+    doubt, MySQL is fast enough for the application. The real question is: does the
+    application use MySQL efficiently? After many years with MySQL, hundreds of different
+    applications, and thousands of different MySQL instances, I assure you: MySQL
+    performance is limited by the application, not the other way around.'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 应用程序可能超出单个MySQL实例的容量，但再次强调：这更多地反映了应用程序本身而非MySQL，因为有数不清的大型高性能应用程序仅使用一个MySQL实例。毫无疑问，MySQL对于应用程序来说速度足够快。真正的问题在于：应用程序是否有效地使用了MySQL？多年来与MySQL共事，涉及数百个不同的应用程序和成千上万个不同的MySQL实例后，我可以向你保证：MySQL的性能受限于应用程序，而不是反过来。
+- en: 'This chapter centers on data access patterns that determine how you can change
+    the application to use MySQL efficiently. There are six major sections. The first
+    clarifies what MySQL does apart from the application and why it’s important. The
+    second proves that database performance does not scale linearly; instead, there
+    is a limit past which performance destabilizes. The third contemplates why a Ferrari
+    is faster than a Toyota even though both car brands work roughly the same. The
+    answer explains why some applications excel with MySQL while others can’t get
+    out of first gear. The fourth enumerates data access patterns. The fifth presents
+    several application changes to improve or modify data access patterns. The sixth
+    revisits an old friend: better, faster hardware.'
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章重点讨论数据访问模式，确定如何改变应用程序以有效使用MySQL。本章包括六个主要部分。第一部分阐明了MySQL在应用程序之外的功能及其重要性。第二部分证明了数据库性能不是线性扩展的；相反，存在一定极限后性能不稳定。第三部分思考了为什么法拉利比丰田更快，尽管两个品牌的汽车原理大致相同。答案解释了为什么有些应用程序在MySQL上表现出色，而其他应用程序则无法起步。第四部分列举了数据访问模式。第五部分介绍了几种改进或修改数据访问模式的应用程序变更。第六部分重新审视了一个老朋友：更好、更快的硬件。
+- en: MySQL Does Nothing
+  id: totrans-8
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MySQL什么也不做
+- en: 'When the application is idle, MySQL is idle. When the application is busy executing
+    queries, MySQL is busy executing those queries. MySQL has several background tasks
+    (like [“Page flushing”](ch06.html#metrics-page-flushing)), but they are only busy
+    reading and writing data for those queries. In fact, background tasks increase
+    performance by allowing foreground tasks—executing queries—to defer or avoid slow
+    operations. Therefore, if MySQL is running slowly and there are no external issues,
+    the cause can only be what drives MySQL: the application.'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当应用程序空闲时，MySQL也空闲。当应用程序忙于执行查询时，MySQL忙于执行这些查询。MySQL有几个后台任务（比如[“页面刷新”](ch06.html#metrics-page-flushing)），但它们只是忙于为那些查询读取和写入数据。事实上，后台任务通过允许前台任务—执行查询—推迟或避免缓慢的操作来提高性能。因此，如果MySQL运行缓慢且没有外部问题，原因只能是驱动MySQL的东西：应用程序。
+- en: Tip
+  id: totrans-10
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: QPS is directly and only attributable to the application. Without the application,
+    QPS is zero.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: QPS直接且仅归因于应用程序。没有应用程序，QPS为零。
+- en: 'Some data stores have *ghosts in the machine*: internal processes that can
+    run at any time and degrade performance if they run at the worst time: when the
+    data store is busy executing queries. (Compaction and vacuuming are two examples—MySQL
+    has neither.) MySQL has no ghosts in the machine—unless the application is executing
+    queries that you don’t know about. Knowing this helps you avoid looking for nonexistent
+    causes and, more importantly, focus on what MySQL is busy doing: executing queries.
+    From [Chapter 1](ch01.html#ch01), you know how to see that: [“Query profile”](ch01.html#query-profile).
+    A query profile shows more than just slow queries, it shows what MySQL is busy
+    doing.'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些数据存储有*机器中的幽灵*：内部进程可以随时运行，并且如果在数据存储繁忙执行查询的最差时机运行，会降低性能。（压缩和清理是两个例子—MySQL没有这些。）MySQL没有机器中的幽灵—除非应用程序执行你不知道的查询。知道这一点有助于你避免寻找不存在的原因，更重要的是，专注于MySQL正忙于做什么：执行查询。来自[第1章](ch01.html#ch01)，你知道如何查看：[“查询概要”](ch01.html#query-profile)。查询概要显示的不仅是慢查询，还显示MySQL正忙于做什么。
+- en: 'Queries affect other queries. The general term for this is *query contention*:
+    when queries compete and wait for shared resources. There are specific types of
+    contention: row lock contention, CPU contention, and so forth. Query contention
+    can make it seem like MySQL is busy doing other things, but don’t be misled: MySQL
+    is only busy executing application queries.'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询会影响其他查询。这个通用术语叫做*查询争用*：当查询竞争并等待共享资源时。有特定类型的争用：行锁争用，CPU争用等等。查询争用可能会让MySQL看起来忙于做其他事情，但不要被误导：MySQL只是忙于执行应用程序查询。
+- en: 'It’s nearly impossible to see or prove query contention because MySQL reports
+    only one type of contention: row lock contention. (Even row lock contention is
+    difficult to see precisely because row locking is complex.) Moreover, contention
+    is fleeting—almost imperceptible—because the problem is intrinsic to high QPS
+    (where *high* is relative to the application). Query contention is like a traffic
+    jam: it requires a lot of cars on the road. Although it’s nearly impossible to
+    see or prove, you need to be aware of it because it might explain inexplicably
+    slow queries.'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 几乎不可能看到或证明查询争用，因为MySQL仅报告一种类型的争用：行锁争用。（即使行锁争用也难以精确看到，因为行锁定是复杂的。）而且，争用是瞬息万变的—几乎察觉不到—因为这个问题是高QPS（其中*高*是相对于应用程序而言）固有的。查询争用就像交通堵塞：它需要大量的车辆上路。虽然几乎不可能看到或证明，但你需要意识到它，因为它可能解释那些莫名其妙的慢查询。
+- en: Query contention plays a major role when performance is pushed to the limit.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当性能被推至极限时，查询争用扮演着重要角色。
+- en: Performance Destabilizes at the Limit
+  id: totrans-16
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在极限处性能不稳定
+- en: 'At the end of [“MySQL: Go Faster”](ch01.html#mysql-go-faster), I said that
+    MySQL can easily push most modern hardware to its limits. That’s true, but the
+    limit might surprise you. [Figure 4-1](#sys-cap-db-1) illustrates what engineers
+    expect: as load increases, database performance increases until it utilizes 100%
+    of *system capacity*—throughput of the hardware and operating system—then performance
+    remains steady. This is called *linear scaling* (or *linear scalability*), and
+    it’s a myth.'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[“MySQL：加快速度”](ch01.html#mysql-go-faster)的结尾，我说MySQL可以轻松推动大多数现代硬件到极限。这是真的，但极限可能会让你感到惊讶。图4-1说明了工程师的预期：随着负载增加，数据库性能增加，直到利用100％的*系统能力*—硬件和操作系统的吞吐量—然后性能保持稳定。这被称为*线性扩展*（或*线性可伸缩性*），但这是个神话。
+- en: '![emsp 0401](assets/emsp_0401.png)'
+  id: totrans-18
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0401](assets/emsp_0401.png)'
+- en: Figure 4-1\. Expected database performance (linear scalability)
+  id: totrans-19
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 4-1\. 预期数据库性能（线性可扩展性）
+- en: Linear scaling is the dream of every DBA and engineer, but it cannot happen.
+    Instead, [Figure 4-2](#sys-cap-db-2) illustrates the reality of database performance
+    with respect to load and system capacity.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 线性扩展是每个DBA和工程师的梦想，但它不可能发生。相反，[图 4-2](#sys-cap-db-2)展示了数据库性能相对于负载和系统容量的现实。
+- en: '![emsp 0402](assets/emsp_0402.png)'
+  id: totrans-21
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0402](assets/emsp_0402.png)'
+- en: Figure 4-2\. Real database performance
+  id: totrans-22
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 4-2\. 实际数据库性能
+- en: 'Database performance increases with load only to a limit that is less than
+    100% of system capacity. Realistically, the limit of database performance is 80%
+    to 95% of system capacity. When load increases past the limit, database performance
+    *destabilizes*: throughput, response time, and other metrics fluctuate markedly—sometimes
+    wildly—from their normal value. At best, the result is decreased performance for
+    some (or most) queries; at worst, it causes an outage.'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库性能随负载增加仅增长到少于系统容量的极限。实际上，数据库性能的极限是系统容量的80%到95%。当负载超过这个限制时，数据库性能*不稳定*：吞吐量、响应时间和其他指标会显著波动，有时甚至会异常。最好的情况下，某些（或大部分）查询的性能下降；最坏的情况下，可能会导致故障。
+- en: '[Equation 4-1](#usl) shows the *Universal Scalability Law* articulated by Neil
+    Gunther: an equation that models the scalability of hardware and software systems.'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[方程 4-1](#usl)显示了Neil Gunther提出的*通用可扩展性法则*：一个模型硬件和软件系统的可扩展性的方程式。'
+- en: Equation 4-1\. Equation 4-1\. Universal Scalability Law
+  id: totrans-25
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 方程式 4-1\. 通用可扩展性法则
+- en: <math><mrow><mi>X</mi> <mrow><mo>(</mo> <mi>N</mi> <mo>)</mo></mrow> <mo>=</mo>
+    <mfrac><mrow><mi>γ</mi><mi>N</mi></mrow> <mrow><mn>1</mn><mo>+</mo><mi>α</mi><mo>(</mo><mi>N</mi><mo>-</mo><mn>1</mn><mo>)</mo><mo>+</mo><mi>β</mi><mi>N</mi><mo>(</mo><mi>N</mi><mo>-</mo><mn>1</mn><mo>)</mo></mrow></mfrac></mrow></math>
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: <math><mrow><mi>X</mi> <mrow><mo>(</mo> <mi>N</mi> <mo>)</mo></mrow> <mo>=</mo>
+    <mfrac><mrow><mi>γ</mi><mi>N</mi></mrow> <mrow><mn>1</mn><mo>+</mo><mi>α</mi><mo>(</mo><mi>N</mi><mo>-</mo><mn>1</mn><mo>)</mo><mo>+</mo><mi>β</mi><mi>N</mi><mo>(</mo><mi>N</mi><mo>-</mo><mn>1</mn><mo>)</mo></mrow></mfrac></mrow></math>
+- en: '[Table 4-1](#usl-coef) outlines what each term in the Universal Scalability
+    Law equation represents.'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[表 4-1](#usl-coef)概述了通用可扩展性法则方程中每个术语的含义。'
+- en: Table 4-1\. Universal Scalability Law terms
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 4-1\. 通用可扩展性法则术语
+- en: '| Term | Represents |'
+  id: totrans-29
+  prefs: []
+  type: TYPE_TB
+  zh: '| 术语 | 代表 |'
+- en: '| --- | --- |'
+  id: totrans-30
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `X` | Throughput |'
+  id: totrans-31
+  prefs: []
+  type: TYPE_TB
+  zh: '| `X` | 吞吐量 |'
+- en: '| `N` | Load: concurrent requests, running processes, CPU cores, nodes in a
+    distributed system, and so on |'
+  id: totrans-32
+  prefs: []
+  type: TYPE_TB
+  zh: '| `N` | 负载：并发请求、运行进程、CPU核心、分布式系统中的节点等 |'
+- en: '| `γ` | Concurrency (ideal parallelism) |'
+  id: totrans-33
+  prefs: []
+  type: TYPE_TB
+  zh: '| `γ` | 并发性（理想的并行性） |'
+- en: '| `α` | Contention: waiting for shared resources |'
+  id: totrans-34
+  prefs: []
+  type: TYPE_TB
+  zh: '| `α` | 争用：等待共享资源 |'
+- en: '| `β` | Coherency: coordinating shared resources |'
+  id: totrans-35
+  prefs: []
+  type: TYPE_TB
+  zh: '| `β` | 一致性：协调共享资源 |'
+- en: Note
+  id: totrans-36
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'A deep dive into the Universal Scalability Law is beyond the scope of this
+    book, so I limit the explanation to the current topic: the limit of database performance.
+    To learn more, read [*Guerrilla Capacity Planning*](https://oreil.ly/WZEd8) by
+    Neil Gunther.'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 深入研究《通用可扩展性法则》超出了本书的范围，因此我将解释限制在当前主题上：数据库性能的极限。想要了解更多，请阅读[《游击队容量规划》](https://oreil.ly/WZEd8)，作者是Neil
+    Gunther。
+- en: 'Throughput is a function of load: `X(N)`. Concurrency (`γ`) helps throughput
+    increase as load (`N`) increases. But contention (`α`) and coherency (`β`) reduce
+    throughput as load increases. This precludes linear scalability and limits database
+    performance.'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 吞吐量是负载的函数：`X(N)`。并发性(`γ`)有助于随着负载(`N`)的增加而增加吞吐量。但是争用(`α`)和一致性(`β`)会随着负载的增加而减少吞吐量。这排除了线性可扩展性并限制了数据库性能。
+- en: 'Worse than limiting performance, coherency causes *retrograde performance*:
+    decreasing performance at high load. The term *retrograde* is an understatement.
+    It suggests that MySQL simply reverts to less throughput when it cannot handle
+    the load, but the reality is worse than that. I prefer the terms *instability*
+    and *destabilize* because they convey the reality: the system is breaking down,
+    not just running more slowly.'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更糟糕的是，一致性不仅限制了性能，还导致*回退性能*：在高负载下性能下降。术语*回退*有所保留。它暗示着当MySQL无法处理负载时，它仅仅减少了吞吐量，但实际情况比这更糟。我更倾向于使用*不稳定*和*失稳*这些术语，因为它们更真实地表达了系统正在崩溃的现实，而不仅仅是运行速度变慢。
+- en: The Universal Scalability Law models real-world MySQL performance surprisingly
+    well.^([1](ch04.html#idm45829111984992)) But as a model, it only describes and
+    predicts the scalability of a workload; it does not say anything about how or
+    why the workload scales (or fails to scale). The USL is primarily used by experts
+    who measure and fit data to the model to determine the parameters (`γ`, `α`, and
+    `β`), then toil heroically to reduce them. Everyone else just watches graphs ([Chapter 6](ch06.html#ch06)
+    covers MySQL metrics) and waits until MySQL performance destabilizes—that’s the
+    limit.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通用可扩展性法则出人意料地很好地模拟了真实世界中MySQL的性能。^([1](ch04.html#idm45829111984992)) 但作为一种模型，它仅描述和预测工作负载的可扩展性；它并不说明工作负载如何或为何扩展（或未能扩展）。通用可扩展性法则主要被专家们用来测量和拟合数据到模型中，以确定参数（`γ`、`α`
+    和 `β`），然后不知疲倦地努力减少它们。其他人只是观察图表（[第 6 章](ch06.html#ch06)涵盖了MySQL指标），并等待MySQL性能不稳定
+    - 这就是极限。
+- en: '[Figure 4-3](#db-perf-limit-charts) shows three charts from a real outage when
+    the application pushed MySQL past the limit.'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 4-3](#db-perf-limit-charts)展示了一个真实的故障期间的三个图表，当应用程序将MySQL推到极限时。'
+- en: 'The outage had three periods:'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 故障分为三个阶段：
+- en: '*The Rise* (6 a.m. to 9 a.m.)'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*峰值*（早上6点到9点）'
+- en: 'The application was stable at the beginning of the rise, but its developers
+    were beginning to worry because the metrics shown were rising slowly but steadily.
+    In the past, the application had outages that began with steadily rising metrics.
+    In response, the application developers increased transaction throughput to cope
+    with the rising demand. (The application is able to throttle transaction throughput;
+    this isn’t a feature of MySQL.) The rise and the response repeated until it no
+    longer worked: MySQL had reached the limit.'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 应用程序在峰值开始时是稳定的，但其开发人员开始担心，因为显示的指标缓慢但稳定地上升。过去，应用程序曾因稳定上升的指标而出现故障。作为回应，应用程序开发人员增加了事务吞吐量以应对增长的需求。（应用程序能够限制事务吞吐量；这不是MySQL的特性。）峰值和响应重复，直到不再起作用：MySQL已达到极限。
+- en: '![emsp 0403](assets/emsp_0403.png)'
+  id: totrans-45
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0403](assets/emsp_0403.png)'
+- en: Figure 4-3\. Database performance past the limit
+  id: totrans-46
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 4-3\. 数据库性能超出极限
+- en: '*The Limit* (9 a.m. to noon)'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*极限*（早上9点到中午）'
+- en: The application was completely unstable and effectively offline during the limit.
+    Although CPU usage and QPS were high and steady, threads running told a different
+    story. The whipsaw pattern of threads running shown in [Figure 4-3](#db-perf-limit-charts)
+    was a telltale sign that MySQL had destabilized. Since one query requires one
+    thread to run, the big swings in threads running indicated that queries were not
+    flowing smoothly through the system. Instead, queries were hammering MySQL in
+    uneven, disconcerted strikes.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 应用程序在达到极限期间完全不稳定，事实上处于离线状态。尽管CPU使用率和QPS高且稳定，但运行的线程告诉了一个不同的故事。在[图 4-3](#db-perf-limit-charts)中展示的线程运行的来回波动模式是MySQL不稳定的明显迹象。由于一个查询需要一个线程来运行，线程运行的大幅波动表明查询没有顺畅地通过系统流动。相反，查询在不均匀、不协调的打击中猛烈地冲击MySQL。
+- en: 'High and steady CPU usage and QPS were misleading: steady is only good with
+    a little variation, as seen before and after the limit. Steady with no variation,
+    as seen during the limit, is flatline. To understand why, here’s a strange but
+    effective analogy. Imagine an orchestra. When the orchestra is playing correctly,
+    there are variations in all aspects of the music. In fact, those variations *are*
+    the music: rhythm, tempo, pitch, tone, melody, dynamics, and so forth. A flatline
+    metric is analogous to a deranged clarinetist playing a single, continuous note
+    *fortissimo*: steady, but not music.'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 高且稳定的CPU使用率和QPS是误导性的：稳定只有在有少量变化时才算好，就像在极限之前和之后看到的那样。没有变化的稳定状态，在极限期间看到的那样，就像平稳状态。为了理解其中的原因，这里有一个奇怪但有效的类比。想象一个管弦乐团。当管弦乐团演奏正确时，音乐的各个方面都有变化。事实上，这些变化
+    *就是* 音乐：节奏、速度、音调、音色、旋律、动态等等。一个平稳状态的度量指标类似于一个失常的单簧管手持续演奏一个音符 *强音*：稳定，但不是音乐。
+- en: 'During the limit, application developers kept trying to increase transaction
+    throughput, but it didn’t work. MySQL would not use the last 5% of CPU, QPS would
+    not increase, and threads running would not stabilize. From the USL ([Equation
+    4-1](#usl)), you know why: contention and coherency. As load increased (`N`),
+    transaction throughput (`X`) increased, but so did the limiting effects of contention
+    (`α`) and coherency (`β`) until MySQL reached the limit.'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在极限期间，应用程序开发人员不断尝试增加事务吞吐量，但没有成功。MySQL不会使用CPU的最后5%，QPS不会增加，线程运行不会稳定。从通用可扩展性法则（[公式
+    4-1](#usl)）中，你知道原因：竞争和一致性。随着负载增加（`N`），事务吞吐量（`X`）增加，但竞争（`α`）和一致性（`β`）的限制效应也随之增加，直到MySQL达到极限。
+- en: '*The Fix* (noon to 3 p.m.)'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*修复*（中午至下午3点）'
+- en: 'Since increasing transaction throughput was its own demise, the fix was to
+    *reduce* transaction throughput. That seems counterintuitive, but the math doesn’t
+    lie. At noon, application developers reduced transaction throughput, and the results
+    are clear in the charts: CPU usage dropped to 50%, QPS returned to a steady variation
+    (and even increased a little), and threads running also returned to a steady variation
+    (with a few spikes, which MySQL had spare capacity to absorb).'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于增加事务吞吐量导致了它自身的失败，修复的方法是*减少*事务吞吐量。这似乎是违反直觉的，但数学不会说谎。在中午时分，应用程序开发人员减少了事务吞吐量，在图表中的结果显而易见：CPU使用率降至50%，QPS恢复到了稳定的变化（甚至稍微增加了一点），运行的线程也恢复到了稳定的变化（有少量峰值，但MySQL有备用容量可以吸收）。
+- en: 'To imagine how this works, consider another analogy. Imagine a highway. When
+    there are many cars on the road, they all slow down (hopefully) because humans
+    need time to think and react to others cars, especially at highway speeds. When
+    there are too many cars on the road, they cause a traffic jam. The only solution
+    (apart from adding more lanes) is to reduce the number of cars on the highway:
+    fewer cars can drive faster. Reducing transaction throughput is analogous to reducing
+    the number of cars on the highway, which lets the remaining cars go faster and
+    traffic flow smoothly.'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 想象一下这是如何工作的，考虑另一个类比。想象一条高速公路。当道路上有很多车时，它们都会减速（希望如此），因为人类需要时间来思考和对其他车辆做出反应，特别是在高速公路上。当道路上的车太多时，它们会导致交通堵塞。除了增加更多车道外，唯一的解决方案是减少高速公路上的车辆数量：少量车辆可以更快地行驶。减少事务吞吐量类似于减少高速公路上的车辆数量，这使得其余车辆可以更快地行驶，交通流畅。
+- en: 'This example nicely models the limit of database performance according to the
+    Universal Scalability Law ([Equation 4-1](#usl)), but it’s also an exceptional
+    case because the application was able to push MySQL and the hardware to the limit.
+    More typically, high load destabilizes the application, and that prevents it from
+    increasing load on MySQL. In other words: the application fails before it can
+    push MySQL to the limit. But in this example, the application didn’t fail, it
+    kept scaling up until it pushed MySQL to the limit.'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个例子很好地模拟了根据通用可扩展性法则（[Equation 4-1](#usl)）数据库性能的极限，但这也是一个特例，因为该应用程序能够将MySQL和硬件推到极限。更典型的情况是，高负载会使应用程序不稳定，这阻止了它增加MySQL的负载。换句话说：在应用程序能够推动MySQL到极限之前，应用程序会失败。但在这个例子中，应用程序没有失败，它不断扩展直到推动MySQL到极限。
+- en: 'Two more points about MySQL performance at the limit before we turn our attention
+    to the application:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们转向应用程序之前，还有两点关于MySQL性能的极限：
+- en: The limit is difficult to reach unless the hardware is blatantly insufficient.
+    As mentioned in [“Better, Faster Hardware!”](ch02.html#better-faster-hardware),
+    this is one of two exceptions for which you should scale up to reasonable hardware.
+    It’s also difficult for an application to fully and *simultaneously* utilize all
+    hardware—CPU, memory, and storage. An application is most likely to incur a bottleneck
+    in one piece of hardware long before it can fully and simultaneously utilize all
+    hardware. When this happens, the application has not reached the limit of database
+    performance, only the limit of that one piece of hardware.
+  id: totrans-56
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 除非硬件显然不足，否则很难达到极限。正如在[“更好、更快的硬件！”](ch02.html#better-faster-hardware)中提到的，这是你应该升级到合理硬件的两个例外之一。一个应用程序很难完全且*同时*利用所有硬件——CPU、内存和存储。当这种情况发生时，应用程序并未达到数据库性能的极限，而只是达到了一个硬件部件的极限。
+- en: 'When high load causes MySQL to respond slowly, this does *not* mean the limit
+    has been reached. The reason is simple: `γ`. Gamma (`γ`) represents concurrency
+    or ideal parallelism. Recall from the Universal Scalability Law equation ([Equation
+    4-1](#usl)) that gamma is in the numerator.^([2](ch04.html#idm45829111946752))
+    Slow database performance does *not* mean the limit has been reached because increasing
+    concurrency (`γ`) raises the limit. Decreasing contention (`α`) also raises the
+    limit. (Coherency [`β`] is out of our control: it’s inherent to MySQL and the
+    operating system, but it’s usually not a problem.)'
+  id: totrans-57
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当高负载导致MySQL响应缓慢时，这并*不*意味着已经达到了极限。原因很简单：`γ`。 Gamma (`γ`) 表示并发或理想并行性。回想一下通用可扩展性法则方程（[Equation
+    4-1](#usl)）中，gamma在分子中。^([2](ch04.html#idm45829111946752)) 慢的数据库性能并*不*意味着已经达到了极限，因为增加并发（`γ`）会提高极限。减少争用（`α`）也会提高极限。（一致性
+    [`β`] 不受我们控制：它是MySQL和操作系统固有的，但通常不是问题。）
+- en: 'The second point leads to the question: how do we increase concurrency, or
+    decrease contention, or both? That seems like a critically important question,
+    but it’s not: it’s misleading because the North Star of MySQL performance is query
+    response time. The values of concurrency (`γ`) and contention (`α`) are not directly
+    measurable. They are determined by fitting throughput and load measurements to
+    the model. Experts use the Universal Scalability Law to understand system capacity,
+    not to improve performance. And this section has used it to prove that performance
+    destabilizes at the limit.'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二个观点引出了一个问题：我们如何增加并发性，或减少争用，或两者兼而有之？这似乎是一个至关重要的问题，但实际上不是：这是误导性的，因为MySQL性能的北极星是查询响应时间。并发性（`γ`）和争用（`α`）的值不能直接测量。它们是通过将吞吐量和负载测量与模型拟合来确定的。专家使用通用可伸缩性法则来理解系统容量，而不是改善性能。本节已经使用它来证明性能在极限处不稳定。
+- en: Toyota and Ferrari
+  id: totrans-59
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 丰田和法拉利
+- en: 'Some applications achieve incredible MySQL performance while others struggle
+    with low throughput. Some applications can fully utilize the hardware—up to the
+    limit—while others barely warm the CPUs. Some applications don’t have any performance
+    problems while others continually struggle with slow queries. It’s a sweeping
+    generalization, but I’m going to claim that every engineer wants their application
+    be on the left side of *while*: incredible performance, fully utilizing the hardware,
+    and no problems. The difference between applications on the left of *while* versus
+    those on the right is understood by contemplating why a Ferrari is faster than
+    a Toyota.'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些应用程序实现了令人难以置信的MySQL性能，而其他一些则在低吞吐量方面苦苦挣扎。一些应用程序可以充分利用硬件，达到极限，而其他一些则几乎没有使CPU变热。一些应用程序没有任何性能问题，而其他一些则不断地为慢查询而苦恼。这是一个概括性的论断，但我要声称，每个工程师都希望他们的应用程序处于“while”左侧：性能令人难以置信，充分利用硬件，并且没有问题。而那些位于“while”右侧的应用程序与左侧的应用程序之间的区别，可以通过思考为什么法拉利比丰田更快来理解。
+- en: Both car brands use roughly the same parts and design, but the top speed of
+    a Toyota is generally 130 MPH, whereas the top speed of a Ferrari is 200 MPH.^([3](ch04.html#idm45829111931920))
+    A Ferrari does not have special parts that make it 70 MPH faster than a Toyota.
+    So why is a Ferrari so much faster than a Toyota? The answer is the difference
+    in engineering *design* and *details*.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 两个汽车品牌使用大致相同的零件和设计，但丰田的最高速度通常为130英里每小时，而法拉利的最高速度为200英里每小时。[^3]法拉利没有特殊的零件，使其比丰田快70英里每小时。那么为什么法拉利比丰田快得多？答案在于工程设计和细节的差异。
+- en: 'A Toyota is not designed for high speed. Achieving high speed (like high performance)
+    requires careful attention to many details. For a car, those details include:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 丰田不是为高速设计的。实现高速（如高性能）需要对许多细节进行仔细关注。对于汽车来说，这些细节包括：
+- en: Engine size, configuration, and timing
+  id: totrans-63
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 引擎尺寸、配置和时机
+- en: Transmission gear ratios, shift points, and timing
+  id: totrans-64
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 变速器齿轮比、换档点和时机
+- en: Tire size, traction, and rotational force
+  id: totrans-65
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 轮胎尺寸、牵引力和旋转力
+- en: Steering, suspension, and braking
+  id: totrans-66
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 转向、悬架和制动
+- en: Aerodynamics
+  id: totrans-67
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 空气动力学
+- en: 'Both car brands design and engineer for those details, but the exacting level
+    of detail in a Ferrari explains why it achieves greater performance. You can see
+    this in one of those details: aerodynamics. The unique exterior design of a Ferrari
+    is flamboyant but also functional: it lowers the drag coefficient, which increases
+    efficiency.'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 两个汽车品牌都为这些细节进行设计和工程化，但法拉利的精确细节水平解释了为什么它能够实现更高的性能。您可以在其中一个细节中看到这一点：空气动力学。法拉利独特的外部设计华丽而实用：它降低了空气动力学系数，从而提高了效率。
+- en: High performance, like high speed, is not accomplished accidentally or by brute
+    force. It is the result of meticulous engineering with the goal of high performance.
+    A Ferrari is faster than a Toyota because it’s designed and engineered in every
+    detail to be faster.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 高性能，如高速度，并非偶然或靠蛮力就能实现。这是通过对高性能的目标进行细致工程化而实现的结果。法拉利比丰田更快，因为它在每一个细节上都被设计和工程化为更快。
+- en: 'Is your application designed and engineered in every detail for maximum MySQL
+    performance? If yes, then I suppose you can skip the rest of this chapter. If
+    not, which is the usual answer, then the next section addresses the fundamental
+    technical differences that separate Toyota-like applications from Ferrari-like
+    applications: data access patterns.'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您的应用程序是否在每个细节上都设计和工程化，以实现最大的MySQL性能？如果是，那么我想你可以跳过本章的其余部分。如果不是，这通常是答案，那么下一节将讨论将类似于丰田的应用程序与类似于法拉利的应用程序区分开来的基本技术差异：数据访问模式。
+- en: Data Access Patterns
+  id: totrans-71
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据访问模式
+- en: '*Data access patterns* describe how an application uses MySQL to access data.'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*数据访问模式*描述了应用程序如何使用MySQL访问数据。'
+- en: 'The term *data access patterns* (or *access patterns* for short) is commonly
+    used but rarely explained. Let’s change that by clarifying three details about
+    access patterns:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 术语*数据访问模式*（或简称*访问模式*）通常被使用，但很少有解释。通过澄清关于访问模式的三个细节，让我们改变这一点：
+- en: It’s so common to discuss access patterns in the plural that they begin to blur
+    together. But it’s important to realize that they are not an undifferentiated
+    blob. An application has many access patterns. For convenience, they’re discussed
+    in the plural. But in practice, you modify access patterns individually.
+  id: totrans-74
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 讨论访问模式的复数形式非常常见，以至于它们开始模糊在一起。但重要的是要意识到它们并非一个不可区分的整体。一个应用程序有许多访问模式。为方便起见，它们以复数形式讨论。但在实践中，您是单独修改访问模式的。
+- en: An access pattern ultimately refers to a query, and you change queries (and
+    the application) to change access patterns, but queries are *not* the focus. In
+    [Go programming language terms](https://golang.org), an access pattern is an interface
+    and a query is an implementation. Focus on the interface, not the implementation.
+    This makes it possible to envision (and possibly apply) access patterns to different
+    data stores. For example, certain access patterns executed on MySQL are better
+    suited for a key-value data store, but that’s difficult to see by focusing on
+    SQL queries that bear no resemblance to key-value queries. In this book, I discuss
+    modifying access patterns, but in practice you modify queries (and the application).
+  id: totrans-75
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 访问模式最终是指一个查询，您更改查询（和应用程序）以更改访问模式，但查询并非重点。在[Go编程语言术语](https://golang.org)中，访问模式是一个接口，查询是一个实现。专注于接口，而非实现，使得可以设想（并可能应用）访问模式到不同的数据存储。例如，在MySQL上执行的某些访问模式更适合键值数据存储，但如果专注于与键值查询毫无相似之处的SQL查询，则很难看到这一点。在本书中，我讨论了修改访问模式，但在实践中，您修改查询（和应用程序）。
+- en: An access pattern comprises a name and a list of technical traits. The name
+    is used to identify and communicate the access pattern with other engineers. (Access
+    patterns do not have intrinsic names.) Choose a name that’s succinct and meaningful.
+    The list of technical traits depends on and varies by data store. MySQL data access,
+    for example, is quite different than Redis data access. This section enumerates
+    and explains nine traits for MySQL data access.
+  id: totrans-76
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 访问模式由名称和技术特征列表组成。名称用于与其他工程师识别和交流访问模式。（访问模式没有固有的名称。）选择一个简洁而有意义的名称。技术特征列表依赖于并且因数据存储而异。例如，MySQL数据访问与Redis数据访问大不相同。本节列举并解释了MySQL数据访问的九个特征。
+- en: 'In theory, application developers should identify every individual access pattern,
+    but let’s be honest: that is very tedious. (I’ve never seen it done, and it might
+    not even be feasible if the application changes quickly.) Nevertheless, that is
+    the goal. Here are three reasonable and achievable approaches toward that goal:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理论上，应用程序开发人员应该识别每个单独的访问模式，但让我们诚实一点：这是非常繁琐的。（我从未见过有人做到这一点，如果应用程序变化迅速，这甚至可能是不可行的。）尽管如此，这仍然是目标。以下是朝这一目标的三种合理且可实现的方法：
+- en: Brainstorm with your team to identify the most obvious and common access patterns.
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 与您的团队进行头脑风暴，以识别最明显和最常见的访问模式。
+- en: Use the query profile (see [“Query profile”](ch01.html#query-profile)) to identify
+    the top, slowest access patterns.
+  id: totrans-79
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用查询概要文件（见[“查询概要文件”](ch01.html#query-profile)）来识别顶部最慢的访问模式。
+- en: Peruse the code for lesser-known (or forgotten) access patterns.
+  id: totrans-80
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 浏览代码以查找较少知名（或被遗忘）的访问模式。
+- en: 'At the very least, you need to follow the first or second approach one time
+    to accomplish the goal of this chapter: indirect query optimization by changing
+    access patterns.'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 至少需要在第一次或第二次尝试中遵循以下方法之一，以完成本章的目标：通过更改访问模式间接优化查询。
+- en: Once you have identified (and named) an access pattern, ascertain the value
+    or answer to each of the following nine traits. Not knowing the value or answer
+    to a trait is a great opportunity to learn and possibly improve part of the application.
+    Don’t leave a trait unknown; find or figure out the value or answer.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦您已识别（并命名）一个访问模式，请确保对以下九个特征的每一个找到值或答案。不知道特征的值或答案是学习和可能改进应用程序的一个很好的机会。不要让特征未知；找到或弄清楚特征的值或答案。
+- en: 'Before explaining each of the nine traits, there’s one more question to settle:
+    how do you use access patterns? Access patterns are pure knowledge, and that knowledge
+    forms a bridge between the previous section and the next section. The previous
+    section, [“Toyota and Ferrari”](#toyota-and-ferrari), makes the point that high-performance
+    MySQL requires a high-performance application. The next section, [“Application
+    Changes”](#app-changes), presents common application changes that help re-engineer
+    the application for high performance with respect to the database. Access patterns
+    help decide (and sometimes dictate) how to re-engineer the application from a
+    Toyota to a Ferrari.'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在解释每个九个特性之前，还有一个问题需要解决：如何使用访问模式？访问模式是纯粹的知识，这些知识构成了前一节和下一节之间的桥梁。前一节，“[丰田和法拉利](#toyota-and-ferrari)”指出高性能的MySQL需要一个高性能的应用程序。下一节，“[应用程序变更](#app-changes)”介绍了帮助重新设计应用程序以便高性能与数据库兼容的常见应用程序变更。访问模式有助于决定（有时候会指导）如何将应用程序从丰田重新设计为法拉利。
+- en: Without further ado, let’s examine nine traits of data access patterns for MySQL.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不多说了，让我们来详细讨论MySQL数据访问模式的九个特性。
+- en: Read/Write
+  id: totrans-85
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 读/写
+- en: Does the access read or write data?
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 访问是读取还是写入数据？
+- en: 'Read access is clear: `SELECT`. Write is less clear when you consider the fine
+    details. For example, `INSERT` is write access, but `INSERT`…`SELECT` is read
+    and write access. Likewise, `UPDATE` and `DELETE` should use a `WHERE` clause,
+    which makes them read and write access, too. For simplicity: `INSERT`, `UPDATE`,
+    and `DELETE` are always considered write access.'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 读取访问很明确：`SELECT`。在考虑细节时，写访问就不那么清楚了。例如，`INSERT`是写访问，但`INSERT`…`SELECT`是读和写访问。同样地，`UPDATE`和`DELETE`应该使用`WHERE`子句，这也使它们成为读和写访问。简单地说：`INSERT`、`UPDATE`和`DELETE`总是被视为写访问。
+- en: 'Internally, reads and writes are not equal: they have different technical impacts
+    and invoke different internal parts of MySQL. An `INSERT` and a `DELETE`, for
+    example, are different writes under the hood—not simply because the former adds
+    and the latter removes. For simplicity again: all reads are equal and all writes
+    are equal.'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在内部，读取和写入并不相等：它们对MySQL的技术影响不同，并调用不同的内部部分。例如，`INSERT`和`DELETE`在底层是不同的写入操作——不仅仅是因为前者添加而后者移除。再次简单地说：所有读取是平等的，所有写入是平等的。
+- en: 'The *read/write* trait is one of the most fundamental and ubiquitous because
+    scaling reads and writes requires different application changes. Scaling reads
+    is usually accomplished by offloading reads, which I cover later in [“Offload
+    Reads”](#offload-reads). Scaling write is more difficult, but enqueuing writes
+    is one technique (see [“Enqueue Writes”](#enqueue-writes)), and [Chapter 5](ch05.html#ch05)
+    covers the ultimate solution: sharding.'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*读/写* 特性是最基础和普遍的之一，因为扩展读取和写入需要不同的应用程序变更。通常通过卸载读取来扩展读取，我稍后在“[卸载读取](#offload-reads)”中介绍。扩展写入更加困难，但是排队写入是一种技术（见“[排队写入](#enqueue-writes)”），而[第五章](ch05.html#ch05)则涵盖了最终解决方案：分片。'
+- en: 'Although this trait is quite simple, it’s important because knowing if an application
+    is read-heavy or write-heavy quickly focuses your attention on relevant application
+    changes. Using a cache, for example, is not relevant for a write-heavy application.
+    Furthermore, other data stores are optimized for reads or writes, and there is
+    a write-optimized storage engine for MySQL: [MyRocks](https://myrocks.io).'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管这个特性相当简单，但它很重要，因为快速了解应用程序是读重还是写重能够迅速聚焦于相关的应用程序变更。例如，在写重的应用程序中使用缓存是不相关的。此外，其他数据存储为读或写进行了优化，而MySQL还有一个写优化的存储引擎：[MyRocks](https://myrocks.io)。
+- en: Throughput
+  id: totrans-91
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 吞吐量
+- en: What is the throughput (in QPS) and variation of the data access?
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据访问的吞吐量（每秒查询数）及其变化是多少？
+- en: 'First of all, throughput is *not* performance. Low throughput access—even just
+    1 QPS—can wreak havoc. You can probably imagine how; in case not, here’s an example:
+    a `SELECT`…`FOR UPDATE` statement that does a table scan and locks every row.
+    It’s rare to find access that terrible, but it proves the point: throughput is
+    not performance.'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，吞吐量并不等同于性能。低吞吐量的访问——即使只有1 QPS——也可能造成严重问题。你可能能想象出这会如何；如果不能，这里举个例子：一个`SELECT`…`FOR
+    UPDATE`语句，它对表进行扫描并锁定每一行。找到如此糟糕的访问是罕见的，但它证明了这一点：吞吐量并不等同于性能。
+- en: Terrible access notwithstanding, very high QPS (where *high* is relative to
+    the application) is usually an issue to abate for all the reasons eloquently stated
+    in [“Less QPS Is Better”](ch03.html#less-qps-is-better). For example, if the application
+    executes stock trades, it probably has a huge burst of read and write access at
+    9:30 a.m. Eastern Time when the American stock exchanges open. That level of throughput
+    conjures entirely different considerations than a steady 500 QPS.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管存在严重的访问问题，对于所有在 [“少量 QPS 更好”](ch03.html#less-qps-is-better) 中详细阐述的原因，非常高的
+    QPS（其中 *高* 是相对于应用程序而言）通常是需要减少的一个问题。例如，如果应用程序执行股票交易，在美国股票交易所开盘时（东部时间上午 9:30），可能会出现大量的读写访问突发。这种吞吐量水平引发了完全不同的考虑，而不是稳定的
+    500 QPS。
+- en: '*Variation*—how QPS increases and decreases—is equally important. The previous
+    paragraph mentioned *burst* and *steady*; another type of variation is *cyclical*:
+    QPS increases and decreases over a period of time. A common cyclical pattern is
+    higher QPS during business hours—9 a.m. to 5 p.m. Eastern Time, for example—and
+    lower QPS in the middle of the night. A common problem is that high QPS during
+    business hours prevents developers from making schema changes (`ALTER TABLE`)
+    or backfilling data.'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*变化* —— QPS 的增加和减少同样重要。前面的段落提到了 *突发* 和 *稳定*；另一种类型的变化是 *周期性*：QPS 随着时间周期性增加和减少。一个常见的周期模式是在工作时间内增加的
+    QPS —— 例如东部时间上午 9 点到下午 5 点 —— 和夜间较低的 QPS。一个常见的问题是在工作时间内高 QPS 阻止开发人员进行模式更改（`ALTER
+    TABLE`）或回填数据。'
+- en: Data Age
+  id: totrans-96
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 数据时代
+- en: What is the age of the data accessed?
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据访问的年龄是多少？
+- en: '*Age* is relative to access order, not time. If an application inserts one
+    million rows in 10 minutes, the first row is the oldest because it was the last
+    row accessed, not because it’s 10 minutes old. If the application updates the
+    first row, then it becomes the newest because it was the most recent row accessed.
+    And if the application never accesses the first row again, but it continues to
+    access other rows, then the first row becomes older and older.'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*年龄* 是相对于访问顺序而言，并非时间。如果一个应用程序在 10 分钟内插入了一百万行数据，第一行是最老的，因为它是最后访问的行，而不是因为它已经
+    10 分钟了。如果应用程序更新第一行，则它变成最新的，因为它是最近访问的行。如果应用程序不再访问第一行，但继续访问其他行，则第一行会变得越来越老。'
+- en: This trait is important because it affects the working set. Recall from [“Working
+    set size”](ch03.html#working-set-size) that the working set is frequently used
+    index values and the primary key rows to which they refer—which is a long way
+    of saying *frequently accessed data*⁠—and it’s usually a small percentage of the
+    table size. MySQL keeps as much data in memory as possible, and data age affects
+    whether or not the data in memory is part of the working set. It usually is because
+    MySQL is exceptionally good at keeping the working set in memory thanks to a mélange
+    of algorithms and data structures. [Figure 4-4](#data-aging) is a highly simplified
+    illustration of the process.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个特征很重要，因为它影响工作集。回想一下 [“工作集大小”](ch03.html#working-set-size)，工作集是经常使用的索引值和它们引用的主键行
+    —— 这句话的意思是 *经常访问的数据*，通常只占表大小的一小部分。MySQL 尽可能多地将数据保存在内存中，数据的年龄影响内存中的数据是否属于工作集。通常是这样，因为
+    MySQL 凭借各种算法和数据结构在内存中保持工作集非常高效。 [图 4-4](#data-aging) 是这个过程的高度简化插图。
+- en: 'The rectangle in [Figure 4-4](#data-aging) represents all data. The working
+    set is a small amount of data: from the dashed line to the top. And memory is
+    smaller than both: from the solid line to the top. In MySQL lingo, data is *made
+    young* when accessed. And when data is not accessed, it becomes old and is eventually
+    evicted from memory.'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 4-4](#data-aging) 中的矩形代表所有数据。工作集是一小部分数据：从虚线到顶部。而内存比两者都小：从实线到顶部。在 MySQL 术语中，数据在访问时
+    *变得年轻*。当数据没有被访问时，它会变老并最终被从内存中驱逐。'
+- en: '![emsp 0404](assets/emsp_0404.png)'
+  id: totrans-101
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0404](assets/emsp_0404.png)'
+- en: Figure 4-4\. Data aging
+  id: totrans-102
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 4-4\. 数据老化
+- en: Since accessing data keeps it young and in memory, the working set stays in
+    memory because it’s frequently accessed. This is how MySQL is very fast with a
+    little memory and a lot of data.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于访问数据会使其保持年轻并保留在内存中，工作集保持在内存中。这就是为什么 MySQL 在少量内存和大量数据情况下非常快速的原因。
+- en: 'Frequently accessing old data is problematic in more than one way. To explain
+    why, I must delve into technical details beyond the scope of this section, but
+    I clarify later in [“InnoDB”](ch06.html#metrics-innodb). Data is loaded into *free
+    pages* (in memory): pages that don’t already contain data. (A *page* is a 16 KB
+    unit of logical storage inside InnoDB.) MySQL uses all available memory, but it
+    also keeps a certain number of free pages. When there are free pages, which is
+    normal, the problem is only that reading data from storage is slow. When there
+    are zero free pages, which is abnormal, the problem worsens threefold. First,
+    MySQL must evict old pages, which it tracks in a least recently used (LRU) list.
+    Second, if an old page is dirty (has data changes not persisted to disk) MySQL
+    must flush (persist) it before it can evict it, and flushing is slow. Third, the
+    original problem remains: reading data from storage is slow. Long story short:
+    frequently dredging up old data is problematic for performance.'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 经常访问旧数据在多个方面都是有问题的。为了解释原因，我必须深入到超出本节范围的技术细节，但我稍后在 [“InnoDB”](ch06.html#metrics-innodb)
+    中进行澄清。数据被加载到*空页*（内存中）：即那些不包含数据的页。 （*页*是InnoDB内部的逻辑存储单位，每个16 KB。） MySQL使用所有可用的内存，但同时保留一定数量的空页。
+    当有空页时，这是正常的，问题仅在于从存储中读取数据会很慢。 当没有空页时，这是异常的，问题会恶化三倍。 首先，MySQL必须驱逐旧页，这些页在最近最少使用（LRU）列表中被跟踪。
+    其次，如果旧页是脏的（即包含未写入磁盘的数据更改），MySQL必须在清除之前刷新（持久化）它，而刷新操作很慢。 第三，原始问题仍然存在：从存储中读取数据很慢。
+    长话短说：频繁访问旧数据对性能有问题。
+- en: 'Occasionally accessing old data is not a problem because MySQL is clever: the
+    algorithms driving the process in [Figure 4-4](#data-aging) prevent occasional
+    access of old data from interfering with new (young) data. Therefore, take data
+    age and throughput into consideration together: old and slow access is probably
+    harmless, but old and fast is bound to cause trouble.'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 偶尔访问旧数据并不是问题，因为MySQL很聪明：驱动这一过程的算法在 [图4-4](#data-aging) 中阻止偶尔访问旧数据干扰新（年轻）数据。
+    因此，一起考虑数据年龄和吞吐量：旧且缓慢的访问可能是无害的，但旧且快速的访问必然会带来麻烦。
+- en: 'Data age is nearly impossible to measure.^([4](ch04.html#idm45829111854048))
+    Fortunately, you only need to estimate the age of the data accessed, which you
+    can do with your understanding of the application, the data, and the access pattern.
+    If, for example, the application stores financial transactions, you know that
+    access is mostly limited to new data: the last 90 days of transactions. Accessing
+    data older than 90 days should be infrequent because transactions have settled
+    and become immutable. By contrast, another part of the same application that manages
+    user profiles might frequently access old data if the percentage of active users
+    is high. Remember: old data is relative to access, not time. The profile of a
+    user who last logged in a week ago isn’t necessarily old by time, but their profile
+    data is relatively old because millions of other profile data have since been
+    accessed, which means their profile data was evicted from memory.'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据年龄几乎不可能衡量。^([4](ch04.html#idm45829111854048)) 幸运的是，你只需估计访问数据的年龄，这可以通过你对应用程序、数据和访问模式的理解来完成。例如，如果应用程序存储金融交易，你知道访问主要限于新数据：最近90天的交易。访问超过90天的数据应该很少，因为交易已经结算且不可变。相比之下，同一应用程序的另一部分管理用户配置文件，如果活跃用户的比例高，可能会频繁访问旧数据。记住：旧数据相对于访问而言，而非时间。一个一周前最后登录的用户配置文件并不一定是时间上的旧数据，但相对于其他已经被访问过的百万个配置文件而言，他们的配置文件数据确实相对较旧，这意味着他们的配置文件数据已经从内存中清除。
+- en: Knowing this trait is a prerequisite for understanding [“Partition Data”](#partition-data)
+    and sharding in [Chapter 5](ch05.html#ch05).
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 知道这一特性是理解 [“分区数据”](#partition-data) 和第5章中的分片的先决条件。
+- en: Data Model
+  id: totrans-108
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 数据模型
+- en: What data model does the access exhibit?
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 访问所展示的数据模型是什么？
+- en: 'Although MySQL is a relational data store, it’s commonly used with other data
+    models: key-value, document, complex analytics, graph, and so forth. You should
+    be keenly aware of nonrelational access because it’s not the best fit for MySQL;
+    therefore, it cannot yield the best performance. MySQL excels with other data
+    models but only to a point. For example, MySQL works well as a key-value data
+    store, but [RocksDB](https://rocksdb.org) is incomparably better because it’s
+    a purpose-built key-value data store.'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管MySQL是关系型数据存储，但通常与其他数据模型一起使用：键值、文档、复杂分析、图形等。您应该特别注意非关系访问，因为它不是MySQL的最佳匹配，因此不能提供最佳性能。MySQL在其他数据模型方面表现出色，但仅限于某些情况。例如，MySQL作为键值数据存储很有效，但[RocksDB](https://rocksdb.org)则更胜一筹，因为它是专门为键值数据存储而构建的。
+- en: 'The data model trait cannot be programmatically measured like other traits.
+    Instead, you need to determine which data model the access exhibits. The verb
+    *exhibits* is meaningful: the access might be relational only because MySQL was
+    the only available data store when the access was created, but it *exhibits* another
+    data model when you consider all data stores. Access is often jammed into the
+    data model of the available data stores. But the best practice is the reverse:
+    determine the ideal data model for the access, then use a data store built for
+    that data model.'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据模型特征不能像其他特征那样以编程方式测量。相反，您需要确定访问表现出哪种数据模型。动词*表现*是有意义的：访问可能仅因为MySQL是唯一可用的数据存储而是关系型，但在考虑所有数据存储时*表现*出另一个数据模型。访问通常被强行塞入可用数据存储的数据模型中。但最佳实践是反过来：确定访问的理想数据模型，然后使用为该数据模型构建的数据存储。
+- en: Transaction Isolation
+  id: totrans-112
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 事务隔离
+- en: What transaction isolation does the access require?
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 访问需要什么样的事务隔离？
+- en: '*Isolation* is one of four ACID properties: atomicity, consistency, isolation,
+    and durability. Since the default MySQL storage engine, InnoDB, is transactional,
+    every query executes in a transaction by default—even a single `SELECT` statement.
+    ([Chapter 8](ch08.html#ch08) examines transactions.) Consequently, the access
+    has isolation whether it needs it or not. This trait clarifies whether isolation
+    is required and if so, what level.'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*隔离性*是ACID属性之一：原子性、一致性、隔离性和耐久性。由于默认的MySQL存储引擎InnoDB支持事务，每个查询默认都在事务中执行，即使是单个`SELECT`语句。([第8章](ch08.html#ch08)讨论了事务。)
+    因此，访问具有隔离性，无论是否需要。这一特性澄清了是否需要隔离性，以及如果需要，需要哪种级别。'
+- en: 'When I ask engineers this question, the answer falls into one of three categories:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我询问工程师这个问题时，答案分为三类：
+- en: None
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无
+- en: No, the access does not require any isolation. It would execute correctly on
+    a nontransactional storage engine. Isolation is just useless overhead, but it
+    doesn’t cause any problems or noticeably impact performance.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不，访问不需要任何隔离。它可以在非事务性存储引擎上正确执行。隔离只是无用的开销，但它不会造成任何问题或明显影响性能。
+- en: Default
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认
+- en: 'Presumably, the access requires isolation, but it’s unknown or unclear which
+    level is required. The application works correctly with the default transaction
+    isolation level for MySQL: `REPEATABLE READ`. Careful thought would be required
+    to determine if another isolation level—or no isolation—would work correctly.'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可能访问需要隔离性，但尚不清楚需要哪种级别。应用程序对MySQL的默认事务隔离级别`REPEATABLE READ`可以正常工作。需要仔细考虑确定其他隔离级别是否或不需要隔离。
+- en: Specific
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 具体
+- en: Yes, the access requires a specific isolation level because it’s part of a transaction
+    that executes concurrently with other transactions that access the same data.
+    Without the specific isolation level, the access could see incorrect versions
+    of the data, which would be a serious problem for the application.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 是的，访问需要特定的隔离级别，因为它是与访问相同数据的其他事务并发执行的一部分。没有特定的隔离级别，访问可能会看到数据的不正确版本，这对应用程序将是一个严重问题。
+- en: In my experience, *Default* is the most common category, and that makes sense
+    because the default transaction isolation level for MySQL, `REPEATABLE READ`,
+    is correct for most cases. But the answer to this trait should lead to *None*
+    or *Specific*. If the access does not require any isolation, then it might not
+    require a transactional data store. Else, if the access requires isolation, now
+    you specifically know which isolation level and why.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据我的经验，*默认*是最常见的类别，这是合理的，因为MySQL的默认事务隔离级别`REPEATABLE READ`对大多数情况都是正确的。但是，对这一特性的回答应该导致*无*或*具体*。如果访问不需要任何隔离性，那么可能不需要事务性数据存储。否则，如果访问需要隔离性，现在您确切地知道需要哪种隔离级别以及原因。
+- en: Other data stores have transactions—even data stores that are not fundamentally
+    transactional. For example, the document store [MongoDB](https://www.mongodb.com)
+    introduced multidocument ACID transactions in version 4.0. Knowing which isolation
+    level is required and why allows you to translate and move access from MySQL to
+    another data store.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其他数据存储也有事务——甚至是不基于事务的数据存储。例如，文档存储 [MongoDB](https://www.mongodb.com) 在版本 4.0
+    中引入了多文档 ACID 事务。了解所需的隔离级别及其原因可以帮助您将访问从 MySQL 移至另一个数据存储并进行翻译。
+- en: Warning
+  id: totrans-124
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Transactions in other data stores can be very different than MySQL transactions,
+    and transactions affect other aspects, like locking.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其他数据存储中的事务可能与 MySQL 的事务非常不同，并且事务会影响锁定等其他方面。
+- en: Read Consistency
+  id: totrans-126
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 读一致性
+- en: Does the read access require strong or eventual consistency?
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 读取访问是否需要强一致性或最终一致性？
+- en: '*Strong consistency* (or *strongly consistent reads*) means that a read returns
+    the most current value. Reads on the source MySQL instance (not replicas) are
+    strongly consistent, but the transaction isolation level determines the *current*
+    value. A long-running transaction can read an old value, but it’s technically
+    the current value with respect to the transaction isolation level. [Chapter 8](ch08.html#ch08)
+    delves into these details. For now, remember that strong consistency is the default
+    (and only option) on the source MySQL instance. This is not true for all data
+    stores. [Amazon DynamoDB](https://oreil.ly/EDCme), for example, defaults to eventually
+    consistent reads, and strongly consistent reads are optional, slower, and more
+    expensive.'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*强一致性*（或*强一致性读*）意味着读取返回最新值。在源 MySQL 实例上（非副本），读取是强一致的，但事务隔离级别确定*当前*值。长时间运行的事务可以读取旧值，但从技术上讲，这是事务隔离级别下的当前值。[第
+    8 章](ch08.html#ch08) 深入讨论了这些细节。暂时记住，强一致性是源 MySQL 实例的默认（也是唯一）选项。对于所有数据存储来说都不是这样。例如，[Amazon
+    DynamoDB](https://oreil.ly/EDCme) 默认使用最终一致性读取，强一致性读取是可选的，速度较慢且更昂贵。'
+- en: '*Eventual consistency* (or *eventually consistent reads*) means that a read
+    might return an old value, but eventually it will return the current value. Reads
+    on MySQL replicas are eventually consistent because of *replication lag*: the
+    delay between when data is written on the source and when it’s written (applied)
+    on the replica. The duration of *eventually* is roughly equal to replication lag,
+    which should be less than a second. Replicas used to serve read access are called
+    *read replicas*. (Not all replicas serve reads; some are only for high availability,
+    or other purposes.)'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*最终一致性*（或*最终一致性读*）意味着读取可能返回旧值，但最终会返回当前值。由于*复制延迟*，MySQL 副本的读取是最终一致的：即数据在源上写入与在副本上写入（应用）之间的延迟。*最终*的持续时间大致等于复制延迟，应该小于一秒。用于提供读访问的副本称为*读副本*。（并非所有副本都提供读取；有些仅用于高可用性或其他目的。）'
+- en: In the world of MySQL, it’s common for all access to use the source instance,
+    which makes all reads strongly consistent by default. But it’s also common for
+    reads *not* to require strong consistency, especially when replication lag is
+    subsecond. When eventual consistency is acceptable, offloading reads (see [“Offload
+    Reads”](#offload-reads)) becomes possible.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 的世界中，通常所有访问都使用源实例，这使得所有读取默认都是强一致性的。但是，当复制延迟为亚秒级时，读取通常*不*需要强一致性。当可以接受最终一致性时，可以进行读取卸载（参见[“卸载读取”](#offload-reads)）。
+- en: Concurrency
+  id: totrans-131
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 并发性
+- en: Is the data accessed concurrently?
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据是并发访问的吗？
+- en: Zero concurrency means that the access does not read (or write) the same data
+    at the same time. If it reads (or writes) the same data at *different* times,
+    that’s also zero concurrency. For example, an access pattern that inserts unique
+    rows has zero concurrency.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 零并发意味着访问不会同时读取（或写入）相同数据。如果在*不同*时间读取（或写入）相同数据，则也是零并发。例如，插入唯一行的访问模式具有零并发。
+- en: High concurrency means that the access frequently reads (or writes) the same
+    data at the same time.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 高并发意味着访问频繁同时读取（或写入）相同数据。
+- en: 'Concurrency indicates how important (or troublesome) row locking will be for
+    write access. Unsurprisingly, the higher the write concurrency on the same data,
+    the greater the row lock contention. Row lock contention is acceptable as long
+    as the increased response time that it causes is also acceptable. It becomes unacceptable
+    when it causes lock wait timeouts, which is a query error that the application
+    must handle and retry. When this begins to happen, there are only two solutions:
+    decrease concurrency (change the access pattern), or shard (see [Chapter 5](ch05.html#ch05))
+    to scale out writes.'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并发性指示写访问时行锁定的重要性（或麻烦）。毫不奇怪，对同一数据的写并发性越高，行锁争用就越大。只要增加的响应时间可接受，行锁争用就是可以接受的。当它导致锁等待超时时，这就变得不可接受了，这是应用程序必须处理并重试的查询错误。当这种情况开始发生时，只有两种解决方案：减少并发性（更改访问模式），或分片（参见[第5章](ch05.html#ch05)）以扩展写操作。
+- en: Concurrency also indicates how applicable a cache might be for read access.
+    If the same data is read with high concurrency but infrequently changed, then
+    it’s a good fit for a cache. I discuss this in [“Offload Reads”](#offload-reads).
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并发性还指示缓存对读访问的适用性。如果相同数据以高并发读取但变更不频繁，则适合缓存。我在[“卸载读取”](#offload-reads)中讨论了这一点。
+- en: As addressed in [“Data Age”](#ap-data-age), concurrency is nearly impossible
+    to measure, but you only need to estimate concurrency, which you can do with your
+    understanding of the application, the data, and the access pattern.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如在[“数据时代”](#ap-data-age)中所讨论的，同时性几乎不可能测量，但您只需要估算并发性，这可以通过您对应用程序、数据和访问模式的理解来完成。
+- en: Row Access
+  id: totrans-138
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 行访问
+- en: 'How are rows accessed? There are three types of row access:'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 行如何被访问？有三种类型的行访问：
+- en: '*Point access*'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*点访问*'
+- en: A single row
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 单行
+- en: '*Range access*'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*范围访问*'
+- en: Ordered rows between two values
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在两个值之间的有序行
+- en: '*Random access*'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*随机访问*'
+- en: Several rows in any order
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 任意顺序的多行
+- en: Using the English alphabet (*A* to *Z*), point access is any single character
+    (*A*, for example); range access is any number of characters in order (*ABC*,
+    or *AC* if *B* doesn’t exist); and random access is any number of random characters
+    (*ASMR*).
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用英文字母（*A*至*Z*），点访问是任何单个字符（例如*A*）；范围访问是顺序的任意数量字符（例如*ABC*，或者如果*B*不存在，则*AC*）；随机访问是任意数量的随机字符（例如*ASMR*）。
+- en: 'This trait seems simplistic, but it’s important for write access for two reasons:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这一特性似乎很简单，但对于写访问有两个重要原因：
+- en: 'Gap locking: range and random access writes that use nonunique indexes exacerbate
+    row lock contention due to gap locks. [“Row Locking”](ch08.html#row-locking) goes
+    into detail.'
+  id: totrans-148
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 间隙锁定：使用非唯一索引的范围和随机访问写操作加剧了由于间隙锁定而导致的行锁争用。[“行锁定”](ch08.html#row-locking)详细讨论了这一点。
+- en: 'Deadlocks: random access writes are a setup for *deadlocks*, which is when
+    two transactions hold row locks that the other transaction needs. MySQL detects
+    and breaks deadlocks, but they kill performance (MySQL kills one transaction to
+    break the deadlock) and they’re annoying.'
+  id: totrans-149
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 死锁：随机访问写入是死锁的前提条件，即两个事务持有对方需要的行锁。MySQL会检测并打破死锁，但会影响性能（MySQL终止一个事务以打破死锁），而且很恼人。
+- en: '*Row access* is also important when planning how to shard. Effective sharding
+    requires that access patterns use a single shard. Point access works best with
+    sharding: one row, one shard. Range and random access work with sharding but require
+    careful planning to avoid negating the benefits of sharding by accessing too many
+    shards. [Chapter 5](ch05.html#ch05) covers sharding.'
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*行访问*在计划如何分片时也很重要。有效的分片要求访问模式使用单个分片。点访问与分片结合效果最佳：一个行对应一个分片。范围和随机访问与分片兼容，但需要仔细规划，以避免通过访问过多分片抵消分片的好处。[第5章](ch05.html#ch05)涵盖了分片。'
+- en: Result Set
+  id: totrans-151
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 结果集
+- en: Does the access group, sort, or limit the result set?
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 访问组、排序或限制结果集吗？
+- en: 'This trait is easy to answer: does the access have a `GROUP BY`, `ORDER BY`,
+    or `LIMIT` clause? Each of these clauses affects if and how the access might be
+    changed or run on another data store. [“Data Access”](ch03.html#data-access) covers
+    several changes. At the very least, optimize access that groups or sorts rows.
+    Limiting rows is not a problem—it’s a benefit—but it works differently on other
+    data stores. Likewise, other data stores may or may not support grouping or sorting
+    rows.'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这一特性很容易回答：访问是否有`GROUP BY`、`ORDER BY`或`LIMIT`子句？每个子句都会影响访问可能如何更改或在其他数据存储上运行。[“数据访问”](ch03.html#data-access)涵盖了几个变化。至少要优化分组或排序行的访问。限制行不是问题，而是一个好处，但在其他数据存储中的工作方式不同。同样，其他数据存储可能支持或不支持分组或排序行。
+- en: Application Changes
+  id: totrans-154
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 应用程序更改
+- en: 'You must change the application to change its data access patterns. The changes
+    presented in this section are common, not exhaustive. They are highly effective
+    but also highly dependent on the application: some could work, others might not.
+    (Except the first change, [“Audit the Code”](#audit-the-code): that always works.)
+    Consequently, each change is an idea that needs further discussion and planning
+    with your team.'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你必须改变应用程序以改变其数据访问模式。本节介绍的更改是常见的，但不是穷尽的。它们非常有效，但也高度依赖于应用程序：有些可能有效，而其他可能不会。（除了第一个变化，["审计代码"](#audit-the-code)：总是有效。）因此，每一个变化都是一个需要与团队进一步讨论和规划的想法。
+- en: 'All changes except the first have a subtle commonality: they require additional
+    infrastructure. I point that out to mentally prepare you for the fact that, in
+    addition to code changes, you will need infrastructure changes, too. As foretold
+    from the beginning, [“Improving Query Response Time”](ch01.html#query-optimization),
+    indirect query optimization requires a greater level of effort. Whereas changing
+    data ([Chapter 3](ch03.html#ch03)) is potentially work, changing access patterns
+    is certainly work. But it’s worth the effort because these changes are, by definition,
+    *transformative*: how the application changes from a Toyota to a Ferrari.'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了第一个之外的所有更改都有一个微妙的共同点：它们需要额外的基础设施。我指出这一点是为了心理准备你，除了代码更改，你还需要基础设施的变更。正如一开始预言的那样，《优化查询响应时间》（[第1章](ch01.html#query-optimization)）间接查询优化需要更大的努力。而改变数据（[第3章](ch03.html#ch03)）可能是工作，改变访问模式肯定是工作。但是这是值得的努力，因为这些变化从定义上来说是*变革性的*：应用程序从丰田变成法拉利。
+- en: 'You might wonder: if these changes are so powerful, why not make them first—before
+    optimizing queries and data? Since the focus of this book is *efficient* MySQL
+    performance, I planned the journey to end with application changes because they
+    require the most effort. By contrast, direct query optimization ([Chapter 2](ch02.html#ch02))
+    and changes to data ([Chapter 3](ch03.html#ch03)) require far less effort, and
+    the former solves a lot of—if not most—performance problems. But if you have the
+    time and energy to jump straight into re-engineering the application, you have
+    my support. Just remember the lesson from [Chapter 2](ch02.html#ch02): indexes
+    provide the most *and the best* leverage. Bad queries ruin wonderful access patterns;
+    or, to quote renowned MySQL expert Bill Karwin:'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能会想：如果这些变化如此强大，为什么不先做它们——在优化查询和数据之前？由于本书的重点是*高效的* MySQL 性能，我计划了这个旅程以应用程序变更结束，因为这需要最多的努力。相比之下，直接查询优化（[第2章](ch02.html#ch02)）和数据更改（[第3章](ch03.html#ch03)）需要的努力要少得多，前者解决了大部分，如果不是所有的性能问题。但是如果你有时间和精力直接进行应用程序的重构，我支持你。只是要记住从[第2章](ch02.html#ch02)学到的教训：索引提供了最多且最好的杠杆。糟糕的查询破坏了出色的访问模式；或者引用著名的MySQL专家Bill
+    Karwin的话：
+- en: Your unoptimized queries are killing the database server.
+  id: totrans-158
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: 你未经优化的查询正在毁掉数据库服务器。
+- en: Audit the Code
+  id: totrans-159
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: '[审计代码](#audit-the-code)'
+- en: 'You might be surprised by how long code can exist and run without any human
+    looking at it. In a certain sense, that’s a sign of good code: it just works and
+    doesn’t cause problems. But “doesn’t cause problems” does not necessarily mean
+    that the code is efficient or even required.'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能会惊讶于代码可以在没有任何人查看的情况下存在和运行多长时间。从某种意义上说，这是良好代码的标志：它只需正常工作，不会引发问题。但是“不引发问题”并不一定意味着代码是高效的或者甚至是必需的。
+- en: 'You don’t have to audit all the code (although that’s not a bad idea), just
+    the code that accesses the database. Look at the actual queries, of course, but
+    also consider the context: the business logic that the queries accomplish. You
+    might realize a different and better way to accomplish the same business logic.'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你不必审计所有的代码（虽然这不是一个坏主意），只需审计访问数据库的代码。当然要看实际的查询，但也要考虑上下文：这些查询实现的业务逻辑。你可能会意识到实现同样业务逻辑的不同且更好的方法。
+- en: 'With respect to queries, look for the following:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于查询，请查找以下内容：
+- en: Queries that are no longer needed
+  id: totrans-163
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不再需要的查询
+- en: Queries that execute too frequently
+  id: totrans-164
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 执行太频繁的查询
+- en: Queries that retry too fast or too often
+  id: totrans-165
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 过于频繁或频率过快的重试查询
+- en: Large or complex queries—can they be simplified?
+  id: totrans-166
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 大型或复杂的查询 - 它们是否可以简化？
+- en: If the code uses ORM—or any kind of database abstraction—double check its defaults
+    and configuration. One consideration is that some database libraries execute `SHOW
+    WARNINGS` after every query to check for warnings. That’s usually not a problem,
+    but it’s also quite wasteful. Also double-check the driver defaults, configuration,
+    and release notes. For example, the MySQL driver for the Go programming language
+    has had very useful developments over the years, so Go code should be using the
+    latest version.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果代码使用ORM或任何类型的数据库抽象层，请仔细检查其默认设置和配置。一个考虑因素是，一些数据库库在每次查询后执行`SHOW WARNINGS`以检查警告。通常这不是问题，但也是相当浪费的。还要仔细检查驱动程序的默认设置、配置和发布说明。例如，Go编程语言的MySQL驱动程序多年来有着非常有用的发展，因此Go代码应该使用最新版本。
+- en: 'Indirectly audit the code by using the query profile to see what queries the
+    application executes—no query analysis required; just use the query profile as
+    an auditing tool. It’s quite common to see unknown queries in the profile. Given
+    [“MySQL Does Nothing”](#mysql-does-nothing), unknown queries likely originate
+    from the application—either your application code or any kind of database abstraction,
+    like ORM—but there is another possibility: ops. *Ops* refers to whoever runs and
+    maintains the data store: DBAs, cloud providers, and so on. If you find unknown
+    queries and you’re certain that the application isn’t executing them, check with
+    whoever operates the data store.'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过使用查询配置文件间接审计代码，查看应用程序执行了哪些查询——无需进行查询分析；只需将查询配置文件用作审计工具。在配置文件中经常看到未知查询是很常见的。鉴于["MySQL
+    无所作为"](https://zh.wikipedia.org/wiki/MySQL%E6%9C%AA%E4%BD%9C%E4%B8%BA)（MySQL Does
+    Nothing），未知查询可能源自应用程序——无论是您的应用程序代码还是ORM等任何类型的数据库抽象层，但还有另一种可能性：运维。*运维*指运行和维护数据存储的人员：DBA、云服务提供商等。如果发现未知查询，并且确信应用程序未执行它们，请与运维人员联系。
+- en: Tip
+  id: totrans-169
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 小贴士
+- en: To make query auditing easier, add application metadata to queries in `/* SQL
+    comments */`. For example, `SELECT`…`/* file:app.go line:75 */` reveals where
+    the query originates in the application source code. SQL comments are removed
+    from digest texts, so your query metric tool must include samples (see [Example 1-1](ch01.html#query-group-ids))
+    or parse metadata from SQL comments.
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了更容易进行查询审计，在`/* SQL comments */`中添加应用程序元数据到查询中。例如，`SELECT`…`/* file:app.go
+    line:75 */`显示查询在应用程序源代码中的来源。SQL注释会从摘要文本中删除，因此您的查询度量工具必须包含样本（参见[示例 1-1](ch01.html#query-group-ids)）或从SQL注释中解析元数据。
+- en: 'Lastly and most overlooked: review the [MySQL error log](https://oreil.ly/hmLlY).
+    It should be quiet: no errors, warnings, and so forth. If it’s noisy, look into
+    the errors because they signify a wide array of issues: network, authentication,
+    replication, MySQL configuration, nondeterministic queries, and so forth. These
+    types of problems should be incredibly rare, so don’t ignore them.'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，也是最容易被忽视的是：审查[MySQL错误日志](https://oreil.ly/hmLlY)。它应该是安静的：没有错误、警告等。如果它很嘈杂，请查看错误，因为它们表示各种问题：网络、认证、复制、MySQL配置、非确定性查询等等。这些问题应该是非常罕见的，因此不要忽视它们。
+- en: Offload Reads
+  id: totrans-172
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 卸载读取操作
+- en: 'By default, a single MySQL instance called *the source* serves all reads and
+    writes. In production, the source should have at least one *replica*: another
+    MySQL instance that replicates all writes from the source. [Chapter 7](ch07.html#ch07)
+    addresses replication, but I mention it here to set the stage for a discussion
+    about offloading reads.'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，称为*源头*的单个MySQL实例提供所有读写服务。在生产环境中，源头应该至少有一个*副本*：另一个MySQL实例，复制源头的所有写操作。[第7章](ch07.html#ch07)讨论了复制，但我在这里提到它是为了讨论如何卸载读取操作。
+- en: Performance can be improved by offloading reads from the source. This technique
+    uses MySQL replicas or cache servers to serve reads. (More on these two in a moment.)
+    It improves performance in two ways. First, it reduces load on the source, which
+    frees time and system resources to run the remaining queries faster. Second, it
+    improves response time for the offloaded reads because the replicas or caches
+    serving those reads are not loaded with writes. It’s a win-win technique that’s
+    commonly used to achieve high-throughput, low-latency reads.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能可以通过将读取操作从源头卸载来改善。这种技术使用MySQL副本或缓存服务器来提供读取服务。（稍后详述这两者。）它以两种方式提升性能。首先，减少了源头的负载，从而释放时间和系统资源，加快剩余查询的运行速度。其次，通过为卸载的读取操作提供服务的副本或缓存，改善了响应时间，因为这些服务没有负载写操作。这是一种双赢的技术，通常用于实现高吞吐量、低延迟的读取操作。
+- en: 'Data read from a replica or cache is *not* guaranteed to be current (the latest
+    value) because there is inherent and unavoidable delay in MySQL replication and
+    writing to a cache. Consequently, data from replicas and caches is *eventually
+    consistent*: it becomes current after a (hopefully very) short delay. Only data
+    on the source is current (transaction isolation levels notwithstanding). Therefore,
+    before serving reads from a replica or cache, the following must be true: *reading
+    data that is out-of-date (eventually consistent) is acceptable, and it will not
+    cause problems for the application or its users*.'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从副本或缓存读取的数据*不*保证是最新的（即最新值），因为 MySQL 复制和写入缓存中存在固有和不可避免的延迟。因此，来自副本和缓存的数据是*最终一致的*：在（希望是非常）短暂的延迟后变得最新。只有源上的数据是当前的（不考虑事务隔离级别）。因此，在从副本或缓存中提供读取之前，必须满足以下条件：*接受读取过时（最终一致的）数据，并且它不会给应用程序或其用户造成问题*。
+- en: 'Give that statement some thought because more than once I’ve seen developers
+    think about it and realize, “Yeah, it’s fine if the application returns slightly
+    out-of-date values.” A commonly cited example is the number of “likes” or up-votes
+    on a post or video: if the current value is 100 but the cache returns 98, that’s
+    close enough—especially if the cache returns the current value a few milliseconds
+    later. If that statement is *not* true for your application, do not use this technique.'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让那个声明深思熟虑，因为我曾多次看到开发人员考虑并意识到，“是的，如果应用程序返回略过时的值，这是可以接受的。”一个常见的例子是帖子或视频的“赞”或“点赞”数量：如果当前值是100，但缓存返回98，这已经足够接近——尤其是如果缓存几毫秒后返回当前值。如果这个声明对你的应用程序*不*成立，请不要使用这种技术。
+- en: In addition to the requirement that eventual consistency is acceptable, offloaded
+    reads must not be part of a multi-statement transaction. Multi-statement transactions
+    must be executed on the source.
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了要求可以接受最终一致性的需求之外，卸载读取不得作为多语句事务的一部分。多语句事务必须在源上执行。
+- en: Warning
+  id: totrans-178
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Always ensure that offload reads are acceptable with eventual consistency and
+    not part of a multi-statement transaction.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请始终确保卸载读取操作可以接受最终一致性，并且不是多语句事务的一部分。
+- en: 'Before serving reads from replicas or caches, thoroughly address this question:
+    *how will the application run degraded when the replicas or caches are offline?*'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在从副本或缓存中提供读取操作之前，彻底解决这个问题：*副本或缓存离线时，应用程序如何降级运行？*
+- en: The only wrong answer to that question is not knowing. Once an application offloads
+    reads, it tends to depend heavily on the replicas or caches to serve those reads.
+    It’s imperative to design, implement, and test the application to run degraded
+    when the replicas or caches are offline. *Degraded* means that the application
+    is running but noticeably slower, limiting client requests, or not fully functional
+    because some parts are offline or throttled. As long as the application is not
+    *hard down*—completely offline and unresponsive with no human-friendly error message—then
+    you’ve done a good job making the application run degraded.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于这个问题，唯一的错误答案是不知道。一旦应用程序卸载读取操作，它往往会严重依赖副本或缓存来提供这些读取操作。设计、实施和测试应用程序在副本或缓存离线时如何降级运行至关重要。*降级*意味着应用程序在运行，但明显变慢，限制客户端请求，或因为某些部分离线或被限流而无法完全运行。只要应用程序不是*完全宕机*——完全离线且无法响应且没有友好的人类可读错误消息——那么你在使应用程序在降级状态下运行方面已经做得很好了。
+- en: 'Last point before we discuss using MySQL replicas versus cache servers: do
+    not offload all reads. Offloading reads improves performance by not wasting time
+    on the source for work that a replica or cache can accomplish. Therefore, start
+    by offloading slow (time-consuming) reads: reads that show up as slow queries
+    in the query profile. This technique is potent, so offload reads one by one because
+    you might only need to offload a few to significantly improve performance.'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在讨论使用 MySQL 副本与缓存服务器之前的最后一个要点：不要卸载所有读取操作。卸载读取操作通过不在源上执行副本或缓存可以完成的工作来提高性能。因此，首先卸载慢（耗时）读取操作：在查询性能分析中显示为慢查询的读取操作。这种技术非常有效，因此逐个卸载读取操作，因为你可能只需要卸载几个读取操作就能显著提高性能。
+- en: MySQL replica
+  id: totrans-183
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: MySQL 副本
+- en: Using MySQL replicas to serve reads is common because every production MySQL
+    setup should already have at least one replica, and more than two replicas is
+    common. With the infrastructure (the replicas) already in place, you only have
+    to modify the code to use the replicas for offloaded reads instead of the source.
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 MySQL 的副本提供读取服务很常见，因为每个生产 MySQL 设置应该已经至少有一个副本，并且多于两个副本也很普遍。有了基础设施（副本）已经就位，你只需修改代码以使用副本来分担读取而不是源。
+- en: 'Before stating why replicas are preferable to cache servers, there’s one important
+    issue to settle: can the application use the replicas? Since replicas are used
+    for high availability, whoever manages MySQL might not intend for replicas to
+    serve reads. Be sure to find out because, if not, replicas might be taken offline
+    without notice for maintenance.'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在说明为什么副本比缓存服务器更可取之前，有一个重要问题需要解决：应用程序能否使用副本？由于副本用于高可用性，管理 MySQL 的人可能并不打算让副本提供读取服务。务必弄清楚这一点，因为如果不能，副本可能会因维护而被下线而无法提前通知。
+- en: 'Presuming your replicas can be used to serve reads, they are preferable to
+    cache servers for three reasons:'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设你的副本可以用来提供读取服务，它们比缓存服务器更可取，理由有三：
+- en: Availability
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可用性
+- en: 'Since replicas are the foundation of high availability, they should have the
+    same availability as the source—99.95% or 99.99% availability, for example. That
+    makes replicas nearly worry-free: whoever manages MySQL is also managing the replicas.'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于副本是高可用性的基础，它们应该与源具有相同的可用性 — 例如 99.95% 或 99.99% 的可用性。这使得副本几乎无需担忧：管理 MySQL 的人也在管理副本。
+- en: Flexibility
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 灵活性
+- en: In the previous section, I said that you should start by offloading slow (time-consuming)
+    reads. For caches, this is especially true because the cache server most likely
+    has limited CPU and memory—resources not to be wasted on trivial reads. By contrast,
+    replicas used for high availability should have the same hardware as the source,
+    so they have resources to spare. Offloading trivial reads to a replica doesn’t
+    matter as much, hence the flexibility when choosing what to offload. On the off
+    chance that you have pure *read replicas*—replicas *not* used for high availability—with
+    less powerful hardware, then don’t waste resources on trivial reads. This is more
+    common in the cloud because it’s easy to provision read replicas with large storage
+    but small CPU and memory (to save money).
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前一节中，我说过你应该从慢速（耗时）读取开始。对于缓存而言，这一点尤为重要，因为缓存服务器很可能具有有限的 CPU 和内存 — 这些资源不应浪费在琐碎的读取上。相比之下，用于高可用性的副本应该与源具有相同的硬件配置，因此它们有多余的资源。将琐碎的读取分担给副本的影响并不那么大，因此在选择何时分担时具有灵活性。如果偶然有纯粹的
+    *读取副本* —— 也就是 *不* 用于高可用性的副本 —— 其硬件配置较弱，则不要浪费资源在琐碎的读取上。这在云中更为常见，因为可以轻松地为大容量存储提供读取副本，但
+    CPU 和内存较小（以节省成本）。
+- en: Simplicity
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 简单性
+- en: 'The application doesn’t have to do anything to keep replicas in sync with the
+    source—that’s intrinsic to being a replica. With a cache, the application must
+    manage updates, invalidation, and (possibly) eviction. But the real simplicity
+    is that replicas don’t require any query changes: the application can execute
+    the exact same SQL statements on a replica.'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 应用程序无需做任何事情来保持副本与源的同步 — 这是副本固有的特性。有了缓存，应用程序必须管理更新、失效和（可能的）驱逐。但真正的简单之处在于副本不需要任何查询更改：应用程序可以在副本上执行完全相同的
+    SQL 语句。
+- en: 'Those are three compelling reasons to prefer MySQL replicas to cache servers,
+    but the latter has one important point in its favor: a cache server can be incredibly
+    faster than MySQL.'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这三个理由充分说明了为什么要优先选择 MySQL 的副本而不是缓存服务器，但后者有一个重要的优势：缓存服务器比 MySQL 快得多。
+- en: Cache server
+  id: totrans-194
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 缓存服务器
+- en: A cache server is not encumbered with SQL, transactions, or durable storage.
+    That makes it incredibly faster than MySQL, but it also takes more work in the
+    application to use properly. As mentioned in the previous section, the application
+    must manage cache updates, invalidation, and (possibly) eviction. Moreover, the
+    application needs a data model that works with the cache, which is usually a key-value
+    model. The extra work is worth the effort because practically nothing is faster
+    than a cache. [Memcached](https://memcached.org) and [Redis](https://redis.io)
+    are two popular and widely-used cache servers.
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个缓存服务器不受SQL、事务或持久存储的限制。这使它比MySQL快得多，但在应用程序中正确使用它需要更多工作。如前文所述，应用程序必须管理缓存更新、失效以及（可能的）驱逐。此外，应用程序需要一个能与缓存配合的数据模型，通常是键值模型。这额外的工作是值得的，因为实际上没有比缓存更快的东西。[Memcached](https://memcached.org)
+    和 [Redis](https://redis.io) 是两种流行且广泛使用的缓存服务器。
+- en: Note
+  id: totrans-196
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'If you hear that MySQL has a built-in query cache: forget it and never use
+    it. It was deprecated as of MySQL 5.7.20 and removed as of MySQL 8.0.'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你听说MySQL有内置的查询缓存：请忘记它，永远不要使用。自MySQL 5.7.20起，它已被弃用，并且在MySQL 8.0中移除。
+- en: 'Caching is ideal for data that’s frequently accessed but infrequently changed.
+    This is not a consideration for MySQL replicas because all changes replicate,
+    but a cache stores only what the application puts in it. A bad example is the
+    current Unix timestamp in seconds: it’s always changing. The exception in a bad
+    case like this: if the frequency of access is significantly *greater than* the
+    frequency of change. For example, if the current Unix timestamp in seconds is
+    requested one million times per second, then caching the current timestamp might
+    be appropriate. A good example is the current year: it changes infrequently. However,
+    the exception in a good case like this: if the frequency of access is significantly
+    *less than* the frequency of change. For example, if the current year is requested
+    only once per second, then a cache provides almost no value because 1 QPS doesn’t
+    make any difference for this data access.'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 缓存非常适合频繁访问但不经常更改的数据。这对于MySQL复制不是一个问题，因为所有更改都会复制，但缓存只存储应用程序放入其中的内容。一个不好的例子是当前Unix时间戳（以秒为单位）：它一直在变化。在这种糟糕的情况下的例外：如果访问频率显著*大于*更改频率。例如，如果每秒请求一百万次当前Unix时间戳，那么缓存当前时间戳可能是合适的。一个好例子是当前年份：它的变化不频繁。然而，在这种良好情况下的例外：如果访问频率显著*低于*更改频率。例如，如果每秒仅请求一次当前年份，则缓存几乎没有价值，因为每秒1次对于这种数据访问没有任何影响。
+- en: 'A word of caution when using a cache: *decide whether the cache is ephemeral
+    or durable*. This, too, is not a consideration for MySQL replicas because they
+    are always durable, but some cache servers can be either. If the cache is truly
+    ephemeral, then you should be able to do the equivalent of `TRUNCATE TABLE` on
+    the cache data without affecting the application. You also need to decide how
+    the ephemeral cache is rebuilt. Some applications rebuild the cache on *cache
+    miss*: when the requested data is not in the cache. Other applications have an
+    external process to rebuild the cache from another data source (for example, loading
+    the cache with images stored in [Amazon S3](https://oreil.ly/XMQxR)). And some
+    applications rely so heavily on the cache, or the cache is so large, that rebuilding
+    it is not feasible. For such applications, a durable cache is required. Either
+    way—ephemeral or durable—test your decision to verify that the application functions
+    as expected when the cache fails and recovers.'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用缓存时需要注意：*决定缓存是临时的还是持久的*。这对于MySQL复制不是一个问题，因为它们总是持久的，但某些缓存服务器可以是两者之一。如果缓存是真正的临时的，那么你应该能够对缓存数据执行类似于`TRUNCATE
+    TABLE`的操作而不影响应用程序。你还需要决定如何重建临时缓存。一些应用在*缓存未命中*时重建缓存：当请求的数据不在缓存中时。其他应用程序有一个外部过程，从另一个数据源重新构建缓存（例如，从[Amazon
+    S3](https://oreil.ly/XMQxR)加载存储在其中的图像）。有些应用程序非常依赖缓存，或者缓存非常大，因此重建它是不可行的。对于这些应用程序，需要一个持久的缓存。无论是临时还是持久，都要测试你的决策，以验证在缓存失败和恢复时应用程序是否按预期运行。
+- en: Enqueue Writes
+  id: totrans-200
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 排队写入
+- en: Use a queue to stabilize write throughput. [Figure 4-5](#erratic-writes) illustrates
+    unstable—erratic—write throughput that spikes above 30,000 QPS and dips below
+    10,000 QPS.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用队列稳定写入吞吐量。[图4-5](#erratic-writes)展示了不稳定的—突发—写入吞吐量，其高于30,000 QPS并低于10,000 QPS。
+- en: '![emsp 0405](assets/emsp_0405.png)'
+  id: totrans-202
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0405](assets/emsp_0405.png)'
+- en: Figure 4-5\. Erratic write throughput
+  id: totrans-203
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图4-5\. 不稳定的写入吞吐量
+- en: Even if performance is currently acceptable with unstable write throughput,
+    it’s not a recipe for success because unstable throughput worsens at scale—it
+    never spontaneously stabilizes. (And if you recall [Figure 4-3](#db-perf-limit-charts)
+    from [“Performance Destabilizes at the Limit”](#perf-at-the-limit), a flatline
+    value is not stable.) Using a queue allows the application to process changes
+    (writes) at a stable rate, as shown in [Figure 4-6](#stable-writes).
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使目前性能在不稳定的写入吞吐量下仍然可接受，但这不是成功的秘诀，因为不稳定的吞吐量在规模上会恶化——它永远不会自动稳定。（如果你还记得[图4-3](#db-perf-limit-charts)中的[“性能极限时的表现”](#perf-at-the-limit)，一个平线值并不稳定。）使用队列使应用程序能够以稳定的速率处理更改（写入），如[图4-6](#stable-writes)所示。
+- en: '![emsp 0406](assets/emsp_0406.png)'
+  id: totrans-205
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0406](assets/emsp_0406.png)'
+- en: Figure 4-6\. Stable write throughput
+  id: totrans-206
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图4-6\. 稳定的写入吞吐量
+- en: 'The real power of enqueueing writes and stable write throughput is that they
+    allow the application to respond gracefully and predictably to a *thundering herd*:
+    a flood of requests that overwhelms the application, or the database, or both.
+    For example, imagine that the application normally processes 20,000 changes per
+    second. But it goes offline for five seconds, which results in 100,000 pending
+    changes. The moment the application comes back online, it’s hit with the 100,000
+    pending changes—a thundering herd—plus the normal 20,000 changes for the current
+    second. How will the application and MySQL handle the thundering herd?'
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将写入加入队列和稳定的写入吞吐量的真正威力在于它们使应用程序能够优雅且可预测地响应*雷鸣群*：即淹没应用程序、数据库或两者的请求洪流。例如，假设应用程序通常每秒处理20,000次更改。但它下线了五秒钟，结果导致有100,000个待处理更改。应用程序重新上线时，它将面对这100,000个待处理更改—一个“雷鸣群”—以及当前秒的正常20,000个更改。应用程序和MySQL将如何处理这场“雷鸣群”？
+- en: 'With a queue, the thundering herd does not affect MySQL: it goes into the queue,
+    and MySQL processes the changes as usual. The only difference is that some changes
+    happen later than usual. As long as write throughput is stable, you can increase
+    the number of queue consumers to process the queue more quickly.'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有了队列，雷鸣群不会影响MySQL：它们进入队列，MySQL像往常一样处理更改。唯一的区别是有些更改可能会比平时晚一些。只要写入吞吐量稳定，可以增加队列消费者的数量，以更快地处理队列。
+- en: Without a queue, experience teaches that one of two things will happen. Either
+    you’ll be super lucky and MySQL will handle the thundering herd, or it won’t.
+    Don’t count on luck. MySQL does not throttle query execution, so it will try to
+    execute all queries when the thundering herd hits. (However, MySQL Enterprise
+    Edition, Percona Server, and MariaDB Server have a *thread pool* that limits the
+    number of concurrently executing queries, which acts as a throttle.) This never
+    works because CPU, memory, and disk I/O are inherently limited—not to mention
+    the Universal Scalability Law ([Equation 4-1](#usl)). Regardless, MySQL always
+    tries because it’s incredibly ambitious and a little foolhardy.
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 没有队列的话，经验告诉我们会出现以下两种情况之一。要么你会非常幸运，MySQL能处理“雷鸣群”现象，要么就不行。不要寄希望于运气。MySQL不会限制查询执行，因此在“雷鸣群”袭击时会尝试执行所有查询。（然而，MySQL企业版、Percona
+    Server和MariaDB Server拥有*线程池*，限制同时执行查询的数量，起到了一定的限流作用。）这种方法从来不奏效，因为CPU、内存和磁盘I/O本质上是有限的，更不用说普适性扩展法则（[Equation
+    4-1](#usl)）。尽管如此，MySQL总是试图做到，因为它非常雄心勃勃，也有点鲁莽。
+- en: 'This technique bestows other advantages that make it worth the effort to implement.
+    One advantage is that it decouples the application from MySQL availability: the
+    application can accept changes when MySQL is offline. Another advantage is that
+    it can be used to recover lost or abandoned changes. Suppose a change requires
+    various steps, some of which might be long-running or unreliable. If a step fails
+    or times out, the application can re-enqueue the change to try again. A third
+    advantage is the ability to replay changes if the queue is an event stream, like
+    [Kafka](https://oreil.ly/fRZpa).'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种技术赋予了其他优势，使得实施它变得值得。其中一个优势是它将应用程序与MySQL的可用性解耦：即使MySQL离线，应用程序也能接受更改。另一个优势是它可以用来恢复丢失或放弃的更改。假设一个更改需要各种步骤，其中一些可能是长时间运行或不可靠的。如果某个步骤失败或超时，应用程序可以重新将更改放入队列以重试。第三个优势是如果队列是事件流（如[Kafka](https://oreil.ly/fRZpa)），则可以重放更改。
+- en: Tip
+  id: totrans-211
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: For write-heavy applications, enqueueing writes is the best practice and practically
+    a requirement. Invest the time to learn and implement a queue.
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于写入密集型应用程序，将写入加入队列是最佳实践，几乎是必须的。投入时间学习和实现队列。
+- en: Partition Data
+  id: totrans-213
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 分区数据
+- en: After [Chapter 3](ch03.html#ch03), it should be no surprise that it’s easier
+    to improve performance with *less data*. Data is valuable to you, but it’s dead
+    weight to MySQL. If you cannot delete or archive data (see [“Delete or Archive
+    Data”](ch03.html#delete-or-archive)), then you should at least partition (physically
+    separate) the data.
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[第三章](ch03.html#ch03)之后，你应该不会感到意外，减少数据量能更容易提高性能。对你来说数据很重要，但对 MySQL 来说只是一种负担。如果不能删除或存档数据（见[“删除或存档数据”](ch03.html#delete-or-archive)），那么至少应该对数据进行分区（物理分离）。
+- en: First, let’s briefly address then put aside [MySQL partitioning](https://oreil.ly/BNopd).
+    MySQL supports partitioning, but it requires special handling. It’s not trivial
+    to implement or maintain, and some third-party MySQL tools don’t support it. Consequently,
+    I don’t recommend using MySQL partitioning.
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，让我们简要讨论然后放置[MySQL 分区](https://oreil.ly/BNopd)。MySQL 支持分区，但需要特殊处理。实施或维护起来并不轻松，并且一些第三方
+    MySQL 工具不支持它。因此，我不建议使用 MySQL 分区。
+- en: 'The type of data partitioning that is most useful, more common, and easier
+    for application developers to implement is separating *hot* and *cold* data: frequently
+    and infrequently accessed data, respectively. Separating hot and cold data is
+    a combination of partitioning and archiving. It partitions by access, and it archives
+    by moving the infrequently accessed (cold) data out of the access path of the
+    frequently accessed (hot) data.'
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最有用、更常见且对应用程序开发者更容易实现的数据分区类型是将*热*和*冷*数据分开：分别是频繁访问和不经常访问的数据。将热数据和冷数据分开是分区和归档的结合。它根据访问进行分区，并通过将不经常访问的（冷）数据移出经常访问的（热）数据的访问路径来进行归档。
+- en: 'Let’s use an example: a database that stores payments. The hot data is the
+    last 90 days of payments for two reasons. First, payments usually do not change
+    after settling, but there are exceptions like refunds that can be applied later.
+    After some period, however, payments are finalized and cannot be changed. Second,
+    the application shows only the last 90 days of payments. To see older payments,
+    users have to look up past statements. The cold data is payments after 90 days.
+    For a year, that’s 275 days, which is roughly 75% of data. Why have 75% of data
+    sit idly in a transactional data store like MySQL? That’s a rhetorical question:
+    there’s no good reason.'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们举个例子：一个存储支付信息的数据库。热数据是最近90天的支付，有两个原因。首先，支付通常在结算后不会更改，但像退款这样的例外情况可以稍后应用。然而，一段时间后，支付将最终确定且无法更改。其次，应用程序仅显示最近90天的支付。要查看较早的支付，用户必须查找过去的对账单。冷数据是90天后的支付。一年来，这是275天，大约占数据的75%。为什么要让75%的数据在像
+    MySQL 这样的事务数据存储中闲置不用呢？这是一个反问：没有充分的理由。
+- en: 'Separating hot and cold data is primarily an optimization for the former. Storing
+    cold data elsewhere yields three immediate advantages: more hot data fits in memory,
+    queries don’t waste time examining cold data, and operations (like schema changes)
+    are faster. Separating hot and cold data is also an optimization for the latter
+    when it has completely different access patterns. In the preceding example, old
+    payments might be grouped by month into a single data object that no longer requires
+    a row for each payment. In that case, a document store or key-value store might
+    be better suited for storing and accessing the cold data.'
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将热数据和冷数据分开主要是对前者进行优化。将冷数据存储在其他地方有三个直接优点：更多的热数据适合内存，查询不会浪费时间检查冷数据，并且操作（如模式更改）更快。将热数据和冷数据分开也是对后者的优化，当它具有完全不同的访问模式时。在前面的例子中，旧的支付可能会按月分组成单个数据对象，不再需要每笔支付的行。在这种情况下，文档存储或键值存储可能更适合存储和访问冷数据。
+- en: At the very least, you can archive cold data in another table in the same database.
+    That’s relatively easy with a controlled `INSERT`…`SELECT` statement to select
+    from the hot table and insert into the cold table. Then `DELETE` the archived
+    cold data from the hot table. Wrap it all up in a transaction for consistency.
+    See [“Delete or Archive Data”](ch03.html#delete-or-archive).
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 至少，您可以在同一数据库的另一个表中存档冷数据。通过控制的`INSERT`…`SELECT`语句从热表中选择并插入到冷表中是相对容易的。然后从热表中`DELETE`存档的冷数据。为了一致性将所有操作包装在一个事务中。参见[“删除或存档数据”](ch03.html#delete-or-archive)。
+- en: 'This technique can be implemented many different ways, especially with respect
+    to how and where the cold data is stored and accessed. But fundamentally it’s
+    very simple and highly effective: move infrequently accessed (cold) data out of
+    the access path of frequently accessed (hot) data to improve performance for the
+    latter.'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种技术可以通过多种不同的方式实施，特别是关于冷数据存储和访问的方式和位置。但从根本上讲，它非常简单且高效：将不经常访问的（冷）数据移出频繁访问的（热）数据的访问路径，以提高后者的性能。
+- en: Don’t Use MySQL
+  id: totrans-221
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 不要使用 MySQL
+- en: 'I want to put a figurative capstone on the current discussion about application
+    changes: the most significant change is not using MySQL when it’s clearly not
+    the best data store for the access patterns. Sometimes it’s very easy to see when
+    MySQL is not the best choice. For example, in previous chapters I made reference
+    to a query with load 5,962. That query is used to select vertices in a graph.
+    Clearly, a relational database is not the best choice for graph data; the best
+    choice is a graph data store. Even a key-value store would be better because graph
+    data has nothing to do with relational database concepts like normalization and
+    transactions. Another easy and common example is time series data: a row-oriented
+    transactional database is not the best choice; the best choice is a time series
+    database, or perhaps a columnar store.'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我想在当前关于应用程序变更的讨论中做一个象征性的总结：最显著的变更是在访问模式明显不适合使用 MySQL 作为最佳数据存储时不使用它。有时很容易看出 MySQL
+    不是最佳选择。例如，在前几章中，我提到过一个负载为 5,962 的查询。该查询用于选择图中的顶点。显然，关系型数据库不适合处理图数据；最佳选择是图数据存储。甚至键-值存储也比关系型数据库更好，因为图数据与规范化和事务等关系型数据库概念无关。另一个简单且常见的例子是时间序列数据：面向行的事务性数据库不是最佳选择；最佳选择是时间序列数据库，或者可能是列存储。
+- en: 'MySQL scales surprising well for a wide range of data and access patterns even
+    when it’s not the best choice. But never take that for granted: be the first engineer
+    on your team to say, “Maybe MySQL isn’t the best choice.” It’s okay: if I can
+    say that, then you can too. If anyone gives you grief, tell them I support your
+    decision to use the best tool for the job.'
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使 MySQL 不是最佳选择，它也能出乎意料地适应各种数据和访问模式。但不要把这一点视为理所当然：作为团队中第一个说出“也许 MySQL 不是最佳选择”的工程师是可以的。没关系：如果我能这么说，你也可以。如果有人因此给你麻烦，请告诉他们我支持你为工作选择最佳工具的决定。
+- en: That said, MySQL is amazing. Please at least finish this chapter and the next,
+    [Chapter 5](ch05.html#ch05), before you swipe left on MySQL.
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管如此，MySQL 也是非常棒的。请至少在阅读完本章和下一章 [第 5 章](ch05.html#ch05) 之后再考虑放弃 MySQL。
+- en: Better, Faster Hardware?
+  id: totrans-225
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 更好，更快的硬件？
+- en: '[“Better, Faster Hardware!”](ch02.html#better-faster-hardware) cautions against
+    scaling up hardware to increase performance. But the first sentence of that section
+    is carefully worded: “When MySQL performance isn’t acceptable, do *not* begin
+    by scaling up…” The key word in that sentence is *begin*, and the pivotal question
+    that it leads to is: *when is the correct time to scale up hardware?*'
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[“更好，更快的硬件！”](ch02.html#better-faster-hardware) 警告不要通过扩展硬件来提高性能。但是该部分的第一句话精心措辞：“当
+    MySQL 的性能不可接受时，请*不要*从扩展…” 该句中的关键词是 *begin*，它引导出一个关键问题：*何时才是扩展硬件的正确时机？*'
+- en: 'That question is difficult to answer because it depends on a combination of
+    factors: queries, indexes, data, access patterns, and how those utilize the current
+    hardware. For example, let’s say that the application has a super inefficient
+    access pattern: it uses MySQL as a queue and polls it very quickly from many application
+    instances. I would not scale up hardware until fixing the access pattern first.
+    But sometimes, engineers don’t have the luxury of time necessary to make such
+    application changes.'
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个问题很难回答，因为它取决于查询、索引、数据、访问模式以及这些如何利用当前的硬件。例如，假设应用程序有一个超级低效的访问模式：它将 MySQL 用作队列，并且从许多应用程序实例中非常快速地轮询它。在修复访问模式之前，我不会扩展硬件。但有时候，工程师没有足够的时间来进行这样的应用程序更改。
+- en: '[Table 4-2](#hardware-upgrade-checklist) is a checklist to help determine if
+    it’s time to scale up the hardware. When you can check all items in column 1 and
+    at least two items in column 2, then it’s a strong indication that it’s time to
+    scale up the hardware.'
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[表 4-2](#hardware-upgrade-checklist) 是一个检查表，用于帮助确定是否是扩展硬件的时机。当您可以检查完列 1 中的所有项目，并至少检查列
+    2 中的两个项目时，这明显表明是时候扩展硬件了。'
+- en: Table 4-2\. Hardware upgrade checklist
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 4-2\. 硬件升级清单
+- en: '| 1\. Check all | 2\. Check at least two |'
+  id: totrans-230
+  prefs: []
+  type: TYPE_TB
+  zh: '| 1\. 检查所有 | 2\. 至少检查两项 |'
+- en: '| --- | --- |'
+  id: totrans-231
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| ☐ Response time is too high | ☐ CPU utilization is greater than 80% |'
+  id: totrans-232
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ 响应时间过高 | ☐ CPU利用率大于80% |'
+- en: '| ☐ Slow queries have been optimized | ☐ Threads running greater than number
+    of CPU cores |'
+  id: totrans-233
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ 已优化慢查询 | ☐ 运行线程大于CPU核心数 |'
+- en: '| ☐ Data has been deleted or archived | ☐ Memory is less than 10% of total
+    data size |'
+  id: totrans-234
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ 数据已删除或存档 | ☐ 内存少于总数据大小的10% |'
+- en: '| ☐ Access patterns have been reviewed and optimized | ☐ Storage IOPS utilization
+    is greater than 80% |'
+  id: totrans-235
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ 已经审查和优化访问模式 | ☐ 存储IOPS利用率大于80% |'
+- en: 'Column 1 is an unapologetic reiteration of everything since [Chapter 1](ch01.html#ch01),
+    but it’s also an unequivocal justification for spending money to upgrade the hardware.
+    Column 2 requires at least two checks because hardware works together. Heavily
+    utilizing only one piece of hardware doesn’t guarantee a problem or slow performance.
+    Instead, it’s probably a good sign: you’re fully utilizing that piece of hardware.
+    But when one piece of hardware is overloaded, it usually begins to affect other
+    pieces of hardware. For example, when slow storage causes a backlog of queries
+    which causes a backlog of clients which causes high CPU utilization because MySQL
+    is trying to execute too many threads. That’s why column 2 requires two checks.'
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一栏不仅是对自[第一章](ch01.html#ch01)以来一切的明确重申，还是升级硬件的明确理由。第二栏至少需要两次检查，因为硬件是协同工作的。仅仅大量利用一个硬件部件并不能保证问题或性能变慢。相反，这可能是一个好迹象：你完全利用了该硬件部件。但当一个硬件部件过载时，通常会开始影响其他硬件部件。例如，当缓慢的存储导致查询积压，进而导致客户积压，因为MySQL试图执行过多的线程，这就是为什么第二栏需要两次检查的原因。
+- en: Values in column 2 should be consistently greater or less than the suggested
+    thresholds. Occasional spikes and dips are normal.
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二栏中的数值应始终大于或小于建议的阈值。偶尔的波动是正常的。
+- en: The maximum number of storage IOPS is determined by the storage device, if running
+    your own hardware. If you’re not sure, check the device specifications, or ask
+    the engineers who manage the hardware. In the cloud, storage IOPS are allocated
+    or provisioned, so it’s usually easier to tell the maximum because you purchase
+    the IOPS. But if you’re not sure, check the MySQL storage settings, or ask the
+    cloud provider. [“IOPS”](ch06.html#metrics-iops) shows which metrics report storage
+    IOPS.
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果是自己的硬件，存储设备的最大IOPS数由存储设备确定。如果不确定，请查看设备规格或询问管理硬件的工程师。在云中，存储IOPS是分配或预留的，所以通常更容易告知最大值，因为你购买了IOPS。但如果不确定，请检查MySQL存储设置或询问云提供商。["IOPS"](ch06.html#metrics-iops)显示了哪些指标报告存储IOPS。
+- en: 'Storage IOPS utilization has an additional consideration based on whether the
+    application is read-heavy or write-heavy (see [“Read/Write”](#ap-read-write)):'
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据应用程序是读密集型还是写密集型（参见["读/写"](ch03.html#ap-read-write)），存储IOPS利用还需要考虑其他因素：
+- en: Read-heavy
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 读取密集型
+- en: 'For read-heavy access patterns, consistently high IOPS is probably due to insufficient
+    memory, not insufficient IOPS. MySQL reads data from disk when it’s not in memory,
+    and it’s exceptionally good at keeping the working set in memory (see [“Working
+    set size”](ch03.html#working-set-size)). But a combination of two factors can
+    cause high IOPS for reads: the working set size is significantly larger than memory,
+    and read throughput is exceptionally high (see [“Throughput”](#ap-throughput)).
+    That combination causes MySQL to swap so much data between disk and memory that
+    the problem shows up as high IOPS. This is rare, but possible.'
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于读取密集型访问模式，持续高IOPS可能是由于内存不足而不是IOPS不足。当MySQL从磁盘读取数据时，如果数据不在内存中，它通常会表现出色地保持工作集在内存中（参见["工作集大小"](ch03.html#working-set-size)）。但是，两个因素的组合可能会导致读取高IOPS：工作集大小显著大于内存，并且读取吞吐量异常高（参见["吞吐量"](ch03.html#ap-throughput)）。这种组合会导致MySQL在磁盘和内存之间频繁交换数据，从而以高IOPS的问题表现出来。这是罕见的，但可能发生。
+- en: Write-heavy
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写入密集型
+- en: 'For write-heavy access patterns, consistently high IOPS is probably due to
+    insufficient IOPS. Simply put: the storage can’t write data fast enough. Normally,
+    storage achieves high throughput (IOPS) with write caches, but caches are not
+    durable. MySQL requires *durable storage*: data physically on disk, not in caches.
+    (The phrase “on disk” is still used even for flash-based storage that doesn’t
+    have disks.) Consequently, MySQL must *flush* data—force it to be written to disk.
+    Flushing severely limits storage throughput, but MySQL has sophisticated techniques
+    and algorithms to achieve performance with durability—[“Page flushing”](ch06.html#metrics-page-flushing)
+    goes into detail. The only solution at this point—because you’ve already optimized
+    queries, data, and access patterns—is more storage IOPS.'
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于写入密集型访问模式，持续高IOPS可能是由于IOPS不足。简而言之：存储无法快速写入数据。通常，存储通过写入缓存实现高吞吐量（IOPS），但缓存不是持久的。MySQL需要*持久存储*：数据物理上存储在磁盘上，而不是在缓存中。因此，MySQL必须*刷新*数据——强制将其写入磁盘。刷新严重限制了存储的吞吐量，但MySQL具有复杂的技术和算法来实现性能与耐久性——[“页面刷新”](ch06.html#metrics-page-flushing)详细介绍了这一点。在这一点上，唯一的解决方案是增加存储的IOPS，因为您已经优化了查询、数据和访问模式。
+- en: 'With a cautious nod to scaling up hardware, it might seem that we’ve reached
+    the end. No matter how many pebbles, or cobbles, or boulders we have to move,
+    we can always use a bigger truck to move them. But what if you have to move a
+    mountain? Then you need the next chapter: sharding.'
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 谨慎考虑扩展硬件的建议，看起来我们已经到了尽头。无论有多少卵石、鹅卵石或巨石需要移动，我们总可以用更大的卡车来搬运它们。但如果你必须移动一座山呢？那么你就需要下一章：分片。
+- en: Summary
+  id: totrans-245
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: 'This chapter centered on data access patterns that determine how you can change
+    the application to use MySQL efficiently. The important takeaway points are:'
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章重点讨论了决定如何更改应用程序以有效使用MySQL的数据访问模式。重要的要点是：
+- en: MySQL does nothing but execute application queries.
+  id: totrans-247
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL除了执行应用程序查询外无任何操作。
+- en: Database performance destabilizes at a limit that is less than 100% of hardware
+    capacity.
+  id: totrans-248
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据库性能在硬件容量的百分之百以下的某个极限处不稳定。
+- en: Some applications have far greater MySQL performance because every detail is
+    engineered for high performance.
+  id: totrans-249
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一些应用由于每一个细节都设计为高性能而具有更高的MySQL性能。
+- en: Access patterns describe how an application uses MySQL to access data.
+  id: totrans-250
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 访问模式描述应用程序如何使用MySQL访问数据。
+- en: You must change the application to change its data access patterns.
+  id: totrans-251
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您必须更改应用程序以改变其数据访问模式。
+- en: Scale up hardware to improve performance after exhausting other solutions.
+  id: totrans-252
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在耗尽其他解决方案之后，扩展硬件以提高性能。
+- en: The next chapter introduces the basic mechanics of sharding MySQL to achieve
+    MySQL at scale.
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一章介绍了将MySQL分片以实现规模化MySQL的基本机制。
+- en: 'Practice: Describe an Access Pattern'
+  id: totrans-254
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实践：描述一个访问模式
+- en: 'The goal of this practice is to describe the access pattern of the slowest
+    query. (To get slow queries, refer back to [“Query profile”](ch01.html#query-profile)
+    and [“Practice: Identify Slow Queries”](ch01.html#ch01-ai).) For the slowest query,
+    describe all nine access pattern traits from [“Data Access Patterns”](#access-patterns).
+    As mentioned in that section, access patterns are pure knowledge. Use that knowledge
+    to consider what [“Application Changes”](#app-changes) could be made to indirectly
+    optimize the query by changing its access pattern. Even if no application changes
+    are possible, knowing access patterns is an expert practice because MySQL performance
+    depends on queries, data, and access patterns.'
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这项实践的目标是描述最慢查询的访问模式。（要获取慢查询，请参考[“查询概况”](ch01.html#query-profile)和[“实践：识别慢查询”](ch01.html#ch01-ai)。）对于最慢的查询，请从[“数据访问模式”](#access-patterns)描述所有九种访问模式特征。正如该部分所述，访问模式是纯知识。利用这些知识考虑可以通过更改其访问模式间接优化查询的[“应用变更”](#app-changes)。即使没有可能的应用变更，了解访问模式也是专家实践，因为MySQL性能取决于查询、数据和访问模式。
+- en: ^([1](ch04.html#idm45829111984992-marker)) Watch the video [Universal Scalability
+    Law Modeling Workbook](https://oreil.ly/hzXnb) by renowned MySQL expert Baron
+    Schwartz to see the USL in action with values from real MySQL servers.
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch04.html#idm45829111984992-marker))观看由著名MySQL专家Baron Schwartz撰写的视频[“通用可扩展性法则建模工作手册”](https://oreil.ly/hzXnb)，了解来自真实MySQL服务器的值的USL如何发挥作用。
+- en: ^([2](ch04.html#idm45829111946752-marker)) In fact, renowned MySQL expert Baron
+    Schwartz put it there. Neil Gunther wrote in a blog post, [“USL Scalability Modeling
+    with Three Parameters”](https://oreil.ly/s2BL8), that Baron added the third parameter
+    because it allowed the USL to fit data from real databases.
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch04.html#idm45829111946752-marker)) 实际上，著名的 MySQL 专家巴伦·施瓦茨放在那里。尼尔·冈瑟在博客文章中写道，[“USL
+    Scalability Modeling with Three Parameters”](https://oreil.ly/s2BL8)，巴伦之所以添加第三个参数，是因为这使得
+    USL 能够拟合来自真实数据库的数据。
+- en: '^([3](ch04.html#idm45829111931920-marker)) Toyota: 210 Km/h; Ferrari: 320 Km/h.'
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([3](ch04.html#idm45829111931920-marker)) 丰田：210 Km/h；法拉利：320 Km/h。
+- en: ^([4](ch04.html#idm45829111854048-marker)) It’s technically possible by inspecting
+    the LSN of data pages in the InnoDB buffer pool, but that’s disruptive, so it’s
+    practically never done.
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([4](ch04.html#idm45829111854048-marker)) 从技术上讲，可以通过检查 InnoDB 缓冲池中数据页的LSN来实现，但这样做会造成干扰，所以实际上几乎不会这样做。

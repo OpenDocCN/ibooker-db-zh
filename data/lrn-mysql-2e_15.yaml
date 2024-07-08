@@ -1,0 +1,1197 @@
+- en: Chapter 15\. Load Balancing MySQL
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第15章 负载均衡MySQL
+- en: There are different ways to connect to MySQL. For example, to perform a write
+    test, a connection is created, the statement is executed, and then the connection
+    is closed. To avoid the cost of opening a connection every time it is needed,
+    the concept of the *connection pool* was developed. Connection pooling is a technique
+    of creating and managing a pool of connections that are ready for use by any thread
+    of the application.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 连接到MySQL有不同的方式。例如，为了执行写入测试，会创建一个连接，执行语句，然后关闭连接。为了避免每次需要时都打开连接的成本，发展了*连接池*的概念。连接池是一种创建和管理一组准备供应用程序的任何线程使用的连接的技术。
+- en: Extending the concept of high availability discussed in [Chapter 13](ch13.xhtml#CH13_HA)
+    to connections in order to improve a production system’s resilience, it is possible
+    to use *load balancers* to connect to a database cluster. With load balancing
+    and MySQL high availability, it is possible to keep the application running without
+    interruption (or with only minor downtime). Basically, if the source server or
+    one of the nodes of the database cluster fails, the client just needs to connect
+    to another database node and it can continue to serve requests.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将在[第13章](ch13.xhtml#CH13_HA)中讨论的高可用性概念扩展到连接，以提高生产系统的弹性，可以使用*负载均衡器*连接到数据库集群。通过负载均衡和MySQL高可用性，可以使应用程序持续运行而不中断（或仅有轻微的停机时间）。基本上，如果源服务器或数据库集群的一个节点失败，客户端只需连接到另一个数据库节点，就可以继续提供服务。
+- en: Load balancers were built to provide transparency for clients when connecting
+    to MySQL infrastructure. In this way, the application does not need to be aware
+    of the MySQL topology; whether you’re using a classic replication, Group Replication,
+    or Galera Cluster does not matter. The load balancer will provide an online node
+    where it will be possible to read and write queries. Having a robust MySQL architecture
+    and a proper load balancer in place can help DBAs avoid sleepless nights.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 负载均衡器旨在为客户端连接到MySQL基础设施提供透明性。这样，应用程序不需要了解MySQL的拓扑结构；无论你使用经典复制、组复制还是Galera集群都无关紧要。负载均衡器将提供一个在线节点，可以进行读写查询。拥有强大的MySQL架构和适当的负载均衡器可以帮助数据库管理员避免彻夜未眠。
+- en: Load Balancing with Application Drivers
+  id: totrans-4
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用应用程序驱动程序进行负载均衡
+- en: To connect an application to MySQL, you need a driver. A *driver* is an adapter
+    used to connect the application to a different system type. It is similar to connecting
+    a video card to your computer; you may need to download and install a driver for
+    it to work with your application.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将应用程序连接到MySQL，你需要一个驱动程序。*驱动程序*是一个适配器，用于将应用程序连接到不同的系统类型。这类似于将视频卡连接到计算机；你可能需要下载并安装一个驱动程序才能使其与你的应用程序配合工作。
+- en: Modern MySQL drivers from commonly used programming languages support connection
+    pooling, load balancing, and failover. Examples include the [JDBC driver for MySQL
+    (MySQL Connector/J)](https://oreil.ly/kaAXI) and the [PDO_MYSQL](https://oreil.ly/xbC7B)
+    driver, which implements the PHP Data Objects (PDO) interface to enable access
+    from PHP to MySQL databases.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现代常用编程语言的MySQL驱动程序支持连接池、负载均衡和故障转移。例如，[MySQL的JDBC驱动程序（MySQL Connector/J）](https://oreil.ly/kaAXI)和[PDO_MYSQL](https://oreil.ly/xbC7B)驱动程序实现了PHP数据对象（PDO）接口，使PHP能够访问MySQL数据库。
+- en: The database drivers we’ve mentioned are built to provide transparency for clients
+    when connecting to standalone MySQL Server or MySQL replication setups. We won’t
+    show you how to use them in code because that would be outside the scope of this
+    book; however, you should be aware that adding a driver library facilitates code
+    development, since the driver abstracts away a substantial amount of work for
+    the developer.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们提到的数据库驱动程序旨在为客户端连接到独立的MySQL服务器或MySQL复制设置提供透明性。我们不会向你展示如何在代码中使用它们，因为那超出了本书的范围；然而，你应该知道添加一个驱动程序库有助于代码开发，因为驱动程序为开发人员抽象了大量的工作。
+- en: But for other topologies, such as a clustering setup like Galera Cluster for
+    MySQL or MariaDB, the JDBC and PHP drivers are not aware of internal Galera state
+    information. For instance, a Galera donor node might be in read-only mode while
+    it is helping another node resynchronize (if the SST method is `mysqldump` or
+    `rsync`), or it could be up in non-primary state if split-brain happens. Another
+    solution is to use a load balancer between the clients and the database cluster.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但对于其他拓扑结构，例如Galera Cluster用于MySQL或MariaDB的集群设置，JDBC和PHP驱动程序不了解内部Galera状态信息。例如，Galera捐赠节点在帮助另一个节点重新同步时可能处于只读模式（如果SST方法是`mysqldump`或`rsync`），或者在分裂大脑发生时可能处于非主状态。另一种解决方案是在客户端和数据库集群之间使用负载均衡器。
+- en: ProxySQL Load Balancer
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: ProxySQL负载均衡器
+- en: 'ProxySQL is a SQL proxy. ProxySQL implements the MySQL protocol, and because
+    of this, it can do things that other proxies cannot do. Here are some of its advantages:'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL是一个SQL代理。ProxySQL实现了MySQL协议，因此可以执行其他代理无法执行的操作。以下是其一些优点：
+- en: It provides “intelligent” load balancing of application requests to multiple
+    databases.
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它提供对多个数据库的应用程序请求的“智能”负载平衡。
+- en: It understands the MySQL traffic that passes through it and can split reads
+    from writes. Understanding the MySQL protocol is especially useful in a source/replica
+    replication setup, where writes should only go to the source and reads to the
+    replicas, or in the case of Galera Cluster for distributing the read queries evenly
+    (linear read scaling).
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它理解通过它传递的MySQL流量，并可以将读取操作与写入操作分离。在源/副本复制设置中，理解MySQL协议尤其有用，其中写入应仅发送到源，读取应发送到副本，或者在Galera集群的情况下均匀分配读取查询（线性读取扩展）。
+- en: It understands the underlying database topology, including whether the instances
+    are up or down, and therefore can route requests to healthy databases.
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它了解底层数据库拓扑结构，包括实例是否运行，因此可以将请求路由到健康的数据库。
+- en: It provides query workload analytics and a query cache, which is useful for
+    analyzing and improving performance.
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它提供查询工作负载分析和查询缓存，对于分析和提升性能非常有用。
+- en: It provides administrators with robust, rich query rule definitions to efficiently
+    distribute queries and cache data to maximize the database service’s efficiency.
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它为管理员提供了强大且丰富的查询规则定义，以高效分发查询并缓存数据，从而最大化数据库服务的效率。
+- en: ProxySQL runs as a daemon watched by a monitoring process. The process monitors
+    the daemon and restarts it in case of a crash to minimize downtime. The daemon
+    accepts incoming traffic from MySQL clients and forwards it to backend MySQL servers.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL作为一个守护进程运行，并由监控进程监视。该进程监控守护进程，在崩溃时重新启动以最小化停机时间。守护进程接受来自MySQL客户端的传入流量并将其转发到后端MySQL服务器。
+- en: The proxy is designed to run continuously without needing to be restarted. Most
+    configurations can be done at runtime using queries similar to SQL statements
+    in the ProxySQL admin interface. These include runtime parameters, server grouping,
+    and traffic-related settings.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 代理设计为持续运行，无需重新启动。大多数配置可以在运行时使用类似SQL语句的查询在ProxySQL管理界面进行。这些包括运行时参数、服务器分组和与流量相关的设置。
+- en: While it is common to install ProxySQL on a standalone node between the application
+    and the database, this can affect query performance due to the additional latency
+    from network hops. [Figure 15-1](#FIG-PROXYSQL1) shows ProxySQL as a middle layer.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然通常将ProxySQL安装在应用程序和数据库之间的独立节点上，但由于网络跳数增加而影响查询性能。图15-1显示了ProxySQL作为中间层。
+- en: '![lm2e 1501](Images/lm2e_1501.png)'
+  id: totrans-19
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1501](Images/lm2e_1501.png)'
+- en: Figure 15-1\. ProxySQL between the application and MySQL
+  id: totrans-20
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图15-1\. 应用程序与MySQL之间的ProxySQL
+- en: To reduce the impact on performance (and avoid the additional network hop),
+    another architecture option is installing ProxySQL on the application servers.
+    The application then connects to ProxySQL (acting as a MySQL server) on localhost
+    using a Unix domain socket, avoiding extra latency. It uses its routing rules
+    to reach out and talk to the actual MySQL servers with their connection pooling.
+    The application doesn’t have any idea what happens beyond its connection to ProxySQL.
+    [Figure 15-2](#FIG-PROXYSQL2) shows ProxySQL on the same server as the application.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了减少对性能的影响（并避免额外的网络跳数），另一种架构选项是将ProxySQL安装在应用程序服务器上。应用程序然后通过Unix域套接字连接到本地主机上的ProxySQL（充当MySQL服务器），避免额外的延迟。它使用其路由规则与具有连接池的实际MySQL服务器进行通信。应用程序对ProxySQL之外的情况一无所知。图15-2显示了ProxySQL与应用程序位于同一服务器上的情况。
+- en: '![lm2e 1502](Images/lm2e_1502.png)'
+  id: totrans-22
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1502](Images/lm2e_1502.png)'
+- en: Figure 15-2\. ProxySQL on the same server as the application
+  id: totrans-23
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 15-2\. 与应用程序位于同一服务器上的 ProxySQL
+- en: Installing and Configuring ProxySQL
+  id: totrans-24
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 安装和配置 ProxySQL
+- en: Let’s take a look at how to deploy ProxySQL for a source/replica configuration.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看如何为源/复制配置部署 ProxySQL。
+- en: The tool’s developers provide official packages for a variety of Linux distributions
+    for all ProxySQL releases on their [GitHub releases page](https://oreil.ly/2EFKJ),
+    so we’ll download the latest package version from there and install it.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 工具的开发者在他们的[GitHub 发行页面](https://oreil.ly/2EFKJ)上为各种 Linux 发行版提供官方包，适用于所有 ProxySQL
+    版本的发布，因此我们将从那里下载最新的软件包版本并安装它。
+- en: 'Before installing, the following instances are the ones we will use in this
+    process:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在安装之前，以下实例是我们在此过程中将要使用的实例：
+- en: '[PRE0]'
+  id: totrans-28
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'To begin, find the proper distribution for your operating system. In this example,
+    we will then install for CentOS 7\. First, we will become root, install the MySQL
+    client to connect to ProxySQL, and install ProxySQL itself. We get the URL from
+    the downloads page and refer it to `yum`:'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要开始，找到适合您操作系统的适当分发。在本例中，我们将为 CentOS 7 安装。首先，我们将成为 root 用户，安装 MySQL 客户端以连接 ProxySQL，并安装
+    ProxySQL 本身。我们从下载页面获取 URL 并将其引用到 `yum`：
+- en: '[PRE1]'
+  id: totrans-30
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'We have all the requirements to run ProxySQL, but the service doesn’t automatically
+    start after installation, so we start it manually:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经具备运行 ProxySQL 的所有要求，但安装后服务不会自动启动，因此我们手动启动它：
+- en: '[PRE2]'
+  id: totrans-32
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'ProxySQL should now be running with its default configuration in place. We
+    can check it by running this command:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL 现在应该按照其默认配置运行。我们可以通过运行此命令来检查它：
+- en: '[PRE3]'
+  id: totrans-34
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'The output of the ProxySQL process in the active state should be similar to
+    the following:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL 进程处于活动状态的输出应类似于以下内容：
+- en: '[PRE4]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'ProxySQL splits the application interface from the admin interface. This means
+    that ProxySQL will listen on two network ports: the admin interface will listen
+    on 6032, and the application will listen on 6033 (to make it easier to remember,
+    that’s the reverse of MySQL’s default port, 3306).'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL 将应用程序接口与管理接口分开。这意味着 ProxySQL 将监听两个网络端口：管理接口将监听 6032 端口，应用程序将监听 6033
+    端口（为了更容易记住，这是 MySQL 默认端口 3306 的反向）。
+- en: Next, ProxySQL needs to communicate with the MySQL nodes to be able to check
+    their condition. To achieve this, ProxySQL needs to connect to each server with
+    a dedicated user.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，ProxySQL 需要与 MySQL 节点通信以能够检查其状态。为实现此目的，ProxySQL 需要连接到每个服务器，并使用专用用户。
+- en: 'First, we are going to create the user on the source server. Connect to the
+    MySQL source instance and run these commands:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，在源服务器上创建用户。连接到 MySQL 源实例并运行以下命令：
+- en: '[PRE5]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Next, we will configure ProxySQL parameters to recognize the user. First we
+    connect to ProxySQL:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将配置 ProxySQL 参数以识别用户。首先连接到 ProxySQL：
+- en: '[PRE6]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'And then we set the parameters:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后设置参数：
+- en: '[PRE7]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Now that we’ve set the user in the database and ProxySQL, it is time to tell
+    ProxySQL which MySQL servers are present in the topology:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们在数据库和 ProxySQL 中设置了用户，现在是时候告诉 ProxySQL 数据库中存在哪些 MySQL 服务器了：
+- en: '[PRE8]'
+  id: totrans-46
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'The next step is to define who our writer and reader groups. The servers present
+    in the writer group will be able to receive DML operations, while `SELECT` queries
+    will use the servers in the reader group. In this example, the host group 10 will
+    be the writer, and host group 11 will be the reader:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一步是定义我们的写入组和读取组。位于写入组的服务器将能够接收 DML 操作，而 `SELECT` 查询将使用读取组中的服务器。在本例中，主机组 10
+    将是写入组，主机组 11 将是读取组：
+- en: '[PRE9]'
+  id: totrans-48
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Next, ProxySQL must have users that can access backend nodes to manage connections.
+    Let’s create the user on the backend source server:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，ProxySQL 必须具有能够访问后端节点以管理连接的用户。让我们在后端源服务器上创建用户：
+- en: '[PRE10]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'And now we will configure ProxySQL with the user:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们将使用用户配置 ProxySQL：
+- en: '[PRE11]'
+  id: totrans-52
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'The next step is the most exciting because it is here that we define the rules.
+    The rules will tell ProxySQL where to send write and read queries, balancing the
+    load on the servers:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来的步骤是最令人兴奋的，因为在这里我们定义规则。规则将告诉 ProxySQL 将写入和读取查询发送到哪里，从而平衡服务器的负载：
+- en: '[PRE12]'
+  id: totrans-54
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'ProxySQL has a thread responsible for connecting on each server listed in the
+    `mysql_servers` table and checking the value of the `read_only` variable. Suppose
+    the replica is showing up in the writer group, like this:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL 在 `mysql_servers` 表中每个服务器连接上都有一个线程负责，并检查 `read_only` 变量的值。假设复制品显示在写入组中，如下所示：
+- en: '[PRE13]'
+  id: totrans-56
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: '[PRE14]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Because we do not want ProxySQL writing data to the replica servers, which would
+    cause data inconsistency, we need to set the `read_only` option in the replica
+    servers, so these servers will serve only read queries.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为我们不希望ProxySQL向副本服务器写入数据，这会导致数据不一致，所以我们需要在副本服务器中设置`read_only`选项，这样这些服务器只会处理读取查询。
+- en: '[PRE15]'
+  id: totrans-59
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Now we’re ready to use our application. Running the following command should
+    return the hostname that ProxySQL connected from:'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们可以使用我们的应用程序了。运行以下命令应该返回ProxySQL连接的主机名：
+- en: '[PRE16]'
+  id: totrans-61
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: '[PRE17]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: ProxySQL has a lot more features and flexibility than we’ve shown here; our
+    goal in this section was just to present the tool so you’re aware of this option
+    when deciding on an architecture.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL拥有比我们在这里展示的更多功能和灵活性；我们本节的目标只是介绍这个工具，以便您在决定架构时考虑这个选项。
+- en: Note
+  id: totrans-64
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: As we mentioned when configuring replication in Chapter 13, we want to reinforce
+    the idea that ProxySQL needs to reach the MySQL servers; otherwise, it won’t work.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们在配置第13章复制时提到的，我们要强调ProxySQL需要能够访问MySQL服务器；否则，它将无法工作。
+- en: HAProxy Load Balancer
+  id: totrans-66
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: HAProxy负载均衡器
+- en: '*HAProxy* stands for High Availability Proxy, and it is a TCP/HTTP load balancer.
+    It distributes a workload across a set of servers to maximize performance and
+    optimize resource usage.'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*HAProxy* 代表高可用性代理，它是一个TCP/HTTP负载均衡器。它将工作负载分布到一组服务器上，以最大化性能并优化资源使用。'
+- en: With the intent to expand your knowledge regarding MySQL architectures and different
+    topologies, we will configure Percona XtraDB Cluster (Galera Cluster) with HAProxy
+    in this section instead of a classic replication topology.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了扩展关于MySQL架构和不同拓扑结构的知识，本节我们将配置Percona XtraDB集群（Galera集群），而不是传统的复制拓扑。
+- en: The architecture options are similar to ProxySQL’s. HAProxy can be placed together
+    with the application or in a middle layer. [Figure 15-3](#FIG-HAPROXY1) shows
+    an example where HAProxy is placed on the same server as the application.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 架构选项类似于ProxySQL。HAProxy可以与应用程序一起放置或者放在中间层。[图 15-3](#FIG-HAPROXY1) 展示了一个示例，其中HAProxy与应用程序放在同一台服务器上。
+- en: '![lm2e 1503](Images/lm2e_1503.png)'
+  id: totrans-70
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1503](Images/lm2e_1503.png)'
+- en: Figure 15-3\. HAProxy together with the application
+  id: totrans-71
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 15-3\. HAProxy与应用程序一起
+- en: And [Figure 15-4](#FIG-HAPROXY2) shows a topology with HAProxy in a middle layer.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并且 [图 15-4](#FIG-HAPROXY2) 显示了一个中间层中带有HAProxy的拓扑结构。
+- en: Again, these are archictectures with different pros and cons. While in the first
+    one we do not have an extra hop (which reduces latency), we add extra load to
+    the application server. Also, you have to configure HAProxy on each application
+    server.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同样，这些是具有不同优缺点的架构。在第一个架构中，我们没有额外的跳跃（从而减少延迟），但会增加应用服务器的负载。此外，您需要在每台应用服务器上配置HAProxy。
+- en: On the other hand, having HAProxy in the middle layer facilitates managing it
+    and increases availability, because the application can connect to any HAProxy
+    server. However, the extra hop adds latency.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一方面，将HAProxy放在中间层有助于管理并增加可用性，因为应用程序可以连接到任何HAProxy服务器。然而，额外的跳跃会增加延迟。
+- en: '![lm2e 1504](Images/lm2e_1504.png)'
+  id: totrans-75
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1504](Images/lm2e_1504.png)'
+- en: Figure 15-4\. HAProxy in a middle layer running in dedicated servers
+  id: totrans-76
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 15-4\. 在专用服务器上运行中间层中的HAProxy
+- en: Installing and Configuring HAProxy
+  id: totrans-77
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 安装和配置HAProxy
+- en: Common operating systems such as Red Hat/CentOS and Debian/Ubuntu provide the
+    HAProxy package, and you can install it using the package manager. The installation
+    process is relatively easy.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 常见操作系统如Red Hat/CentOS和Debian/Ubuntu提供了HAProxy包，你可以使用包管理器安装它。安装过程相对比较简单。
+- en: 'For Debian or Ubuntu, use these commands:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于Debian或Ubuntu，请使用以下命令：
+- en: '[PRE18]'
+  id: totrans-80
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'For Red Hat or CentOS, use:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于Red Hat或CentOS，请使用：
+- en: '[PRE19]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: When installed, HAProxy will set the default path for the configuration file
+    as */etc/haproxy/haproxy.cfg*.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 安装完成后，HAProxy将设置配置文件的默认路径为*/etc/haproxy/haproxy.cfg*。
+- en: 'Before starting HAProxy, we need to configure it. For this demonstration, in
+    our first scenario HAProxy will be located on the same server as the application.
+    Here are the IPs of our three-node Galera Cluster:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在启动HAProxy之前，我们需要对其进行配置。在这个演示中，我们的第一个场景中，HAProxy将位于与应用程序相同的服务器上。以下是我们三节点Galera集群的IP地址：
+- en: '[PRE20]'
+  id: totrans-85
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'Let’s open our */etc/haproxy/haproxy.cfg* file and look at it. There are many
+    parameters to customize, split into three sections:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们打开我们的*/etc/haproxy/haproxy.cfg*文件并查看它。有许多参数可以自定义，分为三个部分：
+- en: '`global`'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`global`'
+- en: A section in the configuration file for process-wide parameters
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 进程全局参数的配置文件中的一个部分
+- en: '`defaults`'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`defaults`'
+- en: A section in the configuration file for default parameters
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 配置文件中用于默认参数的一个部分
+- en: '`listen`'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`listen`'
+- en: A section in the configuration file that defines a complete proxy, including
+    its frontend and backend parts
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 配置文件中定义完整代理（包括其前端和后端部分）的部分
+- en: '[Table 15-1](#TABLE-HAPROXY) shows the basic HAProxy parameters.'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[表15-1](#TABLE-HAPROXY)显示了基本的HAProxy参数。'
+- en: Table 15-1\. HAProxy options (with links to HAProxy documentation)
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表15-1\. HAProxy选项（附带链接到HAProxy文档）
+- en: '| Parameter | Description |'
+  id: totrans-95
+  prefs: []
+  type: TYPE_TB
+  zh: '| 参数 | 描述 |'
+- en: '| --- | --- |'
+  id: totrans-96
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| [`balance`](https://oreil.ly/Ej25a) | Defines the load balancing algorithm
+    to be used in a backend. |'
+  id: totrans-97
+  prefs: []
+  type: TYPE_TB
+  zh: '| [`balance`](https://oreil.ly/Ej25a) | 定义在后端使用的负载平衡算法。 |'
+- en: '| [`clitimeout`](https://oreil.ly/HRlC5) | Sets the maximum inactivity time
+    on the client side |'
+  id: totrans-98
+  prefs: []
+  type: TYPE_TB
+  zh: '| [`clitimeout`](https://oreil.ly/HRlC5) | 设置客户端端的最大不活动时间 |'
+- en: '| [`contimeout`](https://oreil.ly/Hjwtm) | Sets the maximum time to wait for
+    a connection attempt to a server to succeed |'
+  id: totrans-99
+  prefs: []
+  type: TYPE_TB
+  zh: '| [`contimeout`](https://oreil.ly/Hjwtm) | 设置连接到服务器尝试成功的最长等待时间 |'
+- en: '| [`daemon`](https://oreil.ly/75stw) | Makes the process fork into background
+    (recommended mode of operation) |'
+  id: totrans-100
+  prefs: []
+  type: TYPE_TB
+  zh: '| [`daemon`](https://oreil.ly/75stw) | 使进程在后台分叉（推荐的操作模式） |'
+- en: '| [`gid`](https://oreil.ly/ikswS) | Changes the process’s group ID to `*<number>*`
+    |'
+  id: totrans-101
+  prefs: []
+  type: TYPE_TB
+  zh: '| [`gid`](https://oreil.ly/ikswS) | 将进程的组ID更改为`*<number>*` |'
+- en: '| [`log`](https://oreil.ly/ovcK5) | Adds a global syslog server |'
+  id: totrans-102
+  prefs: []
+  type: TYPE_TB
+  zh: '| [`log`](https://oreil.ly/ovcK5) | 添加全局syslog服务器 |'
+- en: '| [`maxconn`](https://oreil.ly/94uQr) | Sets the maximum per-process number
+    of concurrent connections to `*<number>*` |'
+  id: totrans-103
+  prefs: []
+  type: TYPE_TB
+  zh: '| [`maxconn`](https://oreil.ly/94uQr) | 设置每个进程的并发连接数上限为`*<number>*` |'
+- en: '| [`mode`](https://oreil.ly/c3CaJ) | Set the running mode or protocol of the
+    instance |'
+  id: totrans-104
+  prefs: []
+  type: TYPE_TB
+  zh: '| [`mode`](https://oreil.ly/c3CaJ) | 设置实例的运行模式或协议 |'
+- en: '| [`option dontlognull`](https://oreil.ly/DplEm) | Disable logging of null
+    connections |'
+  id: totrans-105
+  prefs: []
+  type: TYPE_TB
+  zh: '| [`option dontlognull`](https://oreil.ly/DplEm) | 禁止记录空连接 |'
+- en: '| [`optiontcplog`](https://oreil.ly/BA2mL) | Enables advanced logging of TCP
+    connections with session state and timers |'
+  id: totrans-106
+  prefs: []
+  type: TYPE_TB
+  zh: '| [`optiontcplog`](https://oreil.ly/BA2mL) | 启用带有会话状态和计时器的TCP连接的高级日志记录 |'
+- en: 'To make HAProxy work, we will use the following configuration file based on
+    our settings:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使HAProxy工作，我们将根据我们的设置使用以下配置文件：
+- en: '[PRE21]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'To start HAProxy, we use the `haproxy` command. We can pass any number of configuration
+    parameters on the command line. To use a configuration file, use the `-f` option.
+    For example, we can pass one configuration file:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要启动HAProxy，我们使用`haproxy`命令。我们可以在命令行上传递任意数量的配置参数。要使用配置文件，请使用`-f`选项。例如，我们可以传递一个配置文件：
+- en: '[PRE22]'
+  id: totrans-110
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'or multiple configuration files:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者多个配置文件：
+- en: '[PRE23]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'or a directory:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者一个目录：
+- en: '[PRE24]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: With this configuration, HAProxy will balance the load between three nodes.
+    In this case, it checks only if the `mysqld` process is listening on port 3306,
+    but doesn’t take into account the state of the node. So, it could be sending queries
+    to a node that has `mysqld` running even if it’s in the `JOINING` or `DISCONNECTED`
+    state.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用这个配置，HAProxy将在三个节点之间平衡负载。在这种情况下，它仅检查`mysqld`进程是否在3306端口上监听，但不考虑节点的状态。因此，即使节点处于`JOINING`或`DISCONNECTED`状态，它也可能向运行`mysqld`的节点发送查询。
+- en: To check the current status of a node, we need something a little more complex.
+    This idea was taken from [Codership’s Google group](https://oreil.ly/7xj0N).
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要检查节点的当前状态，我们需要更复杂的东西。这个想法来自[Codership的Google小组](https://oreil.ly/7xj0N)。
+- en: 'To implement this setup, we will need two scripts:'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要实施此设置，我们将需要两个脚本：
+- en: '`clustercheck`, located in */usr/local/bin* and a config for `xinetd`'
+  id: totrans-118
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`clustercheck`位于*/usr/local/bin*，并配置了`xinetd`'
+- en: '`mysqlchk`, located in */etc/xinetd.d* on each node'
+  id: totrans-119
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`mysqlchk`位于每个节点的*/etc/xinetd.d*中'
+- en: '[Both scripts are available](https://oreil.ly/iN1La) in binaries and source
+    distributions of Percona XtraDB.'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[这两个脚本都可用](https://oreil.ly/iN1La)在Percona XtraDB的二进制和源分发中。'
+- en: 'Change the */etc/services* file by adding the following line for each node:'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过为每个节点添加以下行来更改*/etc/services*文件：
+- en: '[PRE25]'
+  id: totrans-122
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: If the */etc/services* file does not exist, it’s likely that `xinetd` is not
+    installed.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果*/etc/services*文件不存在，则可能未安装`xinetd`。
+- en: 'To install it for CentOS/Red Hat, use:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要为CentOS/Red Hat安装它，请使用：
+- en: '[PRE26]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'For Debian/Ubuntu, use:'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于Debian/Ubuntu，请使用：
+- en: '[PRE27]'
+  id: totrans-127
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'Next, we need to create a MySQL user so the script can check if the node is
+    healthy. Ideally, for security reasons, this user should have the minimum privileges
+    required:'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们需要创建一个MySQL用户，以便脚本可以检查节点是否健康。理想情况下，出于安全原因，此用户应具有所需的最低权限：
+- en: '[PRE28]'
+  id: totrans-129
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'To validate how our node is performing on the health check, we can run the
+    following command and observe the output:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要验证我们的节点在健康检查上的表现，我们可以运行以下命令并观察输出：
+- en: '[PRE29]'
+  id: totrans-131
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: '[PRE30]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'If we do this for all nodes, we will be ready to test whether our HAProxy setup
+    is working. The easiest way to do this is to connect to it and execute some MySQL
+    commands. Let’s run a command that retrieves the hostname from which we are connected:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们对所有节点都这样做，就准备好测试我们的HAProxy设置是否有效了。最简单的方法是连接到它并执行一些MySQL命令。让我们运行一个检索我们所连接的主机名的命令：
+- en: '[PRE31]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: '[PRE32]'
+  id: totrans-135
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'Running this a second time gives us:'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二次运行得到：
+- en: '[PRE33]'
+  id: totrans-137
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: '[PRE34]'
+  id: totrans-138
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'And the third time we get:'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第三次我们得到：
+- en: '[PRE35]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: '[PRE36]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: As you can see, our HAProxy is connecting in a round-robin fashion. If we shut
+    down one of the nodes, HAProxy will route only to the remaining ones.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如您所见，我们的HAProxy以循环方式进行连接。如果我们关闭其中一个节点，HAProxy将只路由到剩余的节点。
+- en: MySQL Router
+  id: totrans-143
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MySQL Router
+- en: MySQL Router is responsible for distributing the traffic between members of
+    an InnoDB cluster. It is a proxy-like solution to hide the cluster topology from
+    applications, so applications don’t need to know which member of a cluster is
+    the primary node and which are secondaries. Note that MySQL Router will *not*
+    work with Galera Clusters; it was developed for *InnoDB Cluster only*.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL Router负责在InnoDB集群的成员之间分发流量。它是一个类似代理的解决方案，用于隐藏应用程序对集群拓扑的了解，因此应用程序无需知道集群的哪个成员是主节点，哪些是从节点。请注意，MySQL
+    Router不适用于Galera集群；它仅为InnoDB集群开发。
+- en: MySQL Router is capable of performing read/write splitting by exposing different
+    interfaces. A common setup is to have one read/write interface and one read-only
+    interface. This is the default behavior that also exposes two similar interfaces
+    to use the X Protocol (used for CRUD operations and async calls).
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL Router能够通过公开不同的接口执行读写分离。常见的设置是有一个读写接口和一个只读接口。这是默认行为，同时还公开了两个类似的接口以使用X协议（用于CRUD操作和异步调用）。
+- en: 'The read/write split is done using the concept of *roles*: primary for writes
+    and secondary for read-only. This is analogous to how members of cluster are named.
+    Additionally, each interface is exposed via a TCP port so applications only need
+    to know the IP:port combination used for writes and the one used for reads. Then
+    MySQL Router will take care of connections to cluster members depending on the
+    type of traffic to the server.'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 读写分离是通过*角色*的概念来完成的：主要用于写入，次要用于只读。这类似于集群成员的命名方式。此外，每个接口通过TCP端口公开，因此应用程序只需知道用于写入的IP:端口组合和用于读取的IP:端口组合。然后MySQL
+    Router将根据流量类型管理与集群成员的连接。
+- en: When working in a production environment, the MySQL server instances that make
+    up an InnoDB Cluster run on multiple host machines as part of a network rather
+    than on single machine. So, as with ProxySQL and HAProxy, the MySQL router can
+    be a middle layer in the architecture.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在生产环境中工作时，构成InnoDB集群的MySQL服务器实例运行在多台主机上，作为网络的一部分，而不是单台机器上。因此，与ProxySQL和HAProxy一样，MySQL路由器可以作为架构中的中间层。
+- en: '[Figure 15-5](#FIG-MYSQL-ROUTER-ARCH) illustrates how the production scenario
+    works.'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 15-5](#FIG-MYSQL-ROUTER-ARCH)说明了生产场景的工作原理。'
+- en: '![lm2e 1505](Images/lm2e_1505.png)'
+  id: totrans-149
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1505](Images/lm2e_1505.png)'
+- en: Figure 15-5\. MySQL InnoDB Cluster production deployment
+  id: totrans-150
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 15-5\. MySQL InnoDB集群生产部署
+- en: 'Now, to start our example, let’s take a look at the MySQL members that are
+    part of the InnoDB Cluster:'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，为了启动我们的示例，让我们查看作为InnoDB集群一部分的MySQL成员：
+- en: '[PRE37]'
+  id: totrans-152
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: '[PRE38]'
+  id: totrans-153
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: '[PRE39]'
+  id: totrans-154
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: '[PRE40]'
+  id: totrans-155
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'Now that we have the configuration of the MySQL nodes and the cluster name,
+    we can start configuring MySQL Router. For performance purposes it’s recommended
+    to set up MySQL Router in the same place as the application, supposing we have
+    an instance per application server, so we will place our router on the application
+    server. First, we are going to identify the version of MySQL Router compatible
+    with our OS:'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经有了MySQL节点的配置和集群名称，可以开始配置MySQL Router了。出于性能考虑，建议将MySQL Router设置在与应用程序相同的位置，假设每个应用服务器都有一个实例，因此我们将把路由器放置在应用服务器上。首先，我们将确定适用于我们操作系统的MySQL
+    Router版本：
+- en: '[PRE41]'
+  id: totrans-157
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: '[PRE42]'
+  id: totrans-158
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: 'Now, we will check the [download page](https://oreil.ly/eCH08) and install
+    it using `yum`:'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们将检查[下载页面](https://oreil.ly/eCH08)，并使用`yum`进行安装：
+- en: '[PRE43]'
+  id: totrans-160
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: '[PRE44]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: 'Now that MySQL Router is installed, we need to create a dedicated directory
+    for its operation:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在MySQL Router已经安装好，我们需要为其操作创建一个专用目录：
+- en: '[PRE45]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: 'Next, we are going to bootstrap MySQL Router. The bootstrap will configure
+    the router for operation with a MySQL InnoDB Cluster:'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将进行MySQL Router的引导操作。引导将配置路由器以与MySQL InnoDB集群一起运行：
+- en: '[PRE46]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: '[PRE47]'
+  id: totrans-166
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: In the command line, we are telling the router to connect with the user `root`,
+    in our primary server (`172.16.3.120`), at port 3306\. We are also telling the
+    router to create a socket file so we can connect using it. Finally, we are creating
+    a new user (`app_router`) to use in our application.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在命令行中，我们正在告诉路由器使用用户 `root` 连接到我们的主服务器（`172.16.3.120`），端口为3306。我们还告诉路由器创建一个套接字文件，以便我们可以使用它进行连接。最后，我们创建一个新用户（`app_router`）用于我们的应用程序。
+- en: 'Let’s have a look at the contents that the bootstrap process created in our
+    configuration directory (*/var/lib/mysqlrouter*):'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看引导过程在我们的配置目录（*/var/lib/mysqlrouter*）中创建的内容。
+- en: '[PRE48]'
+  id: totrans-169
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: '[PRE49]'
+  id: totrans-170
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'A generated MySQL Router configuration file (*mysqlrouter.conf*) looks similar
+    to this:'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成的 MySQL Router 配置文件（*mysqlrouter.conf*）看起来类似于这样：
+- en: '[PRE50]'
+  id: totrans-172
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: '[PRE51]'
+  id: totrans-173
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: In this example, MySQL Router configured four ports (two ports to read/write
+    using the regular MySQL protocol, and two to read/write using the X Protocol)
+    and four sockets. Ports are added by default, and sockets were added because we
+    passed in `--conf-use-sockets`. The InnoDB Cluster named `cluster1` is the source
+    of the metadata, and the destinations are using the InnoDB Cluster metadata cache
+    to dynamically configure host information.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个例子中，MySQL Router 配置了四个端口（两个端口用于使用常规 MySQL 协议进行读/写，另外两个端口用于使用 X 协议进行读/写），以及四个套接字。端口是默认添加的，套接字是因为我们传入了
+    `--conf-use-sockets` 参数。InnoDB 集群命名为 `cluster1` 是元数据的来源，目标是使用 InnoDB 集群元数据缓存来动态配置主机信息。
+- en: 'By executing the *start.sh* script we can start the MySQL router daemon:'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过执行 *start.sh* 脚本，我们可以启动 MySQL 路由器守护进程：
+- en: '[PRE52]'
+  id: totrans-176
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: '[PRE53]'
+  id: totrans-177
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 'Now, we can observe the process running:'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们可以观察到进程正在运行：
+- en: '[PRE54]'
+  id: totrans-179
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: '[PRE55]'
+  id: totrans-180
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: 'And the ports open:'
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 端口已打开：
+- en: '[PRE56]'
+  id: totrans-182
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: '[PRE57]'
+  id: totrans-183
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: 'We’ve configured MySQL Router with the InnoDB Cluster, so now we can test this
+    with read and read/write connections. First, we will connect to the writer port
+    (6446):'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经使用 InnoDB 集群配置了 MySQL Router，现在可以通过读和读/写连接进行测试。首先，我们将连接到写入端口（6446）：
+- en: '[PRE58]'
+  id: totrans-185
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: '[PRE59]'
+  id: totrans-186
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: As you can see, it is possible to execute both reads and writes in the writer
+    port.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如您所见，可以在写入端口执行读和写操作。
+- en: 'Now we will check the read port (6447) using a `SELECT` statement:'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们将使用 `SELECT` 语句检查读端口（6447）：
+- en: '[PRE60]'
+  id: totrans-189
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: '[PRE61]'
+  id: totrans-190
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: 'That’s working, but let’s try to execute a write:'
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是有效的，但让我们尝试执行一个写操作：
+- en: '[PRE62]'
+  id: totrans-192
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: '[PRE63]'
+  id: totrans-193
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: 'So, the read port only accepts reads. It is also possible to see the router
+    load-balancing the reads:'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，读端口仅接受读操作。还可以看到路由器在负载均衡读操作：
+- en: '[PRE64]'
+  id: totrans-195
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: '[PRE65]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: '[PRE66]'
+  id: totrans-197
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: '[PRE67]'
+  id: totrans-198
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: In this way, if any downtime occurs in one of the MySQL nodes, MySQL Router
+    will route the queries to the remaining active nodes.
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当一个 MySQL 节点发生任何停机情况时，MySQL Router 将路由查询到其余的活跃节点。

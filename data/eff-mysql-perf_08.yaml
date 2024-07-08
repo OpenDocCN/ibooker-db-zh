@@ -1,0 +1,2649 @@
+- en: Chapter 8\. Transactions
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第 8 章。事务
+- en: MySQL has nontransactional storage engines, like MyISAM, but InnoDB is the default
+    and the presumptive norm. Therefore, practically speaking, every MySQL query executes
+    in a transaction by default, even a single `SELECT` statement.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 有非事务性存储引擎，如 MyISAM，但 InnoDB 是默认的和推定的标准。因此，实际上，每个 MySQL 查询默认情况下都在一个事务中执行，即使是单个`SELECT`语句也是如此。
+- en: Note
+  id: totrans-2
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'This chapter does not apply if you happen to be using another storage engine,
+    like Aria or MyRocks. But more than likely, you’re using InnoDB, in which case:
+    every MySQL query is a transaction.'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您使用的是 Aria 或 MyRocks 等其他存储引擎，则本章不适用。但更可能的情况是，您正在使用 InnoDB，这种情况下：每个 MySQL 查询都是一个事务。
+- en: 'From our point of view as engineers, transactions appear conceptual: `BEGIN`,
+    execute queries, and `COMMIT`. Then we trust MySQL (and InnoDB) to uphold the
+    ACID properties: atomicity, consistency, isolation, and durability. When the application
+    workload—queries, indexes, data, and access patterns—is well optimized, transactions
+    are a nonissue with respect to performance. (Most database topics are a nonissue
+    when the workload is well optimized.) But behind the scenes, transactions invoke
+    a whole new world of considerations because upholding ACID properties while maintaining
+    performance is not an easy feat. Fortunately, MySQL shines at executing transactions.'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从我们作为工程师的角度来看，事务是概念性的：`BEGIN`，执行查询，然后`COMMIT`。然后我们信任 MySQL（和 InnoDB）来维护 ACID
+    特性：原子性、一致性、隔离性和持久性。当应用工作负载——查询、索引、数据和访问模式——优化良好时，事务在性能方面不成问题（当工作负载优化良好时，大多数数据库主题不成问题）。但在幕后，事务调用了一整套新的考虑因素，因为在维护性能的同时维护
+    ACID 特性并不容易。幸运的是，MySQL 在执行事务时表现出色。
+- en: As with replication lag in the previous chapter, the inner workings of transactions
+    are beyond the scope of this book, but understanding a few basic concepts is pivotal
+    to avoiding common problems that hoist transactions from the lowest levels of
+    MySQL to the tops of engineers’ minds. A little understanding avoids a lot of
+    problems.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与上一章节的复制延迟一样，事务内部工作超出了本书的范围，但理解一些基本概念对于避免把事务从 MySQL 的最低级别提升到工程师头脑的顶峰是至关重要的。稍微的理解可以避免许多问题。
+- en: 'This chapter examines MySQL transactions with respect to avoiding common problems.
+    There are five major sections. The first descends into row locking with respect
+    to transaction isolation levels. The second examines how InnoDB manages concurrent
+    data access while guaranteeing ACID properties: MVCC and the undo logs. The third
+    describes the history list length and how it indicates problematic transactions.
+    The fourth enumerates common problems with transactions to avoid. The fifth is
+    a foray into reporting transaction details in MySQL.'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章讨论了 MySQL 事务，特别是避免常见问题。共有五个主要部分。第一个部分深入探讨了与事务隔离级别相关的行锁定。第二部分讨论了 InnoDB 如何在保证
+    ACID 特性的同时管理并发数据访问：MVCC 和撤消日志。第三部分描述了历史列表长度及其如何指示有问题的事务。第四部分列举了要避免的事务常见问题。第五部分则是探讨在
+    MySQL 中报告事务详细信息的一次冒险。
+- en: Row Locking
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 行锁定
+- en: 'Reads do not lock rows (except for `SELECT`…`FOR SHARE` and `SELECT`…`FOR UPDATE`),
+    but writes always lock rows. That’s simple and expected, but the tricky question
+    is: which rows must be locked? Of course, the rows being written must be locked.
+    But in a `REPEATABLE READ` transaction, InnoDB can lock significantly more rows
+    than it writes. This section illustrates and explains why. But first, we must
+    shift terminology into the vernacular of InnoDB data locking.'
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 读操作不会锁定行（除了`SELECT`…`FOR SHARE`和`SELECT`…`FOR UPDATE`），但写操作总是锁定行。这很简单和预期的，但棘手的问题是：哪些行必须被锁定？当然，正在写入的行必须被锁定。但在`REPEATABLE
+    READ`事务中，InnoDB 可能锁定比其写入的行要多得多。本节说明并解释了为什么会这样。但首先，我们必须将术语转换为InnoDB数据锁定的俗语。
+- en: 'Since tables are indexes (recall [“InnoDB Tables Are Indexes”](ch02.html#tables-are-indexes)),
+    rows are index *records*. InnoDB row locking is discussed in terms of *locking
+    records*, not locking rows, because of index record gaps. A *gap* is a range of
+    values between two index records, as illustrated in [Figure 8-1](#trx-idx-values):
+    a primary key with two records, two pseudo-records (infimum and supremum), and
+    three gaps.'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于表格是索引（回想一下[“InnoDB Tables Are Indexes”](ch02.html#tables-are-indexes)），行就是索引*记录*。InnoDB
+    行锁定讨论的是*记录锁*，而不是行锁定，因为存在索引记录间隙。*间隙*是两个索引记录之间的数值范围，如[图 8-1](#trx-idx-values)所示：一个主键有两个记录，两个伪记录（infimum
+    和 supremum），以及三个间隙。
+- en: '![emsp 0801](assets/emsp_0801.png)'
+  id: totrans-10
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0801](assets/emsp_0801.png)'
+- en: Figure 8-1\. Index record gaps
+  id: totrans-11
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 8-1\. 索引记录间隙
+- en: 'Records are depicted as solid squares with index values inside: 2 and 5 in
+    this example. Pseudo-records are depicted as solid arrows on each end of the index:
+    *infimum* and *supremum*. Every InnoDB B-tree index has these two pseudo-records:
+    infimum represents all index values less than the minimum record (2 in this example);
+    supremum represents all index values greater than the maximum record (5 in this
+    example). Index records don’t begin at 2 or end at 5; technically, they begin
+    and end at the infimum and supremum, and examples in this section reveal the importance
+    of this detail. Gaps are depicted as dashed squares with no index value. If the
+    primary key is a single unsigned four-byte integer, then the three gaps are (in
+    interval notation):'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记录以实心正方形表示，其中包含索引值：在本例中为2和5。伪记录以实心箭头表示在索引的每一端：*infimum*和*supremum*。每个InnoDB
+    B-tree索引都有这两个伪记录：infimum代表小于最小记录（本例中为2）的所有索引值；supremum代表大于最大记录（本例中为5）的所有索引值。索引记录并不从2开始，也不在5结束；从技术上讲，它们从infimum和supremum开始和结束，本节的示例显示了这一细节的重要性。间隙以虚线正方形表示，没有索引值。如果主键是单个无符号四字节整数，则三个间隙为（区间表示）：
+- en: '`[0, 2)`'
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`[0, 2)`'
+- en: '`(2, 5)`'
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`(2, 5)`'
+- en: '`(5, 4294967295]`'
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`(5, 4294967295]`'
+- en: 'When discussing row locking, the term *record* is used instead of *row* because
+    records have gaps, but it could be misleading to say that rows have gaps. For
+    example, if the application has two rows with values 2 and 5, that does not entail
+    a gap in the rows comprising values 3 and 4 because maybe these aren’t valid values
+    for the application. But with respect to an index, between record values 2 and
+    5, values 3 and 4 constitute a valid record gap (presuming an integer column).
+    To put it succinctly: the application deals in rows; InnoDB row locking deals
+    in records. Examples in this section demonstrate that gap locks are surprisingly
+    pervasive and arguably more important than individual record locks.'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在讨论行锁时，术语*record*用于代替*row*，因为记录中存在间隙，但称行存在间隙可能会误导。例如，如果应用程序有两行的值分别为2和5，则这并不意味着行之间存在3和4的间隙，因为这些值可能对应用程序无效。但是就索引而言，在记录值2和5之间，值3和4构成一个有效的记录间隙（假设是整数列）。简而言之：应用程序处理行，而InnoDB行锁处理记录。本节中的示例显示间隙锁意外地普遍存在，并且可以认为比单个记录锁更重要。
+- en: The term *data locks* refers to all types of locks. There are many types of
+    data locks, but [Table 8-1](#lock-types) lists the fundamental InnoDB data locks.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 术语*data locks*指代所有类型的锁定。有许多种数据锁定，但是[Table 8-1](#lock-types)列出了基本的InnoDB数据锁。
+- en: Table 8-1\. Fundamental InnoDB data locks
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Table 8-1\. 基本的InnoDB数据锁
+- en: '| Lock type | Abbreviation | Locks gap | Locks |'
+  id: totrans-19
+  prefs: []
+  type: TYPE_TB
+  zh: '| 锁类型 | 缩写 | 锁定间隙 | 锁定 |'
+- en: '| --- | --- | --- | --- |'
+  id: totrans-20
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- | --- | --- |'
+- en: '| *Record lock* | `REC_NOT_GAP` |  | Locks a single record |'
+  id: totrans-21
+  prefs: []
+  type: TYPE_TB
+  zh: '| *Record lock* | `REC_NOT_GAP` |  | 锁定单个记录 |'
+- en: '| *Gap lock* | `GAP` | ✓ | Locks the gap before (less than) a record |'
+  id: totrans-22
+  prefs: []
+  type: TYPE_TB
+  zh: '| *Gap lock* | `GAP` | ✓ | 锁定记录之前（小于）的间隙 |'
+- en: '| *Next-key lock* |  | ✓ | Locks a single record and the gap before it |'
+  id: totrans-23
+  prefs: []
+  type: TYPE_TB
+  zh: '| *Next-key lock* |  | ✓ | 锁定单个记录及其之前的间隙 |'
+- en: '| *Insert intention lock* | `INSERT_INTENTION` |  | Allows `INSERT` into gap
+    |'
+  id: totrans-24
+  prefs: []
+  type: TYPE_TB
+  zh: '| *Insert intention lock* | `INSERT_INTENTION` |  | 允许在间隙中进行`INSERT`操作 |'
+- en: The best way to understand the fundamental InnoDB data locks is with real transactions,
+    real locks, and illustrations.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理解基本的InnoDB数据锁最好的方法是通过真实的事务、真实的锁和插图。
+- en: Note
+  id: totrans-26
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: As of MySQL 8.0.16, data locks are easy to examine using Performance Schema
+    tables `data_locks` and `data_lock_waits`. The following examples use these Performance
+    Schema tables.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从MySQL 8.0.16开始，可以使用性能模式表`data_locks`和`data_lock_waits`轻松检查数据锁。以下示例使用这些性能模式表。
+- en: 'In MySQL 5.7 and older, you must first `SET GLOBAL innodb_status_output_locks=ON`,
+    which requires `SUPER` MySQL privileges, then execute `SHOW ENGINE INNODB STATUS`
+    and shift through the output to find the relevant transaction and locks. It’s
+    not easy—even experts strain to carefully parse the output. Since MySQL 5.7 is
+    not the current release, I do not use its output in this section; but since MySQL
+    5.7 is still widely used, refer to my blog post [“MySQL Data Locks: Mapping 8.0
+    to 5.7”](https://oreil.ly/pIAM6) for an illustrated guide to mapping data lock
+    output from MySQL 5.7 to MySQL 8.0.'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '在MySQL 5.7及更早版本中，您必须首先`SET GLOBAL innodb_status_output_locks=ON`，这需要`SUPER`
+    MySQL特权，然后执行`SHOW ENGINE INNODB STATUS`并浏览输出以找到相关的事务和锁定。这并不容易——即使是专家也难以仔细解析输出。由于MySQL
+    5.7不是当前版本，我在本节中没有使用其输出；但由于MySQL 5.7仍然广泛使用，请参考我的博客文章[“MySQL Data Locks: Mapping
+    8.0 to 5.7”](https://oreil.ly/pIAM6)以获取从MySQL 5.7到MySQL 8.0的数据锁输出映射的图解指南。'
+- en: Let’s reuse the tried and true table `elem` but simplified as shown in [Example 8-1](#trx-elem).
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们重新使用经过验证的且实用的表`elem`，但简化如[示例8-1](#trx-elem)所示。
+- en: Example 8-1\. Table `elem` simplified
+  id: totrans-30
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例8-1\. 简化后的表`elem`
+- en: '[PRE0]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: The table `elem` is nearly the same as before, but now the nonunique index `idx_a`
+    only covers column `a`, and there are only two rows, which create two primary
+    key values as shown earlier in [Figure 8-1](#trx-idx-values). Since row locks
+    are really index record locks and there are no indexes on columns `b` and `c`,
+    you can ignore these two columns; they’re shown only for completeness and the
+    nostalgia of simpler chapters, like [Chapter 2](ch02.html#ch02) when row locks
+    were just rows locks.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表`elem`与之前几乎相同，但现在非唯一索引`idx_a`仅涵盖列`a`，并且仅有两行，形成两个主键值，如前文[图8-1](#trx-idx-values)所示。由于行锁实际上是索引记录锁，并且在列`b`和`c`上没有索引，您可以忽略这两列；它们仅用于完整性和对更简单章节的怀旧，例如[第2章](ch02.html#ch02)时，行锁只是行锁。
+- en: Since [`autocommit`](https://oreil.ly/86J7d) is enabled by default, the following
+    examples begin with `BEGIN` to start an explicit transaction. Locks are released
+    when a transaction ends; therefore, the transaction is kept active—no `COMMIT`
+    or `ROLLBACK`—to examine the data locks that the SQL statement following `BEGIN`
+    has acquired (or is waiting to acquire). At the end of each example, data locks
+    are printed by querying the table `per​for​m⁠ance_schema.data_locks`.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于默认启用了[`autocommit`](https://oreil.ly/86J7d)，以下示例从`BEGIN`开始以启动显式事务。当事务结束时释放锁定；因此，事务保持活动状态——没有`COMMIT`或`ROLLBACK`——以检查SQL语句在`BEGIN`之后获取（或等待获取）的数据锁。每个示例结束时，通过查询表`per​for​m⁠ance_schema.data_locks`打印数据锁。
+- en: Record and Next-Key Locks
+  id: totrans-34
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 记录锁和下一个键锁
+- en: 'An `UPDATE` on table `elem` using the primary key to match rows acquires four
+    data locks in the default transaction isolation level, `REPEATABLE READ`:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在默认事务隔离级别`REPEATABLE READ`下，使用主键更新表`elem`的行会获取四个数据锁：
+- en: '[PRE1]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: '[PRE2]'
+  id: totrans-37
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Before illustrating and explaining these data locks, I will briefly describe
+    what each row means:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在说明和解释这些数据锁之前，我将简要描述每一行的含义：
+- en: The first row is a *table lock*, as indicated by the `lock_type` column. InnoDB
+    is a row-level locking storage engine, but MySQL also requires table locks—refer
+    back to [“Lock time”](ch01.html#Lock-time). There will be a table lock for every
+    table referenced by queries in the transaction. I include table locks for completeness,
+    but ignore them since we’re focusing on record locks.
+  id: totrans-39
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第一行是*表锁*，由`lock_type`列指示。InnoDB是行级锁定存储引擎，但MySQL也需要表锁——请参阅[“锁定时间”](ch01.html#Lock-time)。每个查询事务引用的表都将有一个表锁。出于完整性考虑，我包括表锁，但我们专注于记录锁，因此忽略它们。
+- en: 'The second row is a *record lock* on primary key value 2, as indicated by all
+    the columns. The cryptic column is `lock_mode`: `X` means an exclusive lock (`S`
+    [not shown] means a shared lock), and `REC_NOT_GAP` means a record lock.'
+  id: totrans-40
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第二行是主键值为2的*记录锁*，如所有列所示。神秘的列是`lock_mode`：`X`表示独占锁（`S` [未显示] 表示共享锁），`REC_NOT_GAP`表示记录锁。
+- en: The third row is a *next-key lock* on the supremum pseudo-record. In column
+    `lock_mode`, a solitary `X` or `S` means an exclusive or shared next-key lock,
+    respectively. Imagine it as `X,NEXT_KEY`.
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第三行是超穷记录上的*下一个键锁*。在`lock_mode`列中，孤立的`X`或`S`表示独占或共享下一个键锁，分别视为`X,NEXT_KEY`。
+- en: The fourth row is a *next-key lock* on primary key value 5. Again, the solitary
+    `X` in column `lock_mode` means an exclusive next-key lock. Imagine it as `X,NEXT_KEY`.
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第四行是主键值为5的*下一个键锁*。再次，在`lock_mode`列中的孤立`X`表示独占下一个键锁。将其视为`X,NEXT_KEY`。
+- en: '[Figure 8-2](#trx-idx-next-key-locks) illustrates the impact of these data
+    locks.'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图8-2](#trx-idx-next-key-locks)说明了这些数据锁的影响。'
+- en: '![emsp 0802](assets/emsp_0802.png)'
+  id: totrans-44
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0802](assets/emsp_0802.png)'
+- en: Figure 8-2\. Record and next-key locks on primary key, `REPEATABLE READ` transaction
+  id: totrans-45
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图8-2\. 主键上的记录锁和下一个键锁，`REPEATABLE READ`事务
+- en: 'Locked records are shaded; unlocked records are white. The record lock on primary
+    key value 2 is shaded darkly. This record is locked because its corresponding
+    row matches the table condition: `id BETWEEN 2 AND 5`.'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 锁定记录被阴影覆盖；未锁定的记录是白色的。主键值为2的记录由于其对应的行匹配了表条件：`id BETWEEN 2 AND 5`，因此被锁定并且阴影深色显示。
+- en: The next-key lock on primary key value 5 is shaded medium-dark, and the gap
+    before it is shaded lightly. This record is locked because its corresponding row
+    matches the table condition, too. The gap before this record is locked because
+    it’s a next-key lock. The gap comprises the nonexistent primary key values 3 and
+    4 (to which there are no corresponding rows).
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 主键值为 5 的下一个键锁是中暗色阴影，其前的间隙则为轻微浅色阴影。这条记录被锁定，因为其对应的行符合表条件。这条记录前的间隙也被锁定，因为这是一个下一个键锁。这个间隙包括不存在的主键值
+    3 和 4（没有对应的行）。
+- en: 'Similarly, the next-key lock on the supremum pseudo-record is shaded medium-dark,
+    and the gap before it is shaded lightly. The gap comprises all primary key values
+    greater than 5. The intriguing question is: why lock the supremum pseudo-record,
+    which *includes* all primary key values greater than 5, when the table condition
+    *excludes* primary key values greater than 5? The answer is equally intriguing,
+    but I must defer it until [“Gap Locks”](#trx-gap-locks).'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 类似地，至上伪记录的下一个键锁被中暗色阴影阴影，其前的间隙则为轻微浅色阴影。这个间隙包含所有大于 5 的主键值。有趣的问题是：为什么要锁定至上伪记录，它*包含*所有大于
+    5 的主键值，而表条件*排除*大于 5 的主键值？答案同样耐人寻味，但我必须推迟到[“间隙锁”](#trx-gap-locks)。
+- en: 'Let’s confirm that the gaps are locked by trying to insert a row (using another
+    transaction with autocommit enabled):'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们确认这些间隙被锁定，通过尝试插入一行（使用另一个启用自动提交的事务）：
+- en: '[PRE3]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'The first `INSERT` times out trying to acquire an insert intention lock on
+    the gap between values 2 and 5, which is where the new value (3) would be inserted.
+    Although column `lock_data` lists value 5, this record is *not* locked because
+    this not a record or next-key lock: it’s an insert intentions lock, which is a
+    special type of gap lock (for `INSERT`); therefore, it locks the gap before the
+    value 5. More on insert intention locks in [“Insert Intention Locks”](#trx-ii).'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一个 `INSERT` 因尝试在值为 2 和 5 之间的间隙上获取插入意图锁而超时，这是新值（3）将被插入的地方。虽然列 `lock_data` 列出值
+    5，但这条记录*未*被锁定，因为这不是记录或下一个键锁：它是插入意图锁，是一种特殊类型的间隙锁（用于 `INSERT`）；因此，它锁定了值 5 前的间隙。关于插入意图锁的更多信息，请参见[“插入意图锁”](#trx-ii)。
+- en: The second `INSERT` times out trying to acquire a next-key lock on the supremum
+    pseudo-record because the new value, 6, is greater than the current maximum value,
+    5, so it would be inserted between the maximum record and the supremum pseudo-record.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二个 `INSERT` 因尝试在至上伪记录上获取下一个键锁而超时，因为新值 6 大于当前最大值 5，因此它将被插入在最大记录和至上伪记录之间。
+- en: 'These `INSERT` statements prove that [Figure 8-2](#trx-idx-next-key-locks)
+    is not wrong: nearly the entire index is locked except for values less than 2.
+    Why does InnoDB use next-key locks that lock the gaps instead of record locks?
+    Because the transaction isolation level is `REPEATABLE READ`, but that’s only
+    part of the answer. The complete answer is not straightforward, so bear with me
+    for a moment. By locking the gaps before the affected records, next-key locks
+    isolate the entire range of records that the query accesses, which is the *I*
+    in ACID: isolation. That prevents a phenomenon called [*phantom rows*](https://oreil.ly/DYs9L)
+    (or *phantom reads*) when, at a later time, a transaction reads rows that it did
+    not read at an earlier time. The new rows are *phantoms* because, like a ghost,
+    they appear mysteriously. (*Phantom* is the actual term in the ANSI SQL-92 standard.)
+    Phantom rows violate the principle of isolation, which is why certain transaction
+    isolation levels forbid them. Now the truly mysterious part of this explanation:
+    the ANSI SQL-92 standard *allows* phantom rows in `REPEATABLE READ` but InnoDB
+    prevents them with next-key locking. But let’s not go down the proverbial rabbit
+    hole by asking why InnoDB prevents phantom rows in `REPEATABLE READ`. Knowing
+    why doesn’t change the fact, and it’s not uncommon for database servers to implement
+    transaction isolation levels differently than the standard.^([1](ch08.html#idm45829097823024))
+    For completeness, however, know that the ANSI SQL-92 standard forbids phantom
+    rows only in the highest transaction isolate level: `SERIALIZABLE`. InnoDB supports
+    `SERIALIZABLE`, but I don’t cover it in this chapter because it’s not commonly
+    used. `REPEATABLE READ` is the default in MySQL and InnoDB uses next-key locks
+    to prevent phantom rows in `REPEATABLE READ`.'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些`INSERT`语句证明了 [图 8-2](#trx-idx-next-key-locks) 不是错误的：几乎整个索引被锁定，除了小于 2 的值。为什么
+    InnoDB 使用锁定间隙而不是记录锁呢？因为事务隔离级别是`REPEATABLE READ`，但这只是部分答案。完整的答案并不简单，请稍候。通过在影响的记录之前锁定间隙，next-key
+    锁定隔离了查询访问的整个记录范围，这是 ACID 中的*I*：隔离。这样可以防止后期事务读取先前未读取的行，称为[*幻影行*](https://oreil.ly/DYs9L)（或*幻读*）。新行是*幻影*，因为像幽灵一样神秘地出现。（*幻影*是
+    ANSI SQL-92 标准的实际术语。）幻影行违反了隔离原则，这就是为什么某些事务隔离级别禁止它们的原因。现在解释的真正神秘部分：ANSI SQL-92
+    标准允许在`REPEATABLE READ`中存在幻影行，但 InnoDB 使用 next-key 锁来阻止它们。但我们不要深入询问为什么 InnoDB 在`REPEATABLE
+    READ`中阻止幻影行。了解原因并不改变事实，数据库服务器实现事务隔离级别通常与标准不同。^([1](ch08.html#idm45829097823024))
+    为了完整起见，了解 ANSI SQL-92 标准仅在最高事务隔离级别`SERIALIZABLE`中禁止幻影行。InnoDB 支持`SERIALIZABLE`，但本章未涵盖，因为它不常用。MySQL
+    中默认使用`REPEATABLE READ`，InnoDB 使用 next-key 锁来阻止`REPEATABLE READ`中的幻影行。
+- en: 'Transaction isolation level `READ COMMITTED` disables gap locking, which includes
+    next-key locks. To prove it, change the transaction isolation level to `READ COMMITTED`:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务隔离级别`READ COMMITTED`禁用间隙锁定，包括 next-key 锁定。为了证明这一点，将事务隔离级别更改为`READ COMMITTED`：
+- en: '[PRE4]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: Note
+  id: totrans-56
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注
+- en: '`SET TRANSACTION` applies once to the next transaction. After the next transaction,
+    subsequent transactions use the default transaction isolation level. See [`SET
+    TRANSACTION`](https://oreil.ly/46zcp) for details.'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SET TRANSACTION` 仅适用于接下来的一次事务。在下一次事务之后，后续的事务将使用默认的事务隔离级别。详情请参阅 [`SET TRANSACTION`](https://oreil.ly/46zcp)。'
+- en: The same `UPDATE` statement in a `READ COMMITTED` transaction acquires records
+    locks only on the matching rows, as illustrated in [Figure 8-3](#trx-idx-records-locks).
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`READ COMMITTED`事务中，相同的`UPDATE`语句仅对匹配的行获取记录锁，如 [图 8-3](#trx-idx-records-locks)
+    所示。
+- en: '![emsp 0803](assets/emsp_0803.png)'
+  id: totrans-59
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0803](assets/emsp_0803.png)'
+- en: Figure 8-3\. Record locks on primary key, `READ COMMITTED` transaction
+  id: totrans-60
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 8-3\. 主键上的记录锁，`READ COMMITTED`事务
+- en: 'Why not use `READ COMMITTED`? That question relates to an access pattern trait
+    ([“Transaction Isolation”](ch04.html#ap-trx-iso)) that makes it entirely application-specific,
+    even query-specific. In a transaction, `READ COMMITTED` has two important side
+    effects:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为什么不使用`READ COMMITTED`？这个问题涉及访问模式特征（[“事务隔离”](ch04.html#ap-trx-iso)）的应用程序特定性，甚至查询特定性。在事务中，`READ
+    COMMITTED`有两个重要的副作用：
+- en: The same read statement can return different rows if re-executed.
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果重新执行相同的读取语句，可能返回不同的行。
+- en: The same write statement can affect different rows if re-executed.
+  id: totrans-63
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果重新执行相同的写入语句，可能会影响不同的行。
+- en: 'These side effects explain why InnoDB does not need to use a consistent snapshot
+    for reads or lock the gaps for writes: `READ COMMITTED` allows the transaction
+    to read or write different records (for committed changes) at different times.
+    ([“MVCC and the Undo Logs”](#mvcc) defines *consistent snapshot*.) Carefully consider
+    these side effects with respect to your application. If you are certain they will
+    not cause a transaction to read, write, or return incorrect data, then `READ COMMITTED`
+    reduces locks and undo logs, which helps improve performance.'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些副作用解释了为什么InnoDB不需要对读取使用一致性快照，也不需要对写入锁定间隙：`READ COMMITTED`允许事务在不同时间读取或写入不同记录（对已提交更改）。([“MVCC和Undo日志”](#mvcc)定义了*一致性快照*。)请仔细考虑这些副作用，以便于您的应用程序。如果您确信它们不会导致事务读取、写入或返回不正确的数据，那么`READ
+    COMMITTED`会减少锁和撤消日志，从而有助于提高性能。
+- en: Gap Locks
+  id: totrans-65
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 间隙锁
+- en: 'Gap locks are purely prohibitive: they prevent other transactions from inserting
+    rows into the gap. That’s all they do.'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'Gap locks are purely prohibitive: they prevent other transactions from inserting
+    rows into the gap. That’s all they do.'
+- en: Multiple transactions can lock the same gap because all gaps locks are compatible
+    with other gap locks. But since gap locks prevent *other* transactions from inserting
+    rows into the gap, only one transaction can insert rows into a gap when it’s the
+    only transaction locking the gap. Two or more locks on the same gap prevent all
+    transactions from inserting rows into the gap.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 多个事务可以锁定同一个间隙，因为所有间隙锁都与其他间隙锁兼容。但由于间隙锁阻止*其他*事务将行插入到间隙中，当只有一个事务锁定间隙时，只有一个事务可以将行插入到间隙中。对同一个间隙的两个或更多锁会阻止所有事务将行插入到间隙中。
+- en: 'The purpose of a gap lock is narrow: prevent other transactions from inserting
+    rows into the gap. But the creation of a gap lock is wide: any query that accesses
+    the gap. Reading nothing can create a gap lock that blocks inserting rows:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 间隙锁的目的很狭窄：阻止其他事务将行插入到间隙中。但间隙锁的创建范围很广：任何访问间隙的查询。即使读取空内容也可以创建一个阻止插入行的间隙锁：
+- en: '[PRE5]'
+  id: totrans-69
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Prima facie, that `SELECT` seems innocuous: a `SELECT` in `REPEATABLE READ`
+    uses a consistent snapshot, and `FOR SHARE` only creates shared locks, so it won’t
+    block other reads. More importantly, the `SELECT` doesn’t match any rows: table
+    `elem` has primary key values 2 and 5, not 3. No rows, no locks—right? Wrong.
+    By accessing the gap with `READ REPEATABLE` and `SELECT`…`FOR SHARE`, you summon
+    a lone gap lock: [Figure 8-4](#trx-idx-s-gap).'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表面上看，这个`SELECT`似乎是无害的：在`REPEATABLE READ`中的`SELECT`使用一致性快照，并且`FOR SHARE`只创建共享锁，因此不会阻塞其他读操作。更重要的是，这个`SELECT`并不匹配任何行：表`elem`的主键值是2和5，而不是3。没有行，就没有锁——对吗？错了。通过使用`READ
+    REPEATABLE`和`SELECT`…`FOR SHARE`访问间隙，您会召唤一个孤立的间隙锁：[图8-4](#trx-idx-s-gap)。
+- en: '![emsp 0804](assets/emsp_0804.png)'
+  id: totrans-71
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0804](assets/emsp_0804.png)'
+- en: Figure 8-4\. Lone gap lock
+  id: totrans-72
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图8-4\. 孤立间隙锁
+- en: I call it a *lone* gap lock because it doesn’t accompany a next-key lock or
+    insert intention lock; it stands alone. All gap locks—shared or exclusive—prevent
+    other transactions from inserting rows into the gap. That innocuous `SELECT` statement
+    is actually an insidious `INSERT` blocker. The larger the gap, the larger the
+    block, which the next section illustrates with a secondary index.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我称之为*孤立*间隙锁，因为它不伴随下一个键锁或插入意图锁；它是独立存在的。所有间隙锁（共享或排他）都会阻止其他事务将行插入到间隙中。这个看似无害的`SELECT`语句实际上是一个阻止`INSERT`的恶意操作。间隙越大，阻碍越大，下一节将通过一个次要索引进行说明。
+- en: 'The easy creation of gap locks by any access to the gap is part of the answer
+    to the intriguing question in [“Record and Next-Key Locks”](#trx-record-locks):
+    why lock the supremum pseudo-record, which *includes* all primary key values greater
+    than 5, when the table condition *excludes* primary key values greater than 5?
+    First, let me dial the intrigue to maximum. Here’s the original query and its
+    data locks:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: The easy creation of gap locks by any access to the gap is part of the answer
+    to the intriguing question in [“记录和下一个键锁”](#trx-record-locks)：为什么在表条件*排除*主键大于5的情况下，要锁定包括所有主键值大于5的超界伪记录？首先，让我把好奇心提升到最高点。这是原始查询及其数据锁：
+- en: '[PRE6]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'Now, here’s the same query but with an `IN` clause instead of a `BETWEEN` clause:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，这里是相同的查询，但使用`IN`子句而不是`BETWEEN`子句：
+- en: '[PRE7]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Both transactions are `REPEATABLE READ`, and both queries have the exact same
+    EXPLAIN plan: range access on primary key. But the new query acquires record locks
+    only on the matching rows. What is this magic? [Figure 8-5](#trx-id-in) shows
+    what’s happening for each query.'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 两个事务都是`REPEATABLE READ`，两个查询具有完全相同的EXPLAIN计划：主键的范围访问。这是什么魔法？[图8-5](#trx-id-in)显示了每个查询的情况。
+- en: '![emsp 0805](assets/emsp_0805.png)'
+  id: totrans-79
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0805](assets/emsp_0805.png)'
+- en: Figure 8-5\. Range access for `BETWEEN` versus `IN`, `REPEATABLE READ` transaction
+  id: totrans-80
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 8-5\. `BETWEEN` 与 `IN` 的范围访问，`REPEATABLE READ` 事务
+- en: 'Row access for `BETWEEN` happens as you might expect: from 2 to 5 and everything
+    between. In simplistic terms, the sequence of row access for `BETWEEN` is:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`BETWEEN` 的行访问如您所预期的那样：从 2 到 5 和之间的所有内容。简单地说，`BETWEEN` 的行访问顺序是：'
+- en: Read row at index value 2
+  id: totrans-82
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 读取索引值为 2 的行
+- en: 'Row matches: record lock'
+  id: totrans-83
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 行匹配：记录锁
+- en: 'Next index value: 5'
+  id: totrans-84
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 下一个索引值：5
+- en: Traverse the gap from 2 to 5
+  id: totrans-85
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从 2 到 5 的间隙遍历
+- en: Read row at index value 5
+  id: totrans-86
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 读取索引值为 5 的行
+- en: 'Row matches: next-key lock'
+  id: totrans-87
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 行匹配：下一键锁
+- en: 'Next index value: supremum'
+  id: totrans-88
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 下一个索引值：最大值
+- en: Traverse the gap from 5 to supremum
+  id: totrans-89
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从 5 到最大值的间隙遍历
+- en: 'End of the index: next-key lock'
+  id: totrans-90
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 索引结束：下一键锁
+- en: 'But the sequence of row access for `IN` is much simpler:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但 `IN` 的行访问顺序要简单得多：
+- en: Read row at index value 2
+  id: totrans-92
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 读取索引值为 2 的行
+- en: 'Row matches: record lock'
+  id: totrans-93
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 行匹配：记录锁
+- en: Read row at index value 5
+  id: totrans-94
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 读取索引值为 5 的行
+- en: 'Row matches: record lock'
+  id: totrans-95
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 行匹配：记录锁
+- en: 'Despite having the exact same EXPLAIN plan and matching the same rows, the
+    queries access rows differently. The original query (`BETWEEN`) accesses the gaps;
+    therefore, it uses next-key locks to lock the gaps. The new query (`IN`) does
+    not access the gaps; therefore, it uses record locks. But make no mistake: the
+    `IN` clause does not preclude gap locking. If the new query table condition is
+    `IN (2, 3, 5)`, that accesses the gap between value 2 and 5 and causes a gap lock
+    (not a next-key lock):'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管具有相同的 EXPLAIN 计划并匹配相同的行，但查询以不同的方式访问行。原始查询（`BETWEEN`）访问间隙，因此使用下一键锁来锁定间隙。新查询（`IN`）不访问间隙，因此使用记录锁。但不要误解：`IN`
+    子句并不排除间隙锁定。如果新查询表条件为 `IN (2, 3, 5)`，那么访问值 2 和 5 之间的间隙并导致间隙锁定（而不是下一键锁）：
+- en: '[PRE8]'
+  id: totrans-97
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'You have a lone gap lock: `X,GAP`. But notice: there is no next-key lock on
+    the supremum pseudo-record because `IN (2, 3, 5)` does not access that gap. Mind
+    the gap.'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你有一个单独的间隙锁：`X,GAP`。但请注意：在伪记录最大值上没有下一键锁，因为 `IN (2, 3, 5)` 不访问该间隙。注意间隙。
+- en: Gap locking is easy to disable by using `READ COMMITTED`. A `READ COMMITTED`
+    transaction doesn’t need gap locks (or next-key locks) because records in the
+    gap are allowed to change, and each query accesses the latest latest changes (committed
+    rows) when it executes. Even the lone gap lock summoned by `SELECT * FROM elem
+    WHERE id = 3 FOR SHARE` is quashed by `READ COMMITTED`.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过使用 `READ COMMITTED` 可轻松禁用间隙锁定。`READ COMMITTED` 事务不需要间隙锁（或下一键锁），因为间隙中的记录允许更改，并且每个查询在执行时访问最新的更改（已提交的行）。即使
+    `SELECT * FROM elem WHERE id = 3 FOR SHARE` 召唤的孤立间隙锁也被 `READ COMMITTED` 扫除。
+- en: Secondary Indexes
+  id: totrans-100
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 二级索引
+- en: 'Secondary indexes introduce potentially wide-ranging consequences with respect
+    to row locking, especially nonunique indexes. Recall that simplified table `elem`
+    ([Example 8-1](#trx-elem)) has a nonunique secondary index on column `a`. With
+    that in mind, let’s see how the following `UPDATE` in a `REPEATABLE READ` transaction
+    locks records on the secondary index and the primary key:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二级索引引入了关于行锁定的潜在广泛后果，特别是对于非唯一索引。回想一下简化表 `elem`（[示例 8-1](#trx-elem)）在列 `a` 上有一个非唯一二级索引。考虑到这一点，让我们看看以下
+    `REPEATABLE READ` 事务中的 `UPDATE` 如何锁定二级索引和主键记录：
+- en: '[PRE9]'
+  id: totrans-102
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: '[Figure 8-6](#trx-idx-gap-lock) illustrates those six records locks: four on
+    the secondary index and two on the primary key.'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 8-6](#trx-idx-gap-lock) 说明了这六条记录锁定：四条在二级索引上，两条在主键上。'
+- en: '![emsp 0806](assets/emsp_0806.png)'
+  id: totrans-104
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0806](assets/emsp_0806.png)'
+- en: Figure 8-6\. Next-key locks on secondary index, `REPEATABLE READ` transaction
+  id: totrans-105
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 8-6\. 二级索引上的下一键锁，`REPEATABLE READ` 事务
+- en: 'The `UPDATE` only matches two rows, but it locks the entire secondary index,
+    which prevents inserting any values. The locks on the secondary index are similar
+    to those in [Figure 8-2](#trx-idx-next-key-locks). But now there is a next-key
+    lock on the first record in the secondary index record: tuple `(''Ar'', 5)`, where
+    5 is the corresponding primary key value. This next-key lock isolates the range
+    from new duplicate “Ar” values. For example, it prevents inserting the tuple `(''Ar'',
+    1)`, which sorts before `(''Ar'', 5)`.'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`UPDATE` 只匹配两行，但锁定整个二级索引，这阻止了插入任何值。二级索引上的锁与 [图 8-2](#trx-idx-next-key-locks)
+    中的类似。但现在，在二级索引记录的第一个记录上有一个下一键锁：元组 `(''Ar'', 5)`，其中 5 是对应的主键值。这个下一键锁隔离了新重复的 “Ar”
+    值的范围。例如，它阻止插入排序在 `(''Ar'', 5)` 之前的元组 `(''Ar'', 1)`。'
+- en: 'Normally, InnoDB does not lock an entire secondary index. That happens in these
+    examples only because there are only two index records (in both the primary key
+    and the nonunique secondary index). But recall [“Extreme Selectivity”](ch02.html#extreme-selectivity):
+    the lower the selectivity, the larger the gaps. As an extreme example, if a nonunique
+    index has 5 unique values evenly distributed over 100,000 rows, that is 20,000
+    records per row (100,000 rows / 5 cardinality), or 20,000 records per gap.'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，InnoDB不会锁定整个次要索引。在这些例子中只有两个索引记录（分别在主键和非唯一次要索引中）。但请回忆[“极端选择性”](ch02.html#extreme-selectivity)：选择性越低，间隙越大。例如，如果一个非唯一索引在10万行中有5个均匀分布的唯一值，那么每行有20000条记录（100000行/5基数），或者每个间隙有20000条记录。
+- en: Tip
+  id: totrans-108
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: The lower the index selectivity, the larger the record gaps.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引选择性越低，记录间隙越大。
+- en: '`READ COMMITTED` avoids gap locking, even for nonunique secondary indexes because
+    only matching rows are locked with record locks. But let’s not make it too easy
+    on ourselves; let’s keep examining InnoDB data locks on nonunique secondary indexes
+    for different kinds of data changes.'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`READ COMMITTED`避免了间隙锁定，即使是对于非唯一次要索引，因为只有匹配行会使用记录锁定。但让我们不要对自己太宽容；让我们继续检查InnoDB在非唯一次要索引上不同数据更改的数据锁定。'
+- en: 'At the end of the previous section, changing the `BETWEEN` clause to an `IN`
+    clause averted gap locking, but that does not work with a nonunique index. In
+    fact, InnoDB *adds* a gap lock in this case:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一节结束时，将`BETWEEN`子句更改为`IN`子句可避免间隙锁定，但在非唯一索引中不起作用。事实上，在这种情况下，InnoDB会*添加*一个间隙锁：
+- en: '[PRE10]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'I removed the original data locks from the output (they’re identical) to highlight
+    the new gap lock on tuple `(''Au'', 2)`. Strictly speaking, this gap lock is redundant
+    with the next-key lock on the same tuple, but it does not result in incorrect
+    locking or data access. Therefore, just let it be and never forget: InnoDB is
+    full of wonders and mysteries. And what would life be without a few of those?'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我从输出中删除了原始数据锁（它们是相同的），以突出元组`('Au', 2)`上的新间隙锁。严格来说，这个间隙锁与同一元组上的下一个键锁重复，但这并不会导致错误的锁定或数据访问。因此，就让它存在吧，永远不要忘记：InnoDB充满了奇迹和神秘。生活中少了这些，还有什么意思呢？
+- en: 'It’s important to examine data locks because InnoDB is full of surprises. Although
+    this section is detailed and meticulous, it’s barely below the surface—InnoDB
+    locking is deep, and in the depths hide secrets. For example, what data locks
+    might InnoDB require if “Au” is changed to “Go”? Let’s examine the data locks
+    of that change:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 检查数据锁是很重要的，因为InnoDB充满了惊喜。尽管这一部分详细而细致，但它几乎在表面之下——InnoDB的锁定是深奥的，深处隐藏着秘密。例如，如果将“Au”更改为“Go”，InnoDB可能需要什么数据锁呢？让我们来检查这种变化的数据锁定：
+- en: '[PRE11]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: '[Figure 8-7](#trx-idx-si-update) visualizes those four data locks.'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 8-7](#trx-idx-si-update)可视化了这四个数据锁。'
+- en: '![emsp 0807](assets/emsp_0807.png)'
+  id: totrans-117
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0807](assets/emsp_0807.png)'
+- en: Figure 8-7\. Update nonunique secondary index value, `REPEATABLE READ` transaction
+  id: totrans-118
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 8-7\. 更新非唯一次要索引值，`REPEATABLE READ`事务
+- en: 'The “Au” value is gone—changed to “Go”—but InnoDB still holds a next-key lock
+    on the tuple: `(''Au'', 2)`. The new “Go” does not have record lock or next-key
+    lock, only a gap lock before the tuple: `(''Go'', 2)`. So what’s locking the new
+    “Go” record? Is this some kind of `REPEATABLE READ` side effect? Let’s change
+    the transaction isolation level and re-examine the data locks:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: “Au”值已经消失——更改为“Go”，但InnoDB仍然保持元组`('Au', 2)`的下一个键锁。新的“Go”没有记录锁或下一个键锁，只有在元组之前的间隙锁：`('Go',
+    2)`。那么是什么锁定了新的“Go”记录？这是某种`REPEATABLE READ`的副作用吗？让我们更改事务隔离级别并重新检查数据锁定：
+- en: '[PRE12]'
+  id: totrans-120
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: Switching to `READ COMMITTED` disables gap locking as expected, but where is
+    the lock—any lock—on the new “Go” value? “Writes always lock rows,” or at least
+    that’s what I said at the beginning of [“Row Locking”](#row-locking). And yet,
+    InnoDB reports no locks for this write…
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 切换到`READ COMMITTED`会按预期禁用间隙锁定，但新的“Go”值的锁定——任何锁定——在哪里呢？“写入始终锁定行”，至少在[“行锁定”](#row-locking)开始时是这样说的。然而，InnoDB对此写入未报告任何锁定……
+- en: What if I told you that InnoDB is so optimized that it can lock without locking?
+    Let’s use the next type of data lock, insert intention, to stare perilously deep
+    into InnoDB locking and resolve this mystery.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我告诉你，InnoDB如此优化，以至于可以在不锁定的情况下进行锁定呢？让我们使用插入意向锁，深入探索InnoDB锁定，并解决这个谜团。
+- en: Insert Intention Locks
+  id: totrans-123
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 插入意向锁
+- en: 'An *insert intention lock* is a special type of gap lock that means the transaction
+    will insert a row into the gap when the gap is not locked by other transactions.
+    Only gap locks block insert intention locks. (Remember: *gap locks* include next-key
+    locks because the latter are a combination of record lock and gap lock.) Insert
+    intention locks are compatible with (do not block) other insert intention locks.
+    This is important for `INSERT` performance because it allows multiple transactions
+    to insert different rows into the same gap at the same time. How does InnoDB handle
+    duplicate keys? I return to this question after demonstrating other facets of
+    insert intention locks that make the answer more clear.'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 插入意向锁是一种特殊类型的间隙锁，表示当间隙未被其他事务锁定时，事务将向该间隙插入一行。只有间隙锁会阻止插入意向锁。（记住：*间隙锁* 包括 next-key
+    锁，因为后者是记录锁和间隙锁的组合。）插入意向锁与其他插入意向锁兼容（不会阻止）。这对于 `INSERT` 的性能非常重要，因为它允许多个事务同时向同一间隙插入不同的行。InnoDB
+    如何处理重复键？在演示插入意向锁的其他方面使答案更加清晰后，我会回答这个问题。
+- en: Tip
+  id: totrans-125
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Gap locks *prevent* `INSERT`. Insert intention locks *allow* `INSERT`.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 间隙锁 *阻止* `INSERT`。插入意向锁 *允许* `INSERT`。
+- en: 'Insert intention locks are special for three reasons:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 插入意向锁有三个特殊之处：
+- en: 'Insert intention locks do not lock the gap because, as the term *intention*
+    implies, they represent a *future* action: inserting a row *when* there are no
+    gap locks held by other transactions.'
+  id: totrans-128
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 插入意向锁不会锁定间隙，因为如术语 *意向* 所示，它们代表的是一个*未来*的动作：在*没有*其他事务持有间隙锁时插入一行。
+- en: Insert intention locks are created and reported only when they conflict with
+    gap locks held by other transactions; otherwise, insert intention locks are not
+    created or reported by the transaction inserting the row.
+  id: totrans-129
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 只有当插入意向锁与其他事务持有的间隙锁冲突时，才会创建和报告插入意向锁；否则，插入意向锁不会由插入行的事务创建或报告。
+- en: If an insert intention lock is created, it is used once and released immediately
+    once granted; but InnoDB continues to report it until the transaction is complete.
+  id: totrans-130
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果创建了插入意向锁，它会被使用一次，并在授予后立即释放；但是 InnoDB 在事务完成之前会继续报告它。
+- en: In a sense, insert intention locks aren’t locks because they don’t block access.
+    They’re more like wait conditions that InnoDB uses to signal when a transaction
+    can proceed with an `INSERT`. Granting the insert intention lock is the signal.
+    But if a transaction doesn’t have to wait because there are no conflict gap locks,
+    then it doesn’t wait, and you won’t see an insert intention lock because none
+    was created.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某种意义上，插入意向锁不是锁，因为它们不会阻塞访问。它们更像是 InnoDB 用来信号传递的等待条件，用于指示事务何时可以进行 `INSERT`。授予插入意向锁就是信号。但是如果一个事务不必等待，因为没有冲突的间隙锁，那么它就不会等待，并且你看不到插入意向锁，因为没有创建。
+- en: 'Let’s see insert intention locks in action. Start by locking the gap between
+    primary key values 2 and 5; then, in a second transaction, try to insert a row
+    with primary key value 3:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看插入意向锁的实际操作。首先锁定主键值为2和5之间的间隙；然后，在第二个事务中，尝试插入主键值为3的行：
+- en: '[PRE13]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: '`X,GAP,INSERT_INTENTION` in column `lock_mode` is an insert intention lock.
+    It’s also listed as `X,INSERT_INTENTION` (not shown) when locking and inserting
+    into the gap between the maximum record value and the supremum pseudo-record.'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`lock_mode` 列中的 `X,GAP,INSERT_INTENTION` 是一个插入意向锁。当在最大记录值和超越伪记录之间的间隙进行锁定和插入时，它也被列为
+    `X,INSERT_INTENTION`（未显示）。'
+- en: 'The first transaction locks the gap before primary key value 5. That gap lock
+    blocks the second transaction from inserting into the gap, so it creates an insert
+    intention lock and waits. Once the first transaction commits (or rolls back),
+    the gap is unlocked, the insert intention lock is granted, and the second transaction
+    inserts the row:'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一个事务在主键值为5之前锁定了间隙。该间隙锁阻止了第二个事务向间隙插入行，因此它创建了一个插入意向锁并等待。一旦第一个事务提交（或回滚），间隙解锁，插入意向锁被授予，第二个事务插入行：
+- en: '[PRE14]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'As noted earlier, InnoDB continues to report an insert intention lock even
+    though, once granted, it is used once and released immediately. Consequently,
+    it looks like the gap is locked, but it’s an illusion—a ploy by InnoDB to lure
+    us in deeper. You can prove that it’s an illusion by inserting another row into
+    the gap at primary key value 4; it does not block. Why does InnoDB continue to
+    report an insert intention lock that’s not really there? Few mortals know, and
+    it matters not. Look past the illusion to see it for what it *was*: in the past,
+    the transaction blocked before inserting a row into the gap.'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如前面所述，InnoDB 继续报告插入意图锁，即使一旦授予，它只被使用一次并立即释放。因此，看起来像是间隙被锁定，但这是一个幻觉——InnoDB 用来引诱我们更深入的策略。你可以通过在主键值为
+    4 的间隙插入另一行来证明这是一个幻觉；它不会阻塞。为什么 InnoDB 继续报告一个实际上不存在的插入意图锁呢？少数凡人知晓，但这并不重要。超越幻觉，看到它*曾经*是什么：在过去，事务在插入行到间隙之前被阻塞。
+- en: 'For completeness and a segue into deeper aspects of InnoDB locking, especially
+    with respect to insert intention locks, here is what you see when an `INSERT`
+    does not block on gap locks:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了完整性和深入了解 InnoDB 锁定的更深层次，特别是与插入意图锁相关的内容，这里是当`INSERT`在间隙锁上不阻塞时你所看到的情况：
+- en: '[PRE15]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'No record locks at all. That’s how insert intention locks work on the surface,
+    but we came here to stare perilously deep into InnoDB locking, so let’s go deeper
+    by asking the question that led us here: why is there no record (or next-key)
+    lock on the newly inserted row? This is the same mystery from the previous section:
+    no lock on the new “Go” value.'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根本没有记录锁。这就是插入意图锁在表面上的工作方式，但我们来到这里是为了深入研究 InnoDB 锁定，所以让我们通过提出导致我们到此的问题来更深入：为什么新插入行上没有记录（或下一个键）锁？这是前一节中同样的谜团：对新“Go”值没有锁。
+- en: 'This is the secret: InnoDB has explicit and implicit locks and it only reports
+    explicit locks.^([2](ch08.html#idm45829097678720)) Explicit locks exist as lock
+    structures in memory; therefore, InnoDB can report them. But implicit locks do
+    not exist: there is no lock structure; therefore, InnoDB has nothing to report.'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是秘密所在：InnoDB 拥有显式和隐式锁，并且只报告显式锁。[^2] 显式锁存在于内存中的锁结构中；因此，InnoDB 可以报告它们。但隐式锁并不存在：没有锁结构；因此，InnoDB
+    没有什么可以报告的。
+- en: 'In the previous example, `INSERT INTO elem VALUES (9, ''As'', ''B'', ''C'')`,
+    the index record for the new row exists, but the row is not committed (because
+    the transaction has not committed). If another transaction attempts to lock the
+    row, it detects three conditions:'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的例子中，`INSERT INTO elem VALUES (9, 'As', 'B', 'C')`，新行的索引记录存在，但行未提交（因为事务尚未提交）。如果另一个事务尝试锁定该行，则会检测到三个条件：
+- en: The row is not committed.
+  id: totrans-143
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 行未提交。
+- en: The row belongs to another transaction.
+  id: totrans-144
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 该行属于另一个事务。
+- en: The row is not explicitly locked.
+  id: totrans-145
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 行并未显式锁定。
+- en: 'Then magic happens: the requesting transaction—the transaction attempting to
+    lock the record—converts the implicit lock to an explicit lock *on behalf of*
+    the owning transaction—the transaction that created the record. Yes, that means
+    one transaction creates a lock for another transaction—but that’s not the confusing
+    part. Since the requesting transaction creates the lock that it’s trying to acquire,
+    at first glance InnoDB seems to report that the transaction is waiting for a lock
+    that it holds—the transaction is blocked on itself. There’s a way to see through
+    this illusion, but we’ve gone too deep.'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后奇迹发生了：请求锁的事务——试图锁定记录的事务——代表创建记录的事务将隐式锁转换为显式锁。是的，这意味着一个事务为另一个事务创建了锁——但这并不让人困惑。由于请求锁的事务创建了它试图获取的锁，乍一看
+    InnoDB 似乎报告该事务正在等待它持有的锁——该事务被自己阻塞。有一种方法可以看穿这种幻觉，但我们已经深入得太多了。
+- en: I hope that, as an engineer using MySQL, you never need to descend to this depth
+    of InnoDB locking to achieve remarkable performance with MySQL. But I led us down
+    here for two reasons. First, despite the illusions, the fundamentals of InnoDB
+    row locking with respect to transaction isolation levels are tractable and applicable.
+    You are now fantastically well prepared to handle every common InnoDB row locking
+    issue—and more. Second, InnoDB made me do it because I stared too deeply for too
+    long; and when it all blurred into one, I knew that I had fallen from the precipice
+    and could never return. Don’t ask why it locks the supremum pseudo-record beyond
+    the table condition range. Don’t ask why it has redundant gap locks. Don’t ask
+    why it converts implicit locks. Don’t ask; else the questions never cease. Go
+    on; save yourself.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我希望作为一个使用 MySQL 的工程师，你永远不需要深入到 InnoDB 锁定的这个深度，以实现 MySQL 的出色性能。但我带领我们来到这里有两个原因。首先，尽管有幻觉，但关于事务隔离级别的
+    InnoDB 行锁定的基础是可解的和适用的。现在你已经准备好处理每一个常见的 InnoDB 行锁定问题，甚至更多。其次，InnoDB 让我这样做是因为我盯着它看了太久；当一切模糊成一团时，我知道自己已经从悬崖上跌落，再也无法回头。不要问为什么它锁定了表条件范围之外的最高伪记录。不要问为什么它有冗余的间隙锁。不要问为什么它转换隐式锁。不要问；否则问题永远不会停止。继续前行；拯救自己。
+- en: MVCC and the Undo Logs
+  id: totrans-148
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MVCC 和撤销日志
+- en: InnoDB uses multiversion concurrency control (MVCC) and undo logs to accomplish
+    the *A*, *C*, and *I* properties of ACID. (To accomplish the *D*, InnoDB uses
+    a transaction log—see [“Transaction log”](ch06.html#metrics-trx-log).) *Multiversion
+    concurrency control* means that changes to a row create a new version of the row.
+    MVCC is not unique to InnoDB; it’s a common method that many data stores use.
+    When a row is first created, it’s version 1. When it’s first updated, it’s version
+    2. The basis of MVCC is that simple, but it quickly becomes more complex and interesting.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB 使用多版本并发控制（MVCC）和撤销日志来实现 ACID 的 *A*、*C* 和 *I* 特性。（为了实现 *D*，InnoDB 使用事务日志—参见[“事务日志”](ch06.html#metrics-trx-log)。）*多版本并发控制*
+    意味着对行的更改会创建行的新版本。MVCC 不是 InnoDB 独有的；许多数据存储使用的是一种常见方法。当行首次创建时，它是版本 1。当它首次更新时，它是版本
+    2。MVCC 的基础是简单的，但很快变得更加复杂和有趣。
+- en: Note
+  id: totrans-150
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Using the term *undo logs* is an intentional simplification because the full
+    structure of undo logging is complex. The term *undo logs* is sufficiently precise
+    to learn what it does and how it affects performance.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用术语 *撤销日志* 是有意简化的，因为撤销日志的完整结构是复杂的。术语 *撤销日志* 足够精确，可以了解它的作用以及它如何影响性能。
+- en: '*Undo logs* record how to roll back changes to a previous row version. [Figure 8-8](#trx-mvcc)
+    shows a single row with five versions and five undo logs that allow MySQL to roll
+    back changes to previous row versions.'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*撤销日志* 记录如何回滚到先前行版本的更改。[图 8-8](#trx-mvcc) 显示了一个具有五个版本和五个撤销日志的单行，这些撤销日志允许 MySQL
+    回滚到先前的行版本的更改。'
+- en: 'That row harkens back to [“InnoDB Tables Are Indexes”](ch02.html#tables-are-indexes)
+    in [Chapter 2](ch02.html#ch02): it’s the row with primary key value 2 in table
+    `elem`, depicted as the primary key leaf node. For brevity, I include only the
+    primary key value (2), the row version (v1 through v5), and column `a` value (“Au”
+    for v5); the other two columns, `b` and `c`, are not shown.'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那行回溯到[“InnoDB 表是索引”](ch02.html#tables-are-indexes) 在[第 2 章](ch02.html#ch02)中：它是表
+    `elem` 中主键值为 2 的行，显示为主键叶节点。为简洁起见，我仅包括主键值（2）、行版本（v1 到 v5）和列 `a` 的值（v5 为“Au”）；其他两列，`b`
+    和 `c`，未显示。
+- en: 'Version 5 (bottom right in [Figure 8-8](#trx-mvcc)) is the current row that
+    all new transactions will read, but let’s begin at the beginning. The row is created
+    as iron (“Fe”): version 1 in the upper left corner. There’s an undo log for version
+    1 because `INSERT` creates the first version of a row. Then column `a` is modified
+    (`UPDATE`) to change iron to titanium (“Ti”): version 2. Upon creating version
+    2, MySQL also creates an undo log that records how to roll back version 2 changes,
+    which restores version 1. (In the next paragraph, I explain why version 1 has
+    a solid outline [and a camera icon] but version 2 has a dashed outline.) Then
+    column `a` is modified to change titanium to silver (“Ag”): version 3. MySQL creates
+    an undo log that records how to roll back version 3 changes, and this undo log
+    is linked to the previous so that MySQL can, if needed, roll back and restore
+    version 2. Two more row updates occur: silver to Californium (“Cf”) for version
+    4, and Californium to gold (“Au”) for version 5.'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 版本 5（在 [Figure 8-8](#trx-mvcc) 的右下角）是所有新事务将读取的当前行，但让我们从头开始。该行被创建为铁（“Fe”）：版本
+    1 在左上角。版本 1 有一个撤消日志，因为 `INSERT` 创建了行的第一个版本。然后修改了列 `a`（`UPDATE`）将铁更改为钛（“Ti”）：版本
+    2。创建版本 2 时，MySQL 还创建了一个撤消日志，记录如何撤销版本 2 的更改，从而恢复版本 1。（在下一段中，我会解释为什么版本 1 有坚实的轮廓
+    [和相机图标]，但版本 2 有虚线轮廓。）然后修改了列 `a` 将钛更改为银（“Ag”）：版本 3。MySQL 创建了一个撤消日志，记录如何撤销版本 3 的更改，并且这个撤消日志链接到之前的撤消日志，这样
+    MySQL 可以在需要时回滚和恢复版本 2。发生了另外两次行更新：银到锎（“Cf”）对应版本 4，锎到金（“Au”）对应版本 5。
+- en: '![emsp 0808](assets/emsp_0808.png)'
+  id: totrans-155
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0808](assets/emsp_0808.png)'
+- en: Figure 8-8\. One row with five versions and five undo logs
+  id: totrans-156
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: Figure 8-8\. 一行有五个版本和五个撤消日志
+- en: Note
+  id: totrans-157
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: Note
+- en: 'There are two sets of undo logs: *insert undo logs* for `INSERT` and *update
+    undo logs* for `UPDATE` and `DELETE`. For simplicity, I refer only to undo logs,
+    which comprises both sets.'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有两组撤消日志：*插入撤消日志* 用于 `INSERT` 和 *更新撤消日志* 用于 `UPDATE` 和 `DELETE`。为简单起见，我只提到撤消日志，它包括这两组。
+- en: 'Version 1 has a solid outline and camera icon because an active transaction
+    (not shown) holds a consistent snapshot at this point in the history of the database.
+    Let me unpack that sentence. InnoDB supports four [transaction isolation levels](https://oreil.ly/xH5Gs),
+    but only two are commonly used: `REPEATABLE READ` (the default) and `READ COMMITTED`.'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Version 1 因为一个活跃的事务（未显示）在数据库历史的这一点上保持了一致的快照，所以具有坚实的轮廓和相机图标。让我解释一下这句话。InnoDB
+    支持四种[事务隔离级别](https://oreil.ly/xH5Gs)，但通常仅使用两种：`REPEATABLE READ`（默认）和 `READ COMMITTED`。
+- en: 'In a `REPEATABLE READ` transaction, the first read establishes a *consistent
+    snapshot* (or *snapshot* for short): a virtual view of the database (all tables)
+    at the moment when the `SELECT` is executed. The snapshot is held until the end
+    of the transaction and used by all subsequent reads to access rows only at this
+    point in the history of the database. Changes made by other transactions after
+    this point are not figuratively visible within the original transaction. Presuming
+    that other transactions are modifying the database, the snapshot of the original
+    transaction becomes an increasingly old view of the database while the transaction
+    remains active (does not `COMMIT` or `ROLLBACK`). It’s like the original transaction
+    is stuck in the 1980s and the only musicians it listens to are Pat Benatar, Stevie
+    Nicks, and Taylor Dayne: old but still great.'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 `REPEATABLE READ` 事务中，第一次读取建立了一个*一致性快照*（或简称*快照*）：数据库（所有表）在执行 `SELECT` 时的虚拟视图。快照保持到事务结束，并且所有后续读取都使用这个快照来访问数据库历史的这一点上的行。在这一点之后其他事务所做的更改在原始事务内部是不可见的。假设其他事务正在修改数据库，则原始事务的快照变成越来越旧的数据库视图，而事务仍然活动（未
+    `COMMIT` 或 `ROLLBACK`）。就像原始事务卡在 1980 年代一样，它唯一听的音乐家是 Pat Benatar、Stevie Nicks 和
+    Taylor Dayne：老但仍然很棒。
+- en: 'Since version 5 is the current row, new transactions establish a snapshot from
+    its point in database history, which is why it has a solid outline and camera
+    icon. The important question is: why do versions 2, 3, and 4 still exist when
+    there are no transactions holding snapshots at their respective points in database
+    history? They exist to maintain the snapshot for version 1 because MySQL uses
+    undo logs to reconstruct old row versions.'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于版本 5 是当前行，新事务会从其在数据库历史中的点建立快照，这就是它具有坚实轮廓和相机图标的原因。重要的问题是：为什么版本 2、3 和 4 仍然存在，当它们在数据库历史中的各自点上没有事务持有快照？它们存在是为了维护版本
+    1 的快照，因为 MySQL 使用撤消日志来重建旧的行版本。
+- en: Tip
+  id: totrans-162
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: Tip
+- en: MySQL uses undo logs to reconstruct old row versions for snapshots.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 使用撤销日志来重建快照的旧行版本。
+- en: 'It’s easy to reconstruct [Figure 8-8](#trx-mvcc). First, immediately after
+    inserting the row in [Figure 8-8](#trx-mvcc), start a transaction and establish
+    a snapshot on version 1 of the row by executing a `SELECT` statement:'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以轻松重建 [图 8-8](#trx-mvcc)。首先，在 [图 8-8](#trx-mvcc) 中插入行后，立即启动事务并通过执行 `SELECT`
+    语句在行版本 1 上建立快照：
+- en: '[PRE16]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: Since there’s no `COMMIT`, that transaction is still active and holding its
+    snapshot on the entire database, which is simply row version 1 in this example.
+    Let’s call this the *original transaction*.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于没有 `COMMIT`，因此该事务仍处于活动状态，并保持其对整个数据库的快照，即在本示例中简单地是行版本 1。我们称之为 *原始事务*。
+- en: 'Then update the row four times to create version 5:'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后更新行四次以创建版本 5：
+- en: '[PRE17]'
+  id: totrans-168
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: '[`autocommit`](https://oreil.ly/nG8wa) is enabled by default in MySQL, which
+    is why the first (active) transaction needs an explicit `BEGIN` but the four `UPDATE`
+    statements do not. Now MySQL is in a state represented by [Figure 8-8](#trx-mvcc).'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 中，默认情况下启用了 [`autocommit`](https://oreil.ly/nG8wa)，这就是为什么第一个（活动的）事务需要显式的
+    `BEGIN`，但四个 `UPDATE` 语句不需要。现在 MySQL 处于 [图 8-8](#trx-mvcc) 表示的状态。
+- en: 'If the original transaction executes `SELECT a FROM elem WHERE id = 2` again,
+    it reads version 5 (that’s not a typo) but (figuratively) sees that that version
+    is newer than the point in database history established by its snapshot. Consequently,
+    MySQL uses the undo logs to roll back the row and reconstruct version 1, which
+    is consistent with the snapshot established by the first `SELECT` statement. When
+    the original transaction commits, and presuming no other active transactions are
+    holding old snapshots, then MySQL can purge all the related undo logs because
+    new transactions always begin with the current row version. When transactions
+    are working well, the whole process is immaterial to performance. But you already
+    know: problematic transactions can negatively affect the performance of the entire
+    process. [“Common Problems”](#trx-problems) looks at how and why; but until then,
+    there are more details to know about MVCC and the undo logs.'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果原始事务再次执行 `SELECT a FROM elem WHERE id = 2`，它将读取版本 5（这不是打字错误），但（比喻地）看到该版本比其快照建立的数据库历史点更新。因此，MySQL
+    使用撤销日志回滚该行并重建版本 1，这与第一个 `SELECT` 语句建立的快照一致。当原始事务提交，并且假设没有其他活动事务保持旧的快照时，MySQL 可以清除所有相关的撤销日志，因为新的事务始终从当前行版本开始。当事务正常工作时，整个过程对性能没有影响。但你已经知道：问题事务可能会对整个过程的性能产生负面影响。[“常见问题”](#trx-problems)
+    将详细探讨原因和如何解决；但在此之前，还有更多关于 MVCC 和撤销日志的细节需要了解。
+- en: In a `READ COMMITTED` transaction, each read establishes a new snapshot. As
+    a result, each read accesses the latest committed row version, hence `READ COMMITTED`.
+    Since snapshots are used, undo logs are still created, but this is almost never
+    an issue with `READ COMMITTED` because each snapshot is held only for the duration
+    of the read. If a read takes a very long time *and* there’s significant write
+    throughput on the database, you might notice the accrual of redo logs (as an increase
+    in history list length). Otherwise, `READ COMMITTED` is virtually free of undo
+    logging.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 `READ COMMITTED` 事务中，每次读取都会建立一个新的快照。因此，每次读取都会访问最新提交的行版本，因此称为 `READ COMMITTED`。由于使用了快照，因此仍会创建撤销日志，但在
+    `READ COMMITTED` 中几乎从不成为问题，因为每个快照仅在读取期间保持。如果读取时间很长 *且* 数据库上存在重要的写入吞吐量，可能会注意到重做日志的累积（作为历史列表长度的增加）。否则，`READ
+    COMMITTED` 几乎不涉及撤销日志。
+- en: 'Snapshots only affect reads (`SELECT`)—they’re never used for writes. Writes
+    always secretly read current rows, even if the transaction cannot “see” them with
+    `SELECT`. This double vision averts chaos. For example, imagine that another transaction
+    inserts a new row with primary key value 11. If the original transaction tries
+    to insert a row with the same primary key value, MySQL will return a duplicate
+    key value because the primary key value exists even though the transaction cannot
+    see it with `SELECT`. Moreover, snapshots are very consistent: in a transaction,
+    there is no way to advance the snapshot to a newer point in database history.
+    If the application executing the transaction needs a newer snapshot, it must commit
+    the transaction and begin a new one to establish a new snapshot.'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 快照只影响读取（`SELECT`）操作，从不影响写入。写入操作始终会秘密地读取当前行，即使事务通过`SELECT`无法“看见”它们。这种双重视角避免了混乱。例如，假设另一个事务插入了主键值为11的新行。如果原始事务试图插入相同主键值的行，MySQL将返回重复键值的错误，因为主键值已经存在，即使通过`SELECT`事务看不到它。此外，快照非常一致：在事务中，无法将快照前进到数据库历史的新点。如果执行事务的应用程序需要更新的快照，则必须提交事务并启动新事务以建立新快照。
+- en: Writes generate undo logs that are kept until the end of the transaction—regardless
+    of transaction isolation level. Until now, I have focused on undo logs with respect
+    to reconstructing old row versions for snapshots, but they are also used on `ROLLBACK`
+    to revert changes made by writes.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写入生成的撤消日志会保留到事务结束——无论事务隔离级别如何。到目前为止，我已经重点介绍了撤消日志，关于为快照重建旧行版本，但它们也在`ROLLBACK`时用于恢复写入造成的更改。
+- en: 'One last thing to know about MVCC: undo logs are saved in the InnoDB buffer
+    pool. You might recall from [“Page flushing”](ch06.html#metrics-page-flushing)
+    that “*Misc pages* contain miscellaneous internal data not covered in this book.”
+    Misc pages include undo logs (and many more internal data structures). Since undo
+    logs reside in buffer pool pages, they use memory and are periodically flushed
+    to disk.'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于MVCC的最后一点需要知道的是：撤消日志保存在InnoDB缓冲池中。你可能还记得[“页面刷新”](ch06.html#metrics-page-flushing)中提到，“*杂项页*包含本书未涵盖的各种内部数据。”杂项页包括撤消日志（以及许多其他内部数据结构）。由于撤消日志驻留在缓冲池页面中，它们使用内存，并定期刷新到磁盘中。
+- en: 'There are a few system variables and metrics related to the undo logs; as an
+    engineer using MySQL, you only need to know and monitor one: HLL, first introduced
+    in [“History list length (metric)”](ch06.html#metrics-hll) and explained further
+    in the next section. Otherwise, MVCC and the undo logs work flawlessly as long
+    as the application avoids all [“Common Problems”](#trx-problems). One such problem
+    is abandoned transactions, so let’s avoid that by committing the original transaction:'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与撤消日志相关的系统变量和度量有几个；作为使用MySQL的工程师，你只需要了解和监控其中一个：HLL，首次引入于[“历史列表长度（度量）”](ch06.html#metrics-hll)，并在下一节进一步解释。除此之外，只要应用程序避免所有[“常见问题”](#trx-problems)，MVCC和撤消日志的工作都很完美。其中一个问题是未完成的事务，因此让我们通过提交原始事务来避免这种情况：
+- en: '[PRE18]'
+  id: totrans-176
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: Goodbye, consistent snapshot. Goodbye, undo logs. Hello, history list length…
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再见，一致性快照。再见，撤消日志。你好，历史列表长度……
+- en: History List Length
+  id: totrans-178
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 历史列表长度
+- en: History list length (HLL) gauges the amount of old row versions not purged or
+    flushed.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 历史列表长度（HLL）衡量未清除或未刷新的旧行版本数量。
+- en: 'Historically (no pun intended), HLL has been difficult to define because the
+    full structure of undo logging is complex:'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 历史上（没有捉弄），HLL很难定义，因为撤消日志的完整结构很复杂：
+- en: '[PRE19]'
+  id: totrans-181
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: That complexity obscures any simple relationship between undo logging and HLL,
+    including the unit of measurement. The simplest functional (although not technically
+    correct) unit of HLL is *changes*. If the HLL value is 10,000, you can read that
+    as 10,000 changes. By understanding [“MVCC and the Undo Logs”](#mvcc), you know
+    that changes are kept (not purged) in memory (not flushed) in order to reconstruct
+    old row versions. Therefore, it’s accurate enough to say that HLL gauges the amount
+    of old row versions not purged or flushed.
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种复杂性掩盖了撤消日志和HLL之间的任何简单关系，包括度量单位。HLL最简单的功能单位（尽管不是技术上正确的）是*更改*。如果HLL值为10,000，那么可以理解为10,000次更改。通过理解[“MVCC和撤消日志”](#mvcc)，你会知道更改保留在内存中（而不是刷新）以重建旧行版本。因此，可以准确地说HLL衡量了未清除或未刷新的旧行版本数量。
+- en: 'HLL greater than 100,000 is a problem—do not ignore it. Even though the true
+    technical nature of HLL is elusive—even for MySQL experts—its usefulness is clear
+    and undeniable: HLL is the harbinger of transaction-related problems. Always monitor
+    HLL (see [“History list length (metric)”](ch06.html#metrics-hll)), alert when
+    it’s too high (greater than 100,000), and fix the problem, which is undoubtedly
+    one of the common problems discussed in the next section.'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: HLL 大于 100,000 是一个问题——不要忽视它。即使对于 MySQL 专家来说，HLL 的真正技术性质也是难以捉摸的，但其实用性显而易见：HLL
+    是事务相关问题的先驱。始终监控 HLL（参见 [“历史列表长度（指标）”](ch06.html#metrics-hll)），当其过高（大于 100,000）时发出警报，并修复这个问题，这无疑是下一节讨论的常见问题之一。
+- en: 'Although I caution against alerting on thresholds in [“Wild Goose Chase (Thresholds)”](ch06.html#thresholds),
+    HLL is an exception: alerting when HLL is greater than 100,000 is reliable and
+    actionable.'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管我在 [“野鹅追逐（阈值）”](ch06.html#thresholds) 中警告不要在阈值上进行警报，但 HLL 是一个例外：当 HLL 大于 100,000
+    时进行警报是可靠且可操作的。
+- en: Tip
+  id: totrans-185
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Alert on HLL greater than 100,000.
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 HLL 大于 100,000 进行警报。
+- en: In theory, HLL has a maximum value, but MySQL performance is sure to crumble
+    long before that value.^([3](ch08.html#idm45829097586336)) For example, just a
+    few weeks ago as I write this, an instance of MySQL in the cloud crashed at HLL
+    200,000, which took a long-running transaction four hours to amass before crashing
+    MySQL and causing a two-hour outage.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理论上，HLL 有一个最大值，但在这个值之前 MySQL 的性能肯定会崩溃。^([3](ch08.html#idm45829097586336)) 例如，就在我写作这段文字的几周前，一个在云中的
+    MySQL 实例在达到 HLL 200,000 后崩溃，导致一个长时间运行的事务积累四个小时才崩溃 MySQL，并导致两小时的故障。
+- en: 'Since undo logging is incredibly efficient, there is huge leeway in HLL with
+    respect to the value at which MySQL performance will degrade or—worst case—crash.
+    I have seen MySQL crash at 200,000, but I have also seen it run just fine well
+    beyond 200,000. One thing is certain: if HLL increases unchecked, it *will* cause
+    a problem: either noticeably slow performance, or MySQL will crash.'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于撤销日志非常高效，因此在 HLL 的值使得 MySQL 的性能降低或者最坏情况下会崩溃之前，HLL 有很大的余地。我见过 MySQL 在 200,000
+    时崩溃，但也见过它在远超过 200,000 时表现良好。有一点是肯定的：如果 HLL 持续增加，*将* 会造成问题：要么是明显的性能下降，要么是 MySQL
+    崩溃。
+- en: 'I want you to be the first engineer in history to use MySQL and never have
+    a HLL problem. That’s a lofty goal, but I encourage you to shoot for the stars.
+    To that end, I intentionally flooded a MySQL instance with `UPDATE` statements
+    to drive up the HLL—to amass thousands of old row versions. [Table 8-2](#hll-response-time)
+    shows the effect of HLL on query response time for a single row point-select:
+    `SELECT * FROM elem WHERE id=5` in an active `REPEATABLE READ` transaction.'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我希望你成为历史上第一个使用 MySQL 却从未遇到 HLL 问题的工程师。这是一个远大的目标，但我鼓励你去追求。为此，我故意向 MySQL 实例灌输大量的
+    `UPDATE` 语句以增加 HLL——积累数千个旧行版本。[表 8-2](#hll-response-time) 显示了在活动的 `REPEATABLE
+    READ` 事务中针对单个行点选择 `SELECT * FROM elem WHERE id=5` 的 HLL 对查询响应时间的影响。
+- en: Table 8-2\. Effect of HLL on query response time
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 8-2\. HLL 对查询响应时间的影响
+- en: '| HLL | Response time (ms) | Baseline increase (%) |'
+  id: totrans-191
+  prefs: []
+  type: TYPE_TB
+  zh: '| HLL | 响应时间（ms） | 基线增加（%） |'
+- en: '| --- | --- | --- |'
+  id: totrans-192
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- | --- |'
+- en: '| 0 | 0.200 ms |  |'
+  id: totrans-193
+  prefs: []
+  type: TYPE_TB
+  zh: '| 0 | 0.200 ms |  |'
+- en: '| 495 | 0.612 ms | 206% |'
+  id: totrans-194
+  prefs: []
+  type: TYPE_TB
+  zh: '| 495 | 0.612 ms | 206% |'
+- en: '| 1,089 | 1.012 ms | 406% |'
+  id: totrans-195
+  prefs: []
+  type: TYPE_TB
+  zh: '| 1,089 | 1.012 ms | 406% |'
+- en: '| 2,079 | 1.841 ms | 821% |'
+  id: totrans-196
+  prefs: []
+  type: TYPE_TB
+  zh: '| 2,079 | 1.841 ms | 821% |'
+- en: '| 5,056 | 3.673 ms | 1,737% |'
+  id: totrans-197
+  prefs: []
+  type: TYPE_TB
+  zh: '| 5,056 | 3.673 ms | 1,737% |'
+- en: '| 11,546 | 8.527 ms | 4,164% |'
+  id: totrans-198
+  prefs: []
+  type: TYPE_TB
+  zh: '| 11,546 | 8.527 ms | 4,164% |'
+- en: 'This example does *not* mean that HLL will increase query response time as
+    shown; it only proves that HLL can increase query response time. From [“MVCC and
+    the Undo Logs”](#mvcc) and this section you know why: the `SELECT` in the active
+    `REPEATABLE READ` transaction has a consistent snapshot on row 5 (`id=5`), but
+    the `UPDATE` statements on that row generate new row versions. Each time the `SELECT`
+    is executed, it slogs through the undo logs to reconstruct the original row version
+    for the consistent snapshot, and that slog increases query response time.'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此示例并*不*意味着 HLL 会像显示的那样增加查询响应时间；它只证明了 HLL 可以增加查询响应时间。从 [“MVCC 和撤销日志”](#mvcc)
+    及本节，你知道原因：活动的 `REPEATABLE READ` 事务中的 `SELECT` 对行 5（`id=5`）有一致的快照，但对该行的 `UPDATE`
+    语句生成新的行版本。每次执行 `SELECT`，它都会通过撤销日志来重构原始行版本的一致快照，这种工作增加了查询响应时间。
+- en: 'Increasing query response time is proof enough, but we’re professionals, so
+    let’s prove it irrefutably. At the end of [“MVCC and the Undo Logs”](#mvcc), I
+    mention that undo logs are stored as pages in the InnoDB buffer pool. As a result,
+    the `SELECT` should access an inordinate number of pages. To prove this, I use
+    [Percona Server](https://oreil.ly/OWUYR) because its enhanced slow query log prints
+    the number of distinct pages accessed when configured with `log_slow_verbosity
+    = innodb`:'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 增加查询响应时间已经足够证明，但作为专业人士，让我们以无可辩驳的方式证明它。在[“MVCC和Undo日志”](#mvcc)的结尾，我提到Undo日志存储为InnoDB缓冲池中的页。因此，`SELECT`应该访问大量页面。为了证明这一点，我使用[Percona
+    Server](https://oreil.ly/OWUYR)，因为它增强了慢查询日志，在配置`log_slow_verbosity = innodb`时打印访问的不同页面数量：
+- en: '[PRE20]'
+  id: totrans-201
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: Normally, the `SELECT` in this example accesses a single page to look up one
+    row by primary key. But when the consistent snapshot for the `SELECT` is old (and
+    HLL is large), InnoDB slogs through hundreds of undo log pages to reconstruct
+    the old row.
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，这个例子中的`SELECT`只访问一个页面来查找一个主键行。但是当`SELECT`的一致性快照过时（并且HLL很大）时，InnoDB会通过数百个撤消日志页面来重建旧行。
+- en: 'MVCC, undo logs, and HLL are all normal and good trade-offs: a little performance
+    for a lot of concurrency. It’s only when HLL is inordinately large—greater than
+    100,000–that you should take action to fix the cause, which is almost universally
+    one of the following common problems.'
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MVCC、撤消日志和HLL都是正常且良好的权衡：一点性能换取大量并发性。只有当HLL异常大——超过100,000个时，您应该采取措施来修复原因，这几乎普遍是以下常见问题之一。
+- en: Common Problems
+  id: totrans-204
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 常见问题
+- en: 'Transaction problems arise from the queries that constitute the transaction,
+    how quickly the application executes those queries, and how quickly the application
+    commits the transaction. Although a single query with [`autocommit`](https://oreil.ly/oQtD2)
+    enabled is technically a transaction that can cause the following problems (except
+    for [“Abandoned Transactions”](#trx-lost)), the main focus is multistatement transactions
+    that begin with `BEGIN` (or `START TRANSACTION`), execute several queries, and
+    end with `COMMIT` (or `ROLLBACK`). The performance impact of a multistatement
+    transaction can be greater than the sum of its parts—the queries that constitute
+    the transaction—because locks and undo logs are held until the transaction commits
+    (or rolls back). Remember: MySQL is very patient—almost too patient. If the application
+    does not commit a transaction, MySQL will wait even until the consequences of
+    that active transaction ring its death knell.'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务问题源于构成事务的查询，应用程序执行这些查询的速度以及应用程序提交事务的速度。虽然启用[`autocommit`](https://oreil.ly/oQtD2)的单个查询在技术上是可能导致以下问题的事务（除了[“废弃事务”](#trx-lost)），但主要关注的是以`BEGIN`（或`START
+    TRANSACTION`）开头的多语句事务，执行几个查询，然后以`COMMIT`（或`ROLLBACK`）结束。多语句事务的性能影响可能大于构成事务的部分——因为锁和撤消日志在事务提交（或回滚）之前都被保持。记住：MySQL非常有耐心——几乎太有耐心了。如果应用程序不提交事务，MySQL甚至会等待直到这个活动事务的后果。
+- en: 'Fortunately, none of these problems are difficult to detect or fix. HLL is
+    the harbinger of most transaction problems, which is why you should always monitor
+    it: see [“History list length (metric)”](ch06.html#metrics-hll) and [“History
+    List Length”](#hll). To keep the details of each problem uncluttered, I explain
+    how to find and report problematic transactions in [“Reporting”](#trx-reporting).'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 幸运的是，这些问题都不难检测或修复。HLL是大多数事务问题的前兆，这就是为什么你应该始终监控它：参见[“历史列表长度（度量）”](ch06.html#metrics-hll)和[“历史列表长度”](#hll)。为了保持每个问题的细节清晰，我解释了如何查找和报告有问题的事务在[“报告”](#trx-reporting)。
+- en: Large Transactions (Transaction Size)
+  id: totrans-207
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 大事务（事务大小）
+- en: 'A large transaction modifies an inordinate number of rows. How many rows is
+    *inordinate*? That is relative, but engineers always know when they see it. For
+    example, if you see that a transaction has modified 250,000 rows and you know
+    that there are only 500,000 rows in the whole database, that’s inordinate. (Or
+    at the very least, it’s a suspicious access pattern: see [“Result Set”](ch04.html#ap-result-set).)'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个大型事务修改了大量行数。什么是*大量*？这是相对的，但工程师总是能看得出来。例如，如果你看到一个事务修改了25万行，而且你知道整个数据库只有50万行，那就是大量（或者至少是一个可疑的访问模式：参见[“结果集”](ch04.html#ap-result-set)）。
+- en: Note
+  id: totrans-209
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'Generally, *transaction size* refers to the number of rows modified: the more
+    rows modified, the larger the transaction. For [MySQL Group Replication](https://oreil.ly/wH10S),
+    *transaction size* has a slightly different meaning: see [“Group Replication Limitations”](https://oreil.ly/cJhWF)
+    in the MySQL manual.'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，*事务大小* 指修改的行数：修改的行数越多，事务就越大。对于[MySQL Group Replication](https://oreil.ly/wH10S)，*事务大小*
+    有略微不同的含义：请参阅MySQL手册中的[“Group Replication Limitations”](https://oreil.ly/cJhWF)。
+- en: If the transaction is running in the default isolation level, `REPEATABLE READ`,
+    then it’s safe to presume that it has locked a greater number of records than
+    modified rows because of gap locking—as detailed in [“Row Locking”](#row-locking).
+    If the transaction is running in `READ COMMITTED` isolation level, then it’s only
+    acquiring record locks for each modified row. Either way, a large transaction
+    is a large source of lock contention that can severely degrade write throughput
+    and response time.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果事务在默认隔离级别`REPEATABLE READ`中运行，则可以安全地假设由于间隙锁定，它已锁定了比修改的行数更多的记录，如[“Row Locking”](#row-locking)所述。如果事务在`READ
+    COMMITTED`隔离级别中运行，则只为每个修改的行获取记录锁定。无论哪种方式，大事务都是锁争用的主要来源，可以严重降低写入吞吐量和响应时间。
+- en: 'Don’t forget replication (see [Chapter 7](ch07.html#ch07)): large transactions
+    are a main cause of replication lag (see [“Transaction Throughput”](ch07.html#repl-tps))
+    and decrease the effectiveness of multithreaded replication (see [“Reducing Lag:
+    Multithreaded Replication”](ch07.html#repl-mtr)).'
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '不要忘记复制（参见[第7章](ch07.html#ch07)）：大事务是复制滞后的主要原因之一（参见[“Transaction Throughput”](ch07.html#repl-tps)），并且降低了多线程复制的效率（参见[“Reducing
+    Lag: Multithreaded Replication”](ch07.html#repl-mtr)）。'
+- en: Large transactions can be noticeably slow to commit (or roll back) as previously
+    addressed in [“MVCC and the Undo Logs”](#mvcc), [“Binary Log Events”](ch07.html#repl-binlog-events),
+    and [Figure 6-7](ch06.html#trx-log). It’s quick and easy to modify rows because
+    the data changes happen in memory, but commit is the reckoning when MySQL does
+    significant work to persist and replicate the data changes.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大事务在提交（或回滚）时可能明显变慢，正如之前在[“MVCC and the Undo Logs”](#mvcc)，[“Binary Log Events”](ch07.html#repl-binlog-events)，以及[Figure 6-7](ch06.html#trx-log)中所提到的。修改行数据很快很容易，因为数据变更发生在内存中，但提交时MySQL会进行大量工作以保持和复制数据变更。
+- en: 'Smaller transactions are better. How small? That, too, is relative and complicated
+    to calibrate because, as I just noted, transactions cause a reckoning on commit,
+    which means you have to calibrate several subsystems. (It’s even more complicated
+    when you factor in the cloud, which tends to limit and tweak little details, like
+    IOPS.) Except for bulk operations which require calibrating a batch size (see
+    [“Batch Size”](ch03.html#batch-size)), calibrating transaction size is not commonly
+    needed because, although the problem is common, it’s typically a one-off problem:
+    found, fixed, and doesn’t reoccur (for awhile, at least). [“Reporting”](#trx-reporting)
+    shows you how to find large transactions.'
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更小的事务更好。多小？这也是相对的，因为正如我刚才提到的，事务在提交时会有一个大量的工作，这意味着你必须校准几个子系统。（当你考虑到云时，事情会更复杂，因为云倾向于限制和微调诸如IOPS之类的细节。）除了需要校准批量操作的批处理大小（参见[“Batch
+    Size”](ch03.html#batch-size)）之外，通常不需要校准事务大小，因为尽管这个问题很常见，但通常是一次性的问题：找到、修复并且暂时不会再次出现。[“Reporting”](#trx-reporting)向你展示如何找到大事务。
+- en: The fix is to find the query (or queries) in the transaction that modify too
+    many rows, and change them to modify fewer rows. But that depends entirely on
+    the query, its purpose in the application, and why it’s modifying too many rows.
+    Whatever the reason, Chapters [1](ch01.html#ch01)–[4](ch04.html#ch04) equip you
+    to understand and fix the query.
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 解决方法是找出在事务中修改了过多行的查询（或查询），并将其修改为修改更少行数的方式。但这完全取决于查询本身，在应用程序中的目的以及为何修改了太多行。不管原因如何，第1章至第4章会让你理解和修复这个查询问题。
+- en: Finally, if you closely follow the principle of least data (see [“Principle
+    of Least Data”](ch03.html#principle-of-least-data)), transaction size may never
+    be a problem.
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，如果你严格遵循最少数据原则（参见[“Principle of Least Data”](ch03.html#principle-of-least-data)），事务大小可能永远不会成为问题。
+- en: Long-Running Transactions
+  id: totrans-217
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 长时间运行的事务
+- en: 'A long-running transaction takes too long to complete (commit or roll back).
+    How long is *too long*? That depends:'
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 长时间运行的事务需要太长时间才能完成（提交或回滚）。多长时间算是*太长*？这取决于：
+- en: Longer than acceptable for the application or users
+  id: totrans-219
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于应用程序或用户来说，时间过长是不可接受的。
+- en: Long enough to cause problems (likely contention) with other transactions
+  id: totrans-220
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 事务长度过长（可能引起争用问题）可能会影响其他事务。
+- en: Long enough to cause a history list length alert
+  id: totrans-221
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 足以引起历史列表长度警报
+- en: Unless you’re proactively addressing performance, the second and third points
+    are more likely to bring a long-running transaction to your attention.
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除非您主动解决性能问题，否则第二点和第三点更有可能引起您对长时间运行事务的关注。
+- en: 'Presuming that the application isn’t waiting between queries (which is the
+    next problem: [“Stalled Transactions”](#trx-stalled)), long-running transactions
+    have two causes:'
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设应用程序在查询之间不等待（这是下一个问题：“[挂起事务](#trx-stalled)”），长时间运行的事务有两个原因：
+- en: The queries that constitute the transaction are too slow.
+  id: totrans-224
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 构成事务的查询速度太慢。
+- en: The application executes too many queries in the transaction.
+  id: totrans-225
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 应用程序在事务中执行的查询太多。
+- en: 'You fix the first cause with the techniques from Chapters [1](ch01.html#ch01)–[5](ch05.html#ch05).
+    Remember: undo logs and row locks for all queries in a transaction are held until
+    the transaction commits. On the upside, this means that optimizing slow queries
+    to fix a long-running transaction has collateral benefits: the individual queries
+    are faster *and* the transaction as a whole is faster, which can increase overall
+    transaction throughput. The downside is that a long-running transaction might
+    be quick enough for the application but too long for other transactions. For example,
+    let’s say that a transaction takes one second to execute, which is fine for the
+    application, but during that second it holds row locks needed by another, faster
+    transaction. This creates a tricky problem to debug because the fast transaction
+    might run slowly in production but quickly in isolation when analyzed in the laboratory
+    (on your laptop, for example). The difference, of course, is that the concurrency
+    and contention of transactions in production is largely or completely absent in
+    the lab. In this case, you must debug data lock contention, which is not easy
+    for several reasons, the least of which is that data locks are fleeting. See the
+    note following [Table 8-1](#lock-types), and talk with your DBA or a MySQL expert.'
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以通过 [第1章](ch01.html#ch01) 到 [第5章](ch05.html#ch05) 中的技术来修复第一个原因。请记住：事务中所有查询的撤消日志和行锁都会一直保留，直到事务提交。好处是，通过优化慢查询来修复长时间运行的事务具有副作用好处：单个查询更快*且*整个事务更快，这可以增加整体事务吞吐量。缺点是，长时间运行的事务可能对应用程序来说速度足够快，但对其他事务来说太长。例如，假设一个事务执行需要一秒钟，这对应用程序来说还可以接受，但在这一秒钟内，它占用了另一个更快事务所需的行锁。这会导致一个棘手的问题，因为快速事务可能在生产环境中运行缓慢，但在实验室（例如您的笔记本电脑上）分析时却运行得很快。当然，不同之处在于生产中的事务并发和争用在实验室中大部分或完全不存在。在这种情况下，您必须调试数据锁竞争问题，这并不容易，其中最小的问题之一是数据锁是瞬息的。请参阅[表 8-1](#lock-types)
+    后面的注释，并与您的DBA或MySQL专家讨论。
+- en: You fix the second cause by modifying the application to execute fewer queries
+    in the transaction. This occurs when the application attempts a bulk operation
+    or programmatically generates queries inside a transaction without limiting the
+    number of queries. Either way, the fix is to reduce or limit the number of queries
+    in the transaction. Even if the transaction isn’t long-running, this is a best
+    practice to ensure that it won’t accidentally become long-running. For example,
+    maybe when the application is new it only inserts 5 rows per transaction; but
+    years later, when the application has millions of users, it’s inserting 500 rows
+    per transaction because a limit wasn’t built in from the beginning.
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以通过修改应用程序在事务中执行的查询来修复第二个原因。当应用程序尝试执行批量操作或在事务内部程序化地生成查询而没有限制查询数量时会发生这种情况。无论哪种方式，解决方法都是减少或限制事务中的查询数量。即使事务不是长时间运行的，这也是一种最佳实践，可以确保它不会意外地变得长时间运行。例如，也许当应用程序是新的时候，每个事务只插入5行数据；但多年后，当应用程序有数百万用户时，每个事务插入500行数据，因为从一开始就没有设定限制。
+- en: '[“Reporting”](#trx-reporting) shows you how to find long-running transactions.'
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[“报告”](#trx-reporting) 展示了如何找到长时间运行的事务。'
+- en: Stalled Transactions
+  id: totrans-229
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 挂起事务
+- en: 'A stalled transaction is waiting too long after `BEGIN`, between queries, or
+    before `COMMIT`. Stalled transactions are likely to be long-running transactions,
+    but the causes are different: time waiting between queries (stalled) rather than
+    time waiting for queries (long-running).'
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 挂起事务在`BEGIN`之后、查询之间或`COMMIT`之前等待时间太长。挂起事务很可能是长时间运行的事务，但原因不同：等待查询之间的时间（挂起），而不是等待查询完成的时间（长时间运行）。
+- en: Note
+  id: totrans-231
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'In practice, a stalled transaction appears as a long-running transaction because
+    the end result is the same: slow transaction response time. Analyzing the transaction
+    is required to determine if the response time is due to stalls or slow queries.
+    Absent that analysis, engineers (and MySQL experts) often refer to any slow transaction
+    as long-running.'
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在实践中，一个停滞的事务看起来像一个长时间运行的事务，因为最终结果是一样的：事务响应时间缓慢。需要分析事务以确定响应时间是由于停滞还是慢查询。在没有进行分析的情况下，工程师（和MySQL专家）通常将任何缓慢的事务称为长时间运行的事务。
+- en: 'Granted, there’s always some wait time between queries (at least due to network
+    latency required to send queries and receive result sets), but as in the previous
+    two problems, you’ll know a stalled transaction when you see it. To put it figuratively:
+    the whole is much greater than the sum of its parts. To put it technically: the
+    transaction response time from `BEGIN` to `COMMIT` is much greater than the sum
+    of the query response times.'
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当然，查询之间总会有一些等待时间（至少由于发送查询和接收结果集所需的网络延迟），但如同前两个问题一样，当您看到停滞的事务时，您将知道这是一个停滞的事务。用比喻说：整体远大于其各部分之和。从技术角度来说：从`BEGIN`到`COMMIT`的事务响应时间远大于查询响应时间之和。
+- en: 'Since stalled transactions are waiting *between* queries (including after `BEGIN`
+    and before `COMMIT`), MySQL is not culpable: the waits are caused by the application,
+    and the reasons are limitless. A common reason is doing time-consuming application
+    logic while a transaction is active, instead of before or after the transaction.
+    But sometimes this can’t be avoided; consider the following example:'
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于停滞的事务在查询之间等待（包括`BEGIN`之后和`COMMIT`之前），MySQL 不应负责：等待是由应用程序引起的，原因多种多样。一个常见的原因是在事务活动期间执行耗时的应用程序逻辑，而不是在事务之前或之后执行。但有时这是无法避免的；考虑以下示例：
+- en: '[PRE21]'
+  id: totrans-235
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'The solution in this case depends on the application logic. I’d begin by asking
+    the most fundamental question: do these queries need to be a transaction? Can
+    the row change after reading and before updating? If the row changes, does that
+    break the logic? If nothing else, can the `READ COMMITTED` isolation level be
+    used to disable gap locking? Engineers are clever and find ways to fix cases like
+    this; the first step is finding them, which is covered in [“Reporting”](#trx-reporting).'
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下的解决方案取决于应用程序逻辑。我首先会问最基本的问题：这些查询是否需要成为一个事务？在读取后和更新前行是否会改变？如果行发生变化，是否会破坏逻辑？如果没有其他办法，是否可以使用`READ
+    COMMITTED`隔离级别来禁用间隙锁定？工程师很聪明，能找到解决这类问题的方法；首先找到它们是第一步，这在[“Reporting”](#trx-reporting)中有所涵盖。
+- en: Abandoned Transactions
+  id: totrans-237
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 被废弃的事务
+- en: 'An abandoned transaction is an active transaction without an active client
+    connection. There are two main causes of abandoned transactions:'
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 被废弃的事务是没有活动客户端连接的活动事务。被废弃的事务有两个主要原因：
+- en: Application connection leaks
+  id: totrans-239
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 应用程序连接泄漏
+- en: Half-closed connections
+  id: totrans-240
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 半关闭的连接
+- en: 'An application bug can leak database connections (like leaking memory or threads):
+    the code-level connection object goes out of scope, so it’s no longer used, but
+    it’s still referenced by other code, so it’s neither closed nor freed (probably
+    resulting in a small memory leak, too). Apart from application-level profiling,
+    debugging, or leak detection to verify this bug directly, you can verify it indirectly
+    if restarting the application fixes (closes) the abandoned transactions. In MySQL,
+    you can see what are likely to be abandoned transactions (as shown in [“Reporting”](#trx-reporting)),
+    but you cannot verify this bug in MySQL because MySQL doesn’t know that the connection
+    has been abandoned.'
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 应用程序中的一个 bug 可能会泄漏数据库连接（就像泄漏内存或线程一样）：代码级别的连接对象超出作用域，因此不再使用，但其他代码仍在引用它，因此既未关闭也未释放（可能导致小内存泄漏）。除了应用程序级别的性能分析、调试或泄漏检测来直接验证这个
+    bug 外，如果重新启动应用程序可以修复（关闭）被废弃的事务，也可以间接验证它。在 MySQL 中，您可以查看可能被废弃的事务（如[“Reporting”](#trx-reporting)所示），但您无法在
+    MySQL 中验证这个 bug，因为 MySQL 不知道连接已被废弃。
+- en: 'Half-closed connections do not happen under normal circumstances because MySQL
+    rolls back a transaction when the client connection closes for any reason detectable
+    by MySQL or the operating system. But problems outside MySQL and the operating
+    system can cause the client side of the connection to close without closing the
+    MySQL side—that’s why it’s called a *half-closed* connection. MySQL is especially
+    prone to half-closed connections because its network protocol is almost entirely
+    command and response: the client sends commands, and MySQL sends a response. (If
+    you’re curious, clients send a query to MySQL with a [`COM_QUERY`](https://oreil.ly/I4RjE)
+    packet.) Between command and response, the client and MySQL observe total silence—not
+    a single byte is transmitted. As peaceful as that sounds, it means that half-closed
+    connections go unnoticed until [`wait_timeout`](https://oreil.ly/zP2bf) seconds
+    have passed, which defaults to 28,800 (8 hours).'
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在正常情况下，半关闭的连接不会发生，因为MySQL在客户端连接因MySQL或操作系统可检测的任何原因关闭时会回滚事务。但在MySQL和操作系统之外的问题可能会导致客户端连接关闭而未关闭MySQL端，这就是所谓的*半关闭*连接。MySQL特别容易发生半关闭连接，因为它的网络协议几乎完全是命令和响应的形式：客户端发送命令，MySQL发送响应。（如果你好奇的话，客户端通过[`COM_QUERY`](https://oreil.ly/I4RjE)数据包向MySQL发送查询。）在命令和响应之间，客户端和MySQL保持完全静默——没有任何字节被传输。尽管听起来很安静，但这意味着半关闭连接直到等待[`wait_timeout`](https://oreil.ly/zP2bf)秒过去才被注意到，默认值为28,800秒（8小时）。
+- en: 'Whether an application bug causing connection leaks or a half-closed connection
+    mistaken for meditative network silence, the end result is the same if either
+    occurs while a transaction is active (not committed): the transaction stays active.
+    Any consistent snapshot or data locks stay active, too, because MySQL doesn’t
+    know that the transaction has been abandoned.'
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论是应用程序缺陷导致的连接泄漏，还是被误认为是冥想网络静默的半关闭连接，结果都是一样的，如果这两者发生在事务处于活跃状态（未提交状态）时：事务保持活跃。任何一致的快照或数据锁也会保持活跃，因为MySQL不知道事务已被放弃。
+- en: Truth be told, MySQL likes the silence; as do I. But we’re paid to work, so
+    let’s examine how to find and report all four transaction problems.
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 说实话，MySQL喜欢这种宁静；我也一样。但我们是为了工作而被付费的，因此让我们看看如何找到并报告所有四种事务问题。
+- en: Reporting
+  id: totrans-245
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 报告
+- en: 'The [MySQL Performance Schema](https://oreil.ly/fgU04) makes detailed transaction
+    reporting possible; but at the time of this writing, there are no tools that make
+    it easy. I wish I could tell you to use existing open source tools, but there
+    are none. The following SQL statements are the state of the art. When new art
+    is developed, I’ll let you know at [MySQL Transaction Reporting](https://hackmysql.com/trx).
+    Until then, let’s get the job done the old-fashioned way: *copy-paste*.'
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[MySQL性能模式](https://oreil.ly/fgU04)使得详细的事务报告成为可能；但截至本文撰写时，尚无能简化此过程的工具。我希望能告诉你使用现有的开源工具，但实际上并没有。以下SQL语句代表了当前的最新技术水平。一旦有新技术出现，我会在[MySQL事务报告](https://hackmysql.com/trx)通知你。在那之前，我们还是老老实实地*复制粘贴*吧。'
+- en: 'Active Transactions: Latest'
+  id: totrans-247
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 活跃事务：最新
+- en: 'The SQL statement in [Example 8-2](#trx-report-latest) reports the latest query
+    for all transactions active longer than 1 second. This report answers the question:
+    which transactions are long-running and what are they doing right now?'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[示例 8-2](#trx-report-latest)中的SQL语句报告了所有运行时间超过1秒的活跃事务的最新查询。该报告回答了以下问题：哪些事务运行时间较长，它们当前在做什么？'
+- en: Example 8-2\. Report latest query for transactions active longer than 1 second
+  id: totrans-249
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 8-2\. 报告运行时间超过1秒的活跃事务的最新查询
+- en: '[PRE22]'
+  id: totrans-250
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: To increase the time, change the 1 before `\G`. Performance Schema timers use
+    picoseconds, so `1000000000000 * 1` is one second.
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要增加时间，请更改`\G`之前的数字1。性能模式计时器使用皮秒，所以`1000000000000 * 1`就是一秒。
+- en: 'The output of [Example 8-2](#trx-report-latest) resembles the following:'
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[示例 8-2](#trx-report-latest)的输出如下所示：'
+- en: '[PRE23]'
+  id: totrans-253
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'The following is a bit more information about the fields (columns) of [Example 8-2](#trx-report-latest):'
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是关于[示例 8-2](#trx-report-latest)字段（列）的更多信息：
+- en: '`trx_runtime`'
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`trx_runtime`'
+- en: How long the transaction has been running (active) in seconds with millisecond
+    precision. (I forgot about this transaction, which is why it’s been active for
+    almost six hours in the example.)
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务已运行的时间（活跃时间）以毫秒精度计算。例如，这个事务我忘记了，所以在示例中已经运行了近六个小时。
+- en: '`thread_id`'
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`thread_id`'
+- en: 'The thread ID of the client connection that is executing the transaction. This
+    is used in [“Active Transaction: History”](#trx-stmt-history). Performance Schema
+    events use thread IDs and event IDs to link data to client connections and events,
+    respectively. Thread IDs are different than process IDs common to other parts
+    of MySQL.'
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 执行事务的客户连接的线程ID。这在[“活动事务：历史”](#trx-stmt-history)中使用。性能模式事件使用线程ID和事件ID来链接数据到客户连接和事件，线程ID不同于MySQL其他部分常见的进程ID。
+- en: '`trx_event_id`'
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`trx_event_id`'
+- en: 'The transaction event ID. This is used in [“Active Transaction: History”](#trx-stmt-history).'
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务事件ID。这在[“活动事务：历史”](#trx-stmt-history)中使用。
+- en: '`isolation_level`'
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`isolation_level`'
+- en: 'Transaction isolation level: `READ REPEATABLE` or `READ COMMITTED`. (The other
+    isolation levels, `SERIALIZABLE` and `READ UNCOMMITTED`, are rarely used; if you
+    see them, it might be an application bug.) Recall [“Row Locking”](#row-locking):
+    the transaction isolation level affects row locking and whether or not `SELECT`
+    uses a consistent snapshot.'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务隔离级别：`READ REPEATABLE`或`READ COMMITTED`。（另外两个隔离级别，`SERIALIZABLE`和`READ UNCOMMITTED`，很少使用；如果您看到它们，可能是应用程序错误。）回想一下[“行锁定”](#row-locking)：事务隔离级别影响行锁定以及`SELECT`是否使用一致性快照。
+- en: '`autocommit`'
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`autocommit`'
+- en: If `YES`, then `autocommit` is enabled and it’s a single-statement transaction.
+    If `NO`, then the transaction was started with `BEGIN` (or `START TRANSACTION`)
+    and it’s most likely a multistatement transaction.
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果`YES`，则`autocommit`已启用且是单语句事务。如果`NO`，则事务是通过`BEGIN`（或`START TRANSACTION`）启动的，很可能是多语句事务。
+- en: '`db`'
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`db`'
+- en: Current database of `query`. The current database means `USE db`. The query
+    can access other databases with database-qualified table names, such as `db.table`.
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`query`的当前数据库。当前数据库意味着`USE db`。查询可以使用数据库限定的表名访问其他数据库，例如`db.table`。'
+- en: '`query`'
+  id: totrans-267
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`query`'
+- en: The latest query either executed by or executing in the transaction. If `exec_state
+    = running`, then `query` is currently executing in the transaction. If `exec_state
+    = done`, then `query` is the last query that the transaction executed. In both
+    cases the transaction is active (not committed), but in the latter case it’s idle
+    with respect to executing a query.
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务中执行或正在执行的最新查询。如果`exec_state = running`，则`query`当前正在事务中执行。如果`exec_state = done`，则`query`是事务执行的最后一个查询。在这两种情况下，事务是活动的（未提交），但在后一种情况下，它在执行查询方面是空闲的。
+- en: '`rows_examined`'
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`rows_examined`'
+- en: Total number of rows examined by `query`. This does not include past queries
+    executed in the transaction.
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`query`查询的总行数。这不包括事务中执行的过去查询。'
+- en: '`rows_examined`'
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`rows_examined`'
+- en: Total number of rows modified by `query`. This does not include past queries
+    executed in the transaction.
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`query`修改的总行数。这不包括事务中执行的过去查询。'
+- en: '`rows_sent`'
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`rows_sent`'
+- en: Total number of rows sent (result set) by `query`. This does not include past
+    queries executed in the transaction.
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`query`发送的总行数（结果集）。这不包括事务中执行的过去查询。'
+- en: '`exec_state`'
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`exec_state`'
+- en: If `done`, then the transaction is idle with respect to executing a query, and
+    `query` was the last query that it executed. If `running`, then transaction is
+    currently executing `query`. In both cases, the transaction is active (not committed).
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果`done`，则事务在执行查询方面处于空闲状态，并且`query`是它执行的最后一个查询。如果`running`，则事务当前正在执行`query`。在这两种情况下，事务是活动的（未提交）。
+- en: '`exec_time`'
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`exec_time`'
+- en: Execution time of `query` in seconds (with millisecond precision).
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`query`以秒为单位的执行时间（毫秒精度）。'
+- en: The Performance Schema tables `events_transactions_current` and `events_statements_current`
+    contain more fields, but this report selects only the essential fields.
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能模式表`events_transactions_current`和`events_statements_current`包含更多字段，但此报告仅选择关键字段。
+- en: 'This report is a true workhorse because it can reveal all four [“Common Problems”](#trx-problems):'
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此报告是一个真正的工作马，因为它可以揭示所有四个[“常见问题”](#trx-problems)：
+- en: Large transactions
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大事务
+- en: Look at `rows_affected` (row modified) and `rows_sent` to see the transaction
+    size (in terms of rows). Experiment with adding a condition like `trx.rows_affected
+    > 1000`.
+  id: totrans-282
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查看`rows_affected`（修改的行数）和`rows_sent`以查看事务大小（按行计算）。尝试添加条件，如`trx.rows_affected
+    > 1000`。
+- en: Long-running transactions
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 长时间运行的事务
+- en: Adjust the `1` at the end of condition `trx.timer_wait > 1000000000000 * 1`
+    to filter for longer-running queries.
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 调整条件`trx.timer_wait > 1000000000000 * 1`的末尾`1`以过滤长时间运行的查询。
+- en: Stalled transactions
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 挂起的事务
+- en: If `exec_state = done` and stays that way for a while, the transaction is stalled.
+    Since this report only lists the latest query of active transactions, the query
+    should change quickly—`exec_state = done` should be fleeting.
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果`exec_state = done`并且保持这种状态一段时间，则交易停滞。由于此报告仅列出活跃交易的最新查询，查询应快速更改—`exec_state
+    = done`应是短暂的。
+- en: Abandoned transactions
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 被丢弃的交易
+- en: If `exec_state = done` remains for a long time, it’s possible the transaction
+    is abandoned because it stops being reported after commit.
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果`exec_state = done`长时间保持不变，则可能是交易被丢弃，因为提交后不再报告。
+- en: 'The output of this report should be volatile because active transactions should
+    be fleeting. If it reports a transaction long enough for you to see it multiple
+    times, then the transaction is probably exhibiting one of the [“Common Problems”](#trx-problems).
+    In this case, use its `thread_id` and `statement_event_id` (as in [“Active Transaction:
+    History”](#trx-stmt-history)) to report its history—past queries—which helps reveal
+    why the transaction is a problem.'
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此报告的输出应该是不稳定的，因为活跃交易应该是短暂的。如果它报告了一个长时间足以让你多次看到它的交易，则该交易可能展示了[“常见问题”](#trx-problems)之一。在这种情况下，使用其`thread_id`和`statement_event_id`（如[“活跃交易：历史”](#trx-stmt-history)中所述）来报告其历史—过去的查询—这有助于揭示交易存在问题的原因。
+- en: 'Active Transactions: Summary'
+  id: totrans-290
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 活跃交易：总结
+- en: 'The SQL statement in [Example 8-3](#trx-report-summary) reports the summary
+    of queries executed for all transactions active longer than 1 second. This report
+    answers the question: which transactions are long-running and how much work have
+    they been doing?'
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[示例 8-3](#trx-report-summary)中的SQL语句报告了所有活跃时间超过1秒的交易执行的查询摘要。此报告回答了一个问题：哪些交易运行时间长且做了多少工作？'
+- en: Example 8-3\. Report transaction summary
+  id: totrans-292
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 8-3\. 报告交易总结
+- en: '[PRE24]'
+  id: totrans-293
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'To increase the time, change the 1 before `\G`. The fields are the same as
+    in [“Active Transactions: Latest”](#trx-stmt-latest) but this report aggregates
+    past queries for each transaction. A stalled transaction (not currently executing
+    a query) might have done a lot of work in the past, which this report reveals.'
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要增加时间，请更改`\G`之前的1。字段与[“活跃交易：最新”](#trx-stmt-latest)中的相同，但此报告对每个交易聚合过去的查询。一个停滞的交易（当前未执行查询）可能在过去做了大量工作，这在此报告中会显示出来。
+- en: Note
+  id: totrans-295
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: When a query finishes executing, it’s logged in table `performance_schema.events_statements_history`
+    but also remains in table `performance_schema.events_statements_current`. Therefore,
+    the report only includes completed queries and should not be joined to the latter
+    table unless active queries are filtered out.
+  id: totrans-296
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询完成后，它会被记录在表`performance_schema.events_statements_history`中，但也会保留在表`performance_schema.events_statements_current`中。因此，报告仅包括已完成的查询，并且不应与后者表连接，除非筛选掉活跃查询。
+- en: This report is better to find large transactions—[“Large Transactions (Transaction
+    Size)”](#trx-size)—since it includes past queries.
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此报告更适合查找大型交易—[“大型交易（交易大小）”](#trx-size)—因为它包括过去的查询。
+- en: 'Active Transaction: History'
+  id: totrans-298
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 活跃交易：历史
+- en: 'The SQL statement in [Example 8-4](#trx-report-history) reports the history
+    of queries executed for a single transaction. This report answers the question:
+    how much work did each query transaction do? You must replace the zeros with `thread_id`
+    and `trx_event_id` values from the output of [Example 8-2](#trx-report-latest).'
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[示例 8-4](#trx-report-history)中的SQL语句报告了单个交易执行的查询历史。此报告回答了一个问题：每个查询交易做了多少工作？你必须用来自[示例 8-2](#trx-report-latest)输出的`thread_id`和`trx_event_id`值替换零。'
+- en: Example 8-4\. Report transaction history
+  id: totrans-300
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 8-4\. 报告交易历史
+- en: '[PRE25]'
+  id: totrans-301
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'Replace the zeros with values from the output of [Example 8-2](#trx-report-latest):'
+  id: totrans-302
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将零替换为来自[示例 8-2](#trx-report-latest)输出的值：
+- en: Replace the zero in `stm.thread_id = 0` with `thread_id`.
+  id: totrans-303
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将`stm.thread_id = 0`中的零替换为`thread_id`。
+- en: Replace the zero in `stm.nesting_event_id = 0` with `trx_event_id`.
+  id: totrans-304
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将`stm.nesting_event_id = 0`中的零替换为`trx_event_id`。
+- en: 'The output of [Example 8-4](#trx-report-history) looks like:'
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[示例 8-4](#trx-report-history)的输出看起来像：'
+- en: '[PRE26]'
+  id: totrans-306
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: Apart from the `BEGIN` that started the transactions, this transaction executed
+    two queries, then `COMMIT`. The `SELECT` was the first query, and the `UPDATE`
+    was the second query. It’s not a riveting example, but it demonstrates the query
+    execution history of a transaction, plus basic query metrics. History is invaluable
+    when debugging problematic transactions because you can see which queries are
+    slow (`exec_time`) or large (in terms of rows), as well as the point at which
+    the application stalls (when you know that the transaction will execute more queries).
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了开始事务的`BEGIN`之外，这个事务执行了两个查询，然后`COMMIT`。第一个查询是`SELECT`，第二个查询是`UPDATE`。这不是一个引人入胜的例子，但它展示了事务的查询执行历史，以及基本的查询指标。在调试有问题的事务时，历史记录是非常宝贵的，因为你可以看到哪些查询速度慢（`exec_time`）或者大（行数），以及应用程序停滞的时刻（当你知道事务将执行更多查询时）。
+- en: 'Committed Transactions: Summary'
+  id: totrans-308
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 已提交的事务：总结
+- en: The previous three reports are for active transactions, but committed transactions
+    are also revealing. The SQL statement in [Example 8-5](#trx-report-committed)
+    reports basic metrics for committed (completed) transactions. It’s like a slow
+    query log for transactions.
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前三个报告是关于活动事务的，但已提交的事务也很有启发性。示例 8-5中的SQL语句报告了已提交（完成）事务的基本指标。这就像是事务的慢查询日志。
+- en: Example 8-5\. Report basic metrics for committed transactions
+  id: totrans-310
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 8-5\. 报告已提交事务的基本指标
+- en: '[PRE27]'
+  id: totrans-311
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'The fields of [Example 8-5](#trx-report-committed) are:'
+  id: totrans-312
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[示例 8-5](#trx-report-committed)的字段包括：'
+- en: '`trx_time`'
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`trx_time`'
+- en: Total transaction time, in milliseconds with microsecond precision.
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总事务时间，以毫秒为单位，微秒精度。
+- en: '`query_time`'
+  id: totrans-315
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`query_time`'
+- en: Total query execution time, in milliseconds with microsecond precision.
+  id: totrans-316
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总查询执行时间，以毫秒为单位，微秒精度。
+- en: '`idle_time`'
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`idle_time`'
+- en: Transaction time minus query time, in milliseconds with microsecond precision.
+    Idle time indicates how much the application stalled while executing the queries
+    in the transaction.
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务时间减去查询时间，以毫秒为单位，微秒精度。空闲时间指示应用程序在执行事务中执行查询时的停滞时间。
+- en: '`query_count`'
+  id: totrans-319
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`query_count`'
+- en: Number of queries executed in the transaction.
+  id: totrans-320
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务中执行的查询数量。
+- en: '`rows_*`'
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`rows_*`'
+- en: Total number of rows examined, affected, and sent (respectively) by all queries
+    executed in the transaction.
+  id: totrans-322
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有执行的事务中检查、影响和发送的行的总数（分别）。
+- en: 'The output of [Example 8-5](#trx-report-committed) looks like the following:'
+  id: totrans-323
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[示例 8-5](#trx-report-committed)的输出如下所示：'
+- en: '[PRE28]'
+  id: totrans-324
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'For this example, I executed the same transaction twice: first manually, then
+    copy-pasted. The manual execution took 5.6 seconds (5647.892) and was mostly idle
+    time due to typing. But a transaction programmatically executed should be mostly
+    query execution time, as shown in the second row: 403 microseconds of execution
+    time, and only 182 microseconds of idle time.'
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于这个例子，我执行了相同的事务两次：首先是手动执行，然后是复制粘贴。手动执行花费了5.6秒（5647.892毫秒），主要是由于打字导致的空闲时间。但是通过程序执行的事务应该主要是查询执行时间，正如第二行所示：403微秒的执行时间，只有182微秒的空闲时间。
+- en: Summary
+  id: totrans-326
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: 'This chapter examined MySQL transactions with respect to avoiding common problems.
+    The major takeaway points are:'
+  id: totrans-327
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章讨论了关于MySQL事务的常见问题避免。主要的要点是：
+- en: Transaction isolation levels affect row locking (data locks).
+  id: totrans-328
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 事务隔离级别影响行锁定（数据锁）。
+- en: 'The fundamental InnoDB data locks are: *record lock* (locks a single index
+    record), *next-key lock* (locks a single index record plus the record gap before
+    it), *gap lock* (locks the range [gap] between two records), and *insert intention
+    lock* (allows `INSERT` into a gap; more like a wait condition than a lock).'
+  id: totrans-329
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: InnoDB的基本数据锁包括：*记录锁*（锁定单个索引记录）、*next-key锁*（锁定单个索引记录及其前面的记录间隙）、*间隙锁*（锁定两个记录之间的范围）、以及*插入意图锁*（允许在间隙中进行`INSERT`；更像是等待条件而非锁）。
+- en: The default transaction isolation level, `REPEATABLE READ`, uses gap locking
+    to isolate the range of rows accessed.
+  id: totrans-330
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 默认的事务隔离级别，`REPEATABLE READ`，使用间隙锁定以隔离访问的行范围。
+- en: The `READ COMMITTED` transaction isolation level disables gap locking.
+  id: totrans-331
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`READ COMMITTED`事务隔离级别禁用了间隙锁定。'
+- en: InnoDB uses *consistent snapshots* in `REPEATABLE READ` transactions to make
+    reads (`SELECT`) return the same rows despite changes to those rows by other transactions.
+  id: totrans-332
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: InnoDB在`REPEATABLE READ`事务中使用*一致性快照*，使得读取（`SELECT`）返回相同的行，尽管其他事务对这些行进行了更改。
+- en: Consistent snapshots require InnoDB to save row changes in undo logs to reconstruct
+    old row versions.
+  id: totrans-333
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一致性快照要求InnoDB将行更改保存在撤消日志中，以重建旧的行版本。
+- en: History list length (HLL) gauges the amount of old row versions not purged or
+    flushed.
+  id: totrans-334
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 历史列表长度（HLL）衡量未清除或刷新的旧行版本数量。
+- en: 'HLL is a harbinger of doom: always monitor and alert on HLL greater than 100,000.'
+  id: totrans-335
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: HLL是灾难的先兆：始终监控并警报超过100,000的HLL。
+- en: Data locks and undo logs are released when a transaction ends, with `COMMIT`
+    or `ROLLBACK`.
+  id: totrans-336
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当一个事务结束时（使用`COMMIT`或`ROLLBACK`），数据锁和撤销日志会被释放。
+- en: 'Four common problems beset transactions: large transactions (modify too many
+    rows), long-running transactions (slow response time from `BEGIN` to `COMMIT`),
+    stalled transactions (superfluous waits between queries), and abandoned transactions
+    (client connection vanished during active transaction).'
+  id: totrans-337
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 四个常见问题困扰着事务：大事务（修改了太多行）、长时间运行的事务（从`BEGIN`到`COMMIT`的响应时间慢）、停滞的事务（查询之间的不必要等待）和被放弃的事务（客户端连接在活动事务期间消失）。
+- en: The MySQL Performance Schema makes detailed transaction reporting possible.
+  id: totrans-338
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL性能模式使得详细的事务报告成为可能。
+- en: Transaction performance is as important as query performance.
+  id: totrans-339
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 事务性能与查询性能一样重要。
+- en: The next chapter enumerates common MySQL challenges and how to mitigate them.
+  id: totrans-340
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一章列举了常见的MySQL挑战及其缓解方法。
+- en: 'Practice: Alert on History List Length'
+  id: totrans-341
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实践：警报历史列表长度
+- en: 'The goal of this practice is to alert on history list length (HLL) greater
+    than 100,000. (Recall [“History List Length”](#hll).) This depends on your systems
+    for monitoring (collecting metrics) and alerting, but fundamentally it’s no different
+    than alerting on other metrics. Therefore, the needed work is twofold:'
+  id: totrans-342
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个实践的目标是警报历史列表长度（HLL）大于100,000。（参见[“History List Length”](#hll)）。这取决于你的系统用于监控（收集度量）和警报，但从根本上说，它与警报其他度量标准没有什么不同。因此，需要的工作是双重的：
+- en: Collect and report the HLL value.
+  id: totrans-343
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 收集并报告HLL的值。
+- en: Create an alert on HLL greater than 100,000.
+  id: totrans-344
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 创建一个超过100,000的HLL警报。
+- en: 'All MySQL monitors should be able to collect and report HLL. If your current
+    monitoring cannot, seriously consider a better monitor because HLL is a fundamental
+    metric. Read the documentation for your monitor to learn how to make it collect
+    and report HLL. HLL can change quickly, but there’s leeway before MySQL is at
+    risk due to high HLL. Therefore, you can report HLL slowly: every minute.'
+  id: totrans-345
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有的MySQL监控应该能够收集和报告HLL。如果你目前的监控不能做到这一点，认真考虑更好的监控，因为HLL是一个基本的度量标准。阅读你的监控文档，了解如何使其收集和报告HLL。HLL可以快速变化，但在MySQL由于高HLL而面临风险之前有一定的余地。因此，你可以慢慢地报告HLL：每分钟一次。
+- en: 'Once your monitor is collecting and reporting HLL, set an alert on HLL greater
+    than 100,000 for 20 minutes. But recall [“Wild Goose Chase (Thresholds)”](ch06.html#thresholds):
+    you might need to adjust the 20 minute threshold, but note that HLL greater than
+    100,000 for longer than 20 minutes is quite abnormal.'
+  id: totrans-346
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦你的监控系统收集并报告HLL，设定一个在20分钟内HLL大于100,000的警报。但请注意[“Wild Goose Chase（阈值）”](ch06.html#thresholds)：你可能需要调整20分钟的阈值，但注意HLL大于100,000超过20分钟是非常异常的。
+- en: 'In case you need to query the HLL value manually:'
+  id: totrans-347
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果需要手动查询HLL的值：
+- en: '[PRE29]'
+  id: totrans-348
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'Historically, HLL was parsed from the output of `SHOW ENGINE INNODB STATUS`:
+    look for “History list length” under section header “TRANSACTIONS” in MySQL.'
+  id: totrans-349
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 历史上，HLL是从`SHOW ENGINE INNODB STATUS`的输出中解析出来的：在MySQL的“TRANSACTIONS”部分标题下寻找“History
+    list length”。
+- en: I hope that you’re never alerted for HLL, but having the alert is a best practice,
+    and it has saved many applications from an outage. An HLL alert is a friend.
+  id: totrans-350
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我希望你永远不会因为HLL而警觉，但是设置警报是最佳实践，它已经拯救了许多应用避免了停机。HLL警报就像是一个朋友。
+- en: 'Practice: Examine Row Locks'
+  id: totrans-351
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实践：检查行锁
+- en: The goal of this practice is to examine row locks for real queries from your
+    application and, if possible, understand why the query acquires each lock. *If
+    possible* is a necessary disclaimer given that InnoDB row locking can be inscrutable.
+  id: totrans-352
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个实践的目标是检查来自你的应用程序的真实查询的行锁，并尽可能理解为什么查询获取每个锁。*如果可能*是一个必要的免责声明，因为InnoDB行锁可能令人费解。
+- en: 'Use a development or staging instance of MySQL; do not use production. Also,
+    use MySQL 8.0.16 or newer because it has the best data lock reporting using the
+    Performance Schema table `data_locks`, as shown in [“Row Locking”](#row-locking).
+    If you can only use MySQL 5.7, then you’ll need to examine data locks using `SHOW
+    ENGINE INNODB STATUS`: refer to [MySQL Data Locks](https://oreil.ly/f9uqy) for
+    an illustrated guide to mapping data lock output from MySQL 5.7 to MySQL 8.0.'
+  id: totrans-353
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用MySQL的开发或暂存实例；不要使用生产环境。此外，使用MySQL 8.0.16或更新版本，因为它在性能模式表`data_locks`中提供了最佳的数据锁定报告，如在[“行锁定”](#row-locking)中所示。如果只能使用MySQL
+    5.7，则需要使用`SHOW ENGINE INNODB STATUS`来检查数据锁定：请参阅[MySQL数据锁](https://oreil.ly/f9uqy)，以便从MySQL
+    5.7的数据锁输出映射到MySQL 8.0的详细指南。
+- en: Use real table definitions and as much real data (rows) as possible. If possible,
+    dump data from production and load into your development or staging MySQL instances.
+  id: totrans-354
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用真实的表定义和尽可能多的真实数据（行）。如果可能的话，从生产环境中导出数据并加载到您的开发或暂存MySQL实例中。
+- en: If there are particular queries or transactions that you’re curious about, begin
+    by examining their data locks. Otherwise, begin with slow queries—recall [“Query
+    profile”](ch01.html#query-profile).
+  id: totrans-355
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果有特定的查询或事务让您感兴趣，请先检查它们的数据锁定。否则，请从慢查询开始——回顾[“查询概要”](ch01.html#query-profile)。
+- en: 'Since locks are released when a transaction completes, you need to use explicit
+    transactions, as shown in [“Row Locking”](#row-locking):'
+  id: totrans-356
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于锁在事务完成时释放，您需要使用显式事务，如在[“行锁定”](#row-locking)中所示：
+- en: '[PRE30]'
+  id: totrans-357
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: Replace `elem` with your table name, and remember to `COMMIT` or `ROLLBACK`
+    to release the locks.
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用您的表名替换`elem`，并记得执行`COMMIT`或`ROLLBACK`以释放锁定。
+- en: To change the transaction isolation level for the next (and only the next) transaction,
+    execute `SET TRANSACTION ISOLATION LEVEL READ COMMITTED` before `BEGIN`.
+  id: totrans-359
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要更改下一个（仅限下一个）事务的隔离级别，请在`BEGIN`之前执行`SET TRANSACTION ISOLATION LEVEL READ COMMITTED`。
+- en: This is expert-level practice, so any effort and understanding is an achievement.
+    Congratulations.
+  id: totrans-360
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是专家级的实践，所以任何努力和理解都是一种成就。祝贺。
+- en: '^([1](ch08.html#idm45829097823024-marker)) To go down the rabbit hole, follow
+    [“A Critique of ANSI SQL Isolation Levels”](https://oreil.ly/WF6NT): a classic
+    read on the subject of ANSI SQL-92 isolation levels.'
+  id: totrans-361
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch08.html#idm45829097823024-marker)) 要深入研究，请参阅[“对ANSI SQL隔离级别的批判”](https://oreil.ly/WF6NT)：这是关于ANSI
+    SQL-92隔离级别的经典阅读。
+- en: ^([2](ch08.html#idm45829097678720-marker)) Thank you to Jakub Łopuszański for
+    revealing and teaching me this secret.
+  id: totrans-362
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch08.html#idm45829097678720-marker)) 感谢Jakub Łopuszański揭示和教授我这个秘密。
+- en: ^([3](ch08.html#idm45829097586336-marker)) In *storage/innobase/trx/trx0purge.cc*
+    of the MySQL 8.0 source code, a debug block logs a warning when HLL is greater
+    than 2,000,000.
+  id: totrans-363
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([3](ch08.html#idm45829097586336-marker)) 在MySQL 8.0源代码的*storage/innobase/trx/trx0purge.cc*中，当HLL大于2,000,000时，调试块会记录警告。

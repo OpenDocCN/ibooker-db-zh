@@ -1,0 +1,1498 @@
+- en: Chapter 17\. Sharding Administration
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第17章 分片管理
+- en: 'As with replica sets, you have a number of options for administering sharded
+    clusters. Manual administration is one option. These days it is becoming increasingly
+    common to use tools such as Ops Manager and Cloud Manager and the Atlas Database-as-a-Service
+    (DBaaS) offering for all cluster administration. In this chapter, we will demonstrate
+    how to administer a sharded cluster manually, including:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与副本集一样，您可以选择多种选项来管理分片集群。手动管理是一种选择。如今，越来越常见的做法是使用工具如Ops Manager、Cloud Manager和Atlas
+    Database-as-a-Service（DBaaS）提供的所有集群管理功能。在本章中，我们将演示如何手动管理分片集群，包括：
+- en: 'Inspecting the cluster’s state: who its members are, where data is held, and
+    what connections are open'
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 检查集群的状态：其成员是谁，数据存储在哪里，以及有哪些打开的连接
+- en: Adding, removing, and changing members of a cluster
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 添加、移除和更改集群的成员
+- en: Administering data movement and manually moving data
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 管理数据移动和手动移动数据
+- en: Seeing the Current State
+  id: totrans-5
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 查看当前状态
+- en: There are several helpers available to find out what data is where, what the
+    shards are, and what the cluster is doing.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有几个辅助工具可用于查找数据所在位置、分片信息以及集群的运行状态。
+- en: Getting a Summary with sh.status()
+  id: totrans-7
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用`sh.status()`获取摘要
+- en: '`sh.status()` gives you an overview of your shards, databases, and sharded
+    collections. If you have a small number of chunks, it will print a breakdown of
+    which chunks are where as well. Otherwise it will simply give the collection’s
+    shard key and report how many chunks each shard has:'
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`sh.status()`为您提供了有关分片、数据库和分片集合的概述。如果您有少量块，它将打印哪些块位于何处的详细信息。否则，它将仅提供集合的分片键，并报告每个分片有多少块：'
+- en: '[PRE0]'
+  id: totrans-9
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Once there are more than a few chunks, `sh.status()` will summarize the chunk
+    stats instead of printing each chunk. To see all chunks, run `sh.status(true)`
+    (the `true` tells `sh.status()` to be verbose).
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦有几个块以上，`sh.status()`将总结块统计信息，而不是打印每个块。要查看所有块，请运行`sh.status(true)`（`true`告诉`sh.status()`要详细显示）。
+- en: All the information `sh.status()` shows is gathered from your *config* database.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有`sh.status()`显示的信息都是从您的*config*数据库中收集的。
+- en: Seeing Configuration Information
+  id: totrans-12
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 查看配置信息
+- en: All of the configuration information about your cluster is kept in collections
+    in the *config* database on the config servers. The shell has several helpers
+    for exposing this information in a more readable way. However, you can always
+    directly query the *config* database for metadata about your cluster.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您集群的所有配置信息都保存在配置服务器上*config*数据库的集合中。Shell提供了几个辅助工具，以更可读的方式显示这些信息。但是，您始终可以直接查询*config*数据库以获取有关集群的元数据。
+- en: Warning
+  id: totrans-14
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: 'Never connect directly to your config servers, as you do not want to take the
+    chance of accidentally changing or removing config server data. Instead, connect
+    to the *mongos* process and use the *config* database to see its data, as you
+    would for any other database:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 永远不要直接连接到配置服务器，因为您不希望意外更改或删除配置服务器数据。相反，连接到*mongos*进程，并使用*config*数据库查看其数据，就像您对待任何其他数据库一样：
+- en: '[PRE1]'
+  id: totrans-16
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: If you manipulate config data through *mongos* (instead of connecting directly
+    to the config servers), *mongos* will ensure that all of your config servers stay
+    in sync and prevent various dangerous actions like accidentally dropping the *config*
+    database.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您通过*mongos*（而不是直接连接到配置服务器）操作配置数据，*mongos* 将确保所有配置服务器保持同步，并防止意外删除*config*数据库等各种危险操作。
+- en: In general, you should not directly change any data in the *config* database
+    (exceptions are noted in the following sections). If you change anything, you
+    will generally have to restart all of your *mongos* servers to see its effect.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常情况下，您不应直接更改*config*数据库中的任何数据（在下面的部分中会有例外）。如果您进行了任何更改，通常需要重新启动所有的*mongos*服务器才能看到其效果。
+- en: There are several collections in the *config* database. This section covers
+    what each one contains and how it can be used.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*config*数据库中有几个集合。本节介绍了每个集合包含的内容及其用途。'
+- en: config.shards
+  id: totrans-20
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: config.shards
+- en: 'The *shards* collection keeps track of all the shards in the cluster. A typical
+    document in the *shards* collection might look something like this:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*shards*集合跟踪集群中的所有分片。*shards*集合中典型的文档可能如下所示：'
+- en: '[PRE2]'
+  id: totrans-22
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: The shard’s `"_id"` is picked up from the replica set name, so each replica
+    set in your cluster must have a unique name.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分片的`"_id"`是从副本集名称中提取的，因此集群中的每个副本集必须具有唯一的名称。
+- en: When you update your replica set configuration (e.g., adding or removing members),
+    the `"host"` field will be updated automatically.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当更新复制集配置（例如，添加或移除成员）时，`"host"` 字段将自动更新。
+- en: config.databases
+  id: totrans-25
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: config.databases
+- en: 'The *databases* collection keeps track of all of the databases, sharded and
+    not, that the cluster knows about:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*databases* 集合跟踪集群了解的所有数据库，无论是分片的还是非分片的：'
+- en: '[PRE3]'
+  id: totrans-27
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: If `enableSharding` has been run on a database, `"partitioned"` will be `true`.
+    The `"primary"` is the database’s “home base.” By default, all new collections
+    in that database will be created on the database’s primary shard.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果在数据库上运行了 `enableSharding`，`"partitioned"` 将为 `true`。`"primary"` 是数据库的“主基地”。默认情况下，该数据库中的所有新集合都将在主分片上创建。
+- en: config.collections
+  id: totrans-29
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: config.collections
+- en: 'The *collections* collection keeps track of all sharded collections (nonsharded
+    collections are not shown). A typical document looks something like this:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*collections* 集合跟踪所有分片集合（未分片的集合未显示）。典型文档看起来像这样：'
+- en: '[PRE4]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'The important fields are:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重要字段是：
+- en: '`"_id"`'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"_id"`'
+- en: The namespace of the collection.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 集合的命名空间。
+- en: '`"key"`'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"key"`'
+- en: The shard key. In this case, it is a hashed shard key on `"imdbId"`.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分片键。在这种情况下，它是对 `"imdbId"` 进行散列分片键。
+- en: '`"unique"`'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"unique"`'
+- en: Indicates that the shard key is not a unique index. By default, the shard key
+    is not unique.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表示分片键不是唯一索引。默认情况下，分片键不是唯一的。
+- en: config.chunks
+  id: totrans-39
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: config.chunks
+- en: 'The *chunks* collection keeps a record of each chunk in all the collections.
+    A typical document in the *chunks* collection looks something like this:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*chunks* 集合中记录了所有集合中每个 chunk 的记录。*chunks* 集合中的典型文档看起来像这样：'
+- en: '[PRE5]'
+  id: totrans-41
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'The most useful fields are:'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最有用的字段是：
+- en: '`"_id"`'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"_id"`'
+- en: The unique identifier for the chunk. Generally this is the namespace, shard
+    key, and lower chunk boundary.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: chunk 的唯一标识符。通常是命名空间、分片键和较低 chunk 边界。
+- en: '`"ns"`'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"ns"`'
+- en: The collection that this chunk is from.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此 chunk 所属的集合。
+- en: '`"min"`'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"min"`'
+- en: The smallest value in the chunk’s range (inclusive).
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: chunk 的范围中的最小值（包括在内）。
+- en: '`"max"`'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"max"`'
+- en: All values in the chunk are smaller than this value.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有 chunk 中的值均小于此值。
+- en: '`"shard"`'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"shard"`'
+- en: Which shard the chunk resides on.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: chunk 所在的分片。
+- en: The `"lastmod"` field tracks chunk versioning. For example, if the chunk `"video.movies-imdbId_MinKey"`
+    were split into two chunks, we’d want a way of distinguishing the new, smaller
+    `"video.movies-imdbId_MinKey"` chunks from their previous incarnation as a single
+    chunk. Thus, the first component of the `Timestamp` value reflects the number
+    of times a chunk has been migrated to a new shard. The second component of this
+    value reflects the number of splits. The `"lastmodEpoch"` field specifies the
+    collection’s creation epoch. It is used to differentiate requests for the same
+    collection name in the cases where the collection was dropped and immediately
+    recreated.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"lastmod"` 字段跟踪 chunk 的版本信息。例如，如果 chunk `"video.movies-imdbId_MinKey"` 被拆分为两个
+    chunk，我们需要一种方法来区分新的、更小的 `"video.movies-imdbId_MinKey"` chunk 和它们之前作为单个 chunk 的版本。因此，`Timestamp`
+    值的第一个组件反映了 chunk 迁移到新分片的次数。该值的第二个组件反映了拆分次数。`"lastmodEpoch"` 字段指定了集合的创建时期。它用于区分在集合被删除并立即重新创建的情况下对同一集合名称的请求。'
+- en: '`sh.status()` uses the *config.chunks* collection to gather most of its information.'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`sh.status()` 使用 *config.chunks* 集合来收集大部分信息。'
+- en: config.changelog
+  id: totrans-55
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: config.changelog
+- en: The *changelog* collection is useful for keeping track of what a cluster is
+    doing, since it records all of the splits and migrations that have occurred.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*changelog* 集合对于跟踪集群正在执行的操作非常有用，因为它记录了所有已发生的拆分和迁移。'
+- en: 'Splits are recorded in a document that looks like this:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 拆分记录在如下所示的文档中：
+- en: '[PRE6]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: The `"details"` field gives information about what the original document looked
+    like and what it was split into.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"details"` 字段提供了关于原始文档的信息以及它是如何分割的。'
+- en: This output shows what the first chunk split of a collection looks like. Note
+    that the second component of `"lastmod"` for each new chunk was updated so that
+    the values are `Timestamp(9, 2)` and `Timestamp(9, 3)`, respectively.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此输出显示了集合第一个 chunk 拆分的情况。请注意，每个新 chunk 的 `"lastmod"` 的第二个组件已更新，因此其值分别为 `Timestamp(9,
+    2)` 和 `Timestamp(9, 3)`。
+- en: 'Migrations are a bit more complicated and actually create four separate changelog
+    documents: one noting the start of the migrate, one for the “from” shard, one
+    for the “to” shard, and one for the commit that occurs when the migration is finalized.
+    The middle two documents are of interest because these give a breakdown of how
+    long each step in the process took. This can give you an idea of whether it’s
+    the disk, network, or something else that is causing a bottleneck on migrates.'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 迁移稍微复杂，实际上创建了四个单独的变更日志文档：一个标记迁移开始，一个为“源”分片，一个为“目标”分片，以及一个在迁移最终化时发生的提交。中间两个文档很有意思，因为它们详细说明了过程中每个步骤所花费的时间。这可以让你了解是磁盘、网络还是其他原因导致迁移瓶颈。
+- en: 'For example, the document created by the “from” shard looks like this:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，“源”分片创建的文档如下：
+- en: '[PRE7]'
+  id: totrans-63
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Each of the steps listed in `"details"` is timed and the ``"step*`N`* of *`N`*"``
+    messages show how long each step took, in milliseconds.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"details"`中列出的每个步骤都有时间限制，并且`"step*`N`* of *`N`*"`消息显示了每个步骤所花费的时间，以毫秒为单位。'
+- en: 'When the “from” shard receives a `moveChunk` command from the *mongos*, it:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当“源”分片从*mongos*接收到`moveChunk`命令时，它：
+- en: Checks the command parameters.
+  id: totrans-66
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 检查命令参数。
+- en: Confirms with the config servers that it can acquire a distributed lock for
+    the migrate.
+  id: totrans-67
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 确认配置服务器可以为迁移获取分布式锁。
+- en: Tries to contact the “to” shard.
+  id: totrans-68
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 尝试联系“目标”分片。
+- en: Copies the data. This is referred to and logged as “the critical section.”
+  id: totrans-69
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 复制数据。这被称为“关键部分”，并记录在日志中。
+- en: Coordinates with the “to” shard and config servers to confirm the migration.
+  id: totrans-70
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 与“目标”分片和配置服务器协调以确认迁移。
+- en: 'Note that the “to” and “from” shards must be in close communication starting
+    at `"step4 of 6"`: the shards directly talk to one another and the config server
+    to perform the migration. If the “from” server has flaky network connectivity
+    during the final steps, it may end up in a state where it cannot undo the migration
+    and cannot move forward with it. In this case, the *mongod* will shut down.'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，“目标”和“源”分片必须从“第 4 步到第 6 步”开始密切通信：分片直接与彼此和配置服务器通信以执行迁移。如果“源”服务器在最后几个步骤中的网络连接不稳定，则可能会导致无法撤消迁移并且无法继续进行迁移的状态。在这种情况下，*mongod*将关闭。
+- en: 'The “to” shard’s changelog document is similar to the “from” shard’s, but the
+    steps are a bit different. It looks like this:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: “目标”分片的变更日志文档与“源”分片类似，但步骤略有不同。它看起来是这样的：
+- en: '[PRE8]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'When the “to” shard receives a command from the “from” shard, it:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当“目标”分片从“源”分片接收到命令时，它：
+- en: Migrates indexes. If this shard has never held chunks from the migrated collection
+    before, it needs to know what fields are indexed. If this isn’t the first time
+    a chunk from this collection is being moved to this shard, then this should be
+    a no-op.
+  id: totrans-75
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 迁移索引。如果该分片以前从未持有过迁移集合的分块，它需要知道哪些字段被索引。如果这不是首次将该集合的分块移动到该分片，则应该是一个无操作。
+- en: Deletes any existing data in the chunk range. There might be data left over
+    from a failed migration or restore procedure that we wouldn’t want to interfere
+    with the current data.
+  id: totrans-76
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 删除分块范围内的任何现有数据。可能会有来自失败的迁移或恢复过程的数据残留，我们不希望干扰当前数据。
+- en: Copies all documents in the chunk to the “to” shard.
+  id: totrans-77
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将分块中的所有文档复制到“目标”分片。
+- en: Replays any operations that happened to these documents during the copy (on
+    the “to” shard).
+  id: totrans-78
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在复制期间重新执行任何操作（在“目标”分片上）。
+- en: Waits for the “to” shard to have replicated the newly migrated data to a majority
+    of servers.
+  id: totrans-79
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 等待“目标”分片将新迁移的数据复制到大多数服务器。
+- en: Commits the migrate by changing the chunk’s metadata to say that it lives on
+    the “to” shard.
+  id: totrans-80
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过更改分块的元数据来提交迁移，表示它存储在“目标”分片上。
+- en: config.settings
+  id: totrans-81
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: config.settings
+- en: This collection contains documents representing the current balancer settings
+    and chunk size. By changing the documents in this collection, you can turn the
+    balancer on or off or change the chunk size. Note that you should always connect
+    to *mongos*, not the config servers directly, to change values in this collection.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此集合包含代表当前平衡器设置和分块大小的文档。通过更改此集合中的文档，您可以启用或禁用平衡器，或更改分块大小。请注意，您应该始终连接到*mongos*，而不是直接连接到配置服务器，以更改此集合中的值。
+- en: Tracking Network Connections
+  id: totrans-83
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 跟踪网络连接
+- en: There are a lot of connections between the components of a cluster. This section
+    covers some sharding-specific information (see [Chapter 24](ch24.xhtml#chapter-ops)
+    for more information on networking).
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 集群组件之间有许多连接。本节涵盖了一些关于分片的特定信息（更多信息请参见[第 24 章](ch24.xhtml#chapter-ops)有关网络的内容）。
+- en: Getting Connection Statistics
+  id: totrans-85
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 获取连接统计信息
+- en: The command `connPoolStats` returns information regarding the open outgoing
+    connections from the current database instance to other members of the sharded
+    cluster or replica set.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 命令 `connPoolStats` 返回有关当前数据库实例与分片集群或副本集中其他成员之间的开放传出连接的信息。
+- en: 'To avoid interference with any running operations, `connPoolStats` does not
+    take any locks. As such, the counts may change slightly as `connPoolStats` gathers
+    information, resulting in slight differences between the hosts and pools connection
+    counts:'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了避免干扰任何正在运行的操作，`connPoolStats` 不会锁定任何内容。因此，随着 `connPoolStats` 收集信息，计数可能会略有变化，导致主机和池连接计数之间存在轻微差异：
+- en: '[PRE9]'
+  id: totrans-88
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'In this output:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此输出中：
+- en: '`"totalAvailable"` shows the total number of available outgoing connections
+    from the current *mongod*/*mongos* instance to other members of the sharded cluster
+    or replica set.'
+  id: totrans-90
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`"totalAvailable"` 显示了当前 *mongod*/*mongos* 实例与分片集群或副本集中其他成员之间可用的所有传出连接的总数。'
+- en: '`"totalCreated"` reports the total number of outgoing connections ever created
+    by the current *mongod*/*mongos* instance to other members of the sharded cluster
+    or replica set.'
+  id: totrans-91
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`"totalCreated"` 报告了当前 *mongod*/*mongos* 实例与分片集群或副本集中其他成员之间迄今为止创建的所有传出连接的总数。'
+- en: '`"totalInUse"` provides the total number of outgoing connections from the current
+    *mongod*/*mongos* instance to other members of the sharded cluster or replica
+    set that are currently in use.'
+  id: totrans-92
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`"totalInUse"` 提供了当前 *mongod*/*mongos* 实例与分片集群或副本集中其他成员之间正在使用的所有传出连接的总数。'
+- en: '`"totalRefreshing"` displays the total number of outgoing connections from
+    the current *mongod*/*mongos* instance to other members of the sharded cluster
+    or replica set that are currently being refreshed.'
+  id: totrans-93
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`"totalRefreshing"` 显示了当前 *mongod*/*mongos* 实例与分片集群或副本集中其他成员之间当前正在刷新的所有传出连接的总数。'
+- en: '`"numClientConnections"` identifies the number of active and stored outgoing
+    synchronous connections from the current *mongod*/*mongos* instance to other members
+    of the sharded cluster or replica set. These represent a subset of the connections
+    reported by `"totalAvailable"`, `"totalCreated"`, and `"totalInUse"`.'
+  id: totrans-94
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`"numClientConnections"` 标识了当前 *mongod*/*mongos* 实例与分片集群或副本集中其他成员之间活动和存储的传出同步连接的数量。这些连接是
+    `"totalAvailable"`、`"totalCreated"` 和 `"totalInUse"` 报告的连接的子集。'
+- en: '`"numAScopedConnection"` reports the number of active and stored outgoing scoped
+    synchronous connections from the current *mongod*/*mongos* instance to other members
+    of the sharded cluster or replica set. These represent a subset of the connections
+    reported by `"totalAvailable"`, `"totalCreated"`, and `"totalInUse"`.'
+  id: totrans-95
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`"numAScopedConnection"` 报告了当前 *mongod*/*mongos* 实例与分片集群或副本集中其他成员之间活动和存储的传出作用域同步连接的数量。这些连接是
+    `"totalAvailable"`、`"totalCreated"` 和 `"totalInUse"` 报告的连接的子集。'
+- en: '`"pools"` shows connection statistics (in use/available/created/refreshing)
+    grouped by the connection pools. A *mongod* or *mongos* has two distinct families
+    of outgoing connection pools:'
+  id: totrans-96
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`"pools"` 显示了按连接池分组的连接统计信息（使用中/可用/已创建/正在刷新）。*mongod* 或 *mongos* 有两组不同的传出连接池：'
+- en: DBClient-based pools (the “write path,” identified by the field name `"global"`
+    in the `"pools"` document)
+  id: totrans-97
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 基于 DBClient 的池（“写入路径”，在 `"pools"` 文档中由字段名 `"global"` 标识）
+- en: NetworkInterfaceTL-based pools (the “read path”)
+  id: totrans-98
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 基于 NetworkInterfaceTL 的池（“读取路径”）
+- en: '`"hosts"` shows connection statistics (in use/available/created/refreshing)
+    grouped by the hosts. It reports on connections between the current *mongod*/*mongos*
+    instance and each member of the sharded cluster or replica set.'
+  id: totrans-99
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`"hosts"` 显示了按主机分组的连接统计信息（使用中/可用/已创建/正在刷新）。它报告了当前 *mongod*/*mongos* 实例与分片集群或副本集中每个成员之间的连接情况。'
+- en: You might see connections to other shards in the output of `connPoolStats`.
+    These indicate that shards are connecting to other shards to migrate data. The
+    primary of one shard will connect directly to the primary of another shard and
+    “suck” its data.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 `connPoolStats` 的输出中，你可能会看到与其他分片的连接。这些指示分片正在连接到其他分片以迁移数据。一个分片的主节点将直接连接到另一个分片的主节点，并“吸取”其数据。
+- en: When a migrate occurs, a shard sets up a `ReplicaSetMonitor` (a process that
+    monitors replica set health) to track the health of the shard on the other side
+    of the migrate. *mongod* never destroys this monitor, so you may see messages
+    in one replica set’s log about the members of another replica set. This is totally
+    normal and should have no effect on your application.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当进行迁移时，分片会设置一个`ReplicaSetMonitor`（监视复制集健康状况的进程）来跟踪迁移另一侧的分片的健康状况。*mongod*永远不会销毁此监视器，因此您可能会在一个复制集的日志中看到关于另一个复制集成员的消息。这是完全正常的，不应对您的应用程序产生任何影响。
+- en: Limiting the Number of Connections
+  id: totrans-102
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 限制连接数
+- en: When a client connects to a *mongos*, the *mongos* creates a connection to at
+    least one shard to pass along the client’s request. Thus, every client connection
+    into a *mongos* yields at least one outgoing connection from *mongos* to the shards.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当客户端连接到*mongos*时，*mongos*会创建一个连接到至少一个分片，以传递客户端的请求。因此，每个连接到*mongos*的客户端连接至少会导致*mongos*到分片的一个传出连接。
+- en: 'If you have many *mongos* processes, they may create more connections than
+    your shards can handle: by default a *mongos* will accept up to 65,536 connections
+    (the same as *mongod*), so if you have 5 *mongos* processes with 10,000 client
+    connections each, they may be attempting to create 50,000 connections to a shard!'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您有许多*mongos*进程，它们可能会创建比您的分片可以处理的连接更多：默认情况下，*mongos*将接受最多65536个连接（与*mongod*相同），因此如果您有5个每个有10000个客户端连接的*mongos*进程，则可能会尝试创建50000个连接到分片！
+- en: 'To prevent this, you can use the `--maxConns` option to your command-line configuration
+    for *mongos* to limit the number of connections it can create. The following formula
+    can be used to calculate the maximum number of connections a shard can handle
+    from a single *mongos*:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了防止这种情况发生，您可以在命令行配置中使用`--maxConns`选项限制*mongos*可以创建的连接数。可以使用以下公式来计算单个*mongos*可以处理的最大连接数：
+- en: '*maxConns* = *maxConnsPrimary* − (*numMembersPerReplicaSet* × 3) −'
+  id: totrans-106
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*maxConns* = *maxConnsPrimary* − （每个复制集成员数 × 3） −'
+- en: (*other* x 3) / *numMongosProcesses*
+  id: totrans-107
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: （其他 × 3）/ *numMongosProcesses*
+- en: 'Breaking down the pieces of this formula:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分解此公式的各部分：
+- en: maxConnsPrimary
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: maxConnsPrimary
+- en: The maximum number of connections on the Primary, typically set to 20,000 to
+    avoid overwhelming the shard with connections from the *mongos*.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 主节点上的最大连接数，通常设置为20000，以避免*mongos*对分片的连接过多。
+- en: (numMembersPerReplicaSet × 3)
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: （每个复制集成员数 × 3）
+- en: The primary creates a connection to each secondary and each secondary creates
+    two connections to the primary, for a total of three connections.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 主要的创建了到每个从节点的连接，并且每个从节点创建了两个到主节点的连接，总共是三个连接。
+- en: (other x 3)
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: （其他 x 3）
+- en: Other is the number of miscellaneous processes that may connect to your *mongod*s,
+    such as monitoring or backup agents, direct shell connections (for administration),
+    or connections to other shards for migrations.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其他是可能连接到您的*mongod*的其他杂项进程，例如监控或备份代理、直接的shell连接（用于管理）或者连接到其他分片进行迁移。
+- en: numMongosProcesses
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: numMongosProcesses
+- en: The total number of *mongos* in the sharded cluster.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在分片集群中的*mongos*总数。
+- en: 'Note that `--maxConns` only prevents *mongos* from creating more than this
+    many connections. It doesn’t do anything particularly helpful when this limit
+    is reached: it will simply block requests, waiting for connections to be “freed.”
+    Thus, you must prevent your application from using this many connections, especially
+    as your number of *mongos* processes grows.'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，`--maxConns`仅防止*mongos*创建超过此数量的连接。当达到此限制时，它不会执行任何特别有用的操作：它将简单地阻塞请求，等待连接“释放”。因此，您必须防止您的应用程序使用这么多连接，特别是随着*mongos*进程数量的增加。
+- en: When a MongoDB instance exits cleanly it closes all connections before stopping.
+    The members that were connected to it will immediately get socket errors on those
+    connections and be able to refresh them. However, if a MongoDB instance suddenly
+    goes offline due to a power loss, crash, or network problems, it probably won’t
+    cleanly close all of its sockets. In this case, other servers in the cluster may
+    be under the impression that their connection is healthy until they try to perform
+    an operation on it. At that point, they will get an error and refresh the connection
+    (if the member is up again at that point).
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当MongoDB实例正常退出时，它会在停止之前关闭所有连接。连接到它的成员将立即在这些连接上收到套接字错误并能够刷新它们。但是，如果MongoDB实例突然因为断电、崩溃或网络问题而离线，它可能不会干净地关闭所有套接字。在这种情况下，集群中的其他服务器可能会认为它们的连接是健康的，直到它们尝试在其上执行操作。此时，它们将会收到一个错误并刷新连接（如果成员此时已经恢复在线）。
+- en: This is a quick process when there are only a few connections. However, when
+    there are thousands of connections that must be refreshed one by one you can get
+    a lot of errors because each connection to the downed member must be tried, determined
+    to be bad, and reestablished. There isn’t a particularly good way of preventing
+    this, aside from restarting processes that get bogged down in a reconnection storm.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当只有少量连接时，这是一个快速的过程。然而，当需要逐个刷新成千上万的连接时，可能会出现很多错误，因为必须尝试每个与停机成员的连接，确定它们是否无效，并重新建立连接。除了重新启动陷入重连风暴的进程外，没有特别好的方法来防止这种情况。
+- en: Server Administration
+  id: totrans-120
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 服务器管理
+- en: As your cluster grows, you’ll need to add capacity or change configurations.
+    This section covers how to add and remove servers in your cluster.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着集群的增长，您将需要增加容量或更改配置。本节介绍如何在集群中添加和删除服务器。
+- en: Adding Servers
+  id: totrans-122
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 添加服务器
+- en: You can add new *mongos* processes at any time. Make sure their `--configdb`
+    option specifies the correct set of config servers and they should be immediately
+    available for clients to connect to.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以随时添加新的 *mongos* 进程。确保它们的 `--configdb` 选项指定了正确的配置服务器集，并且它们应立即可供客户端连接。
+- en: To add new shards, use the `addShard` command as shown in [Chapter 15](ch15.xhtml#chapter-shard-config).
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要添加新的分片，请使用 `addShard` 命令，如 [第15章](ch15.xhtml#chapter-shard-config) 所示。
+- en: Changing Servers in a Shard
+  id: totrans-125
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 更改分片中的服务器
+- en: As you use your sharded cluster, you may want to change the servers in individual
+    shards. To change a shard’s membership, connect directly to the shard’s primary
+    (not through the *mongos*) and issue a replica set reconfig. The cluster configuration
+    will pick up the change and update *config.shards* automatically. Do not modify
+    *config.shards* by hand.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用分片集群时，您可能希望更改各个分片中的服务器。要更改分片的成员资格，请直接连接到分片的主服务器（而不是通过 *mongos*）并发出副本集重新配置命令。集群配置将捕捉更改并自动更新
+    *config.shards*。不要手动修改 *config.shards*。
+- en: The only exception to this is if you started your cluster with standalone servers
+    as shards, not replica sets.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 唯一的例外是，如果您以独立服务器作为分片启动集群。
+- en: Changing a shard from a standalone server to a replica set
+  id: totrans-128
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 将分片从独立服务器更改为副本集
+- en: The easiest way to do this is to add a new, empty replica set shard and then
+    remove the standalone server shard (as discussed in the next section). Migrations
+    will take care of moving your data to the new shard.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这样做的最简单方法是添加一个新的空副本集分片，然后删除独立服务器分片（如下一节所述）。迁移将负责将您的数据移动到新的分片。
+- en: Removing a Shard
+  id: totrans-130
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 移除分片
+- en: In general, shards should not be removed from a cluster. If you are regularly
+    adding and removing shards, you are putting a lot more stress on the system than
+    necessary. If you add too many shards it is better to let your system grow into
+    them, not remove them and add them back later. However, if necessary, you can
+    remove shards.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常情况下，不应从集群中删除分片。如果您经常添加和删除分片，会给系统带来比必要的更大压力。如果添加了太多的分片，最好让系统逐步增长，而不是将其删除然后稍后再添加。但是如果有必要，您可以删除分片。
+- en: 'First make sure that the balancer is on. The balancer will be tasked with moving
+    all the data on the shard you want to remove to other shards in a process called
+    *draining*. To start draining, run the `removeShard` command. `removeShard` takes
+    the shard’s name and drains all the chunks on that shard to the other shards:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先确保均衡器已启动。均衡器将负责在过程中移动您想要移除的分片上的所有数据到其他分片，这个过程称为 *draining*。要开始 *draining*，运行
+    `removeShard` 命令。`removeShard` 命令需要分片的名称，并将该分片上的所有数据块移动到其他分片上：
+- en: '[PRE10]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: Draining can take a long time if there are a lot of chunks or large chunks to
+    move. If you have jumbo chunks (see [“Jumbo Chunks”](#sect2-jumbo)), you may have
+    to temporarily increase the chunk size to allow draining to move them.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果有大量或大块要移动，*draining* 可能需要很长时间。如果有巨块 (见 [“巨块”](#sect2-jumbo))，可能需要临时增加块大小以允许
+    *draining* 移动它们。
+- en: 'If you want to keep tabs on how much has been moved, run `removeShard` again
+    to give you the current status:'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您想了解移动了多少数据，请再次运行 `removeShard` 以获取当前状态：
+- en: '[PRE11]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: You can run `removeShard` as many times as you want.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以随时运行 `removeShard` 多次。
+- en: 'Chunks may have to be split to be moved, so you may see the number of chunks
+    increase in the system during the drain. For example, suppose we have a five-shard
+    cluster with the following chunk distributions:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可能需要分割块以便移动，因此在 *drain* 过程中您可能会看到系统中的块数量增加。例如，假设我们有一个包含以下块分布的五分片集群：
+- en: '[PRE12]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'This cluster has a total of 52 chunks. If we remove *test-rs3*, we might end
+    up with:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此集群总共有 52 个数据块。如果我们移除 *test-rs3*，可能会得到以下结果：
+- en: '[PRE13]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: The cluster now has 60 chunks, 18 of which came from shard *test-rs3* (11 were
+    there to start and 7 were created from draining splits).
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在集群有 60 个数据块，其中 18 个来自分片 *test-rs3*（开始时有 11 个，另外 7 个来自排空分裂创建的数据块）。
+- en: 'Once all the chunks have been moved, if there are still databases that have
+    the removed shard as their primary, you’ll need to remove them before the shard
+    can be removed. Each database in a sharded cluster has a primary shard. If the
+    shard you want to remove is also the primary of one of the cluster’s databases,
+    `removeShard` lists the database in the `"dbsToMove"` field. To finish removing
+    the shard, you must either move the database to a new shard after migrating all
+    data from the shard or drop the database, deleting the associated data files.
+    The output of `removeShard` will be something like:'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦所有数据块都已移动，如果仍然有数据库将移除的分片作为它们的主分片，那么在移除分片之前，你需要先移除它们。分片集群中的每个数据库都有一个主分片。如果你要移除的分片也是集群中某个数据库的主分片，`removeShard`
+    将在 `"dbsToMove"` 字段中列出该数据库。要完成移除分片的过程，你必须在将所有数据迁移到其他分片后，移动数据库或者删除数据库，删除相关的数据文件。`removeShard`
+    的输出将类似于：
+- en: '[PRE14]'
+  id: totrans-144
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'To finish the remove, move the listed databases with the `movePrimary` command:'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要完成移除操作，请使用 `movePrimary` 命令移动列出的数据库：
+- en: '[PRE15]'
+  id: totrans-146
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Once you have done this, run `removeShard` one more time:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦你完成了这个步骤，再运行 `removeShard` 一次：
+- en: '[PRE16]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: This is not strictly necessary, but it confirms that you have completed the
+    process. If there are no databases that have this shard as their primary, you
+    will get this response as soon as all chunks have been migrated off the shard.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这不是绝对必要的，但它确认你已完成了这个过程。如果没有数据库将这个分片作为它们的主分片，那么当所有数据块都迁移出分片时，你将会得到这个响应。
+- en: Warning
+  id: totrans-150
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Once you have started a shard draining, there is no built-in way to stop it.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦开始排空一个分片，就没有内置的方法可以停止它。
+- en: Balancing Data
+  id: totrans-152
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据平衡
+- en: In general, MongoDB automatically takes care of balancing data. This section
+    covers how to enable and disable this automatic balancing as well as how to intervene
+    in the balancing process.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常情况下，MongoDB会自动处理数据的平衡。本节涵盖如何启用和禁用此自动平衡以及如何干预平衡过程。
+- en: The Balancer
+  id: totrans-154
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 负载均衡器
+- en: 'Turning off the balancer is a prerequisite to nearly any administrative activity.
+    There is a shell helper to make this easier:'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关闭负载均衡器是几乎所有管理活动的先决条件。有一个 shell 辅助工具可以使这一过程更容易：
+- en: '[PRE17]'
+  id: totrans-156
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'With the balancer off a new balancing round will not begin, but turning it
+    off will not force an ongoing balancing round to stop immediately—migrations generally
+    cannot stop on a dime. Thus, you should check the *config.locks* collection to
+    see whether or not a balancing round is still in progress:'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当负载均衡器关闭时，新的负载均衡轮不会开始，但关闭它不会立即停止正在进行的负载均衡轮——迁移通常不能立即停止。因此，你应该检查 *config.locks*
+    集合，以查看负载均衡轮是否仍在进行中：
+- en: '[PRE18]'
+  id: totrans-158
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: '`0` means the balancer is off.'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`0` 意味着负载均衡器已关闭。'
+- en: 'Balancing puts load on your system: the destination shard must query the source
+    shard for all the documents in a chunk and insert them, and then the source shard
+    must delete them. There are two circumstances in particular where migrations can
+    cause performance problems:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 平衡会给系统带来负载：目标分片必须查询源分片中所有文档的数据块并插入它们，然后源分片必须删除它们。特别是在两种情况下，迁移可能会导致性能问题：
+- en: Using a hotspot shard key will force constant migrations (as all new chunks
+    will be created on the hotspot). Your system must have the capacity to handle
+    the flow of data coming off of your hotspot shard.
+  id: totrans-161
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用热点分片键将强制进行持续的迁移（因为所有新的数据块将创建在热点上）。你的系统必须有能力处理来自热点分片的数据流。
+- en: Adding a new shard will trigger a stream of migrations as the balancer attempts
+    to populate it.
+  id: totrans-162
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 添加一个新的分片将触发大量的迁移，因为负载均衡器试图将其填充。
+- en: 'If you find that migrations are affecting your application’s performance, you
+    can schedule a window for balancing in the *config.settings* collection. Run the
+    following update to only allow balancing between 1 p.m. and 4 p.m. First make
+    sure the balancer is on, then schedule the window:'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果发现迁移影响了应用程序的性能，可以在 *config.settings* 集合中安排一个平衡窗口的时间。运行以下更新以仅允许在下午 1 点到下午 4
+    点之间进行平衡。首先确保负载均衡器已开启，然后安排窗口：
+- en: '[PRE19]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: If you set a balancing window, monitor it closely to ensure that *mongos* can
+    actually keep your cluster balanced in the time that you have allotted it.
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果设置了平衡窗口，请密切监视以确保 *mongos* 实际上可以在你分配给它的时间内保持集群的平衡。
+- en: You must be careful if you plan to combine manual balancing with the automatic
+    balancer, since the automatic balancer always determines what to move based on
+    the current state of the set and does not take into account the set’s history.
+    For example, suppose you have *shardA* and *shardB*, each holding 500 chunks.
+    *shardA* is getting a lot of writes, so you turn off the balancer and move 30
+    of the most active chunks to *shardB*. If you turn the balancer back on at this
+    point, it will immediately swoop in and move 30 chunks (possibly a different 30)
+    back from *shardB* to *shardA* to balance the chunk counts.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果计划结合手动均衡和自动均衡器，必须小心，因为自动均衡器总是基于集合的当前状态确定移动内容，并不考虑集合的历史。例如，假设您有 *shardA* 和
+    *shardB*，每个分片持有 500 个块。*shardA* 正在进行大量写入，因此您关闭了均衡器并将最活跃的 30 个块移动到 *shardB*。如果此时重新启动均衡器，它将立即从
+    *shardB* 移回 30 个块（可能是不同的 30 个块），以平衡块计数。
+- en: To prevent this, move 30 quiescent chunks from *shardB* to *shardA* before starting
+    the balancer. That way there will be no imbalance between the shards and the balancer
+    will be happy to leave things as they are. Alternatively, you could perform 30
+    splits on *shardA*’s chunks to even out the chunk counts.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了防止这种情况发生，在启动均衡器之前，将 30 个静止的块从 *shardB* 移动到 *shardA*。这样分片之间就不会存在不平衡，均衡器会乐意保持当前状态。或者，您可以对
+    *shardA* 的块执行 30 次分割，以平衡块计数。
+- en: Note that the balancer only uses number of chunks as a metric, not size of data.
+    Moving a chunk is called a migration and is how MongoDB balances data across your
+    cluster. Thus, a shard with a few large chunks may end up as the target of a migration
+    from a shard with many small chunks (but a smaller data size).
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，均衡器仅使用块数作为指标，不考虑数据大小。移动一个块称为迁移，是 MongoDB 在集群中平衡数据的方法。因此，一个具有少量大块的分片可能成为从具有许多小块（但数据量较小）的分片迁移的目标。
+- en: Changing Chunk Size
+  id: totrans-169
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 修改块大小
+- en: There can be anywhere from zero to millions of documents in a chunk. Generally,
+    the larger a chunk is, the longer it takes to migrate to another shard. In [Chapter 14](ch14.xhtml#chapter_d1e10482),
+    we used a chunk size of 1 MB, so that we could see chunk movement easily and quickly.
+    This is generally impractical in a live system; MongoDB would be doing a lot of
+    unnecessary work to keep shards within a few megabytes of each other in size.
+    By default chunks are 64 MB, which generally provides a good balance between ease
+    of migration and migratory churn.
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个块中可以包含从零到数百万个文档。一般来说，块越大，迁移到另一个分片的时间就越长。在[第14章](ch14.xhtml#chapter_d1e10482)中，我们使用了
+    1 MB 的块大小，这样我们可以轻松快速地观察块的移动。但是，这在实时系统中通常是不切实际的；MongoDB 将不必要地工作来保持分片大小接近几兆字节。默认的块大小是
+    64 MB，一般情况下提供了迁移和移动的良好平衡。
+- en: 'Sometimes you may find that migrations are taking too long with 64 MB chunks.
+    To speed them up, you can decrease your chunk size. To do this, connect to *mongos*
+    through the shell and update the *config.settings* collection:'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时您可能发现 64 MB 的块大小迁移时间过长。为了加快迁移速度，您可以减小块大小。为此，通过 shell 连接到 *mongos* 并更新 *config.settings*
+    集合：
+- en: '[PRE20]'
+  id: totrans-172
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: The previous update would change your chunk size to 32 MB. Existing chunks would
+    not be changed immediately, however; automatic splitting only occurs on insert
+    or update. Thus, if you lower the chunk size, it may take time for all chunks
+    to split to the new size.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述更新将把您的块大小更改为 32 MB。然而，现有的块不会立即更改；自动分割仅在插入或更新时发生。因此，如果您减小块大小，可能需要一些时间让所有块分割到新的大小。
+- en: Splits cannot be undone. If you increase the chunk size, existing chunks grow
+    only through insertion or updates until they reach the new size. The allowed range
+    of the chunk size is between 1 and 1,024 MB, inclusive.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分割无法撤销。如果增加块大小，现有的块只能通过插入或更新来增长，直到达到新的大小。块大小的允许范围是 1 到 1,024 MB，包括两端。
+- en: 'Note that this is a cluster-wide setting: it affects all collections and databases.
+    Thus, if you need a small chunk size for one collection and a large chunk size
+    for another, you may have to compromise with a chunk size in between the two ideals
+    (or put the collections in different clusters).'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个集群范围的设置：它影响所有集合和数据库。因此，如果您需要一个集合的小块大小和另一个集合的大块大小，则可能需要在两个理想值之间进行妥协（或将集合放入不同的集群）。
+- en: Tip
+  id: totrans-176
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: If MongoDB is doing too many migrations or your documents are large, you may
+    want to increase your chunk size.
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果 MongoDB 迁移过多或者您的文档过大，您可能需要增加块大小。
+- en: Moving Chunks
+  id: totrans-178
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 移动块
+- en: As mentioned earlier, all the data in a chunk lives on a certain shard. If that
+    shard ends up with more chunks than the other shards, MongoDB will move some chunks
+    off it.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如前面提到的，块中的所有数据存储在特定的分片上。如果该分片的块比其他分片的多，MongoDB 将会将一些块从该分片移动出去。
+- en: 'You can manually move chunks using the `moveChunk` shell helper:'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`moveChunk` shell 辅助程序可以手动移动块：
+- en: '[PRE21]'
+  id: totrans-181
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: This would move the chunk containing the document with an `"imdbId"` of `500000`
+    to the shard named *shard02*. You must use the shard key (`"imdbId"`, in this
+    case) to find which chunk to move. Generally, the easiest way to specify a chunk
+    is by its lower bound, although any value in the chunk will work (the upper bound
+    will not, as it is not actually in the chunk). This command will move the chunk
+    before returning, so it may take a while to run. The logs are the best place to
+    see what it is doing if it takes a long time.
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将移动包含 `"imdbId"` 为 `500000` 的文档的块到名为 *shard02* 的分片。您必须使用分片键（在这种情况下为 `"imdbId"`）来查找要移动的块。通常，指定一个块最简单的方法是使用其下界，虽然块中的任何值都可以工作（上界不行，因为它实际上不在块中）。该命令在返回之前将移动块，因此可能需要一段时间才能运行。如果运行时间较长，日志是查看其操作的最佳位置。
+- en: 'If a chunk is larger than the max chunk size, *mongos* will refuse to move
+    it:'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果一个块大于最大块大小，*mongos* 将拒绝移动它：
+- en: '[PRE22]'
+  id: totrans-184
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'In this case, you must manually split the chunk before moving it, using the
+    `splitAt` command:'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，您必须在移动之前手动分割块，使用`splitAt`命令：
+- en: '[PRE23]'
+  id: totrans-186
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: Once the chunk has been split into smaller pieces, it should be movable. Alternatively,
+    you can raise the max chunk size and then move it, but you should break up large
+    chunks whenever possible. Sometimes, though, chunks cannot be broken up—we’ll
+    look at this situation next.^([1](ch17.xhtml#idm45882339279480))
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦块被分割成更小的片段，它就应该可以移动了。或者，您可以提高最大块大小然后移动它，但应该尽可能地拆分大块。然而，有时候块无法分割——我们将在接下来看看这种情况。^([1](ch17.xhtml#idm45882339279480))
+- en: Jumbo Chunks
+  id: totrans-188
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 巨型块
+- en: Suppose you choose the `"date"` field as your shard key. The `"date"` field
+    in this collection is a string that looks like ``"*`year`*/*`month`*/*`day`*"``,
+    which means that *mongos* can create at most one chunk per day. This works fine
+    for a while, until your application suddenly goes viral and gets a thousand times
+    its typical traffic for one day.
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您选择 `"date"` 字段作为分片键。此集合中的 `"date"` 字段是一个看起来像 ``"*`year`*/*`month`*/*`day`*"`
+    的字符串，这意味着 *mongos* 每天最多可以创建一个块。这样做一段时间很好，直到您的应用程序突然爆红，并且某一天的流量比平常高出一千倍。
+- en: This day’s chunk is going to be much larger than any other day’s, but it is
+    also completely unsplittable because every document has the same value for the
+    shard key.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这一天的块将比其他任何一天的块都要大得多，但也完全无法分割，因为每个文档对于分片键都有相同的值。
+- en: Once a chunk is larger than the max chunk size set in *config.settings*, the
+    balancer will not be allowed to move the chunk. These unsplittable, unmovable
+    chunks are called *jumbo chunks* and they are inconvenient to deal with.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦一个块大于在 *config.settings* 中设置的最大块大小，*balancer* 将不允许移动该块。这些不可分割、不可移动的块称为巨型块，处理起来很不方便。
+- en: Let’s take an example. Suppose you have three shards, *shard1*, *shard2*, and
+    *shard3*. If you use the hotspot shard key pattern described in [“Ascending Shard
+    Keys”](ch16.xhtml#sect2-hotspot), all your writes will be going to one shard—say,
+    *shard1*. The shard primary *mongod* will request that the *balancer* move each
+    new top chunk evenly between the other shards, but the only chunks that the balancer
+    can move are the nonjumbo chunks, so it will migrate all the small chunks off
+    the hot shard.
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们举个例子。假设你有三个分片，*shard1*、*shard2* 和 *shard3*。如果你使用[“升序分片键”](ch16.xhtml#sect2-hotspot)中描述的热点分片键模式，那么所有的写操作都将会进入一个分片——比如说
+    *shard1*。分片的主 *mongod* 将请求 *balancer* 将每个新的顶部块均匀地移动到其他分片，但 *balancer* 只能移动非巨型块，因此它将所有小块从热点分片迁移出去。
+- en: Now all the shards will have roughly the same number of chunks, but all of *shard2*
+    and *shard3*’s chunks will be less than 64 MB in size. And if jumbo chunks are
+    being created, more and more of *shard1*’s chunks will be more than 64 MB in size.
+    Thus, *shard1* will fill up a lot faster than the other two shards, even though
+    the number of chunks is perfectly balanced between the three.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，所有的分片将会有大致相同数量的块，但 *shard2* 和 *shard3* 的所有块大小都将小于64 MB。如果创建巨型块，*shard1* 的块会越来越多超过64
+    MB。因此，*shard1* 将比其他两个分片更快填满，即使三者之间的块数量完全平衡。
+- en: 'Thus, one of the indicators that you have jumbo chunk problems is that one
+    shard’s size is growing much faster than the others. You can also look at the
+    output of `sh.status()` to see if you have jumbo chunks—they will be marked with
+    the `jumbo` attribute:'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，您有巨大块问题的一个指标是一个分片的大小增长速度比其他分片快得多。您还可以查看`sh.status()`的输出，以查看是否有巨大块，它们将用`jumbo`属性标记：
+- en: '[PRE24]'
+  id: totrans-195
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'You can use the `dataSize` command to check chunk sizes. First, use the *config.chunks*
+    collection to find the chunk ranges:'
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用`dataSize`命令检查块大小。首先，使用*config.chunks*集合找到块范围：
+- en: '[PRE25]'
+  id: totrans-197
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'Then use these chunk ranges to find possible jumbo chunks:'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后使用这些块范围找到可能的巨大块：
+- en: '[PRE26]'
+  id: totrans-199
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'Be careful, though—the `dataSize` command does have to scan the chunk’s data
+    to figure out how big it is. If you can, narrow down your search by using your
+    knowledge of your data: were jumbo chunks created on a certain date? For example,
+    if July 1 was a really busy day, look for chunks with that day in their shard
+    key range.'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不过要小心，`dataSize`命令确实需要扫描块的数据来确定其大小。如果可能的话，通过使用对数据的了解缩小搜索范围：是否在某个特定日期创建了巨大块？例如，如果7月1日是一个非常繁忙的一天，请查找具有该日期的块。
+- en: Tip
+  id: totrans-201
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: If you’re using GridFS and sharding by `"files_id"`, you can look at the *fs.files*
+    collection to find a file’s size.
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你正在使用GridFS并且按`"files_id"`分片，你可以查看*fs.files*集合来找到文件的大小。
+- en: Distributing jumbo chunks
+  id: totrans-203
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 分布巨大块
+- en: To fix a cluster thrown off-balance by jumbo chunks, you must evenly distribute
+    them among the shards.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要解决由巨大块导致失衡的集群问题，必须将它们均匀分布在分片之间。
+- en: 'This is a complex manual process, but should not cause any downtime (it may
+    cause slowness, as you’ll be migrating a lot of data). In the following description,
+    the shard with the jumbo chunks is referred to as the “from” shard. The shards
+    that the jumbo chunks are migrated to are called the “to” shards. Note that you
+    may have multiple “from” shards that you wish to move chunks off of. Repeat these
+    steps for each:'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个复杂的手动过程，但不应造成任何停机（可能会导致速度变慢，因为你将迁移大量数据）。在以下描述中，具有巨大块的分片称为“from”分片。将巨大块迁移到的分片称为“to”分片。请注意，您可能有多个希望迁移块的“from”分片。对于每个分片，重复以下步骤：
+- en: 'Turn off the balancer. You don’t want the balancer trying to “help” during
+    this process:'
+  id: totrans-206
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 关闭平衡器。在此过程中，您不希望平衡器试图“帮助”：
+- en: '[PRE27]'
+  id: totrans-207
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'MongoDB will not allow you to move chunks larger than the max chunk size, so
+    temporarily increase the chunk size. Make a note of what your original chunk size
+    is and then change it to something large, like `10000`. Chunk size is specified
+    in megabytes:'
+  id: totrans-208
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: MongoDB不允许您移动大于最大块大小的块，因此暂时增加块大小。记下您的原始块大小，然后将其更改为大型值，如`10000`。块大小以兆字节指定。
+- en: '[PRE28]'
+  id: totrans-209
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: Use the `moveChunk` command to move jumbo chunks off the “from” shard.
+  id: totrans-210
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用`moveChunk`命令将巨大块从“from”分片移出。
+- en: Run `splitChunk` on the remaining chunks on the “from” shard until it has roughly
+    the same number of chunks as the “to” shards.
+  id: totrans-211
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在“from”分片上运行`splitChunk`，直到它拥有大致相同数量的块作为“to”分片。
+- en: 'Set the chunk size back to its original value:'
+  id: totrans-212
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将块大小设置回其原始值：
+- en: '[PRE29]'
+  id: totrans-213
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'Turn on the balancer:'
+  id: totrans-214
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 启动平衡器：
+- en: '[PRE30]'
+  id: totrans-215
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: When the balancer is turned on again, it will once again be unable to move the
+    jumbo chunks; they are essentially held in place by their size.
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当再次启用平衡器时，它将再次无法移动巨大块；它们基本上是由它们的大小所固定在那里。
+- en: Preventing jumbo chunks
+  id: totrans-217
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 防止巨大块
+- en: As the amount of data you are storing grows, the manual process described in
+    the previous section becomes unsustainable. Thus, if you’re having problems with
+    jumbo chunks, you should make it a priority to prevent them from forming.
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着存储数据量的增长，前面描述的手动过程变得难以维持。因此，如果您遇到巨大块问题，应优先采取措施防止它们形成。
+- en: To prevent jumbo chunks, modify your shard key to have more granularity. You
+    want almost every document to have a unique value for the shard key, or at least
+    to never have more than the chunk size’s worth of data with a single shard key
+    value.
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要防止巨大块，请修改您的分片键以增加细粒度。您希望几乎每个文档的分片键具有唯一值，或者至少从不具有超过块大小值的数据。
+- en: For example, if you were using the year/month/day key described earlier, it
+    could quickly be made more fine-grained by adding hours, minutes, and seconds.
+    Similarly, if you’re sharding on something coarse-grained like log level, you
+    can add to your shard key a second field with a lot of granularity, such as an
+    MD5 hash or UUID. Then you can always split a chunk, even if the first field is
+    the same for many documents.
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，如果你之前使用的是年/月/日的键，可以快速通过添加小时、分钟和秒来提升精细度。同样地，如果你在粗粒度的日志级别上进行分片，可以在分片键中添加一个具有很高粒度的第二字段，例如MD5哈希或UUID。这样，即使第一个字段对许多文档相同，你也可以随时分割一个块。
+- en: Refreshing Configurations
+  id: totrans-221
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 刷新配置
+- en: 'As a final tip, sometimes *mongos* will not update its configuration correctly
+    from the config servers. If you ever get a configuration that you don’t expect
+    or a *mongos* seems to be out of date or cannot find data that you know is there,
+    use the `flushRouterConfig` command to manually clear all caches:'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后的提示是，有时*mongos*无法正确从配置服务器更新其配置。如果出现意外配置或*mongos*看起来过时或找不到已知存在的数据，可以使用`flushRouterConfig`命令手动清除所有缓存：
+- en: '[PRE31]'
+  id: totrans-223
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: If `flushRouterConfig` does not work, restarting all your *mongos* or *mongod*
+    processes clears any cached data.
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果`flushRouterConfig`无法工作，重新启动所有的*mongos*或*mongod*进程可以清除任何缓存数据。
+- en: ^([1](ch17.xhtml#idm45882339279480-marker)) MongoDB 4.4 is planning to add a
+    new parameter (`forceJumbo`) in the `moveChunk` function, as well as a new balancer
+    configuration setting `attemptToBalanceJumboChunks` to address jumbo chunks. The
+    details are in [this JIRA ticket describing the work](https://jira.mongodb.org/browse/SERVER-42273).
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch17.xhtml#idm45882339279480-marker)) MongoDB 4.4计划在`moveChunk`函数中添加一个新参数（`forceJumbo`），以及一个新的负载均衡器配置设置`attemptToBalanceJumboChunks`来解决超大块的问题。具体详情请参阅[这个描述工作的JIRA票](https://jira.mongodb.org/browse/SERVER-42273)。

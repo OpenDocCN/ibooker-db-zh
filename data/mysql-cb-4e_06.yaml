@@ -1,0 +1,1380 @@
+- en: Chapter 6\. Table Management
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第6章 表管理
+- en: 6.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 6.0 引言
+- en: 'This chapter covers topics that relate to creating and populating tables, including:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章涵盖与创建和填充表相关的主题，包括：
+- en: Cloning a table
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 克隆表
+- en: Copying from one table to another
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从一张表复制到另一张表
+- en: Using temporary tables
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用临时表
+- en: Generating unique table names
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 生成唯一表名
+- en: Determining what storage engine a table uses or converting it from one storage
+    engine to another
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 确定表使用的存储引擎或将其从一种存储引擎转换为另一种
+- en: 'Many of the examples in this chapter use a table named `mail` containing rows
+    that track mail message traffic between users on a set of hosts (see [Recipe 5.0](ch05.xhtml#nch-select-select-intro)).
+    To create and load this table, change location into the *tables* directory of
+    the `recipes` distribution and run this command:'
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中的许多示例使用名为`mail`的表，其中包含跟踪一组主机上用户之间邮件消息流量的行（参见[Recipe 5.0](ch05.xhtml#nch-select-select-intro)）。要创建并加载此表，请进入`recipes`分发的*tables*目录，并运行此命令：
+- en: '[PRE0]'
+  id: totrans-9
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 6.1 Cloning a Table
+  id: totrans-10
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 6.1 克隆表
+- en: Problem
+  id: totrans-11
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to create a table that has exactly the same structure as an existing
+    table.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想创建一个与现有表完全相同结构的表。
+- en: Solution
+  id: totrans-13
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use `CREATE` `TABLE` … `LIKE` to clone the table structure. To also copy some
+    or all of the rows from the original table to the new one, use `INSERT` `INTO`
+    … `SELECT`.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`CREATE` `TABLE` … `LIKE`来克隆表结构。如果还想将原始表的一些或全部行复制到新表中，请使用`INSERT` `INTO` …
+    `SELECT`。
+- en: Discussion
+  id: totrans-15
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'To create a new table that is just like an existing table, use this statement:'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要创建与现有表完全相同的新表，请使用此语句：
+- en: '[PRE1]'
+  id: totrans-17
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'The structure of the new table is the same as that of the original table, with
+    a few exceptions: `CREATE` `TABLE` … `LIKE` does not copy foreign key definitions,
+    and it doesn’t copy any `DATA` `DIRECTORY` or `INDEX` `DIRECTORY` table options
+    that the table might use.'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 新表的结构与原始表相同，但有几个例外：`CREATE` `TABLE` … `LIKE`不复制外键定义，也不复制表可能使用的任何`DATA` `DIRECTORY`或`INDEX`
+    `DIRECTORY`表选项。
+- en: 'The new table is empty. If you also want the contents to be the same as the
+    original table, copy the rows using an `INSERT` `INTO` … `SELECT` statement:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 新表为空。如果还希望内容与原始表相同，请使用`INSERT` `INTO` … `SELECT`语句复制行：
+- en: '[PRE2]'
+  id: totrans-20
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'To copy only part of the table, add an appropriate `WHERE` clause that identifies
+    which rows to copy. For example, these statements create a copy of the `mail`
+    table named `mail2`, populated only with the rows for mail sent by `barb`:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要复制表的部分内容，需要添加适当的`WHERE`子句，以确定要复制的行。例如，以下语句将创建一个名为`mail2`的`mail`表的副本，其中只包含由`barb`发送的邮件：
+- en: '[PRE3]'
+  id: totrans-22
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Warning
+  id: totrans-23
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Selecting everything from the large table could be slow and not recommended
+    on the production servers. We discuss how to copy huge tables in [Recipe 6.7](#nch-tblmgmt-tblmgmt-copy-tablespaces)
+    and [Recipe 6.8](#nch-tblmgmt-tblmgmt-copy-myisam-sdi)
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从大表中选择所有内容可能很慢，不建议在生产服务器上执行此操作。我们讨论如何复制大表在[Recipe 6.7](#nch-tblmgmt-tblmgmt-copy-tablespaces)和[Recipe
+    6.8](#nch-tblmgmt-tblmgmt-copy-myisam-sdi)中。
+- en: See Also
+  id: totrans-25
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: For additional information about `INSERT` … `SELECT`, see [Recipe 6.2](#nch-tblmgmt-tblmgmt-into-table).
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关`INSERT` … `SELECT`的更多信息，请参阅[Recipe 6.2](#nch-tblmgmt-tblmgmt-into-table)。
+- en: 6.2 Saving a Query Result in a Table
+  id: totrans-27
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 6.2 将查询结果保存到表中
+- en: Problem
+  id: totrans-28
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to save the result from a `SELECT` statement to a table rather than
+    display it.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望将`SELECT`语句的结果保存到表中，而不是显示它。
+- en: Solution
+  id: totrans-30
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: If the table exists, retrieve rows into it using `INSERT` `INTO` … `SELECT`.
+    If the table does not exist, create it on the fly using `CREATE` `TABLE` … `SELECT`.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果表存在，则使用`INSERT` `INTO` … `SELECT`将行检索到其中。如果表不存在，则使用`CREATE` `TABLE` … `SELECT`动态创建它。
+- en: Discussion
+  id: totrans-32
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'The MySQL server normally returns the result of a `SELECT` statement to the
+    client that executed the statement. For example, when you execute a statement
+    from within the *mysql* program, the server returns the result to *mysql*, which
+    in turn displays it on the screen. It’s possible to save the results of a `SELECT`
+    statement in a table instead, which is useful in several ways:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL服务器通常将`SELECT`语句的结果返回给执行该语句的客户端。例如，当您在*mysql*程序内执行语句时，服务器将结果返回给*mysql*，后者将其显示在屏幕上。可以将`SELECT`语句的结果保存到表中，这在多种情况下都很有用：
+- en: You can easily create a complete or partial copy of a table. If you’re developing
+    an algorithm for your application that modifies a table, it’s safer to work with
+    a copy of a table so that you need not worry about the consequences of mistakes.
+    If the original table is large, creating a partial copy can speed the development
+    process because queries run against it take less time.
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以轻松地创建表的完整或部分副本。如果您正在为修改表的应用程序开发算法，最好使用表的副本，以免担心错误的后果。如果原始表很大，创建部分副本可以加快开发过程，因为对其运行的查询时间较短。
+- en: For a data-loading operation based on information that might be malformed, load
+    new rows into a test temporary table, perform some preliminary checks, and correct
+    the rows as necessary. When you’re satisfied that the new rows are okay, copy
+    them from the temporary table to your main table.
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 基于可能存在格式不正确的信息进行数据加载操作时，将新行加载到测试临时表中，执行一些初步检查，并根据需要更正行。当您确信新行没有问题时，将它们从临时表复制到主表中。
+- en: Some applications maintain a large repository table and a smaller working table
+    into which rows are inserted on a regular basis, copying the working table rows
+    to the repository periodically and clearing the working table.
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一些应用程序维护一个大的存储库表和一个较小的工作表，定期向其中插入行，周期性地将工作表行复制到存储库，并清除工作表。
+- en: To perform summary operations on a large table more efficiently, avoid running
+    expensive summary operations repeatedly on it. Instead, select summary information
+    once into a second table and use that for further analysis.
+  id: totrans-37
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要更高效地对大表执行汇总操作，请避免反复在其上运行昂贵的汇总操作。相反，将汇总信息仅选择一次到第二表中，并在进一步分析时使用该表。
+- en: This recipe shows how to retrieve a result set into a table. The table names
+    `src_tbl` and `dst_tbl` in the examples refer to the source table from which rows
+    are selected and the destination table into which they are stored, respectively.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此处演示如何将结果集检索到表中。示例中的表名`src_tbl`和`dst_tbl`分别指源表（从中选择行）和目标表（将其存储进去）。
+- en: 'If the destination table already exists, use `INSERT` … `SELECT` to copy the
+    result set into it. For example, if `dst_tbl` contains an integer column `i` and
+    a string column `s`, the following statement copies rows from `src_tbl` into `dst_tbl`,
+    assigning column `val` to `i` and column `name` to `s`:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果目标表已经存在，请使用`INSERT` … `SELECT`将结果集复制到其中。例如，如果`dst_tbl`包含整数列`i`和字符串列`s`，则以下语句将行从`src_tbl`复制到`dst_tbl`，将列`val`赋给`i`，将列`name`赋给`s`：
+- en: '[PRE4]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'The number of columns to be inserted must match the number of selected columns,
+    with the correspondence between columns based on position rather than name. To
+    copy all columns, you can shorten the statement to this form:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要插入的列数必须与选定的列数相匹配，列之间的对应关系基于位置而不是名称。要复制所有列，可以简化语句如下：
+- en: '[PRE5]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'To copy only certain rows, add a `WHERE` clause that selects those rows:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要仅复制特定行，请添加一个`WHERE`子句来选择这些行：
+- en: '[PRE6]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'The `SELECT` statement can produce values from expressions, too. For example,
+    the following statement counts the number of times each name occurs in `src_tbl`
+    and stores both the counts and the names in `dst_tbl`:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SELECT`语句也可以从表达式中产生值。例如，以下语句计算`src_tbl`中每个名称出现的次数，并将计数和名称都存储在`dst_tbl`中：'
+- en: '[PRE7]'
+  id: totrans-46
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'If the destination table does not exist, create it first with a `CREATE` `TABLE`
+    statement, then copy rows into it with `INSERT` … `SELECT`. Alternatively, use
+    `CREATE` `TABLE` … `SELECT` to create the destination table directly from the
+    result of the `SELECT`. For example, to create `dst_tbl` and copy the entire contents
+    of `src_tbl` into it, do this:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果目标表不存在，请先使用`CREATE` `TABLE`语句创建它，然后使用`INSERT` … `SELECT`将行复制到其中。或者，直接从`SELECT`的结果创建目标表，例如，要创建`dst_tbl`并将`src_tbl`的整个内容复制到其中，可以这样做：
+- en: '[PRE8]'
+  id: totrans-48
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Warning
+  id: totrans-49
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: '[PRE9]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: does not copy indexes from the source table. If you use this syntax and destination
+    table should have indexes add them after the statement completes. We discuss indexes
+    in [Recipe 21.1](ch21.xhtml#nch-queryperf-queryperf-create-index).
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不会从源表复制索引。如果使用此语法且目标表应具有索引，请在语句完成后添加它们。我们在[第 21.1 节](ch21.xhtml#nch-queryperf-queryperf-create-index)中讨论索引。
+- en: 'MySQL creates the columns in `dst_tbl` based on the name, number, and type
+    of the columns in `src_tbl`. To copy only certain rows, add an appropriate `WHERE`
+    clause. To create an empty table, use a `WHERE` clause that selects no rows:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL根据`src_tbl`中列的名称、数量和类型在`dst_tbl`中创建列。要仅复制特定行，请添加适当的`WHERE`子句。要创建一个空表，请使用选择不返回任何行的`WHERE`子句：
+- en: '[PRE10]'
+  id: totrans-53
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'To copy only some of the columns, name the ones you want in the `SELECT` part
+    of the statement. For example, if `src_tbl` contains columns `a`, `b`, `c`, and
+    `d`, copy just `b` and `d` like this:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要仅复制部分列，请在语句的`SELECT`部分中命名您想要的列。例如，如果`src_tbl`包含列`a`、`b`、`c`和`d`，则像这样仅复制`b`和`d`：
+- en: '[PRE11]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'To create columns in an order different from that in which they appear in the
+    source table, name them in the desired order. If the source table contains columns
+    `a`, `b`, and `c` that should appear in the destination table in the order `c`,
+    `a`, `b`, do this:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要按与源表中出现顺序不同的顺序创建列，请按所需顺序命名它们。如果源表包含应以`c`、`a`、`b`顺序出现在目标表中的列，则执行以下操作：
+- en: '[PRE12]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'To create columns in the destination table in addition to those selected from
+    the source table, provide appropriate column definitions in the `CREATE` `TABLE`
+    part of the statement. The following statement creates `id` as an `AUTO_INCREMENT`
+    column in `dst_tbl` and adds columns `a`, `b`, and `c` from `src_tbl`:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在目标表中创建除源表中选定列之外的列，请在语句的`CREATE TABLE`部分提供适当的列定义。以下语句在`dst_tbl`中创建`id`作为`AUTO_INCREMENT`列，并从`src_tbl`添加列`a`、`b`和`c`：
+- en: '[PRE13]'
+  id: totrans-59
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: The resulting table contains four columns in the order `id`, `a`, `b`, `c`.
+    Defined columns are assigned their default values. This means that `id`, being
+    an `AUTO_INCREMENT` column, is assigned successive sequence numbers starting from
+    1 (see [Recipe 15.1](ch15.xhtml#nch-sequences-seq-create-col)).
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果表以`id`、`a`、`b`、`c`的顺序包含四列。已定义的列被分配它们的默认值。这意味着`id`作为`AUTO_INCREMENT`列，从1开始分配连续的序列号（见[Recipe
+    15.1](ch15.xhtml#nch-sequences-seq-create-col)）。
+- en: 'If you derive a column’s values from an expression, its default name is the
+    expression itself, which can be difficult to work with later. In this case, it’s
+    prudent to give the column a better name by providing an alias (see [Recipe 5.2](ch05.xhtml#nch-select-select-column-alias)).
+    Suppose that `src_tbl` contains invoice information that lists items in each invoice.
+    The following statement generates a summary that lists each invoice named in the
+    table and the total cost of its items, using an alias for the expression:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果从表达式派生列的值，则其默认名称为表达式本身，稍后使用起来可能会很困难。在这种情况下，通过提供别名（见[Recipe 5.2](ch05.xhtml#nch-select-select-column-alias)）来为列命名更好是明智的选择。假设`src_tbl`包含列出每个发票中条目的发票信息。以下语句生成一个摘要，列出表中命名的每个发票及其条目的总费用，并使用表达式的别名：
+- en: '[PRE14]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: '`CREATE` `TABLE` … `SELECT` is extremely convenient, but has some limitations
+    that arise from the fact that the information available from a result set is not
+    as extensive as what you can specify in a `CREATE` `TABLE` statement. For example,
+    MySQL has no idea whether a result set column should be indexed or what its default
+    value is. If it’s important to include this information in the destination table,
+    use the following techniques:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`CREATE TABLE … SELECT`非常方便，但由于结果集提供的信息不如`CREATE TABLE`语句中所能指定的那样全面，因此存在一些限制。例如，MySQL不知道结果集列是否应该建立索引或其默认值是什么。如果在目标表中包含此信息很重要，请使用以下技术：'
+- en: To make the destination table an *exact* copy of the source table, use the cloning
+    technique described in [Recipe 6.1](#nch-tblmgmt-tblmgmt-clone).
+  id: totrans-64
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要使目标表成为源表的*精确*副本，请使用[Recipe 6.1](#nch-tblmgmt-tblmgmt-clone)中描述的克隆技术。
+- en: 'To include indexes in the destination table, specify them explicitly. For example,
+    if `src_tbl` has a `PRIMARY` `KEY` on the `id` column, and a multiple-column index
+    on `state` and `city`, specify them for `dst_tbl` as well:'
+  id: totrans-65
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要在目标表中包含索引，请明确指定它们。例如，如果`src_tbl`在`id`列上有一个`PRIMARY KEY`，以及在`state`和`city`上有一个多列索引，请在`dst_tbl`中也指定它们：
+- en: '[PRE15]'
+  id: totrans-66
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Column attributes such as `AUTO_INCREMENT` and a column’s default value are
+    not copied to the destination table. To preserve these attributes, create the
+    table, then use `ALTER` `TABLE` to apply the appropriate modifications to the
+    column definition. For example, if `src_tbl` has an `id` column that is not only
+    a `PRIMARY` `KEY` but also an `AUTO_INCREMENT` column, copy the table and modify
+    the copy:'
+  id: totrans-67
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不会复制诸如`AUTO_INCREMENT`之类的列属性和列的默认值到目标表。要保留这些属性，请先创建表，然后使用`ALTER TABLE`来修改列定义。例如，如果`src_tbl`有一个`id`列不仅是`PRIMARY
+    KEY`还是`AUTO_INCREMENT`列，请复制表并修改副本：
+- en: '[PRE16]'
+  id: totrans-68
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 6.3 Creating Temporary Tables
+  id: totrans-69
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 6.3 创建临时表
+- en: Problem
+  id: totrans-70
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You need a table only for a short time, after which you want it to disappear
+    automatically.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您仅需要一个表用于短时间，之后希望它自动消失。
+- en: Solution
+  id: totrans-72
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Create a table using the `TEMPORARY` keyword, and let MySQL take care of removing
+    it.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`TEMPORARY`关键字创建表，并让MySQL负责删除。
+- en: Discussion
+  id: totrans-74
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Some operations require a table that exists only temporarily and that should
+    disappear when it’s no longer needed. You can, of course, execute a `DROP` `TABLE`
+    statement explicitly to remove a table when you’re done with it. Another option
+    is to use `CREATE` `TEMPORARY` `TABLE`. This statement is like `CREATE` `TABLE`
+    but creates a transient table that disappears when your session with the server
+    ends, if you haven’t already removed it yourself. This is extremely useful behavior
+    because MySQL drops the table for you automatically; you need not remember to
+    do it. `TEMPORARY` can be used with the usual table-creation methods:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有些操作需要仅临时存在并在不再需要时应消失的表。当然，您可以显式执行`DROP` `TABLE`语句来在完成后移除表。另一个选择是使用`CREATE`
+    `TEMPORARY` `TABLE`。此语句类似于`CREATE` `TABLE`，但创建一个在会话结束时自动消失的临时表，如果您还没有手动移除它的话。这种行为非常有用，因为MySQL会自动删除这个表；您不需要记住去做这件事。`TEMPORARY`可以与通常的表创建方法一起使用：
+- en: 'Create the table from explicit column definitions:'
+  id: totrans-76
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 根据明确的列定义创建表：
+- en: '[PRE17]'
+  id: totrans-77
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'Create the table from an existing table:'
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 根据现有表创建表：
+- en: '[PRE18]'
+  id: totrans-79
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Create the table on the fly from a result set:'
+  id: totrans-80
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 根据结果集即时创建表：
+- en: '[PRE19]'
+  id: totrans-81
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: Temporary tables are session-specific, so multiple clients can each create a
+    temporary table having the same name without interfering with each other. This
+    makes it easier to write applications that use transient tables because you need
+    not ensure that the tables have unique names for each client. (For further discussion
+    of table-naming issues, see [Recipe 6.4](#nch-tblmgmt-tblmgmt-unique-name).)
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 临时表是会话特定的，因此多个客户端可以分别创建同名的临时表而不会互相干扰。这使得编写使用临时表的应用程序更加容易，因为您不需要确保每个客户端的表都具有唯一的名称。（有关表命名问题的进一步讨论，请参见[Recipe
+    6.4](#nch-tblmgmt-tblmgmt-unique-name)。）
+- en: 'A temporary table can have the same name as a permanent table. In this case,
+    the temporary table <q>hides</q> the permanent table for the duration of its existence,
+    which can be useful for making a copy of a table that you can modify without affecting
+    the original by mistake. The `DELETE` statement in the following example removes
+    rows from a temporary `mail` table, leaving the original permanent table unaffected:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 临时表可以与永久表同名。在这种情况下，临时表<q>隐藏</q>了永久表，只要存在，就可以使其复制的表，并且可以在不意外影响原表的情况下进行修改。在以下示例中的`DELETE`语句从临时表`mail`中删除行，而不影响原始永久表：
+- en: '[PRE20]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'Although temporary tables created with `CREATE` `TEMPORARY` `TABLE` have the
+    benefits just discussed, keep the following caveats in mind:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然使用`CREATE` `TEMPORARY` `TABLE`创建的临时表具有刚讨论的好处，但请记住以下注意事项：
+- en: To reuse a temporary table within a given session, you must still drop it explicitly
+    before re-creating it. Attempting to create a second temporary table with the
+    same name results in an error.
+  id: totrans-86
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要在给定会话中重新使用临时表，您必须在重新创建之前显式删除它。尝试使用相同名称创建第二个临时表将导致错误。
+- en: If you modify a temporary table that <q>hides</q> a permanent table with the
+    same name, be sure to test for errors resulting from dropped connections if you
+    use a programming interface that has reconnect capability enabled. If a client
+    program automatically reconnects after detecting a dropped connection, modifications
+    affect the permanent table after the reconnect, not the temporary table.
+  id: totrans-87
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果您修改一个临时表<q>隐藏</q>了同名永久表，请务必测试由于已断开连接导致的错误，特别是使用具有重新连接功能的编程接口时。如果客户端程序在检测到断开连接后自动重新连接，则在重新连接后修改将影响永久表，而不是临时表。
+- en: 'Some APIs support persistent connections or connection pools. These prevent
+    temporary tables from being dropped as you expect when your script ends because
+    the connection remains open for reuse by other scripts. Your script has no control
+    over when the connection closes. This means it can be prudent to execute the following
+    statement prior to creating a temporary table, just in case it’s still in existence
+    from a previous execution of the script:'
+  id: totrans-88
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一些API支持持久连接或连接池。这些功能会阻止临时表在脚本结束时按照您的期望被删除，因为连接仍然保持开放以供其他脚本重用。您的脚本无法控制连接何时关闭。这意味着最好在创建临时表之前执行以下语句，以防它仍然存在于脚本的前一次执行中：
+- en: '[PRE21]'
+  id: totrans-89
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: The `TEMPORARY` keyword is useful here if the temporary table has already been
+    dropped, to avoid dropping any permanent table that has the same name.
+  id: totrans-90
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`TEMPORARY` 关键字在这里很有用，如果临时表已经被删除，可以避免删除任何与其同名的永久表。'
+- en: 6.4 Generating Unique Table Names
+  id: totrans-91
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 6.4 生成唯一表名
+- en: Problem
+  id: totrans-92
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You need to create a table with a name guaranteed not to exist.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要创建一个表，其名称保证不存在。
+- en: Solution
+  id: totrans-94
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Generate a value that is unique to your client program and incorporate it into
+    the table name.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成一个对您的客户端程序唯一的值，并将其合并到表名中。
+- en: Discussion
+  id: totrans-96
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL is a multiple-client database server, so if a given script that creates
+    a transient table might be invoked by several clients simultaneously, take care
+    that multiple invocations of the script do not fight over the same table name.
+    If the script creates tables using `CREATE` `TEMPORARY` `TABLE`, there is no problem
+    because different clients can create temporary tables having the same name without
+    clashing.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 是一个多客户端数据库服务器，因此如果一个创建临时表的脚本可能同时被多个客户端调用，请注意多个脚本实例不要争夺相同的表名。如果脚本使用 `CREATE
+    TEMPORARY TABLE` 创建表，那么不会有问题，因为不同客户端可以创建同名的临时表而不会发生冲突。
+- en: If you cannot or do not want to use a `TEMPORARY` table, make sure that each
+    invocation of the script creates a uniquely named table and drops the table when
+    it is no longer needed. To accomplish this, incorporate into the name some value
+    guaranteed to be unique per invocation. A timestamp won’t work if it’s possible
+    for two instances of a script to be invoked within the timestamp resolution. A
+    random number may be better, but random numbers only reduce the possibility of
+    name clashes, not eliminate it. Values, generated bu function `UUID` are a better
+    source for unique values. Function `UUID` returns a Universal Unique Identifier
+    (UUID) generated according to [RFC 4122, “A Universally Unique IDentifier (UUID)
+    URN Namespace](http://www.ietf.org/rfc/rfc4122.txt) and designed to produce 128
+    bits string that is unique in space and time. While the value generated by this
+    function, is not necessary unique, it is enough to generate unique temporary table
+    name.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您不能或不想使用 `TEMPORARY` 表，请确保脚本的每次调用都创建一个唯一命名的表，并在不再需要时将其删除。为了实现这一点，将一些保证在每次调用中唯一的值合并到名称中。如果可能在时间戳分辨率内调用两个脚本实例，则时间戳将不起作用。随机数可能更好，但随机数只能减少名称冲突的可能性，而不能消除它。由函数
+    `UUID` 生成的值是唯一值的更好来源。函数 `UUID` 根据[RFC 4122，“通用唯一标识符 (UUID) URN 命名空间”](http://www.ietf.org/rfc/rfc4122.txt)生成一个
+    128 位字符串，这个字符串在空间和时间上都是唯一的。虽然此函数生成的值不一定是唯一的，但足以生成唯一的临时表名。
+- en: 'It’s possible to incorporate a `UUID` into a table name within SQL by using
+    prepared statements. The following example illustrates this, referring to the
+    table name in the `CREATE` `TABLE` statement and a precautionary `DROP` `TABLE`
+    statement:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以通过使用准备好的语句将 `UUID` 合并到 SQL 中的表名中来将 `UUID` 集成到表名中。以下示例说明了这一点，在 `CREATE TABLE`
+    语句中引用表名和预防性 `DROP TABLE` 语句中引用表名：
+- en: '[PRE22]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 6.5 Checking or Changing a Table Storage Engine
+  id: totrans-101
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 6.5 检查或更改表的存储引擎
+- en: Problem
+  id: totrans-102
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to check which storage engine a table uses so that you can determine
+    what engine capabilities are applicable. Or you need to change a table’s storage
+    engine because you realize that the capabilities of another engine are more suitable
+    for the way you use the table.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要检查表使用的存储引擎，以便确定哪些引擎功能适用。或者您需要更改表的存储引擎，因为意识到另一个引擎的功能更适合您使用表的方式。
+- en: Solution
+  id: totrans-104
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: To determine a table’s storage engine, you can use any of several statements.
+    To change the table’s engine, use `ALTER` `TABLE` with an `ENGINE` clause.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定表的存储引擎，可以使用几种语句之一。要更改表的引擎，请使用带有 `ENGINE` 子句的 `ALTER TABLE`。
+- en: Discussion
+  id: totrans-106
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL supports multiple storage engines, which have differing characteristics.
+    For example, the InnoDB engine supports transactions, whereas Memory does not.
+    If you need to know whether a table supports transactions, check which storage
+    engine it uses. If the table’s engine does not support transactions, you can convert
+    the table to use a transaction-capable engine.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 支持多个存储引擎，这些引擎具有不同的特性。例如，InnoDB 引擎支持事务，而 Memory 引擎不支持。如果需要知道表是否支持事务，请检查它使用的存储引擎。如果表的引擎不支持事务，可以将表转换为使用支持事务的引擎。
+- en: 'To determine the current engine for a table, check `INFORMATION_SCHEMA` or
+    use the `SHOW` `TABLE` `STATUS` or `SHOW` `CREATE` `TABLE` statement. For the
+    `mail` table, obtain engine information as follows:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定表格的当前引擎，请检查`INFORMATION_SCHEMA`或使用`SHOW` `TABLE` `STATUS`或`SHOW` `CREATE`
+    `TABLE`语句。对于`mail`表格，获取引擎信息如下：
+- en: '[PRE23]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'To change the storage engine for a table, use `ALTER` `TABLE` with an `ENGINE`
+    specifier. For example, to convert the `mail` table to use the Memory storage
+    engine, use this statement:'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要更改表格的存储引擎，请使用带有`ENGINE`说明符的`ALTER` `TABLE`。例如，要将`mail`表格转换为使用Memory存储引擎，请使用以下语句：
+- en: '[PRE24]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: Be aware that converting a large table to a different storage engine might take
+    a long time and be expensive in terms of CPU and I/O activity.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，将大表格转换为不同的存储引擎可能需要很长时间，并且在CPU和I/O活动方面可能很昂贵。
+- en: To determine which storage engines your MySQL server supports, check the output
+    from the `SHOW` `ENGINES` statement or query the `INFORMATION_SCHEMA` `ENGINES`
+    table.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定您的 MySQL 服务器支持哪些存储引擎，请检查`SHOW` `ENGINES`语句的输出或查询`INFORMATION_SCHEMA` `ENGINES`表。
+- en: 6.6 Copying a Table Using mysqldump
+  id: totrans-114
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 6.6 使用 mysqldump 复制表格
+- en: Problem
+  id: totrans-115
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to copy a table or tables, either among the databases managed by a
+    MySQL server, or from one server to another.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望复制一个或多个表格，无论是在 MySQL 服务器管理的数据库之间，还是从一个服务器复制到另一个。
+- en: Solution
+  id: totrans-117
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the *mysqldump* program.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用*mysqldump*程序。
+- en: Discussion
+  id: totrans-119
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'The *mysqldump* program makes a backup file that can be reloaded to re-create
+    the original table or tables:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysqldump*程序创建一个备份文件，可以重新加载以重新创建原始表格或表格：'
+- en: '[PRE25]'
+  id: totrans-121
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'The output file *mail.sql* consists of a `CREATE` `TABLE` statement to create
+    the `mail` table and a set of `INSERT` statements to insert its rows. You can
+    reload the file to re-create the table should the original be lost:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出文件*mail.sql*包括一个`CREATE` `TABLE`语句来创建`mail`表格和一组`INSERT`语句来插入其行。如果原始表格丢失，您可以重新加载文件来重新创建表格：
+- en: '[PRE26]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: This method also makes it easy to deal with any triggers the table has. By default,
+    *mysqldump* writes the triggers to the dump file, so reloading the file copies
+    the triggers along with the table with no special handling.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此方法还可轻松处理表格的任何触发器。默认情况下，*mysqldump*将触发器写入转储文件，因此重新加载文件会将触发器与表格一起复制，无需特殊处理。
+- en: By default *mysqldump* includes statement `DROP TABLE IF EXISTS` before `CREATE
+    TABLE`. If you do not want to drop the table when loading the dump and prefer
+    the operation to fail instead run *mysqldump* with option `--skip-add-drop-table`.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，*mysqldump*在`CREATE TABLE`之前包括`DROP TABLE IF EXISTS`语句。如果您不希望在加载转储时删除表格，并且宁愿操作失败，请使用选项`--skip-add-drop-table`运行*mysqldump*。
+- en: In addition to restoring tables, *mysqldump* can be used to make copies of them,
+    by reloading the output into a different database. (If the destination database
+    does not exist, create it first.) The following examples show some useful table-copying
+    commands.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了恢复表格外，*mysqldump* 还可用于通过将输出重新加载到不同的数据库来复制它们。（如果目标数据库不存在，请先创建。）以下示例展示了一些有用的表格复制命令。
+- en: Copying tables within a single MySQL server
+  id: totrans-127
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 复制单个 MySQL 服务器内的表格
+- en: 'Copy a single table to a different database:'
+  id: totrans-128
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将单个表格复制到不同的数据库中：
+- en: '[PRE27]'
+  id: totrans-129
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: To dump multiple tables, name them all following the database name argument.
+  id: totrans-130
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 要转储多个表格，请在数据库名称参数后命名它们。
+- en: 'Copy all tables in a database to a different database:'
+  id: totrans-131
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 复制数据库中的所有表格到另一个数据库：
+- en: '[PRE28]'
+  id: totrans-132
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: When you name no tables after the database name, *mysqldump* dumps them all.
+    To also include stored routines and events, add the `--routines` and `--events`
+    options to the *mysqldump* command. (There is also a `--triggers` option, but
+    it’s unneeded because, as mentioned previously, *mysqldump* dumps triggers with
+    their associated tables by default.)
+  id: totrans-133
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 当您在数据库名称后没有指定表格名称时，*mysqldump* 会将它们全部转储。要同时包括存储过程和事件，请在 *mysqldump* 命令中添加`--routines`和`--events`选项。（虽然还有`--triggers`选项，但因为*mysqldump*默认将触发器与其关联的表格一起转储，所以不需要。）
+- en: 'Copy a table, using a different name for the copy:'
+  id: totrans-134
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 复制表格，并使用不同的名称进行复制：
+- en: 'Dump the table:'
+  id: totrans-135
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 转储表格：
+- en: '[PRE29]'
+  id: totrans-136
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'Reload the table into a different database that does *not* contain a table
+    with that name:'
+  id: totrans-137
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将表格重新加载到不包含具有该名称的表格的不同数据库中：
+- en: '[PRE30]'
+  id: totrans-138
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'Rename the table:'
+  id: totrans-139
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 重命名表格：
+- en: '[PRE31]'
+  id: totrans-140
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'Or, to move the table into another database at the same time, qualify the new
+    name with the database name:'
+  id: totrans-141
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 或者，同时将表格移动到另一个数据库中，请使用数据库名称限定新名称：
+- en: '[PRE32]'
+  id: totrans-142
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'To perform a table-copying operation without an intermediary file, use a pipe
+    to connect the *mysqldump* and *mysql* commands:'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 若要在没有中介文件的情况下执行表格复制操作，请使用管道连接*mysqldump*和*mysql*命令：
+- en: '[PRE33]'
+  id: totrans-144
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: Tip
+  id: totrans-145
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: You may consider using newer tool *mysqlpump* that works similarly to *mysqldump*,
+    but supports smarter filters and parallel processing. We discuss *mysqlpump* in
+    [Recipe 13.13](ch13.xhtml#nch-xfer-xfer-export-sql).
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以考虑使用较新的工具 *mysqlpump*，其工作方式类似于 *mysqldump*，但支持更智能的过滤器和并行处理。我们在 [Recipe 13.13](ch13.xhtml#nch-xfer-xfer-export-sql)
+    中讨论了 *mysqlpump*。
+- en: Copying tables between MySQL servers
+  id: totrans-147
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 在 MySQL 服务器之间复制表格
+- en: 'The preceding commands use *mysqldump* to copy tables among the databases managed
+    by a single MySQL server. Output from *mysqldump* can also be used to copy tables
+    from one server to another. Suppose that you want to copy the `mail` table from
+    the `cookbook` database on the local host to the `other_db` database on the host
+    *other-host.example.com*. One way to do this is to dump the output into a file:'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前述命令使用 *mysqldump* 在由单个 MySQL 服务器管理的数据库之间复制表格。*mysqldump* 的输出也可以用于从一个服务器复制表格到另一个服务器。假设您想要从本地主机的
+    `cookbook` 数据库复制 `mail` 表格到主机 *other-host.example.com* 上的 `other_db` 数据库。一种方法是将输出转储到一个文件：
+- en: '[PRE34]'
+  id: totrans-149
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'Then copy *mail.sql* to *other-host.example.com*, and run the following command
+    there to load the table into that MySQL server’s `other_db` database:'
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后将 *mail.sql* 复制到 *other-host.example.com*，在那里运行以下命令将表格加载到该 MySQL 服务器的 `other_db`
+    数据库中：
+- en: '[PRE35]'
+  id: totrans-151
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'To accomplish this without an intermediary file, use a pipe to send the output
+    of *mysqldump* directly over the network to the remote MySQL server. If you can
+    connect to both servers from your local host, use this command:'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要实现此目标而无需中间文件，请使用管道将 *mysqldump* 的输出直接通过网络发送到远程 MySQL 服务器。如果您可以从本地主机连接到两台服务器，请使用以下命令：
+- en: '[PRE36]'
+  id: totrans-153
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: The *mysqldump* half of the command connects to the local server and writes
+    the dump output to the pipe. The *mysql* half of the command connects to the remote
+    MySQL server on *other-host.example.com*. It reads the pipe for input and sends
+    each statement to the *other-host.example.com* server.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysqldump* 命令的前半部分连接到本地服务器并将转储输出写入管道。*mysql* 命令的后半部分连接到远程 MySQL 服务器 *other-host.example.com*。它从管道读取输入并将每个语句发送到
+    *other-host.example.com* 服务器。'
+- en: 'If you cannot connect directly to the remote server using *mysql* from your
+    local host, send the dump output into a pipe that uses *ssh* to invoke *mysql*
+    remotely on *other-host.example.com*:'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果无法直接使用本地主机上的 *mysql* 连接到远程服务器，请将转储输出发送到使用 *ssh* 在 *other-host.example.com*
+    上远程调用 *mysql* 的管道中：
+- en: '[PRE37]'
+  id: totrans-156
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: '*ssh* connects to *other-host.example.com* and launches *mysql* there. It then
+    reads the *mysqldump* output from the pipe and passes it to the remote *mysql*
+    process. *ssh* can be useful to send a dump over the network to a machine that
+    has the MySQL port blocked by a firewall but that permits connections on the SSH
+    port.'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*ssh* 连接到 *other-host.example.com* 并在那里启动 *mysql*。然后，它从管道中读取 *mysqldump* 的输出并将其传递给远程的
+    *mysql* 进程。*ssh* 可以用来将转储通过网络发送到一个因防火墙而阻止 MySQL 端口连接但允许 SSH 端口连接的机器。'
+- en: Regarding which table or tables to copy, similar principles apply as for local
+    copies. To copy multiple tables over the network, name them all following the
+    database argument of the *mysqldump* command. To copy an entire database, don’t
+    specify any table names after the database name; *mysqldump* dumps all its tables.
+    To copy all databases that reside on your MySQL instance specify option `--all-databases`.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于要复制哪些表格，适用于本地复制的类似原则同样适用。要通过网络复制多个表格，请在 *mysqldump* 命令的数据库参数后命名它们。要复制整个数据库，请在数据库名称后不指定任何表格名称；*mysqldump*
+    会转储其所有表格。要复制驻留在您的 MySQL 实例上的所有数据库，请指定选项 `--all-databases`。
+- en: 6.7 Copying an InnoDB Table Using Transportable Tablespaces
+  id: totrans-159
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 6.7 使用可传输表空间复制 InnoDB 表格
+- en: Problem
+  id: totrans-160
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to copy an InnoDB table, but the table is too big, and dumping data
+    from it in human-readable format takes long time. Reload is not fast either.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 想要复制一个 InnoDB 表，但表太大了，以人类可读格式导出数据需要很长时间。重载也不够快。
+- en: Solution
+  id: totrans-162
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use transportable tablespaces.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用可传输表空间。
+- en: Discussion
+  id: totrans-164
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Tools like *mysqldump* or *mysqlpump* are good when you work with comparatively
+    small table or if you want to examine resulting SQL dump yourself before applying
+    it to the target server. However, copying in such a way a table that occupies
+    few gigabytes on the disk will take high amount of time. It will also create additional
+    load on the server. To make things worse protection mechanisms will affect other
+    connections that use the same table.
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当处理较小的表格或者想要在将结果的 SQL 转储应用到目标服务器之前自行检查时，像 *mysqldump* 或 *mysqlpump* 这样的工具非常有效。然而，对于在磁盘上占据几十
+    GB 的表进行复制，将需要大量的时间。这也会给服务器增加额外的负载。更糟糕的是，保护机制会影响使用相同表的其他连接。
+- en: To resolve such an issue binary backup and restore methods exist. These methods
+    work on the binary table files without doing any additional data manipulations,
+    therefore performance is the same as if you run command *cp* on Linux or *copy*
+    on Windows.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要解决这样的问题，存在二进制备份和恢复方法。这些方法在二进制表文件上工作，而不进行任何额外的数据操作，因此性能与在 Linux 上运行 *cp* 命令或在
+    Windows 上运行 *copy* 命令时相同。
+- en: As of version 8.0 MySQL stores table definitions in the data dictionary while
+    data is stored in the separate files. Format and name of such files depend from
+    the storage engine. In case of InnoDB they are individual, general and system
+    tablespaces. Individual tablespace files store data for each table individually
+    and could be used for the method we describe in this section. If your tables are
+    stored in the system or general tablespaces you first need to convert them to
+    use individual tablespace format.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从版本 8.0 开始，MySQL 将表定义存储在数据字典中，而数据存储在单独的文件中。这些文件的格式和名称取决于存储引擎。对于 InnoDB，它们是单独的、通用的和系统表空间。单独的表空间文件为每个表单独存储数据，可以用于我们在本节中描述的方法。如果您的表存储在系统或通用表空间中，则首先需要将它们转换为使用单独表空间格式。
+- en: '[PRE38]'
+  id: totrans-168
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'To find out if your table resides in the system or general tablespaces, query
+    table `INNODB_TABLES` in the Information Schema:'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看您的表是否位于系统或通用表空间中，请在信息模式中查询表 `INNODB_TABLES`：
+- en: '[PRE39]'
+  id: totrans-170
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'Once you are ready to copy the tablespace login into the *mysql* client and
+    execute:'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦准备好复制表空间，请登录到 *mysql* 客户端并执行：
+- en: '[PRE40]'
+  id: totrans-172
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: This command will prepare tablespace file for being copied and additionally
+    create configuation file with extension `.cfg` that will contain table metadata.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此命令将准备表空间文件以供复制，并额外创建扩展名为 `.cfg` 的配置文件，其中包含表元数据。
+- en: Keep the MySQL client open and in the another terminal window copy the tablespace
+    and configuation files into the desired location.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 保持 MySQL 客户端打开，在另一个终端窗口中将表空间和配置文件复制到所需位置。
+- en: '[PRE41]'
+  id: totrans-175
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: Once copy finishes unlock the table.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制完成后解锁表格。
+- en: '[PRE42]'
+  id: totrans-177
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: Now you can import the tablespace into remote server or into a different database
+    on the same local server.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在您可以将表空间导入到远程服务器或同一本地服务器上的不同数据库中。
+- en: First step would be to create a table with the exactly same definition as the
+    original one. You can find the table definition if run command *SHOW CREATE TABLE*.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一步是创建与原始表完全相同定义的表。您可以通过运行 *SHOW CREATE TABLE* 命令找到表定义。
+- en: '[PRE43]'
+  id: totrans-180
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: Once you obtained it connect to the destination database and create a table.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦获取它，请连接到目标数据库并创建表格。
+- en: '[PRE44]limbs[PRE45]thing[PRE46]legs[PRE47]arms[PRE48]'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[PRE44]四肢[PRE45]东西[PRE46]腿[PRE47]臂[PRE48]'
+- en: 'After new empty table is created discard its tablespace:'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建新的空表后，丢弃其表空间：
+- en: '[PRE49]'
+  id: totrans-184
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: Warning
+  id: totrans-185
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: '`DISCARD TABLESPACE` removes tablespace files. Be very carefull with this command.
+    If you make a typo and discard a tablespace for the wrong table it could not be
+    restored.'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DISCARD TABLESPACE` 删除表空间文件。对于此命令要非常小心。如果输入错误并丢弃了错误表的表空间，则无法恢复。'
+- en: After tablespace discarded copy table files into the new database directory.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在表空间被丢弃后，将表文件复制到新的数据库目录中。
+- en: '[PRE50]'
+  id: totrans-188
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: Then import the tablespace.
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后导入表空间。
+- en: '[PRE51]'
+  id: totrans-190
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: See Also
+  id: totrans-191
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: For additional information about exchanging tablespace files between MySQL databases
+    and servers, see [Importing InnoDB Tables](https://dev.mysql.com/doc/refman/8.0/en/innodb-table-import.html).
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于在 MySQL 数据库和服务器之间交换表空间文件的更多信息，请参阅 [导入 InnoDB 表](https://dev.mysql.com/doc/refman/8.0/en/innodb-table-import.html)。
+- en: 6.8 Copying a MyISAM Table Using an sdi File
+  id: totrans-193
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 6.8 使用 sdi 文件复制 MyISAM 表
+- en: Problem
+  id: totrans-194
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to copy a large MyISAM table on MySQL 8.0.
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想在 MySQL 8.0 上复制一个大的 MyISAM 表。
+- en: Solution
+  id: totrans-196
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use `IMPORT TABLE` command.
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `IMPORT TABLE` 命令。
+- en: Discussion
+  id: totrans-198
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Tables which use MyISAM storage engine support import of the raw table files
+    with help of the *IMPORT TABLE* statement. To export MyISAM tables without risk
+    to corrupt data during migration open a MySQL connection first and flush the table
+    files to the disk with read lock.
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 MyISAM 存储引擎的表支持使用 *IMPORT TABLE* 语句导入原始表文件。为了在迁移期间无风险地导出 MyISAM 表而不会损坏数据，请首先打开
+    MySQL 连接，并使用读锁定刷新表文件到磁盘。
+- en: '[PRE52]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: Then copy table data, index and metadata files into the backup location.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后复制表数据、索引和元数据文件到备份位置。
+- en: '[PRE53]'
+  id: totrans-202
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: Unlock the original table.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 解锁原始表格。
+- en: Table metadata file with the extension `.sdi` has random sequence of digits
+    in its name, therefore use *sudo* to copy it to allow shell process to expand
+    the file glob pattern.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 元数据文件的扩展名为 `.sdi`，其名称中有随机的数字序列，因此使用 *sudo* 复制它以允许 shell 进程扩展文件全局模式。
+- en: To copy MyISAM table into the desired destination put the table metadata file
+    with extension `sdi` into the directory, specified by the option `--secure-file-priv`,
+    or into any directory, readable by the target MySQL server if such an option is
+    not set. Then copy index and data file into the target database directory.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将MyISAM表格复制到所需目的地，请将带有扩展名`sdi`的表格元数据文件放入由选项`--secure-file-priv`指定的目录，或者放入任何目录，只要目标MySQL服务器可读取，如果未设置此选项。然后将索引和数据文件复制到目标数据库目录。
+- en: '[PRE54]'
+  id: totrans-206
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: Then connect to the database and import the table.
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后连接到数据库并导入表格。
+- en: '[PRE55]'
+  id: totrans-208
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: If you are copying the table into a database with different name you need to
+    edit the `sdi` file manually and replace value of the `schema_ref` with the target
+    database name.
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果要将表格复制到具有不同名称的数据库中，您需要手动编辑`sdi`文件，并将`schema_ref`的值替换为目标数据库名称。

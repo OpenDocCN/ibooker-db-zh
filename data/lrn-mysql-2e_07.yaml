@@ -1,0 +1,2445 @@
+- en: Chapter 6\. Transactions and Locking
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第六章。事务和锁定
+- en: Using locks for transaction isolation is a pillar of SQL databases—but this
+    is also an area that can cause a lot of confusion, especially for newcomers. Developers
+    often think that locking is a database issue and belongs to the DBA realm. The
+    DBAs, in turn, believe this is an application issue and consequently the responsibility
+    of the developers. This chapter will clarify what happens in situations where
+    different processes are trying to write in the same row at the same time. It will
+    also shed light on the behavior of read queries inside a transaction with the
+    different types of isolation levels available in MySQL.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用锁定进行事务隔离是SQL数据库的支柱——但这也是一个可能会导致很多混淆的领域，特别是对于新手来说。开发人员经常认为锁定是数据库问题，属于DBA领域。而DBA则认为这是应用程序问题，因此属于开发人员的责任。本章将澄清在不同进程尝试同时写入同一行时发生的情况。它还将阐明在MySQL中不同隔离级别下事务中读取查询的行为。
+- en: First, let’s define the key concepts. A *transaction* is an operation performed
+    (using one or more SQL statements) on a database as a single logical unit of work.
+    All the SQL statements’ modifications in a transaction are either committed (applied
+    to the database) or rolled back (undone from the database) as a unit, never only
+    partially. A database transaction must be atomic, consistent, isolated, and durable
+    (the famous acronym *ACID*).
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，让我们定义关键概念。*事务* 是对数据库执行的一个（或多个）SQL语句作为单个逻辑工作单元的操作。事务中所有SQL语句的修改要么全部提交（应用于数据库），要么全部回滚（从数据库撤销），永远不会部分提交。数据库事务必须具有原子性、一致性、隔离性和持久性（著名的缩写
+    *ACID*）。
+- en: '*Locks* are mechanisms used to ensure the integrity of the data stored in the
+    database while applications and users are interacting with it. We will see that
+    there are different types of lock, and some are more restrictive than others.'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*锁* 是用于确保与数据库中存储的数据进行交互时应用程序和用户的数据完整性的机制。我们将看到有不同类型的锁，有些比其他的更为限制性。'
+- en: Databases would not need transactions and locks if requests were issued serially
+    and processed in order, one at a time (a `SELECT`, then an `INSERT`, then an `UPDATE`,
+    and so on). We illustrate this behavior in [Figure 6-1](#FIG-SQL-PROGRESSION).
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果请求按顺序串行发出并逐个处理（一个 `SELECT`，然后一个 `INSERT`，然后一个 `UPDATE`等），数据库将不需要事务和锁定。我们在[图6-1](#FIG-SQL-PROGRESSION)中展示了这种行为。
+- en: However, the reality (fortunately!) is that MySQL can handle thousands of requests
+    per second and process them in parallel, rather than serially. This chapter discusses
+    what MySQL does to achieve this parallelism, for example, when requests to `SELECT`
+    and `UPDATE` in the same row arrive simultaneously, or one arrives while the other
+    is still executing. [Figure 6-2](#FIG-SQL-PARALLEL-PROGRESSION) shows what this
+    looks like.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，现实情况（幸运的是！）是MySQL可以处理每秒数千个请求并并行处理它们，而不是按顺序逐个处理。本章讨论了MySQL为实现这种并行性所做的工作，例如当对同一行进行
+    `SELECT` 和 `UPDATE` 请求同时到达，或者一个在执行时另一个到达时的情况。[图6-2](#FIG-SQL-PARALLEL-PROGRESSION)展示了这种情况的外观。
+- en: '![lm2e 0601](Images/lm2e_0601.png)'
+  id: totrans-6
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 0601](Images/lm2e_0601.png)'
+- en: Figure 6-1\. Serialized execution of SQL statements
+  id: totrans-7
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图6-1。SQL语句的串行执行
+- en: '![lm2e 0602](Images/lm2e_0602.png)'
+  id: totrans-8
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 0602](Images/lm2e_0602.png)'
+- en: Figure 6-2\. Parallel execution of SQL statements
+  id: totrans-9
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图6-2。SQL语句的并行执行
+- en: For this chapter, we are particularly interested in how MySQL *isolates* the
+    transactions (the *I* of ACID). We will show you common situations where locking
+    occurs, investigate them, and discuss the MySQL parameters that control how much
+    time a transaction can wait for a lock to be granted.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们特别关注MySQL如何 *隔离* 事务（ACID的 *I*）。我们将展示常见的锁定发生场景，进行调查，并讨论控制事务等待锁定授予的MySQL参数。
+- en: Isolation Levels
+  id: totrans-11
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 隔离级别
+- en: The *isolation level* is the setting that balances performance, reliability,
+    consistency, and reproducibility of results when multiple transactions are making
+    changes and performing queries simultaneously.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*隔离级别* 是在多个事务同时进行更改和执行查询时，平衡性能、可靠性、一致性和结果可重现性的设置。'
+- en: The SQL:1992 standard defines four classic isolation levels, and MySQL supports
+    all of them. InnoDB supports each of the transaction isolation levels described
+    here using different locking strategies. A user can also change the isolation
+    level for a single session or all subsequent connections with the statement `SET
+    [GLOBAL/SESSION] TRANSACTION`.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 标准 SQL:1992 定义了四种经典的隔离级别，并且 MySQL 支持所有这些隔离级别。InnoDB 使用不同的锁定策略支持这里描述的每个事务隔离级别。用户也可以使用语句
+    `SET [GLOBAL/SESSION] TRANSACTION` 来更改单个会话或所有后续连接的隔离级别。
+- en: 'We can enforce a high degree of consistency with the default `REPEATABLE READ`
+    isolation level for operations on data where ACID compliance is essential, and
+    we can relax the consistency rules with `READ COMMITTED` or even `READ UNCOMMITTED`
+    isolation in situations such as bulk reporting where precise consistency and repeatable
+    results are less important than minimizing the amount of overhead for locking.
+    `SERIALIZABLE` isolation enforces even stricter rules than `REPEATABLE READ` and
+    is used mainly for special situations such as troubleshooting. Before diving into
+    the details, let’s take a look at some more terminology:'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于数据操作中 ACID 合规性至关重要的情况，我们可以通过默认的 `REPEATABLE READ` 隔离级别来强制实现高度一致性；在诸如大规模报告这类场景中，可以通过
+    `READ COMMITTED` 或甚至 `READ UNCOMMITTED` 隔离级别放宽一致性规则，此时精确一致性和可重复的结果比锁定的开销更不重要。`SERIALIZABLE`
+    隔离级别比 `REPEATABLE READ` 更严格，主要用于故障排除等特殊情况。在深入了解细节之前，让我们看看一些更多的术语：
+- en: Dirty reads
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 脏读
+- en: These occur when a transaction is able to read data from a row that has been
+    modified by another transaction that has not executed a `COMMIT` yet. If the transaction
+    that made the modifications gets rolled back, the other one will have seen incorrect
+    results that do not reflect the state of the database. Data integrity is compromised.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当一个事务能够从另一个尚未执行 `COMMIT` 的事务修改的行中读取数据时，会发生这种情况。如果进行修改的事务被回滚，那么另一个事务将看到不正确的结果，这些结果不反映数据库的状态。数据完整性受到损害。
+- en: Non-repeatable reads
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不可重复读取
+- en: These occur when two queries in a transaction execute a `SELECT` and the values
+    returned differ between the readings because of changes made by another transaction
+    in the interim (if you read a row at time T1 and then try to read it again at
+    time T2, the row may have been updated). The difference from a dirty read is that
+    in this case there is a `COMMIT`. The initial `SELECT` query is not repeatable
+    because it returns different values when issued the second time.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当事务中的两个查询执行 `SELECT` 时，如果由于另一个事务的更改导致返回的值不同，则会发生这种情况（如果您在时间 T1 读取一行，然后在时间 T2
+    再次尝试读取它，则该行可能已经被更新）。与脏读的区别在于，在这种情况下存在 `COMMIT`。初始的 `SELECT` 查询是不可重复的，因为第二次执行时返回的值不同。
+- en: Phantom reads
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 幻读
+- en: These occur when a transaction is running, and another transaction adds rows
+    to or deletes them from the records being read (again, in this case there is a
+    `COMMIT` by the transaction modifying the data). This means that if the same query
+    is executed again in the same transaction, it will return a different number of
+    rows. Phantom reads can occur when there are no range locks guaranteeing the consistency
+    of the data.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当一个事务正在运行时，另一个事务向正在读取的记录添加行或删除行时会发生这种情况（同样，在这种情况下，修改数据的事务会进行 `COMMIT`）。这意味着如果在同一事务中再次执行相同的查询，它将返回不同数量的行。如果没有范围锁来保证数据的一致性，则可能会发生幻读。
+- en: With those concepts in mind, let’s take a closer look at the different isolation
+    levels in MySQL.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有了这些概念，让我们更仔细地看看 MySQL 中不同的隔离级别。
+- en: REPEATABLE READ
+  id: totrans-22
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: REPEATABLE READ
+- en: '`REPEATABLE READ` is the default isolation level for InnoDB. It ensures consistent
+    reads within the same transaction—that is, that all queries within the transaction
+    will see the same snapshot of the data, established by the first read. In this
+    mode, InnoDB locks the index range scanned, using gap locks or next-key locks
+    (described in [“Locking”](#LOCKING)) to block insertions by other sessions into
+    any gaps within that range.'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`REPEATABLE READ` 是 InnoDB 的默认隔离级别。它确保在同一事务中进行一致的读取——也就是说，事务中的所有查询将看到由第一次读取建立的数据快照。在这种模式下，InnoDB
+    锁定索引范围扫描，使用间隙锁或下一键锁（在[“锁定”](#LOCKING)中描述）来阻止其他会话向该范围内的任何间隙插入。'
+- en: 'For example, suppose that in one session (session 1), we execute the following
+    `SELECT`:'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设在一个会话（会话 1）中，我们执行以下 `SELECT`：
+- en: '[PRE0]'
+  id: totrans-25
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: '[PRE1]'
+  id: totrans-26
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'And in another session (session 2), we update the name in the second row:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并在另一个会话（会话 2）中，我们更新第二行中的名称：
+- en: '[PRE2]'
+  id: totrans-28
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: '[PRE3]'
+  id: totrans-29
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: '[PRE4]'
+  id: totrans-30
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: '[PRE5]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'We can confirm the change in session 2:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以在会话 2 中确认变更：
+- en: '[PRE6]'
+  id: totrans-33
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: '[PRE7]'
+  id: totrans-34
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'But session 1 still shows the old value from its original snapshot of the data:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是会话 1 仍然显示其对数据的原始快照中的旧值：
+- en: '[PRE8]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: '[PRE9]'
+  id: totrans-37
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: With the `REPEATABLE READ` isolation level, there are thus no dirty reads and
+    or non-repeatable reads. Each transaction reads the snapshot established by the
+    first read.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`可重复读`隔离级别，因此不存在脏读或不可重复读。每个事务都读取由第一次读取建立的快照。
+- en: READ COMMITTED
+  id: totrans-39
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 读已提交
+- en: As a curiosity, the `READ COMMITTED` isolation level is the default for many
+    databases, like Postgres, Oracle, and SQL Server, but not MySQL. So, those who
+    are migrating to MySQL must be aware of this difference in the default behavior.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为一个好奇心，`读已提交`隔离级别是许多数据库的默认级别，如Postgres、Oracle和SQL Server，但不是MySQL。因此，那些迁移到MySQL的人必须意识到默认行为的这种差异。
+- en: 'The main difference between `READ COMMITTED` and `REPEATABLE READ` is that
+    with `READ COMMITTED` each consistent read, even within the same transaction,
+    creates and reads its own fresh snapshot. This behavior can lead to *phantom reads*
+    when executing multiple queries inside a transaction. Let’s take a look at an
+    example. In session 1, row 1 looks like this:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`读已提交`和`可重复读`的主要区别在于，使用`读已提交`时，即使在同一个事务内，每次一致性读取也会创建并读取自己的新鲜快照。当在事务内执行多个查询时，这种行为可能导致幻读。让我们看一个例子。在会话
+    1 中，第一行看起来是这样的：'
+- en: '[PRE10]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: '[PRE11]'
+  id: totrans-43
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'Now suppose that in session 2 we update the first row of the `person` table
+    and commit the transaction:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在假设在会话 2 中，我们更新了`person`表的第一行并提交了事务：
+- en: '[PRE12]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: '[PRE13]'
+  id: totrans-46
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: '[PRE14]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: '[PRE15]'
+  id: totrans-48
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'If we check session 1 again, we’ll see that the value of the first row has
+    changed:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们再次检查会话 1，我们将看到第一行的值已经改变：
+- en: '[PRE16]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: '[PRE17]'
+  id: totrans-51
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: The significant advantage of `READ COMMITTED` is that there are no gap locks,
+    allowing the free insertion of new records next to locked records.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`读已提交`的显著优势在于没有间隙锁，允许在锁定记录旁边自由插入新记录。'
+- en: READ UNCOMMITTED
+  id: totrans-53
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 读未提交
+- en: 'With the `READ UNCOMMITTED` isolation level MySQL performs `SELECT` statements
+    in a non-locking fashion, which means two `SELECT` statements within the same
+    transaction might not read the same version of a row. As we saw earlier, this
+    phenomenon is called a dirty read. Consider how the previous example would play
+    out using `READ UNCOMMITTED`. The main difference is that session 1 can see the
+    results of session 2’s update *before* the commit. Let’s walk through another
+    example. Suppose that in session 1 we execute the following `SELECT` statement:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`读未提交`隔离级别下，MySQL 以非锁定方式执行`SELECT`语句，这意味着同一事务中的两个`SELECT`语句可能不会读取同一行的相同版本。正如我们之前看到的，这种现象称为脏读。考虑一下前面的例子，使用`读未提交`时会发生什么。主要区别在于会话
+    1 可以在提交之前看到会话 2 更新的结果。让我们再举一个例子。假设在会话 1 中，我们执行以下`SELECT`语句：
+- en: '[PRE18]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: '[PRE19]'
+  id: totrans-56
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'And in session 2, we perform this update *without* committing:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 而在会话 2 中，我们执行此更新*而不进行*提交：
+- en: '[PRE20]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: '[PRE21]'
+  id: totrans-59
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'If we now perform the `SELECT` again in session 1, here’s what we’ll see:'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们现在在会话 1 中再次执行`SELECT`，我们将看到以下情况：
+- en: '[PRE22]'
+  id: totrans-61
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: '[PRE23]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: We can see that session 1 can read the modified data even though it is in a
+    transient state, and this change may end up being rolled back and not committed.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以看到，即使会话 1 处于瞬态状态，它也能读取修改后的数据，这种更改可能会被回滚而不会被提交。
+- en: SERIALIZABLE
+  id: totrans-64
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 可串行化
+- en: The most restricted isolation level available in MySQL is `SERIALIZABLE`. This
+    is similar to `REPEATABLE READ`, but has an additional restriction of not allowing
+    one transaction to interfere with another. So, with this locking mechanism, the
+    inconsistent data scenario is no longer possible.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 中最受限制的隔离级别是`可串行化`。这类似于`可重复读`，但额外限制了不允许一个事务干扰另一个的情况。因此，通过这种锁定机制，不再可能出现不一致的数据场景。
+- en: Note
+  id: totrans-66
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注
+- en: For applications using `SERIALIZABLE`, it is important to have a retry strategy.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于使用`可串行化`的应用程序，重试策略非常重要。
+- en: 'To make this clearer, imagine a finance database where we register customers’
+    account balances in an `accounts` table. What will happen if two transactions
+    try to update a customer’s account balance at the same time? The following example
+    illustrates this scenario. Assume that we have started two sessions using the
+    default isolation level, `REPEATABLE READ`, and explicitly opened a transaction
+    in each with `BEGIN`. In session 1, we select all the accounts in the `accounts`
+    table:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了更清晰地说明，想象一个财务数据库，在其中我们在`accounts`表中注册客户的账户余额。如果两个事务同时尝试更新客户账户余额会发生什么？以下示例说明了这种情况。假设我们已经使用默认隔离级别`可重复读`启动了两个会话，并在每个会话中显式地开始了事务。在会话
+    1 中，我们选择了`accounts`表中的所有账户：
+- en: '[PRE24]'
+  id: totrans-69
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: '[PRE25]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'Then, in session 2, we select all accounts with balance of at least 80 USD:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，在会话2中，我们选择所有至少有80美元余额的帐户：
+- en: '[PRE26]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: '[PRE27]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'Now, in session 1, we subtract 10 USD from account 1 and check the result:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，在会话1中，我们从帐户1中减去10美元并检查结果：
+- en: '[PRE28]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: '[PRE29]'
+  id: totrans-76
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'We can see that the balance of account 1 has decreased to 70 USD. So, we commit
+    session 1 and then move to session 2 to see if it can read the new changes made
+    by session 1:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以看到帐户1的余额已经减少到70美元。因此，我们提交会话1，然后转到会话2，看看它是否可以读取会话1所做的新更改：
+- en: '[PRE30]'
+  id: totrans-78
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: '[PRE31]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: '[PRE32]'
+  id: totrans-80
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: '[PRE33]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: This `SELECT` query still returns the old data for account 1, with a balance
+    of 80 USD, even though transaction 1 changed it to 70 USD and was committed successfully.
+    That’s because the `REPEATABLE READ` isolation level ensures that all read queries
+    in a transaction are repeatable, which means they always return the same result,
+    even if changes have been made by other committed transactions.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使事务1成功提交并将其更改为70美元，这个`SELECT`查询仍然返回帐户1的旧数据，余额为80美元。这是因为`REPEATABLE READ`隔离级别确保事务中的所有读取查询都是可重复的，这意味着它们始终返回相同的结果，即使其他已提交的事务进行了更改。
+- en: 'But what will happen if we also run the `UPDATE` query to subtract 10 USD from
+    account 1’s balance in session 2? Will it change the balance to 70 USD, or 60
+    USD, or throw an error? Let’s see:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，如果我们在会话2中也运行`UPDATE`查询，从帐户1的余额中减去10美元，会发生什么？它会将余额更改为70美元、60美元还是抛出错误？让我们看一下：
+- en: '[PRE34]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: '[PRE35]'
+  id: totrans-85
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: '[PRE36]'
+  id: totrans-86
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: '[PRE37]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: There’s no error, and the account balance is now 60 USD, which is the correct
+    value because transaction 1 has already committed the change that modified the
+    balance to 70 USD.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 没有错误，帐户余额现在是60美元，这是正确的值，因为事务1已经提交了修改余额为70美元的更改。
+- en: 'However, from transaction 2’s point of view, this doesn’t make sense: in the
+    last `SELECT` query it saw a balance of 80 USD, but after subtracting 10 USD from
+    the account, now it sees a balance of 60 USD. The math doesn’t work here because
+    this transaction is still being affected by concurrent updates from other transactions.'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，从事务2的角度来看，这是不合理的：在最后一个`SELECT`查询中，它看到的是80美元的余额，但在从帐户中扣除10美元之后，现在看到的是60美元的余额。这里的数学不成立，因为该事务仍受到其他事务的并发更新的影响。
+- en: 'This is the scenario where using `SERIALIZABLE` can help. Let’s rewind to before
+    we made any changes. This time we’ll explicitly set the isolation level of both
+    sessions to `SERIALIZABLE` with `SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE`
+    before starting the transactions with `BEGIN`. Again, in session 1 we select all
+    the accounts:'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这就是使用`SERIALIZABLE`可以帮助的情况。让我们倒回到我们没有进行任何更改的情况。这次我们将明确将两个会话的隔离级别设置为`SERIALIZABLE`，在使用`BEGIN`开始事务之前用`SET
+    SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE`。同样，在会话1中，我们选择所有的帐户：
+- en: '[PRE38]'
+  id: totrans-91
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: '[PRE39]'
+  id: totrans-92
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'And in session 2 we select all the accounts with a balance greater than 80
+    USD:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 而在会话2中，我们选择所有余额大于80美元的帐户：
+- en: '[PRE40]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: '[PRE41]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'Now, in session 1 we subtract 10 USD from account 1:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，在会话1中，我们从帐户1中减去10美元：
+- en: '[PRE42]'
+  id: totrans-97
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: 'And…nothing happens. This time the `UPDATE` query is blocked—the `SELECT` query
+    in session 1 has locked those rows and prevents the `UPDATE` in session 2 from
+    succeeding. Because we explicitly started our transactions with `BEGIN` (which
+    has the same effect as disabling autocommit), InnoDB implicitly converts all plain
+    `SELECT` statements in each transaction to `SELECT ... FOR SHARE`. It does not
+    know ahead of time if the transaction will perform only reads or will modify rows,
+    so InnoDB needs to place a lock on it to avoid the issue we demonstrated in the
+    previous example. In this example, if autocommit were enabled, the `SELECT` query
+    in session 2 would not block the update that we are trying to perform in session
+    1: MySQL would recognize that the query is a plain `SELECT` and does not need
+    to block other queries because it is not going to modify any rows.'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后什么都不会发生。这次`UPDATE`查询被阻塞了——会话1中的`SELECT`查询锁定了这些行，阻止了会话2中的`UPDATE`成功执行。因为我们明确地用`BEGIN`开始了我们的事务（这与禁用自动提交的效果相同），InnoDB会隐式地将每个事务中的普通`SELECT`语句转换为`SELECT
+    ... FOR SHARE`。它事先不知道事务是否仅执行读取操作还是修改行，因此InnoDB需要对其进行锁定，以避免我们在前面示例中演示的问题。在本例中，如果启用了自动提交，会话2中的`SELECT`查询将不会阻塞我们试图在会话1中执行的更新：MySQL会识别出这个查询是一个普通的`SELECT`，并且不需要阻塞其他查询，因为它不会修改任何行。
+- en: 'However, the update in session 2 will not hang forever; this lock has a timeout
+    duration that is controlled by the [`innodb_lock_wait_timeout` parameter](https://oreil.ly/rfrv0).
+    So, if session 1 doesn’t commit or roll back its transaction to release the lock,
+    once the session timeout is reached, MySQL will throw the following error:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，第二个会话的更新不会永远挂起；这个锁有一个由[`innodb_lock_wait_timeout`参数](https://oreil.ly/rfrv0)控制的超时时长。因此，如果第一个会话没有提交或回滚其事务以释放锁定，一旦会话超时到达，MySQL将抛出以下错误：
+- en: '[PRE43]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: Locking
+  id: totrans-101
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 锁定
+- en: Now that we’ve seen how each isolation level works, let’s look at the different
+    locking strategies InnoDB employs to implement them.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经看到每个隔离级别是如何工作的，让我们来看看InnoDB用来实现它们的不同锁定策略。
+- en: 'Locks are used in databases to protect shared resources or objects. They can
+    act at different levels, such as:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 锁定用于在数据库中保护共享资源或对象。它们可以在不同的级别上起作用，比如：
+- en: Table locking
+  id: totrans-104
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 表锁定
+- en: Metadata locking
+  id: totrans-105
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 元数据锁定
+- en: Row locking
+  id: totrans-106
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 行锁定
+- en: Application-level locking
+  id: totrans-107
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 应用程序级锁定
+- en: MySQL uses metadata locking to manage concurrent access to database objects
+    and to ensure data consistency. When there is an active transaction (explicit
+    or implicit) on the table, MySQL does not allow writing of metadata (DDL statements,
+    for example, update the metadata of the table). It does this to maintain metadata
+    consistency in a concurrent environment.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL使用元数据锁来管理对数据库对象的并发访问以及确保数据一致性。当表上存在活动事务（显式或隐式）时，MySQL不允许对元数据进行写操作（例如DDL语句更新表的元数据）。它通过这种方式在并发环境中维护元数据的一致性。
+- en: 'If there is an active transaction (running, uncommitted, or rolled back) when
+    a session performs one of the operations mentioned in the following list, the
+    session requesting the data write will be held in the `Waiting for table metadata
+    lock` status. A metadata lock wait may occur in any of the following scenarios:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果在会话执行以下列表中提到的操作时有活动事务（运行中、未提交或回滚），那么请求数据写入的会话将处于`等待表元数据锁定`状态。元数据锁等待可能发生在以下任何情况下：
+- en: When you create or delete an index
+  id: totrans-110
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当您创建或删除索引时
+- en: When you modify the table structure
+  id: totrans-111
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当您修改表结构时
+- en: When you perform table maintenance operations (`OPTIMIZE TABLE` `REPAIR TABLE`,
+    etc.)
+  id: totrans-112
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当您执行表维护操作（`OPTIMIZE TABLE` `REPAIR TABLE`等）时
+- en: When you delete a table
+  id: totrans-113
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当您删除一个表时
+- en: When you try to obtain a table-level write lock on the table (`LOCK TABLE table_name
+    WRITE`)
+  id: totrans-114
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当您尝试在表上获取表级写锁（`LOCK TABLE table_name WRITE`）
+- en: To enable simultaneous write access by multiple sessions, InnoDB supports row-level
+    locking.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了支持多个会话的同时写访问，InnoDB支持行级锁定。
+- en: Application-level or user-level locks, such as those provided by `GET_LOCK()`,
+    can be used to simulate database locks such as record locks.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 应用程序级或用户级锁定，比如由`GET_LOCK()`提供的锁，可以用来模拟诸如记录锁定之类的数据库锁定。
+- en: This book focuses on metadata and the row locks since they are the ones that
+    affect the majority of users and are the most common.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本书侧重于元数据和行锁定，因为它们影响大多数用户并且是最常见的。
+- en: Metadata Locks
+  id: totrans-118
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 元数据锁
+- en: 'The [MySQL documentation](https://oreil.ly/zjDjG) provides the best definition
+    of metadata locks:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[MySQL文档](https://oreil.ly/zjDjG)提供了对元数据锁的最佳定义：'
+- en: To ensure transaction serializability, the server must not permit one session
+    to perform a data definition language (DDL) statement on a table that is used
+    in an uncompleted explicitly or implicitly started transaction in another session.
+    The server achieves this by acquiring metadata locks on tables used within a transaction
+    and deferring the locks’ release until the transaction ends. A metadata lock on
+    a table prevents changes to the table’s structure. This locking approach has the
+    implication that a table that is being used by a transaction within one session
+    cannot be used in DDL statements by other sessions until the transaction ends.
+  id: totrans-120
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: 为了确保事务的串行化，服务器不能允许一个会话在另一个会话中的未完成的显式或隐式启动的事务中使用的表上执行数据定义语言（DDL）语句。服务器通过获取用于事务中使用的表的元数据锁，并推迟锁的释放直到事务结束来实现这一点。表的元数据锁定阻止对表结构的更改。这种锁定方法意味着，一个会话中正在使用的表在事务结束之前不能被其他会话用于DDL语句。
+- en: 'With this definition in mind, let’s take a look at metadata locking in action.
+    First, we will create a dummy table and load some rows into it:'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个定义的基础上，让我们看看元数据锁在实际中的运作。首先，我们将创建一个虚拟表，并加载一些行进去：
+- en: '[PRE44];`'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[PRE44];`'
+- en: '`CREATE` `TABLE` `` `joinit` `` `(`'
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`CREATE` `TABLE` `` `joinit` `` `(`'
+- en: '`` `i` `` `int``(``11``)` `NOT` `NULL` `AUTO_INCREMENT``,`'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`` `i` `` `int``(``11``)` `NOT` `NULL` `AUTO_INCREMENT``,`'
+- en: '`` `s` `` `varchar``(``64``)` `DEFAULT` `NULL``,`'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`` `s` `` `varchar``(``64``)` `默认` `NULL``,`'
+- en: '`` `t` `` `time` `NOT` `NULL``,`'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`` `t` `` `时间` `非` `NULL``,`'
+- en: '`` `g` `` `int``(``11``)` `NOT` `NULL``,`'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`` `g` `` `int``(``11``)` `非` `NULL``,`'
+- en: '`PRIMARY` `KEY` `([PRE45])`'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`主` `键` `([PRE45])`'
+- en: '`)` `ENGINE``=``InnoDB`  `DEFAULT` `CHARSET``=``latin1``;`'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`)` `引擎``=``InnoDB`  `默认` `字符集``=``latin1``;`'
+- en: '`INSERT` `INTO` `joinit` `VALUES` `(``NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+`'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INSERT` `INTO` `joinit` `VALUES` `(``NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+`'
+- en: '`RAND``(` `)` `*``60` `)``)``)``;`'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`RAND``(` `)` `*``60` `)``)``)``;`'
+- en: '`INSERT` `INTO` `joinit` `SELECT` `NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+` `RAND``(` `)` `*``60` `)``)`'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INSERT` `INTO` `joinit` `SELECT` `NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+` `RAND``(` `)` `*``60` `)``)`'
+- en: '`FROM` `joinit``;`'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`FROM` `joinit``;`'
+- en: '`INSERT` `INTO` `joinit` `SELECT` `NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+` `RAND``(` `)` `*``60` `)``)`'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INSERT` `INTO` `joinit` `SELECT` `NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+` `RAND``(` `)` `*``60` `)``)`'
+- en: '`FROM` `joinit``;`'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`FROM` `joinit``;`'
+- en: '`INSERT` `INTO` `joinit` `SELECT` `NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+` `RAND``(` `)` `*``60` `)``)`'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INSERT` `INTO` `joinit` `SELECT` `NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+` `RAND``(` `)` `*``60` `)``)`'
+- en: '`FROM` `joinit``;`'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`FROM` `joinit``;`'
+- en: '`INSERT` `INTO` `joinit` `SELECT` `NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+` `RAND``(` `)` `*``60` `)``)`'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INSERT` `INTO` `joinit` `SELECT` `NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+` `RAND``(` `)` `*``60` `)``)`'
+- en: '`FROM` `joinit``;`'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`FROM` `joinit``;'
+- en: '`INSERT` `INTO` `joinit` `SELECT` `NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+` `RAND``(` `)` `*``60` `)``)`'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INSERT` `INTO` `joinit` `SELECT` `NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+` `RAND``(` `)` `*``60` `)``)`'
+- en: '`FROM` `joinit``;`'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`FROM` `joinit``;`'
+- en: '`INSERT` `INTO` `joinit` `SELECT` `NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+` `RAND``(` `)` `*``60` `)``)`'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INSERT` `INTO` `joinit` `SELECT` `NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+` `RAND``(` `)` `*``60` `)``)`'
+- en: '`FROM` `joinit``;`'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`FROM` `joinit``;`'
+- en: '`INSERT` `INTO` `joinit` `SELECT` `NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+` `RAND``(` `)` `*``60` `)``)`'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INSERT` `INTO` `joinit` `SELECT` `NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+` `RAND``(` `)` `*``60` `)``)`'
+- en: '`FROM` `joinit``;`'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`FROM` `joinit``;`'
+- en: '`INSERT` `INTO` `joinit` `SELECT` `NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+` `RAND``(` `)` `*``60` `)``)`'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INSERT` `INTO` `joinit` `SELECT` `NULL``,` `uuid``(``)``,` `time``(``now``(``)``)``,`  `(``FLOOR``(`
+    `1` `+` `RAND``(` `)` `*``60` `)``)`'
+- en: '`FROM` `joinit``;`'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`FROM` `joinit``;`'
+- en: '[PRE46]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: session1> `UPDATE` `joinit` `SET` `t``=``now``(``)``;`
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: session1> `UPDATE` `joinit` `SET` `t``=``now``(``)``;`
+- en: '[PRE47]'
+  id: totrans-150
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: session2> `ALTER` `TABLE` `joinit` `ADD` `COLUMN` `b` `INT``;`
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: session2> `ALTER` `TABLE` `joinit` `ADD` `COLUMN` `b` `整数``;`
+- en: '[PRE48]'
+  id: totrans-152
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: session3> `SHOW` `PROCESSLIST``;`
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: session3> `显示` `进程列表``;`
+- en: '[PRE49]'
+  id: totrans-154
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: +----+----------+-----------+------+---------+------+...
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +----+----------+-----------+------+---------+------+...
+- en: '| Id | User     | Host      | db   | Command | Time |...'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '| Id | 用户     | 主机      | db   | 命令 | 时间 |...'
+- en: +----+----------+-----------+------+---------+------+...
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +----+----------+-----------+------+---------+------+...
+- en: '| 10 | msandbox | localhost | test | Query   |    3 |...'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '| 10 | msandbox | localhost | test | 查询   |    3 |...'
+- en: '| 11 | msandbox | localhost | test | Query   |    1 |...'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '| 11 | msandbox | localhost | test | 查询   |    1 |...'
+- en: '| 12 | msandbox | localhost | NULL | Query   |    0 |...'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '| 12 | msandbox | localhost | NULL | 查询   |    0 |...'
+- en: +----+----------+-----------+------+---------+------+...
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +----+----------+-----------+------+---------+------+...
+- en: '...+---------------------------------+-------------------------------------+...'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+---------------------------------+-------------------------------------+...'
+- en: '...| State                           | Info                                |...'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| 状态                           | 信息                                |...'
+- en: '...+---------------------------------+-------------------------------------+...'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+---------------------------------+-------------------------------------+...'
+- en: '...| updating                        | UPDATE joinit SET t=now()           |...'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '| 更新                       | UPDATE joinit SET t=now()           |...'
+- en: '...| Waiting for table metadata lock | ALTER TABLE joinit ADD COLUMN b INT
+    |...'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| 等待表元数据锁               | ALTER TABLE joinit ADD COLUMN b INT |...'
+- en: '...| starting                        | SHOW PROCESSLIST                    |...'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| 开始                          | 显示进程列表                    |...'
+- en: '...+---------------------------------+-------------------------------------+...'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+---------------------------------+-------------------------------------+...'
+- en: '...+-----------+---------------+'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+-----------+---------------+'
+- en: '...| Rows_sent | Rows_examined |'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| 发送行 | 检查行 |'
+- en: '...+-----------+---------------+'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+-----------+---------------+'
+- en: '...|         0 |        179987 |'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...|         0 |        179987 |'
+- en: '...|         0 |             0 |'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...|         0 |             0 |'
+- en: '...|         0 |             0 |'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...|         0 |             0 |'
+- en: '...+-----------+---------------+'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+-----------+---------------+'
+- en: '[PRE50]'
+  id: totrans-176
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: mysql > `SET` `SESSION` `autocommit``=``0``;`
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql > `SET` `SESSION` `autocommit``=``0``;`
+- en: '[PRE51]'
+  id: totrans-178
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: Query OK, 0 rows affected (0.00 sec)
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Query OK, 0 rows affected (0.00 sec)
+- en: '[PRE52]'
+  id: totrans-180
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: mysql > `UPDATE` `joinit` `SET` `t``=``NOW``(``)` `LIMIT` `1``;`
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql > `UPDATE` `joinit` `SET` `t``=``NOW``(``)` `LIMIT` `1``;`
+- en: '[PRE53]'
+  id: totrans-182
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: Query OK, 1 row affected (0.00 sec)
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Query OK, 1 row affected (0.00 sec)
+- en: 'Rows matched: 1  Changed: 1  Warnings: 0'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'Rows matched: 1  Changed: 1  Warnings: 0'
+- en: '[PRE54]'
+  id: totrans-185
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: mysql > `ALTER` `TABLE` `joinit` `ADD` `COLUMN` `b` `INT``;`
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql > `ALTER` `TABLE` `joinit` `ADD` `COLUMN` `b` `INT``;`
+- en: '[PRE55]'
+  id: totrans-187
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: mysql > `SHOW` `PROCESSLIST``;`
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql > `SHOW` `PROCESSLIST``;`
+- en: '[PRE56]'
+  id: totrans-189
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: mysql> `UPDATE` `performance_schema``.``setup_instruments` `SET` `enabled` `=`
+    `'YES'`
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `UPDATE` `performance_schema``.``setup_instruments` `SET` `enabled` `=`
+    `'YES'`
+- en: -> `WHERE` `NAME` `=` `'wait/lock/metadata/sql/mdl'``;`
+  id: totrans-191
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `WHERE` `NAME` `=` `'wait/lock/metadata/sql/mdl'``;`
+- en: Query OK, 0 rows affected (0.00 sec)
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Query OK, 0 rows affected (0.00 sec)
+- en: 'Rows matched: 1 Changed: 0 Warnings: 0'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'Rows matched: 1 Changed: 0 Warnings: 0'
+- en: '[PRE57]'
+  id: totrans-194
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: mysql> `SELECT` `*`  `FROM` `sys``.``schema_table_lock_waits``;`
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `*`  `FROM` `sys``.``schema_table_lock_waits``;`
+- en: '[PRE58]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: mysql> `SELECT` `object_name``,` `waiting_thread_id``,` `waiting_lock_type``,`
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `object_name``,` `waiting_thread_id``,` `waiting_lock_type``,`
+- en: -> `waiting_query``,` `sql_kill_blocking_query``,` `blocking_thread_id`
+  id: totrans-198
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `waiting_query``,` `sql_kill_blocking_query``,` `blocking_thread_id`
+- en: -> `FROM` `sys``.``schema_table_lock_waits``;`
+  id: totrans-199
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `FROM` `sys``.``schema_table_lock_waits``;`
+- en: '[PRE59]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: +-------------+-------------------+-------------------+...
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------------+-------------------+-------------------+...
+- en: '| object_name | waiting_thread_id | waiting_lock_type |...'
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '| object_name | waiting_thread_id | waiting_lock_type |...'
+- en: +-------------+-------------------+-------------------+...
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------------+-------------------+-------------------+...
+- en: '| joinit      |                29 | EXCLUSIVE         |...'
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '| joinit      |                29 | EXCLUSIVE         |...'
+- en: '| joinit      |                29 | EXCLUSIVE         |...'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '| joinit      |                29 | EXCLUSIVE         |...'
+- en: +-------------+-------------------+-------------------+...
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------------+-------------------+-------------------+...
+- en: '...+-------------------------------------------------------------------+...'
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+-------------------------------------------------------------------+...'
+- en: '...| waiting_query                                                     |...'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| 等待查询                                                     |...'
+- en: '...+-------------------------------------------------------------------+...'
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+-------------------------------------------------------------------+...'
+- en: '...| ALTER TABLE joinit ADD COLUMN  ...  CHAR(32) DEFAULT ''dummy_text'' |...'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| 修改表 joinit 添加列  ...  CHAR(32) 默认 ''dummy_text'' |...'
+- en: '...| ALTER TABLE joinit ADD COLUMN  ...  CHAR(32) DEFAULT ''dummy_text'' |...'
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| ALTER TABLE joinit ADD COLUMN  ...  CHAR(32) 默认 ''dummy_text'' |...'
+- en: '...|-------------------------------------------------------------------+...'
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...|-------------------------------------------------------------------+...'
+- en: '[PRE60]'
+  id: totrans-213
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: '...+-------------------------+--------------------+'
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+-------------------------+--------------------+'
+- en: '...| sql_kill_blocking_query | blocking_thread_id |'
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| sql_kill_blocking_query | blocking_thread_id |'
+- en: '...+-------------------------+--------------------+'
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+-------------------------+--------------------+'
+- en: '...| KILL QUERY 3            |                 29 |'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| KILL QUERY 3            |                 29 |'
+- en: '...| KILL QUERY 5            |                 31 |'
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| KILL QUERY 5            |                 31 |'
+- en: '...+-------------------------+--------------------+'
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+-------------------------+--------------------+'
+- en: 2 rows in set (0.00 sec)
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 2 rows in set (0.00 sec)
+- en: '[PRE61]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: git clone https://github.com/mysql/mysql-sys.git
+  id: totrans-222
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: git clone https://github.com/mysql/mysql-sys.git
+- en: cd mysql-sys/
+  id: totrans-223
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: cd mysql-sys/
+- en: mysql -u root -p < ./sys_56.sql
+  id: totrans-224
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: mysql -u root -p < ./sys_56.sql
+- en: '[PRE62]'
+  id: totrans-225
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: mysql> `SELECT` `*` `FROM` `performance_schema``.``metadata_locks``\``G`
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `*` `FROM` `performance_schema``.``metadata_locks``\``G`
+- en: '[PRE63]'
+  id: totrans-227
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: '*************************** 1\. row ***************************'
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1\. row ***************************'
+- en: 'OBJECT_TYPE: GLOBAL'
+  id: totrans-229
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'OBJECT_TYPE: GLOBAL'
+- en: 'OBJECT_SCHEMA: NULL'
+  id: totrans-230
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'OBJECT_SCHEMA: NULL'
+- en: 'OBJECT_NAME: NULL'
+  id: totrans-231
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'OBJECT_NAME: NULL'
+- en: 'OBJECT_INSTANCE_BEGIN: 140089691017472'
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'OBJECT_INSTANCE_BEGIN: 140089691017472'
+- en: 'LOCK_TYPE: INTENTION_EXCLUSIVE'
+  id: totrans-233
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'LOCK_TYPE: INTENTION_EXCLUSIVE'
+- en: 'LOCK_DURATION: STATEMENT'
+  id: totrans-234
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'LOCK_DURATION: STATEMENT'
+- en: 'LOCK_STATUS: GRANTED'
+  id: totrans-235
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'LOCK_STATUS: GRANTED'
+- en: 'SOURCE:'
+  id: totrans-236
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'SOURCE:'
+- en: 'OWNER_THREAD_ID: 97'
+  id: totrans-237
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'OWNER_THREAD_ID: 97'
+- en: 'OWNER_EVENT_ID: 34'
+  id: totrans-238
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'OWNER_EVENT_ID: 34'
+- en: '...'
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...'
+- en: '*************************** 6\. row ***************************'
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 6\. row ***************************'
+- en: 'OBJECT_TYPE: TABLE'
+  id: totrans-241
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'OBJECT_TYPE: TABLE'
+- en: 'OBJECT_SCHEMA: performance_schema'
+  id: totrans-242
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'OBJECT_SCHEMA: performance_schema'
+- en: 'OBJECT_NAME: metadata_locks'
+  id: totrans-243
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'OBJECT_NAME: metadata_locks'
+- en: 'OBJECT_INSTANCE_BEGIN: 140089640911984'
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'OBJECT_INSTANCE_BEGIN: 140089640911984'
+- en: 'LOCK_TYPE: SHARED_READ'
+  id: totrans-245
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'LOCK_TYPE: SHARED_READ'
+- en: 'LOCK_DURATION: TRANSACTION'
+  id: totrans-246
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'LOCK_DURATION: TRANSACTION'
+- en: 'LOCK_STATUS: GRANTED'
+  id: totrans-247
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'LOCK_STATUS: GRANTED'
+- en: 'SOURCE:'
+  id: totrans-248
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'SOURCE:'
+- en: 'OWNER_THREAD_ID: 98'
+  id: totrans-249
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'OWNER_THREAD_ID: 98'
+- en: 'OWNER_EVENT_ID: 10'
+  id: totrans-250
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'OWNER_EVENT_ID: 10'
+- en: 6 rows in set (0.00 sec)
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 6 rows in set (0.00 sec)
+- en: '[PRE64]'
+  id: totrans-252
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: mysql> `SELECT` `object_type``,` `object_schema``,` `object_name``,` `lock_type``,`
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `object_type``,` `object_schema``,` `object_name``,` `lock_type``,`
+- en: -> `lock_status``,` `thread_id``,` `processlist_id``,` `processlist_info` `FROM`
+  id: totrans-254
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `lock_status``,` `thread_id``,` `processlist_id``,` `processlist_info` `FROM`
+- en: -> `performance_schema``.``metadata_locks` `INNER` `JOIN` `performance_schema``.``threads`
+  id: totrans-255
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `performance_schema``.``metadata_locks` `INNER` `JOIN` `performance_schema``.``threads`
+- en: -> `ON` `thread_id` `=` `owner_thread_id` `WHERE` `processlist_id` `<``>` `connection_id``(``)``;`
+  id: totrans-256
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `ON` `thread_id` `=` `owner_thread_id` `WHERE` `processlist_id` `<``>` `connection_id``(``)``;`
+- en: '[PRE65]'
+  id: totrans-257
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: +-------------+---------------+-------------+---------------------+...
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------------+---------------+-------------+---------------------+...
+- en: '| OBJECT_TYPE | OBJECT_SCHEMA | OBJECT_NAME | LOCK_TYPE           |...'
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '| 对象类型 | 对象模式 | 对象名称 | 锁类型           |...'
+- en: +-------------+---------------+-------------+---------------------+...
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------------+---------------+-------------+---------------------+...
+- en: '| GLOBAL      | NULL          | NULL        | INTENTION_EXCLUSIVE |...'
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '| 全局      | NULL          | NULL        | 意图独占 |...'
+- en: '| SCHEMA      | test          | NULL        | INTENTION_EXCLUSIVE |...'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '| 模式      | 测试          | NULL        | 意图独占 |...'
+- en: '| TABLE       | test          | joinit      | SHARED_UPGRADABLE   |...'
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '| 表       | 测试          | joinit      | 共享升级   |...'
+- en: '| BACKUP      | NULL          | NULL        | INTENTION_EXCLUSIVE |...'
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '| 备份      | NULL          | NULL        | 意图独占 |...'
+- en: '| TABLE       | test          | joinit      | EXCLUSIVE           |...'
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '| 表       | 测试          | joinit      | 独占           |...'
+- en: +-------------+---------------+-------------+---------------------+...
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------------+---------------+-------------+---------------------+...
+- en: '...+-------------+-----------+----------------+...'
+  id: totrans-267
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+-------------+-----------+----------------+...'
+- en: '...| LOCK_STATUS | THREAD_ID | PROCESSLIST_ID |...'
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| 锁状态 | 线程 ID | 进程列表 ID |...'
+- en: '...+-------------+-----------+----------------+...'
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+-------------+-----------+----------------+...'
+- en: '...| GRANTED     |        97 |             71 |...'
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| 授予     |        97 |             71 |...'
+- en: '...| GRANTED     |        97 |             71 |...'
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| 授予     |        97 |             71 |...'
+- en: '...| GRANTED     |        97 |             71 |...'
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| 授予     |        97 |             71 |...'
+- en: '...| GRANTED     |        97 |             71 |...'
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| 授予     |        97 |             71 |...'
+- en: '...| PENDING     |        97 |             71 |...'
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| 待定     |        97 |             71 |...'
+- en: '...+-------------+-----------+----------------+...'
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+-------------+-----------+----------------+...'
+- en: '...+-------------------------------------+'
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+-------------------------------------+'
+- en: '...| PROCESSLIST_INFO                    |'
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| 进程列表信息                    |'
+- en: '...+-------------------------------------+'
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+-------------------------------------+'
+- en: '...| alter table joinit add column b int |'
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| alter table joinit add column b int |'
+- en: '...| alter table joinit add column b int |'
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| alter table joinit add column b int |'
+- en: '...| alter table joinit add column b int |'
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| alter table joinit add column b int |'
+- en: '...| alter table joinit add column b int |'
+  id: totrans-282
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| alter table joinit add column b int |'
+- en: '...| alter table joinit add column b int |'
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...| alter table joinit add column b int |'
+- en: '...+-------------------------------------+'
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...+-------------------------------------+'
+- en: 5 rows in set (0.00 sec)
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 5 行已设置（0.00 秒）
+- en: '[PRE66]'
+  id: totrans-286
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: mysql> `SET` `lock_wait_timeout` `=` `3``;`
+  id: totrans-287
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: mysql> `SET` `lock_wait_timeout` `=` `3``;`
+- en: mysql> `CREATE` `INDEX` `idx_1` `ON` `example` `(``col1``)``;`
+  id: totrans-288
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: mysql> `CREATE` `INDEX` `idx_1` `ON` `example` `(``col1``)``;`
+- en: '[PRE67]'
+  id: totrans-289
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: $ `pt``-``kill` `-``-``busy``-``time` `60` `-``-``kill`
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: $ `pt``-``kill` `-``-``busy``-``time` `60` `-``-``kill`
+- en: '[PRE68]'
+  id: totrans-291
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: mysql> `SELECT` `*` `FROM` `PERSON``;`
+  id: totrans-292
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `*` `FROM` `PERSON``;`
+- en: '[PRE69]'
+  id: totrans-293
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: +----+-----------+
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +----+-----------+
+- en: '| i  | name      |'
+  id: totrans-295
+  prefs: []
+  type: TYPE_TB
+  zh: '| i  | 名称      |'
+- en: +----+-----------+
+  id: totrans-296
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +----+-----------+
+- en: '|  1 | Vinicius  |'
+  id: totrans-297
+  prefs: []
+  type: TYPE_TB
+  zh: '|  1 | Vinicius  |'
+- en: '|  2 | Kuzmichev |'
+  id: totrans-298
+  prefs: []
+  type: TYPE_TB
+  zh: '|  2 | Kuzmichev |'
+- en: '|  3 | Iwo       |'
+  id: totrans-299
+  prefs: []
+  type: TYPE_TB
+  zh: '|  3 | Iwo       |'
+- en: '|  4 | Peter     |'
+  id: totrans-300
+  prefs: []
+  type: TYPE_TB
+  zh: '|  4 | Peter     |'
+- en: '|  5 | Marcelo   |'
+  id: totrans-301
+  prefs: []
+  type: TYPE_TB
+  zh: '|  5 | Marcelo   |'
+- en: '|  6 | Guli      |'
+  id: totrans-302
+  prefs: []
+  type: TYPE_TB
+  zh: '|  6 | Guli      |'
+- en: '|  7 | Nando     |'
+  id: totrans-303
+  prefs: []
+  type: TYPE_TB
+  zh: '|  7 | Nando     |'
+- en: '| 10 | Jobin     |'
+  id: totrans-304
+  prefs: []
+  type: TYPE_TB
+  zh: '| 10 | Jobin     |'
+- en: '| 15 | Rafa      |'
+  id: totrans-305
+  prefs: []
+  type: TYPE_TB
+  zh: '| 15 | Rafa      |'
+- en: '| 18 | Leo       |'
+  id: totrans-306
+  prefs: []
+  type: TYPE_TB
+  zh: '| 18 | Leo       |'
+- en: +----+-----------+
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +----+-----------+
+- en: 10 rows in set (0.00 sec)
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 10 行已设置（0.00 秒）
+- en: '[PRE70]'
+  id: totrans-309
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: session1> `DELETE` `FROM` `person` `WHERE` `name` `LIKE` `'Jobin'``;`
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: session1> `DELETE` `FROM` `person` `WHERE` `name` `LIKE` `'Jobin'``;`
+- en: '[PRE71]'
+  id: totrans-311
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: Query OK, 1 row affected (0.00 sec)
+  id: totrans-312
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Query OK, 1 行受影响（0.00 秒）
+- en: '[PRE72]'
+  id: totrans-313
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: session2> `SELECT` `*` `FROM` `person``;`
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: session2> `SELECT` `*` `FROM` `person``;`
+- en: '[PRE73]'
+  id: totrans-315
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: +----+-----------+
+  id: totrans-316
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +----+-----------+
+- en: '| i  | name      |'
+  id: totrans-317
+  prefs: []
+  type: TYPE_TB
+  zh: '| i  | 名称      |'
+- en: +----+-----------+
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +----+-----------+
+- en: '|  1 | Vinicius  |'
+  id: totrans-319
+  prefs: []
+  type: TYPE_TB
+  zh: '|  1 | Vinicius  |'
+- en: '|  2 | Kuzmichev |'
+  id: totrans-320
+  prefs: []
+  type: TYPE_TB
+  zh: '|  2 | Kuzmichev |'
+- en: '|  3 | Iwo       |'
+  id: totrans-321
+  prefs: []
+  type: TYPE_TB
+  zh: '|  3 | Iwo       |'
+- en: '|  4 | Peter     |'
+  id: totrans-322
+  prefs: []
+  type: TYPE_TB
+  zh: '|  4 | Peter     |'
+- en: '|  5 | Marcelo   |'
+  id: totrans-323
+  prefs: []
+  type: TYPE_TB
+  zh: '|  5 | Marcelo   |'
+- en: '|  6 | Guli      |'
+  id: totrans-324
+  prefs: []
+  type: TYPE_TB
+  zh: '|  6 | Guli      |'
+- en: '|  7 | Nando     |'
+  id: totrans-325
+  prefs: []
+  type: TYPE_TB
+  zh: '|  7 | Nando     |'
+- en: '| 10 | Jobin     |'
+  id: totrans-326
+  prefs: []
+  type: TYPE_TB
+  zh: '| 10 | Jobin     |'
+- en: '| 15 | Rafa      |'
+  id: totrans-327
+  prefs: []
+  type: TYPE_TB
+  zh: '| 15 | Rafa      |'
+- en: '| 18 | Leo       |'
+  id: totrans-328
+  prefs: []
+  type: TYPE_TB
+  zh: '| 18 | Leo       |'
+- en: +----+-----------+
+  id: totrans-329
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +----+-----------+
+- en: 10 rows in set (0.00 sec)
+  id: totrans-330
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 10 行已设置（0.00 秒）
+- en: '[PRE74]'
+  id: totrans-331
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: transaction2 > `INSERT` `INTO` `person` `VALUES` `(``11``,` `'Bennie'``)``;`
+  id: totrans-332
+  prefs: []
+  type: TYPE_NORMAL
+  zh: transaction2 > `INSERT` `INTO` `person` `VALUES` `(``11``,` `'Bennie'``)``;`
+- en: '[PRE75]'
+  id: totrans-333
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: 'ERROR 1205 (HY000): Lockwait timeout exceeded; try restarting transaction'
+  id: totrans-334
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '错误 1205 (HY000): 锁等待超时；请尝试重新启动事务'
+- en: '[PRE76]'
+  id: totrans-335
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: '------- TRX HAS BEEN WAITING 17 SEC FOR THIS LOCK TO BE GRANTED:'
+  id: totrans-336
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '------- 事务等待 17 秒以便授予此锁：'
+- en: RECORD LOCKS space id 28 page no 3 n bits 80 index PRIMARY of table
+  id: totrans-337
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记录锁 空间 ID 28 页号 3 n 位 80 索引 PRIMARY of table
+- en: '`test`.`person` trx id 4773 lock_mode X locks gap before rec insert'
+  id: totrans-338
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`test`.`person` 事务 ID 4773 锁模式 X 锁间隙插入前'
+- en: intention waiting
+  id: totrans-339
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 意图等待
+- en: '[PRE77]'
+  id: totrans-340
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: mysql> `CREATE` `UNIQUE` `INDEX` `idx` `ON` `PERSON` `(``name``)``;`
+  id: totrans-341
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `CREATE` `UNIQUE` `INDEX` `idx` `ON` `PERSON` `(``name``)``;`
+- en: '[PRE78]'
+  id: totrans-342
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: Query OK, 0 rows affected (0.01 sec)
+  id: totrans-343
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Query OK, 0 行受影响 (0.01 秒)
+- en: 'Records: 0  Duplicates: 0  Warnings: 0'
+  id: totrans-344
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'Records: 0  Duplicates: 0  Warnings: 0'
+- en: '[PRE79]'
+  id: totrans-345
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: mysql> `DELETE` `FROM` `person` `WHERE` `name` `LIKE` `'Jobin'``;`
+  id: totrans-346
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `DELETE` `FROM` `person` `WHERE` `name` `LIKE` `'Jobin'``;`
+- en: '[PRE80]'
+  id: totrans-347
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: Query OK, 1 row affected (0.00 sec)
+  id: totrans-348
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Query OK, 1 行受影响 (0.00 秒)
+- en: '[PRE81]'
+  id: totrans-349
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: mysql> `SELECT` `*` `FROM` `city` `WHERE` `CountryCode` `=` `'ITA'` `AND` `District``=``'Toscana'``;`
+  id: totrans-350
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `*` `FROM` `city` `WHERE` `CountryCode` `=` `'ITA'` `AND` `District``=``'Toscana'``;`
+- en: '[PRE82]'
+  id: totrans-351
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: +------+---------+-------------+----------+------------+
+  id: totrans-352
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +------+---------+-------------+----------+------------+
+- en: '| ID   | Name    | CountryCode | District | Population |'
+  id: totrans-353
+  prefs: []
+  type: TYPE_TB
+  zh: '| ID   | Name    | CountryCode | District | Population |'
+- en: +------+---------+-------------+----------+------------+
+  id: totrans-354
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +------+---------+-------------+----------+------------+
+- en: '| 1471 | Firenze | ITA         | Toscana  |     376662 |'
+  id: totrans-355
+  prefs: []
+  type: TYPE_TB
+  zh: '| 1471 | Firenze | ITA         | Toscana  |     376662 |'
+- en: '| 1483 | Prato   | ITA         | Toscana  |     172473 |'
+  id: totrans-356
+  prefs: []
+  type: TYPE_TB
+  zh: '| 1483 | Prato   | ITA         | Toscana  |     172473 |'
+- en: '| 1486 | Livorno | ITA         | Toscana  |     161673 |'
+  id: totrans-357
+  prefs: []
+  type: TYPE_TB
+  zh: '| 1486 | Livorno | ITA         | Toscana  |     161673 |'
+- en: '| 1516 | Pisa    | ITA         | Toscana  |      92379 |'
+  id: totrans-358
+  prefs: []
+  type: TYPE_TB
+  zh: '| 1516 | Pisa    | ITA         | Toscana  |      92379 |'
+- en: '| 1518 | Arezzo  | ITA         | Toscana  |      91729 |'
+  id: totrans-359
+  prefs: []
+  type: TYPE_TB
+  zh: '| 1518 | Arezzo  | ITA         | Toscana  |      91729 |'
+- en: +------+---------+-------------+----------+------------+
+  id: totrans-360
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +------+---------+-------------+----------+------------+
+- en: 5 rows in set (0.00 sec)
+  id: totrans-361
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 5 rows in set (0.00 秒)
+- en: '[PRE83]'
+  id: totrans-362
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: session1> `UPDATE` `city` `SET` `Population``=``Population` `+` `1` `WHERE`
+    `ID` `=` `1471``;`
+  id: totrans-363
+  prefs: []
+  type: TYPE_NORMAL
+  zh: session1> `UPDATE` `city` `SET` `Population``=``Population` `+` `1` `WHERE`
+    `ID` `=` `1471``;`
+- en: '[PRE84]'
+  id: totrans-364
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE84]'
+- en: Query OK, 1 row affected (0.00 sec)
+  id: totrans-365
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Query OK, 1 行受影响 (0.00 秒)
+- en: 'Rows matched: 1  Changed: 1  Warnings: 0'
+  id: totrans-366
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'Rows matched: 1  Changed: 1  Warnings: 0'
+- en: '[PRE85]'
+  id: totrans-367
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE85]'
+- en: session2> `UPDATE` `city` `SET` `Population``=``Population` `+` `1` `WHERE`
+    `ID` `=``1516``;`
+  id: totrans-368
+  prefs: []
+  type: TYPE_NORMAL
+  zh: session2> `UPDATE` `city` `SET` `Population``=``Population` `+` `1` `WHERE`
+    `ID` `=``1516``;`
+- en: '[PRE86]'
+  id: totrans-369
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE86]'
+- en: Query OK, 1 row affected (0.00 sec)
+  id: totrans-370
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Query OK, 1 行受影响 (0.00 秒)
+- en: 'Rows matched: 1  Changed: 1  Warnings: 0'
+  id: totrans-371
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'Rows matched: 1  Changed: 1  Warnings: 0'
+- en: '[PRE87]'
+  id: totrans-372
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE87]'
+- en: session1> `UPDATE` `city` `SET` `Population``=``Population` `+` `1` `WHERE`
+    `ID` `=``1516``;`
+  id: totrans-373
+  prefs: []
+  type: TYPE_NORMAL
+  zh: session1> `UPDATE` `city` `SET` `Population``=``Population` `+` `1` `WHERE`
+    `ID` `=``1516``;`
+- en: '[PRE88]'
+  id: totrans-374
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE88]'
+- en: 'ERROR 1213 (40001): Deadlock found when trying to get lock; try restarting
+    transaction'
+  id: totrans-375
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'ERROR 1213 (40001): 死锁，尝试获取锁定；请重启事务'
+- en: '[PRE89]'
+  id: totrans-376
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE89]'
+- en: session2> `UPDATE` `city` `SET` `Population``=``Population` `+` `1` `WHERE`
+    `ID` `=` `1471``;`
+  id: totrans-377
+  prefs: []
+  type: TYPE_NORMAL
+  zh: session2> `UPDATE` `city` `SET` `Population``=``Population` `+` `1` `WHERE`
+    `ID` `=` `1471``;`
+- en: '[PRE90]'
+  id: totrans-378
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE90]'
+- en: Query OK, 1 row affected (5.15 sec)
+  id: totrans-379
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Query OK, 1 行受影响 (5.15 秒)
+- en: 'Rows matched: 1  Changed: 1  Warnings: 0'
+  id: totrans-380
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'Rows matched: 1  Changed: 1  Warnings: 0'
+- en: '[PRE91]'
+  id: totrans-381
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE91]'
+- en: mysql> `SHOW` `ENGINE` `INNODB` `STATUS``\``G`
+  id: totrans-382
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SHOW` `ENGINE` `INNODB` `STATUS``\``G`
+- en: '[PRE92]'
+  id: totrans-383
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE92]'
+- en: '------------------------'
+  id: totrans-384
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '------------------------'
+- en: LATEST DETECTED DEADLOCK
+  id: totrans-385
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最近检测到死锁
+- en: '------------------------'
+  id: totrans-386
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '------------------------'
+- en: 2020-12-05 16:08:19 0x7f6949359700
+  id: totrans-387
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 2020-12-05 16:08:19 0x7f6949359700
+- en: '*** (1) TRANSACTION:'
+  id: totrans-388
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*** (1) 事务:'
+- en: TRANSACTION 10502342, ACTIVE 34 sec starting index read
+  id: totrans-389
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务 10502342, 活动 34 秒开始索引读取
+- en: mysql tables in use 1, locked 1
+  id: totrans-390
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql tables in use 1, locked 1
+- en: LOCK WAIT 3 lock struct(s), heap size 1136, 2 row lock(s), undo log
+  id: totrans-391
+  prefs: []
+  type: TYPE_NORMAL
+  zh: LOCK WAIT 3 lock struct(s), heap size 1136, 2 row lock(s), undo log
+- en: entries 1
+  id: totrans-392
+  prefs: []
+  type: TYPE_NORMAL
+  zh: entries 1
+- en: MySQL thread id 71, OS thread handle 140090386671360, query id 5979282
+  id: totrans-393
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 线程 id 71, OS 线程句柄 140090386671360, 查询 id 5979282
+- en: localhost msandbox updating
+  id: totrans-394
+  prefs: []
+  type: TYPE_NORMAL
+  zh: localhost msandbox updating
+- en: update city set Population=Population + 1 where ID = 1471
+  id: totrans-395
+  prefs: []
+  type: TYPE_NORMAL
+  zh: update city set Population=Population + 1 where ID = 1471
+- en: '*** (1) WAITING FOR THIS LOCK TO BE GRANTED:'
+  id: totrans-396
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*** (1) WAITING FOR THIS LOCK TO BE GRANTED:'
+- en: RECORD LOCKS space id 6041 page no 15 n bits 248 index PRIMARY of table
+  id: totrans-397
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RECORD LOCKS space id 6041 page no 15 n bits 248 index PRIMARY of table
+- en: '`world`.`city` trx id 10502342 lock_mode X locks rec but not gap waiting'
+  id: totrans-398
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`world`.`city` trx id 10502342 lock_mode X locks rec but not gap waiting'
+- en: '*** (2) TRANSACTION:'
+  id: totrans-399
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*** (2) 事务:'
+- en: TRANSACTION 10502341, ACTIVE 62 sec starting index read
+  id: totrans-400
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务 10502341, 活动 62 秒开始索引读取
+- en: mysql tables in use 1, locked 1
+  id: totrans-401
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql tables in use 1, locked 1
+- en: 3 lock struct(s), heap size 1136, 2 row lock(s), undo log entries 1
+  id: totrans-402
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 3 lock struct(s), heap size 1136, 2 row lock(s), undo log entries 1
+- en: MySQL thread id 75, OS thread handle 140090176542464, query id 5979283
+  id: totrans-403
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 线程 id 75, OS 线程句柄 140090176542464, 查询 id 5979283
+- en: localhost msandbox updating
+  id: totrans-404
+  prefs: []
+  type: TYPE_NORMAL
+  zh: localhost msandbox updating
+- en: update city set Population=Population + 1 where ID =1516
+  id: totrans-405
+  prefs: []
+  type: TYPE_NORMAL
+  zh: update city set Population=Population + 1 where ID =1516
+- en: '*** (2) HOLDS THE LOCK(S):'
+  id: totrans-406
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*** (2) 持有锁定:'
+- en: RECORD LOCKS space id 6041 page no 15 n bits 248 index PRIMARY of table
+  id: totrans-407
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RECORD LOCKS space id 6041 page no 15 n bits 248 index PRIMARY of table
+- en: '`world`.`city` trx id 10502341 lock_mode X locks rec but not gap'
+  id: totrans-408
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`world`.`city` trx id 10502341 lock_mode X locks rec but not gap'
+- en: '*** (2) WAITING FOR THIS LOCK TO BE GRANTED:'
+  id: totrans-409
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*** (2) WAITING FOR THIS LOCK TO BE GRANTED:'
+- en: RECORD LOCKS space id 6041 page no 16 n bits 248 index PRIMARY of table
+  id: totrans-410
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RECORD LOCKS space id 6041 page no 16 n bits 248 index PRIMARY of table
+- en: '`world`.`city` trx id 10502341 lock_mode X locks rec but not gap waiting'
+  id: totrans-411
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`world`.`city` trx id 10502341 lock_mode X locks rec but not gap waiting'
+- en: '*** WE ROLL BACK TRANSACTION (2)'
+  id: totrans-412
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*** 事务回滚 (2)'
+- en: '...'
+  id: totrans-413
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '...'
+- en: '[PRE93]'
+  id: totrans-414
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE93]'
+- en: mysql> `SET` `SESSION` `transaction_isolation``=``'READ-COMMITTED'``;`
+  id: totrans-415
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SET` `SESSION` `transaction_isolation``=``'READ-COMMITTED'``;
+- en: '[PRE94]'
+  id: totrans-416
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE94]'
+- en: Query OK, 0 rows affected (0.00 sec)
+  id: totrans-417
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询完成，影响行数：0，耗时 (0.00 秒)
+- en: '[PRE95]'
+  id: totrans-418
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE95]'
+- en: mysql> `SHOW` `SESSION` `VARIABLES` `LIKE` `'%isol%'``;`
+  id: totrans-419
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SHOW` `SESSION` `VARIABLES` `LIKE` `'%isol%'``;
+- en: '[PRE96]'
+  id: totrans-420
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE96]'
+- en: +-----------------------+----------------+
+  id: totrans-421
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-----------------------+----------------+
+- en: '| Variable_name         | Value          |'
+  id: totrans-422
+  prefs: []
+  type: TYPE_TB
+  zh: '| Variable_name         | Value          |'
+- en: +-----------------------+----------------+
+  id: totrans-423
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-----------------------+----------------+
+- en: '| transaction_isolation | READ-COMMITTED |'
+  id: totrans-424
+  prefs: []
+  type: TYPE_TB
+  zh: '| transaction_isolation | READ-COMMITTED |'
+- en: '| tx_isolation          | READ-COMMITTED |'
+  id: totrans-425
+  prefs: []
+  type: TYPE_TB
+  zh: '| tx_isolation          | READ-COMMITTED |'
+- en: +-----------------------+----------------+
+  id: totrans-426
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-----------------------+----------------+
+- en: '[PRE97]'
+  id: totrans-427
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE97]'
+- en: 'ERROR 1205 (HY000): Lock wait timeout exceeded; try restarting transaction'
+  id: totrans-428
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'ERROR 1205 (HY000): Lock wait timeout exceeded; try restarting transaction'
+- en: '[PRE98]'
+  id: totrans-429
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE98]'
+- en: mysql> `SET` `GLOBAL` `innodb_print_all_deadlocks` `=` `1``;`
+  id: totrans-430
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SET` `GLOBAL` `innodb_print_all_deadlocks` `=` `1``;`
+- en: '[PRE99]'
+  id: totrans-431
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE99]'
+- en: mysql> `SET` `SESSION` `lock_wait_timeout``=``1``;`
+  id: totrans-432
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SET` `SESSION` `lock_wait_timeout``=``1``;
+- en: mysql> `CREATE` `TABLE` `t1``(``i` `INT` `NOT` `NULL` `AUTO_INCREMENT` `PRIMARY`
+    `KEY``)`
+  id: totrans-433
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `CREATE` `TABLE` `t1``(``i` `INT` `NOT` `NULL` `AUTO_INCREMENT` `PRIMARY`
+    `KEY``)`
+- en: -> `ENGINE``=``InnoDB``;`
+  id: totrans-434
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `ENGINE``=``InnoDB``;
+- en: '```'
+  id: totrans-435
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '```'
+- en: '`innodb_deadlock_detect`'
+  id: totrans-436
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`innodb_deadlock_detect`'
+- en: Disables deadlock monitoring. Note that this only means that MySQL will not
+    kill a query to undo the deadlock knot. Disabling deadlock detection will *not*
+    prevent deadlocks from happening, but it will make MySQL rely on the `innodb_lock_wait_timeout`
+    setting for transaction rollback when a deadlock occurs.
+  id: totrans-437
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 禁用死锁监控。请注意，这仅意味着MySQL不会终止查询以撤销死锁，而禁用死锁检测*不会*阻止死锁发生，但会使MySQL依赖于`innodb_lock_wait_timeout`设置来在发生死锁时回滚事务。

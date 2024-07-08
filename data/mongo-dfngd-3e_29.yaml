@@ -1,0 +1,972 @@
+- en: Chapter 23\. Making Backups
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第 23 章。制作备份
+- en: 'It is important to make regular backups of your system. Backups are good protection
+    against most types of failure, and very little can’t be solved by restoring from
+    a clean backup. This chapter covers the common options for making backups:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 定期备份系统非常重要。备份可以有效保护免受大多数类型的故障影响，而通过从干净的备份进行恢复几乎可以解决所有问题。本章涵盖了制作备份的常见选项：
+- en: Single-server backups, including snapshot backup and restore procedure
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 单服务器备份，包括快照备份和恢复过程
+- en: Special considerations for backing up replica sets
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 备份副本集的特殊考虑事项
+- en: Baking up a sharded cluster
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 构建一个分片集群
+- en: Backups are only useful if you are confident about deploying them in an emergency.
+    Thus, for any backup technique you choose, be sure to practice both making backups
+    and restoring from them until you are comfortable with the restore procedure.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 仅当您对在紧急情况下部署备份感到有信心时，备份才有用。因此，无论您选择哪种备份技术，请务必练习制作备份和从备份中恢复，直到您熟悉恢复过程。
+- en: Backup Methods
+  id: totrans-6
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 备份方法
+- en: There are a number of options for backing up clusters in MongoDB. MongoDB Atlas,
+    the official MongoDB cloud service, provides both continuous backups and cloud
+    provider snapshots. Continuous backups take incremental backups of data in your
+    cluster, ensuring your backups are typically just a few seconds behind the operating
+    system. Cloud provider snapshots provide localized backup storage using the snapshot
+    functionality of the cluster’s cloud service provider (e.g., Amazon Web Services,
+    Microsoft Azure, or Google Cloud Platform). The best backup solution for the majority
+    of scenarios is continuous backups.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有多种选项可以备份 MongoDB 集群。MongoDB Atlas，官方 MongoDB 云服务，提供连续备份和云提供商快照。连续备份会增量备份集群中的数据，确保备份通常仅落后操作系统几秒钟。云提供商快照使用集群云服务提供商（例如
+    Amazon Web Services，Microsoft Azure 或 Google Cloud Platform）的快照功能提供本地化备份存储。对于大多数情况，最佳的备份解决方案是连续备份。
+- en: MongoDB also provides backup capability through Cloud Manager and Ops Manager.
+    Cloud Manager is a hosted backup, monitoring, and automation service for MongoDB.
+    Ops Manager is an on-premise solution that has similar functionality to Cloud
+    Manager.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 还通过 Cloud Manager 和 Ops Manager 提供备份功能。Cloud Manager 是 MongoDB 的托管备份、监控和自动化服务。Ops
+    Manager 是一个本地解决方案，具有与 Cloud Manager 类似的功能。
+- en: For individuals and teams managing MongoDB clusters directly, there are several
+    backup strategies. We will outline these strategies in the rest of this chapter.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于直接管理 MongoDB 集群的个人和团队，有几种备份策略。本章的其余部分将概述这些策略。
+- en: Backing Up a Server
+  id: totrans-10
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 备份服务器
+- en: 'There are a variety of ways to create backups. Regardless of the method, making
+    a backup can cause strain on a system: it generally requires reading all your
+    data into memory. Thus, backups should generally be done on replica set secondaries
+    (as opposed to the primary) or, for standalone servers, at an off time.'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有多种方法可以创建备份。无论使用哪种方法，备份都可能对系统造成压力：通常需要将所有数据读入内存。因此，备份通常应该在副本集的次要成员（而不是主要成员）上进行，或者对于独立服务器，在非高峰时间进行。
+- en: The techniques in this section apply to any *mongod*, whether a standalone server
+    or a member of a replica set, unless otherwise noted.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节中的技术适用于任何*mongod*，无论是独立服务器还是副本集的成员，除非另有说明。
+- en: Filesystem Snapshot
+  id: totrans-13
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 文件系统快照
+- en: Filesystem snapshots use system-level tools to create copies of the device that
+    holds MongoDB’s data files. These methods complete quickly and work reliably,
+    but require additional system configuration outside of MongoDB.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文件系统快照使用系统级工具创建 MongoDB 数据文件所在设备的副本。这些方法完成迅速且可靠，但需要在 MongoDB 之外进行额外的系统配置。
+- en: MongoDB 3.2 added support for volume-level backup of MongoDB instances using
+    the WiredTiger storage engine when those instances’ data files and journal files
+    reside on separate volumes. However, to create a coherent backup, the database
+    must be locked and all writes to the database must be suspended during the backup
+    process.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 3.2 添加了对使用 WiredTiger 存储引擎进行卷级备份的支持，当这些实例的数据文件和日志文件驻留在不同卷上时。然而，为了创建一个一致的备份，必须锁定数据库并在备份过程中暂停对数据库的所有写操作。
+- en: Prior to MongoDB 3.2, creating volume-level backups of MongoDB instances using
+    WiredTiger required that the data files and journal reside on the same volume.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MongoDB 3.2 之前，使用 WiredTiger 创建 MongoDB 实例的卷级备份要求数据文件和日志文件驻留在同一个卷上。
+- en: Snapshots work by creating pointers between the live data and a special snapshot
+    volume. These pointers are theoretically equivalent to “hard links.” As the working
+    data diverges from the snapshot, the snapshot process uses a copy-on-write strategy.
+    As a result, the snapshot only stores modified data.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 快照通过在实时数据和特殊快照卷之间创建指针来工作。这些指针在理论上等同于“硬链接”。随着工作数据与快照的分歧，快照过程采用写时复制策略。因此，快照仅存储修改后的数据。
+- en: After making the snapshot, you mount the snapshot image on your filesystem and
+    copy data from the snapshot. The resulting backup contains a full copy of all
+    data.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 制作快照后，您将快照映像挂载到文件系统上，并从快照中复制数据。生成的备份包含所有数据的完整副本。
+- en: 'The database must be valid when the snapshot takes place. This means that all
+    writes accepted by the database need to be fully written to disk: either to the
+    journal or to data files. If there are writes that are not on disk when the backup
+    occurs, the backup will not reflect these changes.'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 快照拍摄时数据库必须有效。这意味着数据库接受的所有写操作都需要完全写入磁盘：要么写入日志，要么写入数据文件。如果备份时还有未写入磁盘的写操作，则备份将不会反映这些更改。
+- en: For the WiredTiger storage engine, the data files reflect a consistent state
+    as of the last checkpoint. Checkpoints occur every minute.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于WiredTiger存储引擎，数据文件反映了最后一个检查点时的一致状态。检查点每分钟发生一次。
+- en: Snapshots create an image of an entire disk or volume. Unless you need to back
+    up your entire system, consider isolating your MongoDB data files, journal (if
+    applicable), and configuration on one logical disk that doesn’t contain any other
+    data. Alternatively, store all MongoDB data files on a dedicated device so that
+    you can make backups without duplicating extraneous data.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 快照创建整个磁盘或卷的映像。除非您需要备份整个系统，否则请考虑将MongoDB数据文件、日志（如果适用）和配置隔离在一个不包含任何其他数据的逻辑磁盘上。或者，将所有MongoDB数据文件存储在专用设备上，以便您可以备份而不复制多余的数据。
+- en: Ensure that you copy data from snapshots onto other systems. This ensures that
+    data is safe from site failures.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确保您从快照中复制数据到其他系统。这样可以确保数据免受站点故障的影响。
+- en: If your *mongod* instance has journaling enabled, then you can use any kind
+    of filesystem or volume/block-level snapshot tool to create backups.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的*mongod*实例启用了日志记录，则可以使用任何类型的文件系统或卷/块级快照工具来创建备份。
+- en: If you manage your own infrastructure on a Linux-based system, configure your
+    system using the Linux Logical Volume Manager (LVM) to provide your disk packages
+    and provide snapshot capability. LVM allows for the flexible combination and division
+    of physical disk partitions, enabling dynamically resizable filesystems. You can
+    also use LVM-based setups within a cloud/virtualized environment.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您在基于Linux的系统上管理自己的基础设施，请使用Linux逻辑卷管理器（LVM）配置系统，以提供磁盘包和提供快照功能。LVM允许动态调整大小的文件系统的灵活组合和分割物理磁盘分区。您还可以在云/虚拟化环境中使用基于LVM的设置。
+- en: In the initial setup of LVM, first we assign disk partitions to physical volumes
+    `(pvcreate)`, then one or more of these are then assigned to a volume group `(vgcreate)`,
+    and then we create logical volumes `(lvcreate)` referring to the volume groups.
+    We can build a filesystem on the logical volume `(mkfs)`, which when created can
+    be mounted for use `(mount)`.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在LVM的初始设置中，首先我们为物理卷分配磁盘分区（`pvcreate`），然后将其中一个或多个分配给卷组（`vgcreate`），然后创建逻辑卷（`lvcreate`），引用卷组。我们可以在逻辑卷上建立文件系统（`mkfs`），创建后可以挂载以供使用（`mount`）。
+- en: Snapshot backup and restore procedure
+  id: totrans-26
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 快照备份和恢复过程
+- en: This section provides an overview of a simple backup process using LVM on a
+    Linux system. While the tools, commands, and paths may be (slightly) different
+    on your system, the following steps provide a high-level overview of the backup
+    operation.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节概述了在Linux系统上使用LVM进行简单备份的过程。虽然工具、命令和路径在您的系统上可能略有不同，但以下步骤提供了备份操作的高级概述。
+- en: Only use the following procedure as a guideline for a backup system and infrastructure.
+    Production backup systems must consider a number of application-specific requirements
+    and factors unique to specific environments.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 仅将以下程序用作备份系统和基础设施的指南。生产备份系统必须考虑特定环境中的多个应用程序特定要求和因素。
+- en: 'To create a snapshot with LVM, issue a command as `root` in the following format:'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用LVM创建快照，请以`root`用户发出以下格式的命令：
+- en: '[PRE0]'
+  id: totrans-30
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: This command creates an LVM snapshot (with the `--snapshot` option) named `mdb-snap01`
+    of the `mongodb` volume in the `vg0` volume group, which will be located at `/dev/vg0/mdb-snap01`.
+    The location and paths to your systems, volume groups, and devices may vary slightly
+    depending on your operating system’s LVM configuration.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此命令使用 `--snapshot` 选项创建名为 `mdb-snap01` 的 LVM 快照，该快照位于 `vg0` 卷组中的 `mongodb` 卷上，路径为
+    `/dev/vg0/mdb-snap01`。根据您的操作系统的 LVM 配置，系统、卷组和设备的位置和路径可能会略有不同。
+- en: The snapshot has a cap of 100 MB, because of the parameter `--size 100M`. This
+    size does not reflect the total amount of the data on the disk, but rather the
+    amount of differences between the current state of */dev/vg0/mongodb* and the
+    snapshot (*/dev/vg0/mdb-snap01*).
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于参数 `--size 100M` 的限制，快照的容量为 100 MB。这个大小不反映磁盘上数据的总量，而是当前 */dev/vg0/mongodb*
+    状态与快照 (*/dev/vg0/mdb-snap01*) 之间差异的量。
+- en: The snapshot will exist when the command returns. You can restore directly from
+    the snapshot at any time, or create a new logical volume and restore from the
+    snapshot to the alternate image.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当命令返回时，快照将存在。您可以随时直接从快照恢复，或者创建一个新的逻辑卷，并从快照恢复到备用映像。
+- en: While snapshots are great for creating high-quality backups quickly, they are
+    not ideal as a format for storing backup data. Snapshots typically depend and
+    reside on the same storage infrastructure as the original disk images. Therefore,
+    it’s crucial that you archive these snapshots and store them elsewhere.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管快照非常适合快速创建高质量备份，但作为存储备份数据的格式并不理想。快照通常依赖于并驻留在与原始磁盘映像相同的存储基础设施上。因此，非常重要的是将这些快照归档并存储在其他地方。
+- en: 'After creating a snapshot, mount the snapshot and copy the data to separate
+    storage. Alternatively, take a block-level copy of the snapshot image, such as
+    with the following procedure:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建快照后，挂载快照并将数据复制到独立存储。或者，执行如下过程，对快照图像进行块级复制，例如：
+- en: '`# umount /dev/vg0/mdb-snap01`'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`# umount /dev/vg0/mdb-snap01`'
+- en: '`# dd if=/dev/vg0/mdb-snap01 | gzip > mdb-snap01.gz`'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`# dd if=/dev/vg0/mdb-snap01 | gzip > mdb-snap01.gz`'
+- en: 'This command sequence does the following:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此命令序列执行以下操作：
+- en: Ensures that the */dev/vg0/mdb-snap01* device is not mounted
+  id: totrans-39
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 确保 */dev/vg0/mdb-snap01* 设备未被挂载
+- en: Performs a block-level copy of the entire snapshot image using the `dd` command
+    and compresses the result in a gzipped file in the current working directory
+  id: totrans-40
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 `dd` 命令执行整个快照图像的块级复制，并将结果压缩为当前工作目录中的一个 gzipped 文件
+- en: Warning
+  id: totrans-41
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: The `dd` command will create a large *.gz* file in your current working directory.
+    Make sure that you run *this command* in a filesystem that has enough free space.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`dd` 命令将在当前工作目录中创建一个大的 *.gz* 文件。确保在有足够空闲空间的文件系统中运行 *这个命令*。'
+- en: 'To restore a snapshot created with LVM, issue the following sequence of commands:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要恢复使用 LVM 创建的快照，请执行以下命令序列：
+- en: '`# lvcreate --size 1G --name mdb-new vg0`'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`# lvcreate --size 1G --name mdb-new vg0`'
+- en: '`# gzip -d -c mdb-snap01.gz | dd of=/dev/vg0/mdb-new`'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`# gzip -d -c mdb-snap01.gz | dd of=/dev/vg0/mdb-new`'
+- en: '`# mount /dev/vg0/mdb-new /srv/mongodb`'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`# mount /dev/vg0/mdb-new /srv/mongodb`'
+- en: 'This sequence does the following:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此序列执行以下操作：
+- en: Creates a new logical volume named *mdb-new*, in the */dev/vg0* volume group.
+    The path to the new device will be */dev/vg0/mdb-new*. You can use a different
+    name, and change 1G to your desired volume size.
+  id: totrans-48
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在 */dev/vg0* 卷组中创建一个名为 *mdb-new* 的新逻辑卷。新设备的路径将为 */dev/vg0/mdb-new*。您可以使用不同的名称，并将
+    1G 更改为所需的卷大小。
+- en: Uncompresses and unarchives the *mdb-snap01.gz* file into the *mdb-new* disk
+    image.
+  id: totrans-49
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将 *mdb-snap01.gz* 文件解压并解档到 *mdb-new* 磁盘映像中。
+- en: Mounts the *mdb-new* disk image to the */srv/mongodb* directory. Modify the
+    mount point to correspond to your MongoDB data file location or other location
+    as needed.
+  id: totrans-50
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 挂载 *mdb-new* 磁盘映像到 */srv/mongodb* 目录。根据需要修改挂载点以对应您的 MongoDB 数据文件位置或其他位置。
+- en: The restored snapshot will have a stale `mongod.lock` file. If you do not remove
+    this file from the snapshot, MongoDB may assume that the stale lock file indicates
+    an unclean shutdown. If you’re running with `storage.journal.enabled` enabled
+    and you do not use `db.fsyncLock()`, you do not need to remove the `mongod.lock`
+    file. If you use `db.fsyncLock()` you will need to remove the lock.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 恢复的快照将具有陈旧的 `mongod.lock` 文件。如果不从快照中删除此文件，MongoDB 可能会认为陈旧的锁文件指示了一个不干净的关闭。如果您启用了
+    `storage.journal.enabled` 并且没有使用 `db.fsyncLock()`，则不需要删除 `mongod.lock` 文件。如果您使用了
+    `db.fsyncLock()`，则需要删除该锁。
+- en: 'To restore a backup without writing to a compressed *.gz* file, use the following
+    sequence of commands:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要恢复备份而不写入压缩的 *.gz* 文件，请使用以下命令序列：
+- en: '`# umount /dev/vg0/mdb-snap01`'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`# umount /dev/vg0/mdb-snap01`'
+- en: '`# lvcreate --size 1G --name mdb-new vg0`'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`# lvcreate --size 1G --name mdb-new vg0`'
+- en: '`# dd if=/dev/vg0/mdb-snap01 of=/dev/vg0/mdb-new`'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`# dd if=/dev/vg0/mdb-snap01 of=/dev/vg0/mdb-new`'
+- en: '`# mount /dev/vg0/mdb-new /srv/mongodb`'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`# mount /dev/vg0/mdb-new /srv/mongodb`'
+- en: 'You can implement off-system backups using the combined process and SSH. This
+    sequence is identical to procedures explained previously, except that it archives
+    and compresses the backup on a remote system using SSH:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以使用组合过程和SSH实现离系统备份。这个序列与之前解释的过程完全相同，只是使用SSH在远程系统上存档并压缩备份：
+- en: '`umount /dev/vg0/mdb-snap01`'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`umount /dev/vg0/mdb-snap01`'
+- en: '`dd if=/dev/vg0/mdb-snap01 | ssh username@example.com gzip > /opt/backup/mdb-snap01.gz`'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`dd if=/dev/vg0/mdb-snap01 | ssh username@example.com gzip > /opt/backup/mdb-snap01.gz`'
+- en: '`lvcreate --size 1G --name mdb-new vg0`'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`lvcreate --size 1G --name mdb-new vg0`'
+- en: '`ssh username@example.com gzip -d -c /opt/backup/mdb-snap01.gz | dd of=/dev/vg0/mdb-new`'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ssh username@example.com gzip -d -c /opt/backup/mdb-snap01.gz | dd of=/dev/vg0/mdb-new`'
+- en: '`mount /dev/vg0/mdb-new /srv/mongodb`'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`mount /dev/vg0/mdb-new /srv/mongodb`'
+- en: Starting in MongoDB 3.2, for the purpose of volume-level backup of MongoDB instances
+    using WiredTiger, the data files and the journal are no longer required to reside
+    on a single volume. However, the database must be locked and all writes to the
+    database must be suspended during the backup process to ensure the consistency
+    of the backup.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从MongoDB 3.2开始，为了使用WiredTiger对MongoDB实例进行卷级备份，不再需要数据文件和日志驻留在单个卷上。然而，在备份过程中必须锁定数据库并暂停对数据库的所有写入，以确保备份的一致性。
+- en: If your *mongod* instance is either running without journaling or has the journal
+    files on a separate volume, you must flush all writes to disk and lock the database
+    to prevent writes during the backup process. If you have a replica set configuration,
+    then for your backup use a secondary that is not receiving reads (i.e., a hidden
+    member).
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的 *mongod* 实例正在运行而没有使用日志或将日志文件存储在单独的卷上，则必须将所有写操作刷新到磁盘并锁定数据库以防止备份过程中的写入。如果您有副本集配置，则备份时请使用未接收读取的次要成员（即隐藏成员）。
+- en: 'To do this, issue the `db.fsyncLock()` method in the `mongo` shell:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要执行此操作，请在 `mongo` shell 中使用 `db.fsyncLock()` 方法：
+- en: '[PRE1]'
+  id: totrans-66
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: Then perform the backup operation described previously.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后执行先前描述的备份操作。
+- en: 'After the snapshot completes, unlock the database by issuing the following
+    command in the `mongo` shell:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 快照完成后，在 `mongo` shell 中发出以下命令解锁数据库：
+- en: '[PRE2]'
+  id: totrans-69
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: This process is described more fully in the following section.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此过程在以下部分中有更详细的描述。
+- en: Copying Data Files
+  id: totrans-71
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 复制数据文件
+- en: 'Another way of creating single-server backups is to make a copy of everything
+    in the data directory. Because you cannot copy all of the files at the same moment
+    without filesystem support, you must prevent the data files from changing while
+    you are making the copy. This can be accomplished with a command called `fsyncLock`:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种创建单服务器备份的方法是复制数据目录中的所有内容。由于不能同时复制所有文件而没有文件系统支持，因此必须在复制数据文件时防止其变化。这可以通过称为
+    `fsyncLock` 的命令来完成：
+- en: '[PRE3]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: This command locks the database against any further writes and then flushes
+    all dirty data to disk (`fsync`), ensuring that the files in the data directory
+    have the latest consistent information and are not changing.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此命令锁定数据库以防止进一步的写入，并将所有脏数据刷新到磁盘（`fsync`），确保数据目录中的文件具有最新的一致信息且不在变化。
+- en: Once this command has been run, *mongod* will enqueue all incoming writes. It
+    will not process any further writes until it has been unlocked. Note that this
+    command stops writes to *all* databases (not just the one *db* is connected to).
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 运行此命令后，*mongod* 将排队所有传入的写入。在解锁之前，它不会处理任何进一步的写入。请注意，此命令会停止对*所有*数据库（而不仅仅是连接到的数据库）的写入。
+- en: 'Once the `fsyncLock` command returns, copy all of the files in your data directory
+    to a backup location. On Linux, this can be done with a command such as:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦 `fsyncLock` 命令返回，将所有数据目录中的文件复制到备份位置。在Linux上，可以使用以下命令完成：
+- en: '[PRE4]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: Make sure that you copy absolutely every file and folder from the data directory
+    to the backup location. Excluding files or directories may make the backup unusable
+    or corrupt.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确保将数据目录中的每个文件和文件夹都复制到备份位置。排除文件或目录可能会导致备份无法使用或损坏。
+- en: 'Once you have finished copying the data, unlock the database to allow it to
+    take writes again:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完成数据复制后，请解锁数据库以允许其再次写入：
+- en: '[PRE5]'
+  id: totrans-80
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: Your database will begin handling writes again normally.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你的数据库将会正常处理写操作。
+- en: Note that there are some locking issues with authentication and `fsyncLock`.
+    If you are using authentication, do not close the shell between calling `fsyncLock`
+    and `fsyncUnlock`. If you disconnect, you may be unable to reconnect and have
+    to restart `mongod`. The `fsyncLock` setting does not persist between restarts;
+    `mongod` will always start up unlocked.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，使用认证和`fsyncLock`存在一些锁定问题。如果使用认证，请不要在调用`fsyncLock`和`fsyncUnlock`之间关闭Shell。如果断开连接，您可能无法重新连接并且必须重新启动*mongod*。`fsyncLock`设置在重新启动之间不会持久化；*mongod*始终会解锁启动。
+- en: As an alternative to `fsyncLock`, you can instead shut down *mongod*, copy the
+    files, and then start *mongod* back up again. Shutting down *mongod* effectively
+    flushes all changes to disk and prevents new writes from occurring during the
+    backup.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为`fsyncLock`的替代方法，你可以关闭*mongod*，复制文件，然后再次启动*mongod*。关闭*mongod*会有效地将所有更改刷新到磁盘，并在备份期间防止新的写入操作发生。
+- en: 'To restore from the copy of the data directory, ensure that *mongod* is not
+    running and that the data directory you want to restore into is empty. Copy the
+    backed-up data files to the data directory, and then start *mongod*. For example,
+    the following command would restore the files backed up with the command shown
+    earlier:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要从数据目录的副本中恢复，请确保*mongod*没有在运行，并且要将要恢复的数据目录清空。将备份的数据文件复制到数据目录，然后启动*mongod*。例如，以下命令将恢复之前显示的命令备份的文件：
+- en: '[PRE6]'
+  id: totrans-85
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Despite the warnings about partial data directory copies, you can use this method
+    to back up individual databases if you know what to copy and where they are using
+    the `--directoryperdb` option. To back up an individual database (called, say,
+    *myDB*), which is only available if you are using the `--directoryperdb` option,
+    copy the entire *myDB* directory. Partial data directory copies are only possible
+    with the `--directoryperdb` option.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管有关部分数据目录副本的警告，如果您知道要复制的内容以及使用`--directoryperdb`选项，您可以使用此方法备份单个数据库。要备份一个名为*myDB*的单个数据库（仅在使用`--directoryperdb`选项时可用），复制整个*myDB*目录。部分数据目录副本仅在使用`--directoryperdb`选项时才可能。
+- en: 'You can restore specific databases by copying just the files with the correct
+    database name into your data directory. You must be starting from a clean shutdown
+    to restore piecemeal like this. If you had a crash or a hard shutdown, do not
+    attempt to restore a single database from the backup: replace the entire directory
+    and start the *mongod* to allow the journal files to be replayed.'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过仅复制具有正确数据库名称的文件来恢复特定数据库到您的数据目录中。如果要这样逐个还原，必须从干净的关闭开始。如果发生崩溃或硬关闭，请勿尝试从备份中恢复单个数据库：替换整个目录并启动*mongod*以允许重放日志文件。
+- en: Warning
+  id: totrans-88
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Never use `fsyncLock` in conjunction with *mongodump* (described next). Depending
+    on what else your database is doing, *mongodump* may hang forever if the database
+    is locked.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 永远不要与*mongodump*（稍后描述）一起使用`fsyncLock`。根据数据库的其他操作，*mongodump*可能会永远挂起如果数据库被锁定。
+- en: Using mongodump
+  id: totrans-90
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用mongodump
+- en: 'The final way of making a single-server backup is to use *mongodump*. *mongodump*
+    is mentioned last because it has some downsides. It is slower (both to get the
+    backup and to restore from it) and it has some issues with replica sets, which
+    are discussed in [“Specific Considerations for Replica Sets”](#sect1-rs-backup).
+    However, it also has some benefits: it is a good way to back up individual databases,
+    collections, and even subsets of collections.'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后一种制作单服务器备份的方法是使用*mongodump*。之所以将*mongodump*放在最后提到，是因为它有一些缺点。它速度较慢（获取备份和从中恢复）并且在复制集方面存在一些问题，这些问题在[“复制集的特定注意事项”](#sect1-rs-backup)中有讨论。但是，它也有一些好处：是备份单个数据库、集合甚至集合子集的好方法。
+- en: '*mongodump* has a variety of options that you can see by running `mongodump
+    --help`. Here, we will focus on the most useful ones to use for backing up.'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mongodump*有多种选项，可以通过运行`mongodump --help`查看。在这里，我们将重点介绍用于备份的最有用的选项。'
+- en: 'To back up all databases, simply run *mongodump*. If you are running *mongodump*
+    on the same machine as the *mongod*, you can simply specify the port *mongod*
+    is running on:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要备份所有数据库，只需运行*mongodump*。如果在与*mongod*相同的机器上运行*mongodump*，只需指定*mongod*运行的端口即可：
+- en: '[PRE7]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: '*mongodump* will create a *dump* directory in the current directory, which
+    contains a dump of all your data. This *dump* directory is organized by database
+    and by collection into folders and subfolders. The actual data is stored in *.bson*
+    files, which merely contain every document in a collection in BSON, concatenated
+    together. You can examine *.bson* files using the *bsondump* tool, which comes
+    with MongoDB.'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mongodump* 将在当前目录下创建一个 *dump* 目录，其中包含所有数据的备份。这个 *dump* 目录按数据库和集合分别组织成文件夹和子文件夹。实际数据存储在
+    *.bson* 文件中，这些文件只是将每个集合中的每个文档以 BSON 格式串联在一起。你可以使用随 MongoDB 一起提供的 *bsondump* 工具查看
+    *.bson* 文件。'
+- en: 'You do not even need to have a server running to use *mongodump*. You can use
+    the `--dbpath` option to specify your data directory, and *mongodump* will use
+    the data files to copy data:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你甚至不需要运行服务器就可以使用 *mongodump*。你可以使用 `--dbpath` 选项指定你的数据目录，*mongodump* 将使用数据文件进行数据复制：
+- en: '[PRE8]'
+  id: totrans-97
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: You should not use `--dbpath` if *mongod* is running.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果 *mongod* 在运行，则不应使用 `--dbpath`。
+- en: 'One issue with *mongodump* is that it is not an instantaneous backup: the system
+    may be taking writes while the backup occurs. Thus, you might end up with a situation
+    where user A begins a backup that causes *mongodump* to dump the database *A*,
+    but while this is happening user B drops *A*. However, *mongodump* has already
+    dumped it, so you’ll end up with a snapshot of the data that is inconsistent with
+    the state on the original server.'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mongodump* 的一个问题是它不是即时备份：备份进行时系统可能正在写入。因此，可能出现这样的情况，用户 A 开始了一个导致 *mongodump*
+    转储数据库 *A* 的备份，但同时用户 B 删除了 *A*。然而，*mongodump* 已经完成了转储，因此你将得到一个与原始服务器状态不一致的数据快照。'
+- en: To avoid this, if you are running *mongod* with `--replSet`, you can use *mongodump*’s
+    `--oplog` option. This will keep track of all operations that occur on the server
+    while the dump is taking place, so these operations can be replayed when the backup
+    is restored. This gives you a consistent point-in-time snapshot of data from the
+    source server.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了避免这种情况，如果你正在使用 `--replSet` 运行 *mongod*，你可以使用 *mongodump* 的 `--oplog` 选项。这将跟踪备份期间在服务器上发生的所有操作，因此可以在还原备份时重新播放这些操作。这为你提供了源服务器数据的一致时间点快照。
+- en: If you pass *mongodump* a replica set connection string (e.g., ``"*`setName`*/*`seed1`*,*`seed2`*,*`seed3`*"``),
+    it will automatically select the primary to dump from. If you want to use a secondary,
+    you can specify a `read preference`. The `read preference` can be specified by
+    `--uri connection string`, by the `uri readPreferenceTags` option, or by the `--readPreference`
+    command-line option. For more details on the various settings and options, please
+    see [the *mongodump* MongoDB documentation page](https://oreil.ly/GH3-O).
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你向 *mongodump* 提供一个副本集连接字符串（例如，``"*`setName`*/*`seed1`*,*`seed2`*,*`seed3`*"``），它将自动选择主节点进行备份。如果你想使用副本节点，你可以指定一个
+    `read preference`。`read preference` 可以通过 `--uri connection string`、`uri readPreferenceTags`
+    选项或 `--readPreference` 命令行选项来指定。有关各种设置和选项的详细信息，请参阅 [the *mongodump* MongoDB documentation
+    page](https://oreil.ly/GH3-O)。
+- en: 'To restore from a *mongodump* backup, use the *mongorestore* tool:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要从 *mongodump* 备份还原数据，请使用 *mongorestore* 工具：
+- en: '[PRE9]'
+  id: totrans-103
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: If you used the `--oplog` option to dump the database, you must use the `--oplogReplay`
+    option with *mongorestore* to get the point-in-time snapshot.
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你在转储数据库时使用了 `--oplog` 选项，你必须在使用 *mongorestore* 还原时使用 `--oplogReplay` 选项来获取时间点快照。
+- en: If you are replacing data on a running server, you may (or may not) wish to
+    use the `--drop` option, which drops a collection before restoring it.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你正在替换运行中的服务器上的数据，你可能（或者可能不）希望使用 `--drop` 选项，在还原之前删除集合。
+- en: The behavior of *mongodump* and *mongorestore* has changed over time. To prevent
+    compatibility issues, try to use the same version of both utilities (you can see
+    their versions by running `mongodump --version` and `mongorestore --version`).
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mongodump* 和 *mongorestore* 的行为随着时间的推移而发生了变化。为了防止兼容性问题，请尽量使用这两个工具的相同版本（你可以通过运行
+    `mongodump --version` 和 `mongorestore --version` 来查看它们的版本）。'
+- en: Warning
+  id: totrans-107
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: From MongoDB version 4.2 and up, you cannot use either *mongodump* or *mongorestore*
+    as a strategy for backing up a sharded cluster. These tools do not maintain the
+    atomicity guarantees of transactions across shards.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从 MongoDB 版本 4.2 开始，你不能再将 *mongodump* 或 *mongorestore* 用作备份分片集群的策略。这些工具不保证跨分片的事务的原子性。
+- en: Moving collections and databases with mongodump and mongorestore
+  id: totrans-109
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用 mongodump 和 mongorestore 移动集合和数据库
+- en: You can restore into an entirely different database and collection than you
+    dumped from. This can be useful if different environments use different database
+    names (say, *dev* and *prod*) but the same collection names.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以将数据恢复到与你备份的完全不同的数据库和集合中。如果不同的环境使用不同的数据库名称（比如*dev*和*prod*），但使用相同的集合名称，则这可能非常有用。
+- en: 'To restore a *.bson* file into a specific database and collection, specify
+    the targets on the command line:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将*.bson*文件恢复到特定的数据库和集合中，请在命令行上指定目标：
+- en: '[PRE10]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'It is also possible to use these tools with SSH to perform data migration without
+    any disk I/O using the archive feature of these tools. This simplifies three stages
+    into one operation, when previously you had to back up to disk, then copy those
+    backup files to a target server, and then run *mongorestore* on that server to
+    restore the backups:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 也可以使用SSH与这些工具一起执行数据迁移，使用这些工具的归档功能，无需任何磁盘I/O。这将三个阶段简化为一个操作，以前你必须备份到磁盘，然后将这些备份文件复制到目标服务器，然后在该服务器上运行*mongorestore*来恢复备份：
+- en: '[PRE11]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'Compression can be combined with the archive feature of these tools to further
+    reduce the size of the information sent while performing a data migration. Here
+    is the same SSH data migration example using both the archive and compression
+    features of these tools:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 压缩可以与这些工具的归档功能结合使用，进一步减少执行数据迁移时发送的信息量。以下是使用这些工具的归档和压缩功能执行相同SSH数据迁移示例：
+- en: '[PRE12]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: Administrative complications with unique indexes
+  id: totrans-117
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 唯一索引的管理复杂性
+- en: If you have a unique index (other than `"_id"`) on any of your collections,
+    you should consider using a different type of backup than *mongodump*/*mongorestore*.
+    Unique indexes require that the data does not change in ways that would violate
+    the unique index constraint during the copy. The safest way to ensure this is
+    to choose a method that “freezes” the data, then make a backup as described in
+    either of the previous two sections.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你的集合中有唯一索引（除了`"_id"`以外），你应该考虑使用不同于*mongodump*/*mongorestore*的备份类型。唯一索引要求在复制过程中数据不会以违反唯一索引约束的方式发生变化。确保这一点的最安全方法是选择一种“冻结”数据的方法，然后按照前两节中的任一描述进行备份。
+- en: If you are determined to use *mongodump*/*mongorestore*, you may need to preprocess
+    your data when you restore from a backup.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你决定使用*mongodump*/*mongorestore*，在从备份恢复数据时可能需要预处理你的数据。
+- en: Specific Considerations for Replica Sets
+  id: totrans-120
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 副本集的特定考虑因素
+- en: The main additional consideration when backing up a replica set is that as well
+    as the data, you must also capture the state of the replica set to ensure an accurate
+    point-in-time snapshot of your deployment is made.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在备份副本集时的主要额外考虑因素是，除了数据之外，你还必须捕获副本集的状态，以确保对部署进行准确的时间点快照。
+- en: 'Generally, you should make backups from a secondary: this keeps load off of
+    the primary, and you can lock a secondary without affecting your application (so
+    long as your application isn’t sending it read requests). You can use any of the
+    three methods outlined previously to back up a replica set member, but a filesystem
+    snapshot or data file copy is recommended. Either of these techniques can be applied
+    to replica set secondaries with no modification.'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，应从次要节点进行备份：这样可以减轻主节点的负载，并且你可以锁定次要节点而不影响你的应用程序（只要你的应用程序不发送读请求到次要节点）。你可以使用前面概述的任一三种方法之一来备份副本集成员，但建议使用文件系统快照或数据文件复制。这些技术都可以应用于副本集的次要节点而无需修改。
+- en: '*mongodump* is not quite as simple to use when replication is enabled. First,
+    if you are using *mongodump*, you must take your backups using the `--oplog` option
+    to get a point-in-time snapshot; otherwise the backup’s state won’t match the
+    state of any other members in the cluster. You must also create an oplog when
+    you restore from a *mongodump* backup, or the restored member will not know where
+    it was synced to.'
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当启用复制时，使用*mongodump*不是那么简单。首先，如果你使用*mongodump*，必须使用`--oplog`选项进行备份，以获取一个时间点的快照；否则备份的状态将不会与集群中其他成员的状态匹配。当从*mongodump*备份中恢复时，你还必须创建一个操作日志，否则恢复后的成员将不知道它同步到了哪里。
+- en: 'To restore a replica set member from a *mongodump* backup, start the target
+    replica set member as a standalone server with an empty data directory and run
+    *mongorestore* on it (as described in the previous section) with the `--oplogReplay`
+    option. Now it should have a complete copy of the data, but it still needs an
+    oplog. Create an oplog using the `createCollection` command:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要从 *mongodump* 备份中恢复副本集成员，请将目标副本集成员作为独立服务器启动，并使用空数据目录运行 *mongorestore*（如前一节所述），并使用
+    `--oplogReplay` 选项。现在它应该具有完整的数据副本，但仍然需要一个 oplog。使用 `createCollection` 命令创建一个 oplog：
+- en: '[PRE13]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: Specify the size of the collection in bytes. See [“Resizing the Oplog”](ch13.xhtml#sect1-resize-oplog)
+    for advice on oplog sizing.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 指定集合的字节大小。请参阅 [“调整 Oplog 大小”](ch13.xhtml#sect1-resize-oplog) 以获取有关 oplog 大小调整的建议。
+- en: 'Now you need to populate the oplog. The easiest way to do this is to restore
+    the *oplog.bson* backup file from the dump into the *local.oplog.rs* collection:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在您需要填充 oplog。最简单的方法是将转储的 *oplog.bson* 文件恢复到 *local.oplog.rs* 集合中：
+- en: '[PRE14]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Note that this is not a dump of the oplog itself (*dump/local/oplog.rs.bson*),
+    but rather of the oplog operations that occurred during the dump. Once this *mongorestore*
+    is complete, you can restart this server as a replica set member.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，这不是 oplog 本身的转储（*dump/local/oplog.rs.bson*），而是在转储过程中发生的 oplog 操作。一旦完成此 *mongorestore*，您可以将此服务器重新启动为副本集成员。
+- en: Specific Considerations for Sharded Clusters
+  id: totrans-130
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 分片集群的特殊考虑因素
+- en: 'The main additional consideration when backing up a sharded cluster using the
+    approaches in this chapter is that you can only back up the pieces when they are
+    active, and sharded clusters are impossible to “perfectly” back up while active:
+    you can’t get a snapshot of the entire state of the cluster at a point in time.
+    However, this limitation is generally sidestepped by the fact that as your cluster
+    gets bigger, it becomes less and less likely that you’d ever have to restore the
+    whole thing from a backup. Thus, when dealing with a sharded cluster, we focus
+    on backing up pieces: the config servers and the replica sets individually. If
+    you need the ability to back up the whole cluster to a particular point in time
+    or would prefer an automated solution, you can avail yourself of MongoDB’s Cloud
+    Manager or Atlas backup feature.'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用本章介绍的方法备份分片集群时的主要额外考虑因素是，您只能在它们活跃时备份各个分片，并且在活跃状态下几乎不可能“完美地”备份分片集群：无法在某一时刻获得集群整体状态的快照。然而，一般情况下，随着集群规模的增大，您几乎不太可能需要从备份中恢复整个集群。因此，在处理分片集群时，我们关注备份各个部分：配置服务器和副本集各自的备份。如果您需要能够备份整个集群到特定时间点，或者希望使用自动化解决方案，可以使用
+    MongoDB 的 Cloud Manager 或 Atlas 备份功能。
+- en: Turn off the balancer before performing any of these operations on a sharded
+    cluster (either backup or restore). You cannot get a consistent snapshot of the
+    world with chunks flying around. See [“Balancing Data”](ch17.xhtml#sect1-balancer)
+    for instructions on turning the balancer on and off.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在对分片集群执行任何这些操作（备份或恢复）之前，请关闭平衡器。您无法在分片飞来飞去的情况下获取一个一致的世界快照。请参阅 [“平衡数据”](ch17.xhtml#sect1-balancer)
+    以获取有关打开和关闭平衡器的说明。
+- en: Backing Up and Restoring an Entire Cluster
+  id: totrans-133
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 备份和恢复整个集群
+- en: When a cluster is very small or in development, you may want to actually dump
+    and restore the entire thing. You can accomplish this by turning off the balancer
+    and then running *mongodump* through the *mongos*. This creates a backup of all
+    of the shards on whatever machine *mongodump* is running on.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当集群非常小或处于开发阶段时，您可能确实希望转储和恢复整个集群。您可以通过关闭平衡器，然后通过 *mongos* 运行 *mongodump* 来实现这一点。这会在运行
+    *mongodump* 的机器上备份所有分片的数据。
+- en: To restore from this type of backup, run *mongorestore* connected to a *mongos*.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要从这种类型的备份恢复，请运行连接到 *mongos* 的 *mongorestore*。
+- en: Alternatively, after turning off the balancer you can take filesystem or data
+    directory backups of each shard and the config servers. However, you will inevitably
+    get copies from each at slightly different times, which may or may not be a problem.
+    Also, as soon as you turn on the balancer and a migrate occurs, some of the data
+    you backed up from one shard will no longer be there.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，在关闭平衡器后，您可以获取每个分片和配置服务器的文件系统或数据目录备份。但是，您将不可避免地在略有不同的时间点获得每个备份副本，这可能会或可能不会成为问题。此外，一旦启用平衡器并进行迁移，您从一个分片备份的一些数据将不再存在。
+- en: Backing Up and Restoring a Single Shard
+  id: totrans-137
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 备份和恢复单个分片
+- en: Most often, you’ll only need to restore a single shard in a cluster. If you
+    are not too picky, you can restore from a backup of that shard using one of the
+    single-server methods just described.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数情况下，您只需要恢复集群中的一个分片。如果您不是太挑剔的话，可以使用刚才描述的单服务器方法之一从该分片的备份中恢复。
+- en: There is one important issue to be aware of, however. Suppose you make a backup
+    of your cluster on Monday. On Thursday, your disk melts down and you have to restore
+    from the backup. In the intervening days, new chunks may have moved to this shard.
+    Your backup of the shard from Monday will not contain these new chunks. You may
+    be able to use a config server backup to figure out where the disappearing chunks
+    lived on Monday, but it is a lot more difficult than simply restoring the shard.
+    In most cases, restoring the shard and losing the data in those chunks is the
+    preferable route.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，有一个重要问题需要注意。假设您在星期一备份了集群。到了星期四，您的硬盘损坏了，您需要从备份中恢复。在这几天中，新的数据块可能已经移到了该分片。您星期一备份的分片不包含这些新的数据块。您可能可以使用配置服务器的备份来找出星期一消失的数据块在哪里，但这比简单地恢复分片要困难得多。在大多数情况下，恢复分片并丢失这些数据块中的数据是更可取的路径。
+- en: You can connect directly to a shard to restore from a backup (instead of going
+    through *mongos*).
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以直接连接到一个分片来从备份中恢复（而不通过*mongos*）。

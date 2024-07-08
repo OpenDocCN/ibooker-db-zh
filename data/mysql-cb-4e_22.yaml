@@ -1,0 +1,1375 @@
+- en: Chapter 22\. Server Administration
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第22章 服务器管理
+- en: 22.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 22.0 简介
+- en: 'This chapter covers how to perform operations involved in administering a MySQL
+    server:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章涵盖了如何执行涉及管理 MySQL 服务器的操作：
+- en: General server configuration
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通用服务器配置
+- en: The plug-in interface
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 插件接口
+- en: Controlling server logging
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 控制服务器日志记录
+- en: Configuring storage engines
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 配置存储引擎
+- en: The chapter doesn’t cover managing MySQL user accounts. That is an administrative
+    task, and is covered in [Chapter 24](ch24.xhtml#nch-security).
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章不涵盖管理 MySQL 用户帐户。这是一个管理任务，在[第24章](ch24.xhtml#nch-security)中有详细介绍。
+- en: Note
+  id: totrans-8
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Many of the techniques shown here require administrative access, such as the
+    ability to modify tables in the `mysql` system database or use statements that
+    require the `SUPER` privilege. For this reason, to carry out the operations described
+    here, you’ll likely need to connect to the server as `root` rather than as `cbuser`.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里展示的许多技术需要管理员访问权限，例如修改 `mysql` 系统数据库中的表或使用需要 `SUPER` 特权的语句。因此，为了执行这里描述的操作，您可能需要以
+    `root` 而不是 `cbuser` 身份连接到服务器。
+- en: 22.1 Configuring the Server
+  id: totrans-10
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 22.1 配置服务器
+- en: Problem
+  id: totrans-11
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to change the server settings, and also verify that your changes took
+    effect.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望更改服务器设置，并验证您的更改是否生效。
+- en: Solution
+  id: totrans-13
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: To change settings, specify them at server startup or at runtime. To verify
+    the changes, examine the relevant system variables at runtime.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要更改设置，请在服务器启动时或运行时指定它们。要验证更改，请在运行时检查相关的系统变量。
+- en: Discussion
+  id: totrans-15
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: The MySQL server places many configuration parameters under your control. For
+    example, resources that require memory can be adjusted up or down to tailor resource
+    usage. A heavily used server requires more memory; a lightly used one, less. You
+    can set command options and system variables at server startup, and many system
+    variables are settable at runtime as well. You can also examine your settings
+    at runtime to verify that the configuration is as you intend.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 服务器提供了许多配置参数供您控制。例如，需要内存资源可以调整为更高或更低以调整资源使用。一个使用频繁的服务器需要更多的内存；一个使用较少的服务器需要更少的内存。您可以在服务器启动时设置命令选项和系统变量，并且许多系统变量也可以在运行时设置。您还可以在运行时检查您的设置，以验证配置是否如您所愿。
+- en: Configuration control at server startup
+  id: totrans-17
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 在服务器启动时的配置控制
+- en: To configure the server at startup time, specify options on the command line
+    or in an option file. The latter is usually preferable because you can specify
+    settings once and they’ll apply at each startup. (For background on using command-line
+    options and option files, see [Recipe 1.4](ch01.xhtml#nch-mysql-mysql-options).)
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在启动时配置服务器，请在命令行或选项文件中指定选项。通常情况下，后者更可取，因为您可以指定设置一次，并且它们将在每次启动时生效。（有关使用命令行选项和选项文件的背景，请参阅[食谱1.4](ch01.xhtml#nch-mysql-mysql-options)。）
+- en: Command option names typically use dashes, whereas system variable names use
+    underscores. However, the server is more permissive at startup and recognizes
+    command options and system variables written using dashes or underscores interchangeably.
+    For example, `sql_mode` and `sql-mode` are equivalent on the command line or in
+    an option file. This differs from runtime, when references to system variables
+    *must* be written using underscores.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 命令选项名称通常使用连字符，而系统变量名称使用下划线。但是，在启动时，服务器更宽松，可以识别使用连字符或下划线写的命令选项和系统变量。例如，在命令行或选项文件中，`sql_mode`
+    和 `sql-mode` 是等效的。这与运行时不同，运行时对系统变量的引用*必须*使用下划线。
+- en: 'To specify server parameters in an option file, list them in the `[mysqld]`
+    group of a file the server reads. To illustrate, here are some parameters you
+    might set:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在选项文件中指定服务器参数，请在服务器读取的文件的`[mysqld]`组中列出它们。例如，这里是您可能设置的一些参数：
+- en: The default character set is `utf8mb4 starting MySQL 8.0`. This character set
+    comes with `utf8mb4_0900_ai_ci` as default collation.
+  id: totrans-21
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 默认字符集为 `utf8mb4，从 MySQL 8.0 开始`。此字符集默认使用 `utf8mb4_0900_ai_ci` 作为默认排序规则。
+- en: The default SQL mode is `STRICT_TRANS_TABLES` (after MySQL 5.7). To be more
+    permissive by default, remove strict SQL mode, which is not recommended.
+  id: totrans-22
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 默认的 SQL 模式是 `STRICT_TRANS_TABLES`（MySQL 5.7 之后）。要默认更宽松，请删除严格的 SQL 模式，这不推荐。
+- en: The event scheduler is enabled by default after MySQL 8.0\. If you plan to use
+    scheduled events (see [Recipe 11.5](ch11.xhtml#nch-routines-routines-events)),
+    you must enable it on prior releases.
+  id: totrans-23
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在 MySQL 8.0 之后，默认启用事件调度程序。如果计划使用定期事件（参见[食谱11.5](ch11.xhtml#nch-routines-routines-events)），必须在之前的版本上启用它。
+- en: For InnoDB engine, buffer pool size defaults to 128MB which is not sufficient
+    beyond development and testing. Consider increasing to a size for running dataset
+    in memory.
+  id: totrans-24
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于 InnoDB 引擎，缓冲池大小默认为 128MB，在开发和测试之外是不足够的。考虑增加到足够运行数据集的内存大小。
+- en: Timezone is set to SYSTEM unless specified at startup. If you aren’t intending
+    to use SYSTEM timezone you need to set it at startup by setting `--timezone=timezone_name`
+  id: totrans-25
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 时区设置为系统默认，除非在启动时指定。如果不打算使用系统时区，则需要通过设置 `--timezone=timezone_name` 在启动时设置它。
+- en: 'To implement these configuration ideas, write the `[mysqld]` group in your
+    option file like this:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要实现这些配置想法，像这样在你的选项文件中写入 `[mysqld]` 组：
+- en: '[PRE0]'
+  id: totrans-27
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Those are just suggestions; adjust the server configuration for your own requirements.
+    For information about plug-in and logging options in particular, see [Recipe 22.2](#nch-admin-plugin-interface)
+    and [Recipe 23.0](ch23.xhtml#nch-monitoring-monitoring-intro).
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些只是建议；根据自己的需求调整服务器配置。特别是有关插件和日志选项的信息，请参阅 [Recipe 22.2](#nch-admin-plugin-interface)
+    和 [Recipe 23.0](ch23.xhtml#nch-monitoring-monitoring-intro)。
+- en: Configuration control and verification at runtime
+  id: totrans-29
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 在运行时进行配置控制和验证
+- en: 'After the server starts, you can make runtime adjustments by changing system
+    variables using the `SET` statement:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务器启动后，您可以通过使用 `SET` 语句更改系统变量来进行运行时调整：
+- en: '[PRE1]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'That statement sets the global value of *`var_name`*; that is, the value that
+    applies to all clients by default. Changes to the global value at runtime require
+    the `SUPER` privilege. Many system variables also have a session value, which
+    is the value specific to a particular client session. The session value of a given
+    variable is initialized from the global value when the client connects, but the
+    client can change it thereafter. For example, the DBA might set the max connections
+    at server startup:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个语句设置了 *`var_name`* 的全局值；也就是说，默认情况下适用于所有客户端。在运行时更改全局值需要 `SUPER` 权限。许多系统变量还有会话值，这是特定客户端会话的值。给定变量的会话值在客户端连接时从全局值初始化，但之后客户端可以更改它。例如，DBA
+    可能在服务器启动时设置最大连接数：
+- en: '[PRE2]'
+  id: totrans-33
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'That sets the global value. A DBA with the `SUPER` privilege can change the
+    global value at runtime:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这设置了全局值。具有 `SUPER` 权限的 DBA 可以在运行时更改全局值：
+- en: '[PRE3]'
+  id: totrans-35
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Each client that connects subsequently has its session variable initialized
+    to the same value, but can change the value as it likes. A DBA may increase this
+    value for troubleshooting connectivity issues.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 后续连接的每个客户端的会话变量初始化为相同的值，但可以根据需要更改值。DBA 可能会增加此值以解决连接问题。
+- en: '[PRE4]'
+  id: totrans-37
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: A `SET` statement that includes no `GLOBAL` or `SESSION` modifier changes the
+    session value, if there is one.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 包含没有 `GLOBAL` 或 `SESSION` 修饰符的 `SET` 语句将更改会话值（如果有）。
+- en: After MySQL 8.0 you may set and persist global variables. Many of global variables
+    are dynamic and can be set at runtime. *PERSIST* close will help set this value
+    permanently even if the server is restarted without saving to the configuration
+    file.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 8.0 之后，您可以设置和持久化全局变量。许多全局变量是动态的，可以在运行时设置。使用 *PERSIST* 选项可以在不保存到配置文件的情况下永久设置此值，即使服务器重新启动也不会丢失。
+- en: '[PRE5]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: '[PRE6]'
+  id: totrans-41
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: '[PRE7]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'To reset persisted values use:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要重置持久化的值，请使用：
+- en: '[PRE8]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: '[PRE9]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'There is alternative syntax for writing system variable references:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还有另一种写系统变量引用的语法：
+- en: '[PRE10]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'The `@@` syntax is more flexible. It can be used in statements other than `SET`,
+    enabling you to retrieve or examine individual system variables:'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`@@` 语法更加灵活。除了 `SET` 语句之外，它还可以用于其他语句，使您能够检索或检查单个系统变量：'
+- en: '[PRE11]'
+  id: totrans-49
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: References to system variables using `@@` syntax with no `GLOBAL.` or `SESSION.`
+    modifier access the session value if there is one, or the global value otherwise.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `@@` 语法引用系统变量时，如果没有 `GLOBAL.` 或 `SESSION.` 修饰符，将访问会话值（如果有），否则将访问全局值。
+- en: Other ways to access system variables include the `SHOW` `VARIABLES` statement
+    and selecting from the `INFORMATION_SCHEMA` `GLOBAL_VARIABLES` and `SESSION_VARIABLES`
+    tables.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 访问系统变量的其他方法包括 `SHOW VARIABLES` 语句以及从 `INFORMATION_SCHEMA` 的 `GLOBAL_VARIABLES`
+    和 `SESSION_VARIABLES` 表中选择。
+- en: If a setting exists only as a command option with no corresponding system variable,
+    you cannot check its value at runtime. Fortunately, such options are rare. Nowadays,
+    most new settings are created as system variables that can be examined at runtime.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果一个设置仅作为命令选项存在，没有对应的系统变量，你无法在运行时检查其值。幸运的是，这种选项很少见。如今，大多数新的设置都被创建为可以在运行时检查的系统变量。
+- en: 22.2 Managing the Plug-In Interface
+  id: totrans-53
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 22.2 管理插件接口
+- en: Problem
+  id: totrans-54
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to exploit the capabilities offered by certain server plug-ins.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望利用某些服务器插件提供的功能。
+- en: Solution
+  id: totrans-56
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Learn how to control the plug-in interface.
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 学习如何控制插件接口。
+- en: Discussion
+  id: totrans-58
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL supports the use of plug-ins that extend server capabilities. There are
+    plug-ins that implement storage engines, authentication methods, password policy,
+    `PERFORMANCE_SCHEMA` tables, and more. The server enables you to specify which
+    plug-ins to use, so that you can load just those you want, with no memory or processing
+    overhead incurred for plug-ins you don’t want.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL支持使用扩展服务器功能的插件。有些插件实现存储引擎、身份验证方法、密码策略、`PERFORMANCE_SCHEMA`表等。服务器允许您指定要使用的插件，因此您可以只加载希望使用的插件，对于不需要的插件不会产生内存或处理开销。
+- en: This section provides the general background on controlling which plug-ins the
+    server loads. Discussion elsewhere describes specific plug-ins and what they can
+    do for you, including the authentication plug-ins (see [Recipe 24.1](ch24.xhtml#nch-security-user-table)),
+    and `validate_password` (see [Recipe 24.3](ch24.xhtml#nch-security-password-policy)
+    and [Recipe 24.4](ch24.xhtml#nch-security-password-strength)).
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节介绍控制服务器加载哪些插件的一般背景。其他地方的讨论描述了特定插件及其对您的用处，包括身份验证插件（参见[Recipe 24.1](ch24.xhtml#nch-security-user-table)），以及`validate_password`（参见[Recipe
+    24.3](ch24.xhtml#nch-security-password-policy)和[Recipe 24.4](ch24.xhtml#nch-security-password-strength)）。
+- en: 'The examples here refer to plug-in files using the *.so* (<q>shared object</q>)
+    filename suffix. If the suffix differs on your system, adjust the names accordingly
+    (for example, use *.dll* on Windows). If you don’t know the name of a given plug-in
+    file, look in the directory named by the `plugin_dir` system variable, which is
+    where the server expects to find plug-in files. For example:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此处的示例使用`.so`（<q>共享对象</q>）文件名后缀引用插件文件。如果您的系统上后缀不同，请相应地调整名称（例如，在Windows上使用`.dll`）。如果您不知道给定插件文件的名称，请查看由`plugin_dir`系统变量命名的目录，服务器期望在此目录中找到插件文件。例如：
+- en: '[PRE12]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: To see which plug-ins are installed, use `SHOW` `PLUGINS` or query the `INFORMATION_SCHEMA`
+    `PLUGINS` table.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看已安装的插件，请使用`SHOW` `PLUGINS`或查询`INFORMATION_SCHEMA` `PLUGINS`表。
+- en: Note
+  id: totrans-64
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Some plug-ins are built in, need not be enabled explicitly, and cannot be disabled.
+    The `mysql_native_password` and `sha256_password` authentication plug-ins fall
+    into this category.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些插件是内置的，无需显式启用，并且无法禁用。`mysql_native_password`和`sha256_password`身份验证插件属于此类别。
+- en: Plug-in control at server startup
+  id: totrans-66
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 服务器启动时的插件控制
+- en: 'To install a plug-in only for a given server invocation, use the `--plugin-load-add`
+    option at server startup, naming the file that contains the plug-in. To name multiple
+    plug-ins as the option value, separate them with semicolons. Alternatively, use
+    the option multiple times, with each instance naming a single plug-in. That makes
+    it easy to enable or disable individual plug-ins by using the `#` character to
+    selectively comment the corresponding lines:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了仅在给定服务器调用期间安装插件，请在服务器启动时使用`--plugin-load-add`选项，指定包含插件的文件名。如果选项值命名多个插件，请用分号分隔它们。或者，多次使用该选项，每次指定一个插件。这样可以通过使用`#`字符有选择性地注释相应的行来轻松启用或禁用单个插件：
+- en: '[PRE13]'
+  id: totrans-68
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'The `--plugin-load-add` option was introduced in MySQL 5.6\. In MySQL 8.0,
+    you can use a single `--plugin-load` option that names all the plug-ins to be
+    loaded in a semicolon-separated list:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`--plugin-load-add`选项在MySQL 5.6中引入。在MySQL 8.0中，您可以使用单个`--plugin-load`选项，该选项列出要加载的所有插件的分号分隔列表：'
+- en: '[PRE14]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Clearly, for dealing with more than one plug-in, `--plugin-load-add` is superior
+    for ease of administration.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 显然，对于处理多个插件，使用`--plugin-load-add`更便于管理。
+- en: Plug-in control at runtime
+  id: totrans-72
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 运行时的插件控制
+- en: 'To install a plugin at runtime and make it persistent, use `INSTALL` `PLUGIN`.
+    The server loads the plug-in (which becomes available immediately) and registers
+    it in the `mysql.plugin` system table to cause it to load automatically for subsequent
+    restarts. For example:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在运行时安装插件并使其持久化，请使用`INSTALL` `PLUGIN`。服务器加载插件（立即可用），并在`mysql.plugin`系统表中注册它，以使其在后续重启时自动加载。例如：
+- en: '[PRE15]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: The `SONAME` (<q>shared object name</q>) clause specifies the file that contains
+    the plug-in.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SONAME`（<q>共享对象名称</q>）子句指定包含插件的文件。'
+- en: 'To disable a plug-in at runtime, use `UNINSTALL` `PLUGIN`. The server unloads
+    the plug-in and removes its registration from the `mysql.plugin` table:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在运行时禁用插件，请使用`UNINSTALL` `PLUGIN`。服务器卸载插件并从`mysql.plugin`表中删除其注册：
+- en: '[PRE16]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: '`INSTALL` `PLUGIN` and `UNINSTALL` `PLUGIN` require the `INSERT` and `DELETE`
+    privilege, respectively, for the `mysql.plugin` table.'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INSTALL` `PLUGIN`和`UNINSTALL` `PLUGIN`需要分别对`mysql.plugin`表具有`INSERT`和`DELETE`权限。'
+- en: 22.3 Controlling Server Logging
+  id: totrans-79
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 22.3 控制服务器日志记录
+- en: Problem
+  id: totrans-80
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to take advantage of log information the server can provide.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望利用服务器提供的日志信息。
+- en: Solution
+  id: totrans-82
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Learn the server options that control logging.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 了解控制日志记录的服务器选项。
+- en: Discussion
+  id: totrans-84
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'The MySQL server can produce several logs:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL服务器可以生成多个日志：
+- en: The error log
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 错误日志
+- en: The error log contains information about problems or exceptional conditions
+    the server encounters. This is useful information for debugging. In particular,
+    if the server exits, check the error log for the reason. For example, if an exit
+    occurs immediately after startup, it’s likely that some setting in the server
+    option file is misspelled or was set to an invalid value. The error log will contain
+    a message to that effect.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 错误日志包含服务器遇到的问题或异常条件的信息。这是调试的有用信息。特别是，如果服务器退出，请检查错误日志查找原因。例如，如果在启动后立即发生退出，则可能是服务器选项文件中某些设置拼写错误或设置为无效值。错误日志将包含相关消息。
+- en: The general query log
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般查询日志
+- en: The general query log indicates when each client connected and disconnected
+    and what SQL statements it executed. This tells you how much and what activity
+    each client is engaged in.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般查询日志显示每个客户端连接和断开连接的时间，以及它执行的SQL语句。这告诉您每个客户端参与的活动量和活动内容。
+- en: The slow query log
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 慢查询日志
+- en: The slow query log records statements that took a long time to execute (see
+    the [MySQL Reference Manual](https://dev.mysql.com/doc/refman/8.0/en/slow-query-log.html)
+    for the meaning of <q>a long time</q> because it can be influenced by several
+    options). Queries that appear repeatedly in this log may be bottlenecks worth
+    investigating to see whether they can be made more efficient.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 慢查询日志记录执行时间较长的语句（请参阅[MySQL参考手册](https://dev.mysql.com/doc/refman/8.0/en/slow-query-log.html)了解“较长时间”的含义，因为它可能受到几个选项的影响）。在此日志中重复出现的查询可能是值得调查的瓶颈，以查看是否可以使其更有效率。
+- en: The binary log
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二进制日志
+- en: 'The binary log contains a record of data changes made by the server. To set
+    up replication, you must enable the binary log on the source server: it serves
+    as the storage medium for changes to be sent to replica servers. The binary log
+    is also used, together with backup files, during data recovery operations.'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二进制日志包含服务器进行的数据更改记录。要设置复制，必须在源服务器上启用二进制日志：它作为将更改发送到副本服务器的存储介质。在数据恢复操作期间，二进制日志与备份文件一起使用。
+- en: Each log serves a different purpose and most can be turned on at your discretion,
+    enabling you to use those that suit your administrative requirements. Each log
+    can be written to a file, and some can be written to other destinations. The error
+    log can be sent to your terminal or to the `syslog` facility. The general and
+    slow query logs can be written to a file, to a table in the `mysql` database,
+    or both.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个日志都有不同的用途，大多数可以根据需要打开，以满足您的管理需求。每个日志可以写入文件，有些可以写入其他目的地。错误日志可以发送到您的终端或`syslog`设施。一般和慢查询日志可以写入文件，也可以写入`mysql`数据库中的表，或者两者兼而有之。
+- en: 'To control server logging, add lines to your server option file that specify
+    the desired types of logging. (Some settings can also be changed at runtime.)
+    For example, the following lines in a server option file send the error log to
+    the *err.log* file in the data directory, enable writing the general query and
+    slow query logs to tables in the `mysql` database, and enable writing the binary
+    log to the */var/mysql-logs* directory using files having names beginning with
+    *binlog*:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要控制服务器日志记录，请在服务器选项文件中添加指定所需日志类型的行（有些设置也可以在运行时更改）。例如，服务器选项文件中的以下行将错误日志发送到数据目录中的*err.log*文件，启用将一般查询和慢查询日志写入`mysql`数据库中的表，并启用将二进制日志写入*/var/mysql-logs*目录，文件名以*binlog*开头：
+- en: '[PRE17]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: For filenames in options that produce log output to files, logfiles are written
+    under the data directory unless specified using full pathnames. The usual reason
+    to use full pathnames is to write logfiles to a filesystem different from the
+    one containing the data directory, which is useful technique for dividing disk
+    space use and I/O activity among physical devices.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于生成日志输出文件的选项中的文件名，除非使用完整路径名指定，否则日志文件将写入数据目录下。使用完整路径名的通常原因是将日志文件写入与包含数据目录的文件系统不同的文件系统，这对于在物理设备之间分割磁盘空间使用和I/O活动是一种有用的技术。
+- en: The rest of this section provides details specific to controlling individual
+    logs. The examples show the lines to include in your server option file to produce
+    specific logging behavior. For some ideas about using the logs for diagnostic
+    or activity assessment purposes, see [Recipe 22.6](#nch-admin-admin-monitor).
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节的其余部分提供了控制各个日志的具体细节。示例显示了在服务器选项文件中包含的行，以生成特定的日志记录行为。关于使用日志进行诊断或活动评估的一些想法，请参见[Recipe
+    22.6](#nch-admin-admin-monitor)。
+- en: Warning
+  id: totrans-99
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: For any log that you enable, see also [Recipe 22.4](#nch-admin-log-file-rotation)
+    and [Recipe 22.5](#nch-admin-log-table-rotation) for log maintenance techniques.
+    Logs increase in size over time, so you’ll want to have a plan for managing them.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于启用的任何日志，请参见[Recipe 22.4](#nch-admin-log-file-rotation)和[Recipe 22.5](#nch-admin-log-table-rotation)获取日志维护技术。随着时间的推移，日志大小会增加，因此您需要有一个管理计划。
+- en: The error log
+  id: totrans-101
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 错误日志
+- en: The error log cannot be disabled, but you can control where it’s written. By
+    default, on Unix, the error output goes to your terminal on Unix or to *`host_name`**.err*
+    in the data directory if you start the server using *mysqld_safe*. On Windows
+    the default is *`host_name`**.err* in the data directory. To specify the error
+    log filename, set the `log_error` system variable.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 错误日志无法禁用，但您可以控制其写入位置。默认情况下，在Unix上，错误输出转到您的终端，或者如果使用*mysqld_safe*启动服务器，则在数据目录中为*`host_name`**.err*。在Windows上，默认为数据目录中的*`host_name`**.err*。要指定错误日志文件名，请设置`log_error`系统变量。
+- en: 'Examples:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 示例：
+- en: 'Write the error log to the *err.log* file in the data directory:'
+  id: totrans-104
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将错误日志写入数据目录中的*err.log*文件：
+- en: '[PRE18]'
+  id: totrans-105
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'As of MySQL 5.7.2, you can influence the amount of error log output by setting
+    the `log_error_verbosity` system variable. Permitted values range from 1 (errors
+    only) to 3 (errors, warnings, notes; the default). To see errors only, do this:'
+  id: totrans-106
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 自MySQL 5.7.2起，您可以通过设置`log_error_verbosity`系统变量来影响错误日志输出的数量。允许的值范围从1（仅错误）到3（错误、警告、注释；默认）。要仅查看错误，请执行以下操作：
+- en: '[PRE19]'
+  id: totrans-107
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'On Unix, if you start the server using *mysqld_safe*, it’s possible to redirect
+    the error log to the `syslog` facility:'
+  id: totrans-108
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在Unix上，如果使用*mysqld_safe*启动服务器，则可以将错误日志重定向到`syslog`设施：
+- en: '[PRE20]'
+  id: totrans-109
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: The general query and slow query logs
+  id: totrans-110
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 一般查询和慢查询日志
+- en: 'Several system variables control the general query and slow query logs. Each
+    variable can be set at server startup or changed at runtime:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 几个系统变量控制一般查询和慢查询日志。每个变量可以在服务器启动时设置或在运行时更改：
+- en: '`log_output` controls the log destinations. The value is `FILE` (log to files,
+    the default), `TABLE` (log to tables), `NONE` (disable logging), or a comma-separated
+    combination of values, in any order. `NONE` overrides any other value. If the
+    value is `NONE`, other settings for these logs have no effect. Destination control
+    applies to the general query and slow query logs together; you cannot write one
+    to a file and the other to a table.'
+  id: totrans-112
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`log_output`控制日志目标。其值为`FILE`（日志写入文件，默认）、`TABLE`（日志写入表）、`NONE`（禁用日志记录），或者以逗号分隔的值的组合，顺序任意。如果值为`NONE`，则其他这些日志的设置无效。目标控制适用于一般查询和慢查询日志；您不能将一个写入文件，另一个写入表。'
+- en: '`general_log` and `slow_query_log` enable or disable the respective logs. By
+    default, each log is disabled. If you enable either of them, the server writes
+    the log to the destinations specified by `log_output`, unless that variable is
+    `NONE`.'
+  id: totrans-113
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`general_log`和`slow_query_log`启用或禁用各自的日志。默认情况下，每个日志都被禁用。如果启用其中任何一个，则服务器将日志写入由`log_output`指定的目标，除非该变量为`NONE`。'
+- en: '`general_log_file` and `slow_query_log_file` specify log filenames. The default
+    names are *`host_name`**.log* and *`host_name`**-slow.log*; however, these settings
+    have no effect unless `log_output` specifies `FILE` logging.'
+  id: totrans-114
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`general_log_file`和`slow_query_log_file`指定日志文件名。默认名称为*`host_name`**.log*和*`host_name`**-slow.log*；但是，除非`log_output`指定`FILE`记录，否则这些设置无效。'
+- en: 'Examples:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 示例：
+- en: 'Write the general query log to the *query.log* file in the data directory:'
+  id: totrans-116
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将一般查询日志写入数据目录中的*query.log*文件：
+- en: '[PRE21]'
+  id: totrans-117
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'Write the general and slow query logs to tables in the `mysql` database (the
+    table names are `general_log` and `slow_log` and cannot be changed):'
+  id: totrans-118
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将一般查询和慢查询日志写入`mysql`数据库中的表（表名为`general_log`和`slow_log`，且不能更改）：
+- en: '[PRE22]'
+  id: totrans-119
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'Write the general query log to a file named *query.log* and to the `general_log`
+    table:'
+  id: totrans-120
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将一般查询日志写入名为*query.log*的文件和`general_log`表：
+- en: '[PRE23]'
+  id: totrans-121
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: The binary log
+  id: totrans-122
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 二进制日志
+- en: Prior to MySQL 8 binary logging was disabled by default. To enable the binary
+    log, use the `--log-bin` option, optionally specifying the logfile basename as
+    the option value. In order to disable binary logging in MySQL 8.0 you can use
+    `--skip-log-bin` option or `--disable-log-bin` option. The default basename is
+    *`binlog`*. The value for this option is a basename because the server creates
+    binary logfiles in numbered sequence, automatically adding to the basename suffixes
+    of *.000001*, *.000002*, and so forth. The server advances to the next file in
+    the sequence when it starts, when the logs are flushed, and when the current file
+    reaches the maximum logfile size (controlled by the `max_binlog_size` system variable).
+    In MySQL 8.0 `expire_logs_days` is deprecated and replaced with `binlog_expire_logs_seconds`.
+    To have the server expire logfiles for you, set the `binlog_expire_logs_seconds`
+    system variable to the age in seconds at which files become eligible for removal.
+    The default value for *binlog_expire_logs_seconds* is 30 days (30*24*60*60 seconds).
+    To disable automatic purging of binary logs set *binlog_expire_logs_seconds* to
+    0.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在MySQL 8之前，默认情况下禁用了二进制日志记录。要启用二进制日志，请使用`--log-bin`选项，可选择性地指定日志文件的基本名称作为选项值。在MySQL
+    8.0中，要禁用二进制日志记录，可以使用`--skip-log-bin`选项或`--disable-log-bin`选项。默认基本名称是*`binlog`*。此选项的值为基本名称，因为服务器会自动为二进制日志文件添加编号顺序后缀，例如*.000001*，*.000002*等。服务器在启动时、刷新日志时以及当前文件达到最大日志文件大小（由`max_binlog_size`系统变量控制）时，会切换到序列中的下一个文件。在MySQL
+    8.0中，`expire_logs_days`已被弃用，并替换为`binlog_expire_logs_seconds`。要让服务器为您过期日志文件，请将`binlog_expire_logs_seconds`系统变量设置为文件变为可删除状态的秒数。*binlog_expire_logs_seconds*的默认值为30天（30*24*60*60秒）。要禁用二进制日志的自动清除，请将*binlog_expire_logs_seconds*设置为0。
+- en: 'Examples:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例子：
+- en: 'Enable the binary log, writing numbered files in the data directory having
+    names beginning with *binlog*. Additionally, expire logfiles after a week:'
+  id: totrans-125
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 启用二进制日志，在数据目录中写入以*binlog*开头的编号文件。此外，一周后过期日志文件：
+- en: '[PRE24]'
+  id: totrans-126
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: The binary log is an essential component for the MySQL server, and the administrator
+    needs to approach it carefully. Binary logs contain events for all data changes
+    hence used for the following areas.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二进制日志是MySQL服务器的重要组件，管理员需要小心处理。二进制日志包含所有数据更改事件，因此用于以下领域。
+- en: Replication setup
+  id: totrans-128
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 复制设置
+- en: Point-in-time recovery
+  id: totrans-129
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 时间点恢复
+- en: Debugging a specific event
+  id: totrans-130
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 调试特定事件
+- en: 22.4 Rotating or Expiring Logfiles
+  id: totrans-131
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 22.4 旋转或过期日志文件
+- en: Problem
+  id: totrans-132
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Files used for logging grow indefinitely unless managed.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除非管理，否则用于日志记录的文件会无限增长。
+- en: Solution
+  id: totrans-134
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Available strategies for managing log files include rotating a logfile through
+    a set of names and expiring files by age. But different strategies apply to different
+    logs, so consider the log type before choosing a strategy.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 管理日志文件的可用策略包括通过一组名称旋转日志文件和按年龄删除文件。但不同的策略适用于不同类型的日志，因此在选择策略之前请考虑日志类型。
+- en: Discussion
+  id: totrans-136
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Logfile rotation is a technique that renames a logfile through a series of one
+    or more names. This maintains the file for a certain number of rotations, at which
+    point it reaches the end of the sequence and its contents are discarded by being
+    overwritten. Rotation can be applied to the error log, general query log, or slow
+    query log.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 日志文件旋转是一种通过一系列一个或多个名称重命名日志文件的技术。这保留文件一定数量的旋转，到达序列末尾时，文件内容通过被覆盖来丢弃。旋转可应用于错误日志、常规查询日志或慢查询日志。
+- en: Logfile expiration removes files when they reach a certain age. This technique
+    applies to the binary log.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 日志文件到期会在文件达到一定年龄时移除文件。此技术适用于二进制日志。
+- en: Both log management methods rely on log flushing to make sure that the current
+    logfile has been closed properly. When you flush the logs, the server closes and
+    reopens whichever of the files it is writing. If you rename the error, general
+    query, or slow query logfile first, the server closes the current file and reopens
+    a new one using the original name; this is what enables rotation of the current
+    file while the server runs. The server also closes the current binary logfile
+    and opens a new one with the next number in the sequence.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 两种日志管理方法都依赖于日志刷新，以确保当前日志文件已正确关闭。刷新日志时，服务器关闭并重新打开正在写入的文件。如果首先重命名错误、常规查询或慢查询日志文件，服务器将关闭当前文件并使用原始名称重新打开一个新文件；这就是在服务器运行时启用当前文件旋转的方式。服务器还会关闭当前二进制日志文件，并打开序列中下一个编号的新文件。
+- en: To flush the server logs, execute a `FLUSH` `LOGS` statement or use the *mysqladmin*
+    `flush-logs` command. (Log flushing requires the `RELOAD` privilege.) The following
+    discussion shows maintenance operations as performed at the command line, so it
+    uses *mysqladmin*. The examples use *mv* as the file renaming command, which is
+    applicable on Unix. On Windows, use *rename* instead.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要刷新服务器日志，请执行`FLUSH` `LOGS`语句或使用*mysqladmin* `flush-logs`命令。（日志刷新需要`RELOAD`权限。）以下讨论显示了在命令行执行的维护操作，因此使用了*mysqladmin*。示例中使用*mv*作为文件重命名命令，在Unix上适用。在Windows上，请改用*rename*。
+- en: Rotating the error, general query, or slow query log
+  id: totrans-141
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 旋转错误日志、通用查询日志或慢查询日志
+- en: 'To maintain a single file in a log rotation, rename the current logfile and
+    flush the logs. Suppose that the error logfile is named *err.log* in the data
+    directory. To rotate it, change location to the data directory, then execute these
+    commands:'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在日志轮换中保持单个文件，请重命名当前的日志文件并刷新日志。假设错误日志文件在数据目录中命名为*err.log*。要进行轮换，请切换到数据目录，然后执行以下命令：
+- en: '[PRE25]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: When you flush the logs, the server opens a new *err.log* file. You can remove
+    *err.log.old* at your leisure. To maintain an archive copy, include it in your
+    filesystem backups before removing it.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你刷新日志时，服务器会打开一个新的*err.log*文件。您可以随意删除*err.log.old*。要保留存档副本，请在删除它之前将其包含在文件系统备份中。
+- en: 'To maintain a set of multiple rotated files, it’s convenient to use a sequence
+    of numbered suffixes. For example, to maintain a set of three old general query
+    logfiles, do this:'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要维护一组多个旋转文件，可以使用一系列编号后缀很方便。例如，要维护一组三个旧的通用查询日志文件，请执行以下操作：
+- en: '[PRE26]'
+  id: totrans-146
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: The first few times you execute the command sequence, the initial commands are
+    unneeded until the respective *query.log.**`N`* files exist.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 初次执行命令序列时，只有在相应的*query.log.**`N`*文件存在时才不需要初始命令。
+- en: Successive executions of that command sequence rotate *query.log* through the
+    names *query.log.1*, *query.log.2*, and *query.log.3*; then *query.log.3* is overwritten
+    and its contents lost. To maintain an archive copy, include the rotated files
+    in your filesystem backups before removing them.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 连续执行该命令序列将通过名称*query.log.1*、*query.log.2*和*query.log.3*轮换*query.log*；然后*query.log.3*将被覆盖并且其内容丢失。要保留存档副本，请在删除它们之前将轮换的文件包括在文件系统备份中。
+- en: Rotating the binary log
+  id: totrans-149
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 旋转二进制日志
+- en: 'The server creates binary logfiles in numbered sequence. To expire them, you
+    need only arrange that it removes files when they’re old enough. Several factors
+    affect how many files the server creates and maintains:'
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务器按编号顺序创建二进制日志文件。要使其过期，只需安排在文件够旧时删除它们。几个因素影响服务器创建和维护的文件数量：
+- en: 'The frequency of server restarts and log flushing operations: one new file
+    is generated each time either of those occurs.'
+  id: totrans-151
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 服务器重启和日志刷新操作的频率：每次发生其中一种情况时都会生成一个新文件。
+- en: 'The size to which files can grow: larger sizes lead to fewer files. To control
+    this size, set the `max_binlog_size` system variable.'
+  id: totrans-152
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 文件可以增长到的大小：较大的大小导致较少的文件。要控制此大小，请设置`max_binlog_size`系统变量。
+- en: 'How old files are permitted to become: longer expiration times lead to more
+    files. To control this age, set the `binlog_expire_logs_seconds` system variable.
+    The server makes expiration checks at server startup and when it opens a new binary
+    logfile.'
+  id: totrans-153
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 允许旧文件变得多老：较长的过期时间导致更多的文件。要控制此年龄，请设置`binlog_expire_logs_seconds`系统变量。服务器在启动时和打开新的二进制日志文件时进行过期检查。
+- en: 'The following settings enable the binary log, set the maximum file size to
+    4GB, and expire files after four days:'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下设置启用二进制日志，设置最大文件大小为4GB，并在四天后过期文件：
+- en: '[PRE27]'
+  id: totrans-155
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'You can also remove binary logfiles manually with the `PURGE` `BINARY` `LOGS`
+    statement. For example, to remove all files up to and including the one named
+    `binlog.001028`, do this:'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你还可以通过`PURGE` `BINARY` `LOGS`语句手动删除二进制日志文件。例如，要删除直到包括名为`binlog.001028`的文件为止的所有文件，请执行以下操作：
+- en: '[PRE28]'
+  id: totrans-157
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: If your server is a replication source, don’t be too aggressive about removing
+    binary logfiles. No file should be removed until you’re certain its contents have
+    been completely transmitted to all replicas.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你的服务器是复制源，请不要过于急于删除二进制日志文件。在确定其内容已完全传输到所有副本之前，不应删除任何文件。
+- en: Automating logfile rotation
+  id: totrans-159
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 自动化日志文件轮换
+- en: 'To make it easier to perform a rotation operation, put the commands that implement
+    it in a file to create a shell script. To perform the rotation automatically,
+    arrange to execute the script from a job scheduler such as *cron*. The script
+    will need to access connection parameters that enable it to connect to the server
+    to flush the logs, using an account that has the `RELOAD` privilege. One strategy
+    is to put the parameters in an option file and pass the file to *mysqladmin* using
+    a `--defaults-file=`*`file_name`* option. For example:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了更容易执行旋转操作，将实施操作的命令放入文件以创建一个 shell 脚本。要自动执行旋转操作，请安排在作业调度程序（如 *cron*）中执行该脚本。该脚本将需要访问连接参数，使其能够连接到服务器以刷新日志，使用具有
+    `RELOAD` 特权的帐户。一个策略是将参数放入选项文件，并通过 `--defaults-file=`*`file_name`* 选项将文件传递给 *mysqladmin*。例如：
+- en: '[PRE29]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 22.5 Rotating Log Tables or Expiring Log Table Rows
+  id: totrans-162
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 22.5 旋转日志表或过期日志表行
+- en: Problem
+  id: totrans-163
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Tables used for logging grow indefinitely unless managed.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用于日志记录的表会无限增长，除非进行管理。
+- en: Solution
+  id: totrans-165
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Rotate the tables or expire rows within them.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 旋转表或在其中过期行。
+- en: Discussion
+  id: totrans-167
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: '[Recipe 22.4](#nch-admin-log-file-rotation) discussed rotation and expiration
+    of logfiles. Analogous techniques apply to log tables:'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[Recipe 22.4](#nch-admin-log-file-rotation) 讨论了日志文件的轮换和过期。类似的技术也适用于日志表：'
+- en: To rotate a log table, rename it and open a new table with the original name.
+  id: totrans-169
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要旋转日志表，请重命名它并打开一个新表，以使用原始名称。
+- en: To expire log table contents, remove rows older than a certain age.
+  id: totrans-170
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要过期日志表中的内容，请删除超过一定年龄的行。
+- en: The examples here demonstrate how to implement these methods using the general
+    query log table, `mysql.general_log`. The same methods apply to the slow query
+    log table, `mysql.slow_log`, or to any other table containing rows that have a
+    timestamp.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里的示例演示了如何使用通用查询日志表 `mysql.general_log` 实施这些方法。相同的方法适用于慢查询日志表 `mysql.slow_log`
+    或任何包含具有时间戳的行的其他表。
+- en: 'To employ log table rotation, create an empty copy of the original table to
+    serve as the new table (see [Recipe 6.1](ch06.xhtml#nch-tblmgmt-tblmgmt-clone)),
+    then rename the original table and rename the new one to take its place:'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用日志表轮换，创建原始表的空副本作为新表（参见 [Recipe 6.1](ch06.xhtml#nch-tblmgmt-tblmgmt-clone)），然后重命名原始表并重命名新表以取代原始表：
+- en: '[PRE30]'
+  id: totrans-173
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'To employ log row expiration, you can either empty the table completely or
+    selectively:'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用日志行过期，可以完全清空表或选择性地清空：
+- en: 'To empty a log table completely, truncate it:'
+  id: totrans-175
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要完全清空日志表，请将其截断：
+- en: '[PRE31]'
+  id: totrans-176
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'To expire a table selectively, removing only rows older than a given age, you
+    must know the name of the column that indicates row-creation time:'
+  id: totrans-177
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要选择性地过期表，仅删除早于给定年龄的行，必须知道指示行创建时间的列名：
+- en: '[PRE32]'
+  id: totrans-178
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'For automatic expiration, the statements for any of the techniques just described
+    can be executed within a scheduled event (see [Recipe 11.5](ch11.xhtml#nch-routines-routines-events)).
+    For example:'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于自动过期，可以在计划事件中执行上述任何技术的语句（参见 [Recipe 11.5](ch11.xhtml#nch-routines-routines-events)）。例如：
+- en: '[PRE33]'
+  id: totrans-180
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 22.6 Configuring storage engines
+  id: totrans-181
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 22.6 配置存储引擎
+- en: Problem
+  id: totrans-182
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to make sure the engine of your choice is configured properly.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望确保所选择的引擎已正确配置。
+- en: Solution
+  id: totrans-184
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Understand and configure each storage engine according to its use case.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据用例理解和配置每个存储引擎。
+- en: Discussion
+  id: totrans-186
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL comes with several storage engines by default, such as MyISAM and InnoDB.
+    MySQL 8.0 onwards uses InnoDB as the default database engine. Along with this
+    popular storage engine, there are some others you might want to explore. Each
+    of these storage engine will use shared resources as well as dedicated resources
+    from the operating system. Care must be taken not to give too many resources while
+    mixing and matching.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 默认提供几种存储引擎，例如 MyISAM 和 InnoDB。从 MySQL 8.0 开始，InnoDB 作为默认数据库引擎。除了这种流行的存储引擎，您可能还想探索其他一些。每个存储引擎都将使用来自操作系统的共享资源以及专用资源。在混合使用时，必须注意不要提供太多资源。
+- en: 'InnoDB : Supports transactions and row level locking with full ACID compliancy
+    engine.'
+  id: totrans-188
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: InnoDB：支持事务和行级锁定，具有完全的 ACID 兼容性引擎。
+- en: 'MyISAM : Table level locking and simple engine.'
+  id: totrans-189
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MyISAM：表级锁定和简单引擎。
+- en: 'MyRocks : LSM based b-tree key/value storage engine. ^([1](ch22.xhtml#idm45820313521328))'
+  id: totrans-190
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MyRocks：基于 LSM 的 B 树键/值存储引擎。^([1](ch22.xhtml#idm45820313521328))
+- en: 'CSV : Comma separated values engine.'
+  id: totrans-191
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: CSV：逗号分隔值引擎。
+- en: 'Blackhole : All writes are sent to /dev/null no data storage engine.'
+  id: totrans-192
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Blackhole：所有写入都发送到 /dev/null 无数据存储引擎。
+- en: 'Memory : Optimized for in memory work load storage engine.'
+  id: totrans-193
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 内存：为内存工作负载存储引擎优化。
+- en: 'Archive : Write only engine for archival data in compressed format storage
+    engine.'
+  id: totrans-194
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Archive：用于存档数据的只写引擎，以压缩格式存储引擎。
+- en: Warning
+  id: totrans-195
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Using multiple storage engines at the same time can cause issues and may lead
+    to data loss if used in the same transaction. Also, be careful about the compatibility
+    of your application and tooling around it.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同时使用多个存储引擎可能会引发问题，并可能导致数据丢失，如果在同一事务中使用时请注意应用程序及其周围工具的兼容性。
+- en: As each of above engines store data differently, we must configure them accordingly.
+    InnoDB utilizes redo and undo log spaces for modified data. This allows both recovery
+    and point in time restore with minimal data loss in the event of hardware or server
+    failures. MyRocks is another advanced storage engine which writes to recovery
+    log Write Ahead Log (WAL) first and supports rollback for each transaction. MyISAM
+    and CSV type storage engines writes directly to data files. While it’s easier
+    to make binary backups and transport them, these engines will not support rollback
+    operations.
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于每个引擎都以不同方式存储数据，我们必须相应地配置它们。InnoDB 使用重做日志和撤销日志空间来存储修改后的数据。这允许在硬件或服务器故障时最小化数据丢失的情况下进行恢复和时间点还原。MyRocks
+    是另一种先进的存储引擎，首先写入恢复日志 Write Ahead Log (WAL)，并支持每个事务的回滚。MyISAM 和 CSV 类型存储引擎直接写入数据文件。虽然二进制备份和传输更容易，但这些引擎不支持回滚操作。
+- en: 'To check default storage engine using MySQL 8.0:'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在 MySQL 8.0 中检查默认存储引擎：
+- en: '[PRE34]'
+  id: totrans-199
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: We can see the table storage engine type by checking the schema definition.
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过检查模式定义，我们可以看到表存储引擎类型。
+- en: '[PRE35]'
+  id: totrans-201
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: If we want to change the storage engine type after you’ve created the table,
+    issue an *ALTER* statement.
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们想在创建表后更改存储引擎类型，可以发出*ALTER*语句。
+- en: '[PRE36]'
+  id: totrans-203
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: Note
+  id: totrans-204
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: While you can swap between storage engines after a table has been created and
+    data loaded, *ALTER TABLE* operation locks for all storage engines. For large
+    data sets, consider utilizing online schema change utilities such as [pt-online-schema-change](https://www.percona.com/doc/percona-toolkit/3.0/pt-online-schema-change.html#:~:text=pt%2Donline%2Dschema%2Dchange%20works%20by%20creating%20an%20empty,it%20with%20the%20new%20one.)
+    or [gh-ost](https://github.com/github/gh-ost). These tools allow schema migrations
+    to complete without creating a metadata lock and apply changes in a controlled
+    way.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然可以在创建表并加载数据后在存储引擎之间进行切换，*ALTER TABLE* 操作会为所有存储引擎锁定。对于大型数据集，请考虑使用在线模式更改工具，例如[pt-online-schema-change](https://www.percona.com/doc/percona-toolkit/3.0/pt-online-schema-change.html#:~:text=pt%2Donline%2Dschema%2Dchange%20works%20by%20creating%20an%20empty,it%20with%20the%20new%20one.)
+    或 [gh-ost](https://github.com/github/gh-ost)。这些工具允许模式迁移完成而不创建元数据锁，并以受控方式应用更改。
+- en: 'Other storage engine settings can be checked as follows:'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以按以下方式检查其他存储引擎设置：
+- en: '[PRE37]'
+  id: totrans-207
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: ^([1](ch22.xhtml#idm45820313521328-marker)) Third party storage engine via Percona
+    and MariaDB designed to handle write intensive workloads with space saving benefits.
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch22.xhtml#idm45820313521328-marker)) 通过 Percona 和 MariaDB 设计的第三方存储引擎，旨在处理具有节省空间优势的写入密集型工作负载。

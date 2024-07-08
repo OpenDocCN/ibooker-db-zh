@@ -1,0 +1,3652 @@
+- en: Chapter 2\. Indexes and Indexing
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第2章\. 索引和索引技术
+- en: 'Many factors determine MySQL performance, but indexes are special because performance
+    cannot be achieved without them. You can remove other factors—queries, schemas,
+    data, and so on—and still achieve performance, but removing indexes limits performance
+    to brute force: relying on the speed and capacity of hardware. If this book were
+    titled *Brute Force MySQL Performance*, the contents would be as long as the title:
+    “Buy better, faster hardware.” You laugh, but just a few days ago I met with a
+    team of developers who had been improving performance in the cloud by purchasing
+    faster hardware until stratospheric costs compelled them to ask, “How else can
+    we improve performance?”'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多因素决定了MySQL的性能，但索引是特殊的，因为没有它们无法实现性能。可以删除其他因素——查询、架构、数据等等，仍然可以实现性能，但删除索引会限制性能到粗暴力：依赖于硬件的速度和容量。如果这本书标题是*Brute
+    Force MySQL Performance*，其内容就像标题一样长：“购买更好、更快的硬件。”你笑了，但就在几天前，我与一组开发人员会议时，他们一直通过购买更快的硬件来改善云端性能，直到成本飙升，迫使他们询问：“我们如何进一步提升性能？”
+- en: 'MySQL leverages hardware, optimizations, and indexes to achieve performance
+    when accessing data. Hardware is an obvious leverage because MySQL runs on hardware:
+    the faster the hardware, the better the performance. Less obvious and perhaps
+    more surprising is that hardware provides the *least* leverage. I explain why
+    in a moment. *Optimizations* refer to the numerous techniques, algorithms, and
+    data structures that enable MySQL to utilize hardware efficiently. Optimizations
+    bring the power of hardware into focus. And focus is the difference between a
+    light bulb and a laser. Consequently, optimizations provide more leverage than
+    hardware. If databases were small, hardware and optimizations would be sufficient.
+    But increasing data size *deleverages* the benefits of hardware and optimizations.
+    Without indexes, performance is severely limited.'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL在访问数据时利用硬件、优化和索引来提高性能。硬件是显而易见的杠杆，因为MySQL运行在硬件上：硬件越快，性能越好。而较不明显且可能更令人惊讶的是，硬件提供的*杠杆*最小。我马上会解释为什么。*优化*是指众多技术、算法和数据结构，使MySQL能够有效地利用硬件。优化使硬件的能力更加明显。而集中则是灯泡和激光之间的区别。因此，优化比硬件提供了更多的杠杆。如果数据库很小，硬件和优化将足以满足需求。但是增加数据规模会*减少*硬件和优化的好处。没有索引，性能将严重受限。
+- en: To illustrate these points, think of MySQL as a fulcrum that leverages hardware,
+    optimizations, and indexes to figuratively lift data, as shown in [Figure 2-1](#no-indexes).
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了说明这些观点，将MySQL想象成一个杠杆，利用硬件、优化和索引来象征性地提升数据，如[图2-1](#no-indexes)所示。
+- en: '![emsp 0201](assets/emsp_0201.png)'
+  id: totrans-4
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0201](assets/emsp_0201.png)'
+- en: Figure 2-1\. MySQL performance without indexes
+  id: totrans-5
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图2-1\. 没有索引的MySQL性能
+- en: Without indexes (on the right side), MySQL achieves limited performance with
+    relatively small data. But add indexes to the balance, as shown in [Figure 2-2](#good-indexes),
+    and MySQL achieves high performance with large data.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 没有索引（右侧），MySQL在相对较小的数据集上的性能有限。但是添加索引到平衡中，如[图2-2](#good-indexes)所示，MySQL在大数据集上可以达到高性能。
+- en: '![emsp 0202](assets/emsp_0202.png)'
+  id: totrans-7
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0202](assets/emsp_0202.png)'
+- en: Figure 2-2\. MySQL performance with indexes
+  id: totrans-8
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图2-2\. 有索引的MySQL性能
+- en: Indexes provide the most *and the best* leverage. They are required for any
+    nontrivial amount of data. MySQL performance requires proper indexes and indexing,
+    both of which this chapter teaches in detail.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引提供了最多*和最佳*的杠杆效应。对于任何非微不足道的数据量，它们都是必需的。MySQL的性能需要适当的索引和索引，本章详细介绍了这两者的使用方法。
+- en: Several years ago, I designed and implemented an application that stores a lot
+    of data. Originally, I estimated the largest table not to exceed a million rows.
+    But there was a bug in the data archiving code that allowed the table to reach
+    one *billion* rows. For years, nobody noticed because response time was always
+    great. Why? Good indexes.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 几年前，我设计并实现了一个存储大量数据的应用程序。最初，我估计最大的表不会超过一百万行。但由于数据存档代码中存在一个bug，允许表达到十*亿*行。多年来，没有人注意到，因为响应时间一直很好。为什么？好的索引。
+- en: Note
+  id: totrans-11
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'It’s commonly said that MySQL uses only one index per table, but that’s not
+    entirely true. The index merge optimization, for example, can use two indexes.
+    In this book, however, I focus on the normal case: one query, one table, one index.'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常说MySQL每个表只使用一个索引，但这并不完全正确。例如，索引合并优化可以使用两个索引。在本书中，我专注于正常情况：一个查询、一个表、一个索引。
+- en: 'This chapter teaches MySQL indexes and indexing. There are five major sections.
+    The first argues why you should not be distracted by hardware or MySQL tuning.
+    It’s a necessary digression in order to fully understand why hardware and MySQL
+    tuning are not efficient solutions for improving MySQL performance. The second
+    is a visual introduction to MySQL indexes: what they are and how they work. The
+    third teaches indexing—applying indexes for maximum leverage—by thinking like
+    MySQL. The fourth covers common reasons why indexes lose effectiveness (leverage).
+    The fifth is a brief overview of MySQL table join algorithms because effective
+    joins rely on effective indexes.'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章讲解 MySQL 索引和索引。它有五个主要部分。第一部分论述了为什么不应该被硬件或 MySQL 调优分心。这是一个必要的离题讨论，以便完全理解为什么硬件和
+    MySQL 调优不是提高 MySQL 性能的有效解决方案。第二部分是 MySQL 索引的视觉介绍：它们是什么以及它们如何工作。第三部分教授索引——通过像 MySQL
+    一样思考应用索引以获得最大的效益。第四部分涵盖索引失效（效益减少）的常见原因。第五部分简要介绍了 MySQL 表连接算法，因为有效的连接依赖于有效的索引。
+- en: Red Herrings of Performance
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 性能的误导
+- en: '*Red herring* is an idiom that refers to a distraction from a goal. When tracking
+    down solutions to improve MySQL performance, two red herrings commonly distract
+    engineers: faster hardware and MySQL tuning.'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*红鲱鱼*是一个指代分散注意力的习语。在追踪改善 MySQL 性能的解决方案时，两个常见的误导工具是更快的硬件和 MySQL 调优。'
+- en: Better, Faster Hardware!
+  id: totrans-16
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 更好、更快的硬件！
+- en: 'When MySQL performance isn’t acceptable, do *not* begin by scaling up (using
+    better, faster hardware) to “see if that helps.” It probably will help if you
+    scale up significantly, but you learn nothing because it only proves what you
+    already know: computers run faster on faster hardware. Better, faster hardware
+    is a red herring of performance because you miss learning the real causes of,
+    and solutions to, slow performance.'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当 MySQL 的性能不可接受时，*不要*立即通过升级（使用更好、更快的硬件）来“看看是否有帮助”。如果显著扩展，可能确实会有所帮助，但你不会学到任何东西，因为这只证明了你已经知道的事实：计算机在更快的硬件上运行更快。更好、更快的硬件是性能的一个误导，因为你会错过学习慢性能的真正原因和解决方案。
+- en: There are two reasonable exceptions. First, if the hardware is blatantly insufficient,
+    then scale up to reasonable hardware. For example, using 1 GB of memory with 500
+    GB of data is blatantly insufficient. Upgrading to 32 GB or 64 GB of memory is
+    reasonable. By contrast, upgrading to 384 GB of memory is sure to help but is
+    unreasonable. Second, if the application is experiencing *hyper-growth* (a massive
+    increase in users, usage, and data) and scaling up is a stopgap solution to keep
+    the application running, then do it. Keeping the application running is always
+    reasonable.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有两种合理的例外情况。首先，如果硬件明显不足，则升级到合理的硬件是必要的。例如，使用 1 GB 内存处理 500 GB 数据显然不足。升级到 32 GB
+    或 64 GB 内存是合理的。相比之下，升级到 384 GB 内存肯定有帮助，但是不合理。其次，如果应用正在经历*超级增长*（用户、使用率和数据的大幅增加），并且扩展是保持应用运行的权宜之计，那么就这样做。保持应用程序运行始终是合理的。
+- en: 'Otherwise, scaling up to improve MySQL performance happens *last*. Experts
+    agree: *first* optimize queries, data, access patterns, and the application. If
+    all those optimizations do not yield sufficient performance, then scale up. Scaling
+    up happens last for the following reasons.'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 否则，为了改善 MySQL 的性能，扩展是*最后*的选择。专家们一致认为：*首先*优化查询、数据、访问模式和应用程序。如果所有这些优化都无法提供足够的性能，则才考虑扩展。扩展是最后发生的，原因如下。
+- en: You don’t learn anything by scaling up, you simply clobber the problem with
+    faster hardware. Since you’re an engineer, not a cave-dwelling protohuman, you
+    *solve* problems by learning and understanding—you don’t clobber them. Admittedly,
+    learning and understanding is more difficult and time-consuming, but it’s far
+    more effective and sustainable, which leads to the next reason.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过扩展你不会学到任何东西，你只是用更快的硬件解决了问题。因为你是工程师，而不是住在洞穴里的原始人，你通过学习和理解*解决*问题——而不是简单地解决问题。诚然，学习和理解更加困难且耗时，但它们更加有效和可持续，这导致了下一个原因。
+- en: Scaling up is not a sustainable approach. Upgrading physical hardware is nontrivial.
+    Some upgrades are relatively quick and easy, but it depends on many factors outside
+    the scope of this book. Sufficient to say, however, that you will drive yourself
+    or the hardware engineers crazy if you frequently change hardware. Crazy engineers
+    are not sustainable. Moreover, companies often use the same hardware for several
+    years because the purchasing process is long and complicated. As a result, easy
+    hardware scalability is one allure of the cloud. In the cloud, you can scale up
+    (or down) CPU cores, memory, and storage in a few minutes. But this ease is *significantly*
+    more expensive than physical hardware. Cloud costs can increase exponentially.
+    The cost of Amazon RDS, for example, doubles from one instance size to the next—double
+    the hardware, double the price. Exponentially increasing costs are not sustainable.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 升级不是一种可持续的方法。升级物理硬件并不简单。有些升级相对快速且简单，但这取决于书籍范围之外的许多因素。然而，足以说，如果你频繁更换硬件，你会让自己或硬件工程师发疯。疯狂的工程师是不可持续的。此外，公司经常使用同样的硬件多年，因为采购过程漫长且复杂。因此，云端的易于扩展硬件是其吸引力之一。在云中，你可以在几分钟内扩展（或减少）CPU核心、内存和存储。但这种便利比物理硬件显著*昂贵*。云成本可能会呈指数级增长。例如，亚马逊RDS的成本从一个实例大小翻倍到下一个实例大小——硬件加倍，价格也加倍。指数增长的成本是不可持续的。
+- en: 'Generally speaking, MySQL can fully utilize all the hardware that it’s given.
+    (There are limits, which I address in [Chapter 4](ch04.html#ch04).) The real question
+    is: can the application fully utilize MySQL? The presumptive answer is yes, but
+    it’s not guaranteed. Faster hardware helps MySQL but it does not change how the
+    application uses MySQL. For example, increasing memory might not improve performance
+    if the application causes table scans. Scaling up is only effective at increasing
+    performance when the application workload can scale up, too. Not all workloads
+    can scale up.'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，MySQL可以充分利用其所获得的所有硬件。（在[第四章](ch04.html#ch04)中有相关限制。）真正的问题是：应用程序能否充分利用MySQL？假设的答案是肯定的，但不能保证。更快的硬件有助于MySQL，但它不会改变应用程序如何使用MySQL。例如，增加内存可能不会提高性能，如果应用程序导致表扫描。只有当应用程序工作负载也可以扩展时，扩展才能有效提高性能。并非所有工作负载都可以扩展。
+- en: Note
+  id: totrans-23
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: '*Workload* is the combination of queries, data, and access patterns.'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*工作负载*是查询、数据和访问模式的组合。'
+- en: 'But let’s imagine that you successfully scale up the workload to fully utilize
+    MySQL on the fastest hardware available. What happens as the application continues
+    to grow, and its workload continues to increase? This reminds me of a Zen proverb:
+    “When you reach the top of the mountain, keep climbing.” While I do encourage
+    you to meditate on that, it presents a less enlightening dilemma for your application.
+    With nowhere else to go, the only option is doing what should have been done first:
+    optimize queries, data, access patterns, and the application.'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但让我们想象一下，你成功地将工作负载扩展到可以充分利用MySQL的最快硬件。当应用程序继续增长，其工作负载继续增加时会发生什么？这让我想起了一句禅宗谚语：“当你到达山顶时，继续攀登。”虽然我鼓励你在此上冥想，但对你的应用程序而言，这提出了一个不那么令人愉快的困境。没有其他地方可去，唯一的选择是做本应该首先做的事情：优化查询、数据、访问模式和应用程序。
+- en: MySQL Tuning
+  id: totrans-26
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: MySQL调优
+- en: In the television series *Star Trek*, engineers are able to modify the ship
+    to increase power to engines, weapons, shields, sensors, transporters, tractor
+    beams—everything. MySQL is more difficult to operate than a starship because no
+    such modifications are possible. But that does not stop engineers from trying.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在电视系列*星际迷航*中，工程师们可以修改飞船以增加引擎、武器、护盾、传感器、传送器、牵引光束——所有设备的功率。MySQL比星舰更难操作，因为没有这样的修改。但这并不能阻止工程师们尝试。
+- en: First, let’s clarify three terms.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，让我们澄清三个术语。
+- en: Tuning
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 调优
+- en: 'Tuning is adjusting MySQL system variables for research and development (R&D).
+    It’s laboratory work with specific goals and criteria. Benchmarking is common:
+    adjusting system variables to measure the effect on performance. The blog post
+    [“MySQL Challenge: 100k Connections”](https://oreil.ly/CGvrU) by renowned MySQL
+    expert Vadim Tkachenko is an example of extreme tuning. Since tuning is R&D, the
+    results are not expected to be generally applicable; rather, the goal is to expand
+    our collective knowledge and understanding of MySQL, especially with respect to
+    its current limits. Tuning influences future MySQL development and best practices.'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '调优是为研究与开发（R&D）调整 MySQL 系统变量。这是具有特定目标和标准的实验性工作。常见的是基准测试：调整系统变量以测量对性能的影响。著名 MySQL
+    专家 Vadim Tkachenko 的博客文章 [“MySQL Challenge: 100k Connections”](https://oreil.ly/CGvrU)
+    是极端调优的一个例子。由于调优是研究与开发，结果不一定普遍适用；而是扩展我们对 MySQL 的集体知识和理解，尤其是在其当前限制方面。调优会影响未来 MySQL
+    的发展和最佳实践。'
+- en: Configuring
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 配置
+- en: Configuring is setting system variables to values that are appropriate for the
+    hardware and environment. The goal is a reasonable configuration with respect
+    to a few default values that need to be changed. Configuring MySQL is usually
+    done when the MySQL instance is provisioned or when hardware changes. It’s also
+    necessary to reconfigure when data size increases by an order of magnitude, for
+    example from 10 GB to 100 GB. Configuring influences how MySQL runs in general.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 配置是将系统变量设置为适合硬件和环境的值。目标是合理配置，相对于需要更改的几个默认值。配置 MySQL 通常在 MySQL 实例被提供或硬件变更时进行。例如，从
+    10 GB 到 100 GB 数据量增加一个数量级时，重新配置也是必要的。配置会影响 MySQL 的整体运行。
+- en: Optimizing
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 优化
+- en: Optimizing is improving MySQL performance by reducing the workload or making
+    it more efficient—usually the latter since application usage tends to increase.
+    The goal is faster response time and more capacity with the existing hardware.
+    Optimizing influences MySQL and application performance.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 优化是通过减少工作负载或使其更高效来提高 MySQL 的性能——通常是后者，因为应用程序使用往往会增加。目标是更快的响应时间和更大的容量利用现有硬件。优化会影响
+    MySQL 和应用程序的性能。
+- en: You will undoubtedly encounter these terms in MySQL literature, videos, conferences,
+    and so forth. The descriptions are more important than the terms. If, for example,
+    you read a blog post that uses *optimizing* but describes what is defined here
+    as *tuning*, then it’s tuning as defined here.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无疑你会在 MySQL 文献、视频、会议等中遇到这些术语。重要的是描述而不是术语本身。例如，如果你读到一个博客帖子使用了 *优化* 这个术语，但描述的是这里定义为
+    *调优* 的内容，那么这里是调优。
+- en: The distinction of these terms is important because engineers do all three,
+    but only optimizing (as defined here) is an efficient use of your time.^([1](ch02.html#idm45829114802704))
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些术语的区别很重要，因为工程师会做这三种工作，但只有优化（如此处定义）才是你时间的有效利用。^([1](ch02.html#idm45829114802704))
+- en: MySQL tuning is a red herring of performance for two reasons. First, it’s often
+    not done as a controlled laboratory experiment, which makes the results dubious.
+    In totality, MySQL performance is complex; experiments must be carefully controlled.
+    Second, results are unlikely to have a significant effect on performance because
+    MySQL is already highly optimized. Tuning MySQL is akin to squeezing blood from
+    a turnip.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 的调优是性能的一个误导，有两个原因。首先，通常不作为受控实验室实验，这使得结果不可靠。总体而言，MySQL 的性能是复杂的，实验必须仔细控制。其次，结果不太可能对性能产生显著影响，因为
+    MySQL 已经高度优化。调优 MySQL 就像从萝卜中榨血一样。
+- en: 'Going back to the first paragraph of this section, I realize that we all admire
+    Lieutenant Commander Geordi La Forge, the Chief Engineer in *Star Trek: The Next
+    Generation*. When the captain calls for more power, we feel obligated to make
+    it so by applying arcane server parameters. Or, on Earth, when the application
+    needs more power, we want to save the day by applying an ingenious reconfiguration
+    of MySQL that boosts throughput and concurrency by 50%. Good work, La Forge! Unfortunately,
+    MySQL 8.0 introduced automatic configuration by enabling [`innodb_dedicated_server`](https://oreil.ly/niPGL).
+    Since MySQL 5.7 will be end-of-life (EOL) soon after this book is published, let’s
+    keep looking to and building the future. Good work nevertheless, La Forge.'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 回到本节的第一个段落，我意识到我们都钦佩《星际迷航：下一代》中的首席工程师乔迪·拉·福奇中尉。当舰长呼唤更多的能量时，我们感到有义务通过应用神秘的服务器参数使之成真。或者，在地球上，当应用程序需要更多能量时，我们希望通过精巧的MySQL重新配置来提升吞吐量和并发性能达到50%。干得好，拉·福奇！不幸的是，MySQL
+    8.0版本通过启用[`innodb_dedicated_server`](https://oreil.ly/niPGL)引入了自动配置。由于MySQL 5.7版本不久后即将到达生命周期末尾（EOL），让我们继续前进，建设未来。不过，拉·福奇的工作仍然值得称赞。
+- en: Optimizing is all you need to do because tuning is a red herring and configuration
+    is automatic as of MySQL 8.0\. This book is all about optimizing.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 优化是你需要做的一切，因为调优是一个误导，而配置在MySQL 8.0版本后是自动的。本书的核心是优化。
+- en: 'MySQL Indexes: A Visual Introduction'
+  id: totrans-40
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MySQL索引：视觉介绍
+- en: Indexes are the key to performance and, if you recall [“Direct Query Optimization”](ch01.html#direct-query-optimization),
+    changes to queries and indexes solve *a lot* of performance problems. The journey
+    of query optimization requires a solid understanding of MySQL indexes, and that’s
+    what this section presents—in detail with copious illustrations.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引是提升性能的关键，如果你回忆起[“直接查询优化”](ch01.html#direct-query-optimization)，对查询和索引的修改能够解决*大量*的性能问题。优化查询的旅程需要对MySQL索引有扎实的理解，这正是本节详细展示的内容，配有大量插图。
+- en: Although this section is detailed and relatively long, I call it an *introduction*
+    because there is more to learn. But this section is the key that unlocks the treasure
+    chest of MySQL query optimizations.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管本节内容详细且相对较长，但我将其称为*介绍*，因为还有更多内容需要学习。但这一节是打开MySQL查询优化宝藏箱的关键。
+- en: The following nine sections apply only to standard indexes on InnoDB tables—the
+    type of index created by a simple `PRIMARY KEY` or `[UNIQUE] INDEX` table definition.
+    MySQL supports other specialized index types, but I don’t cover them in this book
+    because standard indexes are the basis of performance.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面九个章节仅适用于InnoDB表的标准索引——通过简单的`PRIMARY KEY`或`[UNIQUE] INDEX`表定义创建的索引类型。MySQL支持其他专门的索引类型，但本书不涵盖它们，因为标准索引是性能的基础。
+- en: Before we dive into the details of MySQL indexes, I begin with a revelation
+    about InnoDB tables that will change the way you see not only indexes but most
+    of MySQL performance.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在深入探讨MySQL索引的细节之前，我首先揭示了关于InnoDB表的一个重要信息，这将改变你对索引以及大部分MySQL性能的看法。
+- en: InnoDB Tables Are Indexes
+  id: totrans-45
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: InnoDB表就是索引
+- en: '[Example 2-1](#elem) is the structure of table `elem` (short for *elements*)
+    and the 10 rows that it contains. All examples in this chapter refer to table
+    `elem`—with one clearly noted exception—so take a moment to study it.'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[示例 2-1](#elem)展示了表`elem`（简称*元素*）的结构及其包含的10行内容。本章所有示例都涉及表`elem`——只有一个明确标注的例外——因此请花些时间来研究它。'
+- en: Example 2-1\. Table `elem`
+  id: totrans-47
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-1\. 表`elem`
+- en: '[PRE0]'
+  id: totrans-48
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Table `elem` has two indexes: the primary key on column `id` and a nonunique
+    secondary index on columns `a, b`. The value for column `id` is a monotonically
+    increasing integer. The values for columns `a`, `b`, and `c` are atomic symbols
+    corresponding to the column name letter: “Ag” (silver) for column `a`, “B” (boron)
+    for column `b`, and so on. The row values are random and meaningless; it’s just
+    a simple table used for examples.'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表`elem`有两个索引：在列`id`上的主键索引和在列`a, b`上的非唯一次要索引。列`id`的值是单调递增的整数。列`a`, `b`和`c`的值是对应于列名字母的原子符号：“Ag”（银）对应列`a`，“B”（硼）对应列`b`，依此类推。行值是随机且无意义的；这只是一个用于示例的简单表格。
+- en: '[Figure 2-3](#idx-table) shows a typical view of table `elem`—just the first
+    four rows for brevity.'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 2-3](#idx-table)展示了表`elem`的典型视图——为了简洁起见，只显示了前四行。'
+- en: '![emsp 0203](assets/emsp_0203.png)'
+  id: totrans-51
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0203](assets/emsp_0203.png)'
+- en: 'Figure 2-3\. Table `elem`: visual model'
+  id: totrans-52
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-3\. 表`elem`：视觉模型
+- en: Nothing special about table `elem`, right? It’s so simple, one might say it’s
+    elementary. But what if I told you that it’s not really a table, it’s an index?
+    Get the “F” (fluorine) out of here! [Figure 2-4](#idx-table-pk) shows the true
+    structure of table `elem` as an InnoDB table.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 `elem` 没什么特别的，对吧？它很简单，可以说是基本的。但如果我告诉你，它并不是一张表，而是一个索引呢？把“F”（氟）扔出去吧！[图 2-4](#idx-table-pk)
+    显示了表 `elem` 的真实结构，作为一个 InnoDB 表。
+- en: '![emsp 0204](assets/emsp_0204.png)'
+  id: totrans-54
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0204](assets/emsp_0204.png)'
+- en: 'Figure 2-4\. Table `elem`: InnoDB B-tree index'
+  id: totrans-55
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-4\. 表 `elem`：InnoDB B 树索引
+- en: InnoDB tables are B-tree indexes organized by the primary key. Rows are index
+    records stored in leaf nodes of the index structure. Each index record has metadata
+    (denoted by “…”) used for row locking, transaction isolation, and so on.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB 表是按主键组织的 B 树索引。行是存储在索引结构叶节点中的索引记录。每个索引记录都有元数据（用“…”表示），用于行锁定、事务隔离等。
+- en: '[Figure 2-4](#idx-table-pk) is a highly simplified depiction of the B-tree
+    index that is table `elem`. Four index records (at bottom) correspond to the first
+    four rows. Primary key column values (`1`, `2`, `3`, and `4`) are shown at the
+    top of each index record. Other column values (“Ag,” “B,” “C,” and so forth) are
+    shown below the metadata for each index record.'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 2-4](#idx-table-pk) 是表 `elem` 的 B 树索引的高度简化描述。四个索引记录（在底部）对应于前四行。主键列值（`1`,
+    `2`, `3`, 和 `4`）显示在每个索引记录的顶部。其他列值（“Ag,” “B,” “C,” 等）显示在每个索引记录的元数据下方。'
+- en: 'You don’t need to know the technical details of InnoDB B-tree indexes to understand
+    or achieve remarkable MySQL performance. Only two points are important:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你不需要了解 InnoDB B 树索引的技术细节，才能理解或达到出色的 MySQL 性能。只有两点是重要的：
+- en: Primary key lookups are extremely fast and efficient
+  id: totrans-59
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 主键查找非常快速和高效。
+- en: The primary key is pivotal to MySQL performance
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 主键对于 MySQL 的性能至关重要。
+- en: The first point is true because B-tree indexes are inherently fast and efficient,
+    which is one reason why many database servers use them. The second point becomes
+    increasingly clear in the coming sections—and chapters.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一个观点是正确的，因为B树索引本质上快速和高效，这也是为什么许多数据库服务器使用它们的原因之一。第二个观点在接下来的章节和章节中将变得越来越清晰。
+- en: To learn about the fascinating world of database internals, including indexes,
+    read [*Database Internals*](https://oreil.ly/TDsCc) by Alex Petrov (O’Reilly,
+    2019). For a deep dive into InnoDB internals, including its B-tree implementation,
+    cancel all your meetings and check out the website of renowned MySQL expert [Jeremy
+    Cole](https://oreil.ly/9sH9m).
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 想了解数据库内部的迷人世界，包括索引，请阅读 [*Database Internals*](https://oreil.ly/TDsCc) 一书，作者是
+    Alex Petrov（O’Reilly，2019年出版）。要深入了解 InnoDB 内部，包括其B树实现，请取消所有会议并查看著名 MySQL 专家 [Jeremy
+    Cole](https://oreil.ly/9sH9m) 的网站。
+- en: Note
+  id: totrans-63
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: An InnoDB primary key is a clustered index. The MySQL manual occasionally refers
+    to the primary key as *the clustered index*.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB 主键是一个聚簇索引。MySQL 手册偶尔将主键称为 *聚簇索引*。
+- en: Indexes provide the most and the best leverage because the table *is* an index.
+    The primary key is pivotal to performance. This is especially true because secondary
+    indexes include primary key values. [Figure 2-5](#idx-secondary) shows the secondary
+    index on columns `a, b`.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引提供了最大和最佳的杠杆，因为表 *就是* 一个索引。主键对性能至关重要。这一点尤其重要，因为二级索引包含主键值。[图 2-5](#idx-secondary)
+    显示了在列 `a, b` 上的二级索引。
+- en: '![emsp 0205](assets/emsp_0205.png)'
+  id: totrans-66
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0205](assets/emsp_0205.png)'
+- en: Figure 2-5\. Secondary index on columns a, b
+  id: totrans-67
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-5\. 列 `a, b` 的二级索引
+- en: 'Secondary indexes are B-tree indexes, too, but leaf nodes store primary key
+    values. When MySQL uses a secondary index to find a row, it does a second lookup
+    on the primary key to read the full row. Let’s put the two together and walk through
+    a secondary index lookup for query `SELECT * FROM elem WHERE a=''Au'' AND b=''Be''`:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二级索引也是 B 树索引，但叶节点存储主键值。当 MySQL 使用二级索引查找行时，它会在主键上进行第二次查找，以读取完整行。让我们将这两者结合起来，以及通过查询
+    `SELECT * FROM elem WHERE a='Au' AND b='Be'` 进行二级索引查找的步骤：
+- en: '![emsp 0206](assets/emsp_0206.png)'
+  id: totrans-69
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0206](assets/emsp_0206.png)'
+- en: Figure 2-6\. Secondary index lookup for value “Au, Be”
+  id: totrans-70
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-6\. 值为 “Au, Be” 的二级索引查找
+- en: '[Figure 2-6](#idx-2nd-lookup-1) shows the secondary index (columns `a, b`)
+    on top and the primary key (column `id`) on bottom. Six callouts (numbered circles)
+    show the lookup for value “Au, Be” using the secondary index:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 2-6](#idx-2nd-lookup-1) 显示了顶部的二级索引（列 `a, b`）和底部的主键（列 `id`）。六个标注点（编号圆圈）显示了使用二级索引查找值“Au,
+    Be”的过程：'
+- en: Index lookups begin at the root node; branch right to an internal node for value
+    “Au, Be.”
+  id: totrans-72
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 索引查找从根节点开始；分支右到内部节点，值为“Au, Be.”。
+- en: At an internal node, branch right to the leaf node for value “Au, Be.”
+  id: totrans-73
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在内部节点，向右分支到值为“Au, Be.”的叶节点。
+- en: 'Leaf node for secondary index value “Au, Be” contains the corresponding primary
+    key value: 2.'
+  id: totrans-74
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 二级索引值为“Au, Be”的叶节点包含相应的主键值：2。
+- en: Begin primary key lookup at the root node; branch left to an internal node for
+    value 2.
+  id: totrans-75
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 从根节点开始主键查找；向左分支到值为 2 的内部节点。
+- en: At an internal node, branch right to the leaf node for value 2.
+  id: totrans-76
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在内部节点，向右分支到值为 2 的叶节点。
+- en: Leaf node for primary key value 2 contains the full row matching “Au, Be.”
+  id: totrans-77
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一级键值为 2 的叶节点包含匹配“Au, Be.”的完整行。
+- en: Note
+  id: totrans-78
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: A table has only one primary key. All other indexes are secondary indexes.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表只有一个主键。所有其他索引都是次要索引。
+- en: This section is short but incredibly important because the correct model provides
+    the foundation for understanding indexes *and more*. For example, if you think
+    back to [“Lock time”](ch01.html#Lock-time), you might see it in a new light since
+    rows are actually leaf nodes in the primary key. Knowing that an InnoDB table
+    is its primary key is akin to knowing that heliocentrism, not geocentrism, is
+    the correct model of the solar system. In the world of MySQL, everything revolves
+    around the primary key.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这一部分非常重要，因为正确的模型为理解索引*及更多*提供了基础。例如，如果你回想起[“Lock time”](ch01.html#Lock-time)，你可能会以新的视角看待它，因为行实际上是主键中的叶节点。知道InnoDB表是其主键等同于知道在太阳系中，日心说而不是地心说是正确的模型。在MySQL的世界中，一切围绕主键展开。
+- en: Table Access Methods
+  id: totrans-81
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 表访问方法
+- en: 'Using an index to look up rows is one of three table access methods. Since
+    tables are indexes, an *index lookup* is the best and most common access method.
+    But sometimes, depending on the query, an index lookup is not possible and the
+    only recourse is an *index scan* or a *table scan*—the other access methods. Knowing
+    which access method MySQL uses for a query is imperative because performance requires
+    an index lookup. Avoid index scans and table scans. [“EXPLAIN: Query Execution
+    Plan”](#EXPLAIN) shows how to see the access method. But first, let’s clarify
+    and visualize each one.'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用索引查找行是三种表访问方法之一。由于表是索引，*索引查找*是最好且最常见的访问方法。但有时，根据查询，索引查找是不可能的唯一选择，而唯一的补救方法是*索引扫描*或*表扫描*，即其他访问方法。了解MySQL用于查询的访问方法至关重要，因为性能要求索引查找。避免索引扫描和表扫描。[“EXPLAIN：查询执行计划”](#EXPLAIN)展示了如何查看访问方法。但首先，让我们澄清并可视化每种方法。
+- en: Note
+  id: totrans-83
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The MySQL manual uses the terms *access method*, *access type*, and *join type*.
+    And `EXPLAIN` uses a field called `type` or `access_type` to refer to those terms.
+    In MySQL, the terms are closely related but used equivocally.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 手册使用术语*访问方法*、*访问类型*和*连接类型*。`EXPLAIN`使用名为`type`或`access_type`的字段来指代这些术语。在MySQL中，这些术语密切相关但等效使用。
+- en: 'In this book, for precision and consistency I use only two terms: *access method*
+    and *access type*. There are three access methods: index lookup, index scan, and
+    table scan. For an index lookup, there are several access types: `ref`, `eq_ref`,
+    `range,` and so forth.'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书中，为了精确性和一致性，我只使用两个术语：*访问方法*和*访问类型*。有三种访问方法：索引查找、索引扫描和表扫描。对于索引查找，有几种访问类型：`ref`、`eq_ref`、`range`等。
+- en: Index lookup
+  id: totrans-86
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 索引查找
+- en: 'An index lookup finds specific rows—or ranges of rows—by leveraging the ordered
+    structure and algorithmic access of an index. This is the fastest access method
+    because it’s precisely what indexes are designed for: fast and efficient access
+    to large amounts of data. Consequently, index lookups are essential for direct
+    query optimization. Performance requires that practically every query uses an
+    index lookup for every table. There are several access types for an index lookup
+    that I cover in forthcoming sections such as [“WHERE”](#idx-where).'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过利用索引的有序结构和算法访问，索引查找可以找到特定行或行范围。这是最快的访问方法，因为索引正是为此设计的：快速高效地访问大量数据。因此，索引查找对于直接查询优化至关重要。性能要求几乎每个查询都对每个表使用索引查找。索引查找的访问类型有几种，我将在接下来的章节中详细介绍，比如[“WHERE”](#idx-where)。
+- en: '[Figure 2-6](#idx-2nd-lookup-1) in the previous section shows an index lookup
+    using a secondary index.'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前一节的[图 2-6](#idx-2nd-lookup-1)中显示了使用次要索引进行索引查找。
+- en: Index scan
+  id: totrans-89
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 索引扫描
+- en: 'When an index lookup is not possible, MySQL must use brute force to find rows:
+    read all rows and filter out non-matching ones. Before MySQL resorts to reading
+    every row using the primary key, it tries to read rows using a secondary index.
+    This is called an index scan.'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当无法进行索引查找时，MySQL 必须使用蛮力方法查找行：读取所有行并过滤出不匹配的行。在 MySQL 采用读取每一行使用主键之前，它尝试使用次要索引读取行。这称为索引扫描。
+- en: There are two types of index scan. The first is a *full* index scan, meaning
+    MySQL reads all rows in index order. Reading all rows is usually terrible for
+    performance, but reading them in index order can avoid sorting rows when the index
+    order matches the query `ORDER BY`.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有两种类型的索引扫描。第一种是*完整*索引扫描，意味着 MySQL 按索引顺序读取所有行。通常读取所有行对性能来说很糟糕，但当索引顺序与查询的 `ORDER
+    BY` 匹配时，按顺序读取可以避免对行进行排序。
+- en: '[Figure 2-7](#idx-index-scan) shows a full index scan for query `SELECT * FROM
+    elem FORCE INDEX (a) ORDER BY a, b`. The `FORCE INDEX` clause is required because,
+    since table `elem` is tiny, it’s more efficient for MySQL to scan the primary
+    key and sort the rows rather than scan the secondary index and fetch the rows
+    in order. (Sometimes bad queries make good examples.)'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 2-7](#idx-index-scan) 展示了查询 `SELECT * FROM elem FORCE INDEX (a) ORDER BY
+    a, b` 的完整索引扫描。`FORCE INDEX` 子句是必需的，因为由于表 `elem` 很小，MySQL 更高效地扫描主键并对行进行排序，而不是扫描次要索引并按顺序获取行。
+    （有时候糟糕的查询可以作为好的例子。）'
+- en: '[Figure 2-7](#idx-index-scan) has eight callouts (numbered circles) that show
+    the order of row access:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 2-7](#idx-index-scan) 包含八个标注（编号圆圈），显示了行访问的顺序：'
+- en: 'Read first value of secondary index (SI): “Ag, B.”'
+  id: totrans-94
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 读取次要索引（SI）的第一个值：“Ag, B.”
+- en: Look up corresponding row in primary key (PK).
+  id: totrans-95
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 查找主键（PK）中对应的行。
+- en: 'Read second value of SI: “Al, Br.”'
+  id: totrans-96
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 读取 SI 的第二个值：“Al, Br.”
+- en: Look up corresponding row in PK.
+  id: totrans-97
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 查找主键中对应的行。
+- en: 'Read third value of SI: “Ar, Br.”'
+  id: totrans-98
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 读取 SI 的第三个值：“Ar, Br.”
+- en: Look up corresponding row in PK.
+  id: totrans-99
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 查找主键（PK）中对应的行。
+- en: 'Read fourth value of SI: “Au, Be.”'
+  id: totrans-100
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 读取 SI 的第四个值：“Au, Be.”
+- en: Look up corresponding row in PK.
+  id: totrans-101
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 查找主键（PK）中对应的行。
+- en: '![emsp 0207](assets/emsp_0207.png)'
+  id: totrans-102
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0207](assets/emsp_0207.png)'
+- en: Figure 2-7\. Full index scan on secondary index
+  id: totrans-103
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-7\. 次要索引的完整索引扫描
+- en: 'There is a subtle but important detail in [Figure 2-7](#idx-index-scan): scanning
+    the secondary index in order might be sequential reads, but the primary key lookups
+    are almost certainly random reads. Accessing rows in index order does not guarantee
+    sequential reads; more than likely, it incurs random reads.'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 2-7](#idx-index-scan) 中有一个微妙但重要的细节：按顺序扫描次要索引可能是顺序读取，但主键查找几乎肯定是随机读取。按索引顺序访问行并不能保证顺序读取；很可能会产生随机读取。'
+- en: Note
+  id: totrans-105
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Sequential access (reads and writes) is faster than random access.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 顺序访问（读取和写入）比随机访问更快。
+- en: 'The second type of index scan is an *index-only scan*: MySQL reads column values
+    (not full rows) from the index. This requires a covering index, which is covered
+    later (pun intended) in [“Covering Indexes”](#idx-covering-index). It should be
+    faster than a full index scan because it doesn’t require primary key lookups to
+    read full rows; it only reads column values from the secondary index, which is
+    why it requires a covering index.'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二种索引扫描类型是*仅索引扫描*：MySQL 从索引中读取列值（而不是完整行）。这需要一个覆盖索引，稍后会介绍（这里的“覆盖索引”）。它应该比完整索引扫描更快，因为它不需要主键查找来读取完整行；它只从次要索引中读取列值，这也是为什么它需要一个覆盖索引的原因。
+- en: Don’t optimize for an index scan unless the only alternative is a full table
+    scan. Otherwise, avoid index scans.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除非唯一的选择是全表扫描，否则不要优化为索引扫描。否则，避免索引扫描。
+- en: Table scan
+  id: totrans-109
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 表扫描
+- en: A (full) table scan reads *all* rows in primary key order. When MySQL cannot
+    do an index lookup or an index scan, a table scan is the only option. This is
+    usually terrible for performance, but it’s also usually easy to fix because MySQL
+    is adept at using indexes and has many index-based optimizations. Essentially
+    every query with a `WHERE`, `GROUP BY`, or `ORDER BY` clause can use an index—even
+    if just an index scan—because those clauses use columns and columns can be indexed.
+    Consequently, there are nearly zero reasons for an unfixable table scan.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: （完整）表扫描按主键顺序读取*所有*行。当 MySQL 无法进行索引查找或索引扫描时，表扫描是唯一的选择。这通常对性能很差，但通常很容易修复，因为 MySQL
+    擅长使用索引并具有许多基于索引的优化。基本上每个带有 `WHERE`、`GROUP BY` 或 `ORDER BY` 子句的查询都可以使用索引——即使只是索引扫描——因为这些子句使用列，而列可以被索引。因此，几乎没有不可修复的表扫描的理由。
+- en: '[Figure 2-8](#idx-full-table-scan) shows a full table scan: reading *all* rows
+    in primary key order. It has four callouts that show the order of row access.
+    Table `elem` is tiny and only four rows are shown here, but imagine MySQL slogging
+    through thousands or millions of rows in a real table.'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 2-8](#idx-full-table-scan) 展示了一个全表扫描：按照主键顺序读取*所有*行。其中有四个标记显示了行访问的顺序。表 `elem`
+    很小，这里只显示了四行，但想象一下MySQL在真实表中处理成千上万行或百万行的情况。'
+- en: 'The general advice and best practice is to avoid table scans. But for a complete
+    and balanced discussion, there are two cases when a table scan might be acceptable
+    or (surprisingly) better:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般建议和最佳实践是避免表扫描。但为了全面和平衡的讨论，有两种情况下表扫描可能是可接受的或（令人惊讶地）更好：
+- en: When the table is tiny and infrequently accessed
+  id: totrans-113
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当表格很小且访问不频繁时
+- en: When the table selectivity is very low (see [“Extreme Selectivity”](#extreme-selectivity))
+  id: totrans-114
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当表选择性非常低时（参见 [“极端选择性”](#extreme-selectivity)）
+- en: '![emsp 0208](assets/emsp_0208.png)'
+  id: totrans-115
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0208](assets/emsp_0208.png)'
+- en: Figure 2-8\. Full table scan
+  id: totrans-116
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-8\. 全表扫描
+- en: 'But don’t take any table scan for granted: they’re usually bad for performance.
+    In very rare cases, MySQL can incorrectly choose a table scan when an index lookup
+    is possible, as explained in [“It’s a Trap! (When MySQL Chooses Another Index)”](#its-a-trap).'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但不要认为任何表扫描都是理所当然的：它们通常对性能不利。在极少数情况下，MySQL 可能会错误地选择表扫描，而实际上可以使用索引查找，详见 [“陷阱！（当MySQL选择另一个索引）”](#its-a-trap)。
+- en: Leftmost Prefix Requirement
+  id: totrans-118
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 最左前缀要求
+- en: 'To use an index, a query must use a *leftmost prefix* of the index: one or
+    more index columns starting with the leftmost index column as specified by the
+    index definition. A leftmost prefix is required because the underlying index structure
+    is ordered by the index column order, and it can only be traversed (searched)
+    in that order.'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用索引，查询必须使用索引的*最左前缀*：即索引定义中指定的最左边的一个或多个索引列。最左前缀是必需的，因为底层索引结构是按照索引列顺序排序的，只能按照这个顺序进行遍历（搜索）。
+- en: Note
+  id: totrans-120
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Use [`SHOW CREATE TABLE`](https://oreil.ly/cwQZy) or [`SHOW INDEX`](https://oreil.ly/5wBhH)
+    to see index definitions.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 [`SHOW CREATE TABLE`](https://oreil.ly/cwQZy) 或 [`SHOW INDEX`](https://oreil.ly/5wBhH)
+    查看索引定义。
+- en: '[Figure 2-9](#idx-lpr) shows an index on columns `a, b, c` and a `WHERE` clause
+    using each leftmost prefix: column `a`; columns `a, b`; and columns `a, b, c`.'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 2-9](#idx-lpr) 展示了一个在列 `a, b, c` 上的索引和 `WHERE` 子句使用每个最左前缀的情况：列 `a`；列 `a,
+    b`；和列 `a, b, c`。'
+- en: '![emsp 0209](assets/emsp_0209.png)'
+  id: totrans-123
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0209](assets/emsp_0209.png)'
+- en: Figure 2-9\. Leftmost prefixes of a three-column index
+  id: totrans-124
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-9\. 三列索引的最左前缀
+- en: 'The top `WHERE` clause in [Figure 2-9](#idx-lpr) uses column `a`, which is
+    the leftmost column of the index. The middle `WHERE` clause uses columns `a` and
+    `b` that, together, form a leftmost prefix of the index. And the bottom `WHERE`
+    clause uses the entire index: all three columns. It’s ideal to use all columns
+    of an index, but it’s not required; only a leftmost prefix is required. Index
+    columns can be used in other SQL clauses, as illustrated by many examples in the
+    following sections.'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 2-9](#idx-lpr) 中的顶部 `WHERE` 子句使用了列 `a`，它是索引的最左列。中间的 `WHERE` 子句使用了列 `a` 和
+    `b`，它们一起形成了索引的最左前缀。底部的 `WHERE` 子句使用了整个索引：所有三列。使用索引列可以在其他SQL子句中使用，正如在接下来的几节中的许多示例所示。'
+- en: Tip
+  id: totrans-126
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: To use an index, a query must use a *leftmost prefix* of the index.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用索引，查询必须使用索引的*最左前缀*。
+- en: 'The leftmost prefix requirement has two logical consequences:'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最左前缀要求有两个逻辑结果：
+- en: Indexes `(a, b)` and `(b, a)` are different indexes. They index the same columns
+    but in a different order, which results in different leftmost prefixes. However,
+    a query that uses both columns (for example, `WHERE a = 'Au' AND b = 'Be'`) can
+    use either index, but that does not mean the indexes are equivalent in terms of
+    performance. MySQL will choose the better of the two by calculating many factors.
+  id: totrans-129
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 索引 `(a, b)` 和 `(b, a)` 是不同的索引。它们索引相同的列但顺序不同，导致了不同的最左前缀。然而，一个查询如果同时使用了两个列（例如
+    `WHERE a = 'Au' AND b = 'Be'`），可以选择使用任一索引，但这并不意味着这些索引在性能上是等效的。MySQL会通过计算多个因素选择更好的一个。
+- en: MySQL can most likely use index `(a, b, c)` in place of indexes `(a)` and `(a,
+    b)` because the latter two are leftmost prefixes of the first. In this case, indexes
+    `(a)` and `(a, b)` are duplicates and can be dropped. Use [pt-duplicate-key-checker](https://oreil.ly/EqtfV)
+    to find and report duplicate indexes.
+  id: totrans-130
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: MySQL 很可能可以使用索引 `(a, b, c)` 替代索引 `(a)` 和 `(a, b)`，因为后两者是第一个索引的最左前缀。在这种情况下，索引
+    `(a)` 和 `(a, b)` 是重复的，可以被删除。使用 [pt-duplicate-key-checker](https://oreil.ly/EqtfV)
+    来查找并报告重复的索引。
+- en: Lurking at the end (rightmost) of every secondary index is the primary key.
+    For table `elem` ([Example 2-1](#elem)), the secondary index is effectively `(a,
+    b, id)`, but the rightmost `id` is hidden. MySQL doesn’t show the primary key
+    appended to secondary indexes; you have to imagine it.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个辅助索引的末尾（最右端）隐藏着主键。对于表 `elem`（[示例 2-1](#elem)），辅助索引实际上是 `(a, b, id)`，但最右端的
+    `id` 是隐藏的。MySQL 不显示主键附加到辅助索引；你必须想象它。
+- en: Note
+  id: totrans-132
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'The primary key is appended to every secondary index: `(S, P)` where `S` are
+    secondary index columns and `P` are primary key columns.'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 主键附加到每个辅助索引：`(S, P)`，其中 `S` 是辅助索引列，`P` 是主键列。
+- en: 'In MySQL lingo we say, “The primary key is appended to secondary indexes” even
+    though it’s not literally appended. (You can literally append it by creating index
+    `(a, b, id)`, but don’t do that.) “Appended to” really means that secondary index
+    leaf nodes contain primary key values, as shown earlier in [Figure 2-5](#idx-secondary).
+    This is important because it increases the size of every secondary index: primary
+    key values are duplicated in secondary indexes. Larger indexes require more memory,
+    which means fewer indexes can fit in memory. Keep the size of the primary key
+    small and the number of secondary indexes reasonable. Just the other day, my colleagues
+    were helping a team whose database has 693 GB of secondary indexes on 397 GB of
+    data (primary key).'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 的术语中，我们说，“主键附加到辅助索引”即使实际上并非如此。（你可以通过创建索引 `(a, b, id)` 来实现这种“附加”，但最好不要这样做。）“附加到”实际上意味着辅助索引叶子节点包含主键值，正如前文
+    [图 2-5](#idx-secondary) 所示。这一点很重要，因为它增加了每个辅助索引的大小：主键值在辅助索引中重复出现。更大的索引需要更多的内存，这意味着更少的索引可以放入内存中。保持主键的大小小而辅助索引的数量合理。就在前几天，我的同事们正在帮助一个数据库团队，其数据库的辅助索引占据了
+    693 GB 的空间，而数据只有 397 GB（主键）。
+- en: The leftmost prefix requirement is a blessing and a restriction. The restriction
+    is relatively easy to work around with additional secondary indexes, but wait
+    until you read [“Excessive, Duplicate, and Unused”](#idx-too-many). Joining tables
+    is a particular challenge given the restriction, but I address it in [“Join Tables”](#idx-join-tables).
+    I encourage you to see the leftmost prefix requirement as a blessing. Query optimization
+    with respect to indexing is not trivial, but the leftmost prefix requirement is
+    a simple and familiar starting point on the journey.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最左前缀要求既是一种祝福，也是一种限制。限制相对容易通过额外的辅助索引来解决，但等到你读完 [“过多、重复和未使用的索引”](#idx-too-many)
+    之后再做决定。在面对连接表的特殊挑战时，最左前缀要求尤为重要，不过我在 [“连接表”](#idx-join-tables) 中有所讨论。我鼓励你将最左前缀要求视为一种祝福。关于索引的查询优化并不简单，但最左前缀要求是旅程中一个简单且熟悉的起点。
+- en: 'EXPLAIN: Query Execution Plan'
+  id: totrans-136
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: EXPLAIN：查询执行计划
+- en: 'The MySQL [`EXPLAIN`](https://oreil.ly/M99Gp) command shows a *query execution
+    plan* (or, *EXPLAIN plan*) that describes how MySQL plans to execute the query:
+    table join order, table access method, index usage, and other important details.'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 的 [`EXPLAIN`](https://oreil.ly/M99Gp) 命令显示了一个 *查询执行计划*（或者 *EXPLAIN 计划*），描述了
+    MySQL 计划如何执行查询：表的连接顺序、表的访问方法、索引使用以及其他重要细节。
+- en: '`EXPLAIN` output is vast and varied. Moreover, it’s completely dependent on
+    the query. Changing a single character in a query can significantly change its
+    EXPLAIN plan. For example, `WHERE id = 1` verses `WHERE id > 1` yields a significantly
+    different EXPLAIN plan. And to complicate the matter further, `EXPLAIN` continues
+    to evolve. [“EXPLAIN Output Format”](https://oreil.ly/IMCOJ) in the MySQL manual
+    is required reading—even for experts. Fortunately for the sake of our sanity,
+    the fundamentals have remained the same for decades.'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`EXPLAIN` 输出非常广泛且多样化。此外，它完全依赖于查询本身。在查询中改变一个字符可以显著改变其 EXPLAIN 计划。例如，`WHERE id
+    = 1` 和 `WHERE id > 1` 的查询计划显著不同。并且更复杂的是，`EXPLAIN` 继续发展演变。MySQL 手册中的 [“EXPLAIN
+    输出格式”](https://oreil.ly/IMCOJ) 是必读的，即使是对于专家来说也是如此。幸运的是，基本原理几十年来基本保持不变，这对我们的理解是有利的。'
+- en: 'To illustrate index usage, the next five sections explain queries for each
+    case that MySQL can use an index:'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了说明索引的使用情况，接下来的五个部分解释了 MySQL 可以使用索引的每种情况下的查询：
+- en: 'Find matching rows: [“WHERE”](#idx-where)'
+  id: totrans-140
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 查找匹配的行：[“WHERE”](#idx-where)
+- en: 'Group rows: [“GROUP BY”](#idx-group-by)'
+  id: totrans-141
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 分组行：[“GROUP BY”](#idx-group-by)
+- en: 'Sort rows: [“ORDER BY”](#idx-order-by)'
+  id: totrans-142
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 排序行：[“ORDER BY”](#idx-order-by)
+- en: 'Avoid reading rows: [“Covering Indexes”](#idx-covering-index)'
+  id: totrans-143
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 避免读取行：[“覆盖索引”](#idx-covering-index)
+- en: 'Join tables: [“Join Tables”](#idx-join-tables)'
+  id: totrans-144
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 连接表：[“连接表”](#idx-join-tables)
+- en: There are other specific cases like `MIN()` and `MAX()`, but these five cases
+    are the bread and butter of index usage.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还有其他特定情况，如 `MIN()` 和 `MAX()`，但这五种情况是索引使用的基础。
+- en: But first I need to set the stage by reviewing the meaning of the `EXPLAIN`
+    output fields shown in [Example 2-2](#explain-output).
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但首先，我需要通过查看 [示例 2-2](#explain-output) 中显示的 `EXPLAIN` 输出字段的含义来设定舞台。
+- en: Example 2-2\. `EXPLAIN` output (traditional format)
+  id: totrans-147
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-2\. `EXPLAIN` 输出（传统格式）
+- en: '[PRE1]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'For this introduction, we ignore fields `id`, `select_type`, `partitions`,
+    `key_len`, and `filtered`; but the examples include them to habituate you to the
+    output. The remaining seven fields convey a wealth of information that constitutes
+    the query execution plan:'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此介绍中，我们忽略 `id`、`select_type`、`partitions`、`key_len` 和 `filtered` 字段；但示例包含它们是为了让你习惯这些输出。其余的七个字段传达了组成查询执行计划的大量信息：
+- en: '`table`'
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`table`'
+- en: The `table` field is the table name (or alias) or subquery reference. Tables
+    are listed in the join order determined by MySQL, not the order they appear in
+    the query. The top table is the first table, and the bottom table is the last
+    table.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`table` 字段是表名（或别名）或子查询引用。表按照 MySQL 确定的连接顺序列出，而不是查询中出现的顺序。顶部表是第一个表，底部表是最后一个表。'
+- en: '`type`'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`type`'
+- en: They `type` field is the table access method or index lookup access type—see
+    the first note in [“Table Access Methods”](#table-access-methods) for clarification.
+    `ALL` means a full table scan (see [“Table scan”](#table-scan)). `index` means
+    an index scan (see [“Index scan”](#index-scan)). Any other value—`const`, `ref`,
+    `range`, and so on—is an access type for an index lookup (see [“Index lookup”](#index-lookup)).
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`type` 字段是表访问方法或索引查找访问类型，详见 [“表访问方法”](#table-access-methods) 的第一个注释进行澄清。`ALL`
+    表示全表扫描（参见 [“表扫描”](#table-scan)）。`index` 表示索引扫描（参见 [“索引扫描”](#index-scan)）。其他任何值，如
+    `const`、`ref`、`range` 等，都是索引查找的访问类型（参见 [“索引查找”](#index-lookup)）。'
+- en: '`possible_keys`'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`possible_keys`'
+- en: The `possible_keys` field lists indexes that MySQL could use because the query
+    uses a leftmost prefix. If an index is not listed in this field, then the leftmost
+    prefix requirement is not met.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`possible_keys` 字段列出 MySQL 可以使用的索引，因为查询使用了最左前缀。如果一个索引没有列在这个字段中，则未满足最左前缀的要求。'
+- en: '`key`'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`key`'
+- en: The `key` field is the name of the index that MySQL will use, or `NULL` if no
+    index can be used. MySQL chooses the best index based on many factors, some of
+    which are indicated in the `Extra` field. It’s a safe bet that MySQL will use
+    this index when executing the query (`EXPLAIN` does not execute the query), but
+    see [“It’s a Trap! (When MySQL Chooses Another Index)”](#its-a-trap).
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`key` 字段是 MySQL 将使用的索引名称，如果无法使用索引则为 `NULL`。MySQL 根据多种因素选择最佳索引，其中一些因素在 `Extra`
+    字段中指示。在执行查询时，MySQL 很可能会使用该索引（`EXPLAIN` 不执行查询），但参见 [“陷阱！（当 MySQL 选择另一个索引）”](#its-a-trap)。'
+- en: '`ref`'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ref`'
+- en: The `ref` field lists the source of values used to look up rows in the index
+    (the `key` field).
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ref` 字段列出用于在索引中查找行的值来源（`key` 字段）。'
+- en: For single-table queries or the first table in a join, `ref` is often `const`,
+    which refers to a constant condition on one or more index columns. A *constant
+    condition* is equality (`=` or `<=>` [NULL-safe equal]) to a literal value. For
+    example, `a = 'Au'` is a constant condition that equals only one value.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于单表查询或连接中的第一个表，`ref` 常常是 `const`，指的是一个或多个索引列上的常量条件。*常量条件* 是等号（`=` 或 `<=>` [NULL-safe
+    equal]）与字面值相等。例如，`a = 'Au'` 是一个只等于一个值的常量条件。
+- en: For queries that join multiple tables, `ref` is a column reference from the
+    preceding table in the join order. MySQL joins the current table (the `table`
+    field) using the index to look up rows that match values from column `ref` in
+    the preceding table. [“Join Tables”](#idx-join-tables) shows this in action.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于连接多个表的查询，`ref` 是在连接顺序中前一个表的列引用。MySQL 使用索引来查找与前一个表中列 `ref` 中的值匹配的行，当前表（`table`
+    字段）通过 [“连接表”](#idx-join-tables) 显示这一过程。
+- en: '`rows`'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`rows`'
+- en: The `rows` field is the estimated number of rows that MySQL will examine to
+    find matching rows. MySQL uses index statistics to estimate rows, so expect the
+    real number—[“Rows examined”](ch01.html#Rows-examined)—to be close but different.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`rows`字段是MySQL将检查以查找匹配行的估计行数。MySQL使用索引统计信息来估计行数，因此实际数值——[“检查的行数”](ch01.html#Rows-examined)——可能会接近但不同。'
+- en: '`Extra`'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Extra`'
+- en: The `Extra` field provides additional information about the query execution
+    plan. This field is important because it indicates query optimizations that MySQL
+    can apply, if any.
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Extra`字段提供了关于查询执行计划的额外信息。这个字段很重要，因为它指示了MySQL可以应用的查询优化。'
+- en: Note
+  id: totrans-166
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'All `EXPLAIN` output in this book is *traditional format*: tabular output (`EXPLAIN
+    query;`) or list output (`EXPLAIN query\G`). Other formats are *JSON* (`EXPLAIN
+    FORMAT=JSON query`) and, as of MySQL 8.0.16, *tree* (`EXPLAIN FORMAT=TREE query`).
+    JSON and tree formats are completely different than traditional format, but all
+    formats convey the query execution plan.'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本书中所有的`EXPLAIN`输出都采用*传统格式*：表格输出（`EXPLAIN query;`）或列表输出（`EXPLAIN query\G`）。其他格式包括*JSON*（`EXPLAIN
+    FORMAT=JSON query`）以及从MySQL 8.0.16开始的*树形*（`EXPLAIN FORMAT=TREE query`）。JSON和树形格式与传统格式完全不同，但所有格式都表达了查询执行计划。
+- en: 'Don’t expect to glean much information from those fields without context: tables,
+    indexes, data, and a query. In the following sections, all illustrations refer
+    to table `elem` ([Example 2-1](#elem)), its two indexes, and its ten rows.'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不要期望在没有上下文的情况下从这些字段中获取太多信息：表、索引、数据和查询。在接下来的几节中，所有的插图都涉及到表`elem`（[示例 2-1](#elem)），它的两个索引以及它的十行数据。
+- en: WHERE
+  id: totrans-169
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: WHERE
+- en: 'MySQL can use an index to find rows that match table conditions in a `WHERE`
+    clause. I’m careful to say that MySQL *can* use an index, not that MySQL *will*
+    use an index, because index usage depends on several factors, primarily: table
+    conditions, indexes, and the leftmost prefix requirement (see [“Leftmost Prefix
+    Requirement”](#LPR)). (There are other factors, like index statistics and optimizer
+    costs, but they’re beyond the scope of this book.)'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL可以使用索引来查找与表条件在`WHERE`子句中匹配的行。我要小心地说MySQL *可以* 使用索引，而不是MySQL *将* 使用索引，因为索引的使用取决于几个因素，主要包括表条件、索引和最左前缀要求（参见[“最左前缀要求”](#LPR)）。（还有其他因素，如索引统计信息和优化器成本，但超出了本书的范围。）
+- en: A *table condition* is a column and its value (if any) that matches, groups,
+    aggregates, or orders rows. (For brevity, I use the term *condition* when it’s
+    unambiguous.) In a `WHERE` clause, table conditions are also called *predicates*.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*表条件*是匹配、分组、聚合或排序行的列及其值（如果有）。在`WHERE`子句中，表条件也称为*谓词*。'
+- en: '[Figure 2-10](#idx-where-pk) shows the primary key on column `id` and a `WHERE`
+    clause with a single condition: `id = 1`.'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 2-10](#idx-where-pk)展示了基于列`id`的主键和一个带有单个条件的`WHERE`子句：`id = 1`。'
+- en: '![emsp 0210](assets/emsp_0210.png)'
+  id: totrans-173
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0210](assets/emsp_0210.png)'
+- en: 'Figure 2-10\. `WHERE`: primary key lookup'
+  id: totrans-174
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-10\. `WHERE`：主键查找
+- en: A solid box delineates a table condition and an index column (also called an
+    *index part*) that MySQL can use because the former (table condition) is a leftmost
+    prefix of the latter (index). An arrow points from the table condition to the
+    index column that it uses. Later, we’ll see examples of table conditions and index
+    columns that MySQL cannot use.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个实心框划定了一个表条件和一个索引列（也称为*索引部分*），MySQL可以使用它，因为前者（表条件）是后者（索引）的最左前缀。箭头从表条件指向它使用的索引列。稍后，我们将看到MySQL无法使用的表条件和索引列的示例。
+- en: In [Figure 2-10](#idx-where-pk), MySQL can find rows that match condition `id
+    = 1` using primary key column `id`. [Example 2-3](#ex-idx-where-pk) is the EXPLAIN
+    plan for the full query.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[图 2-10](#idx-where-pk)中，MySQL可以使用主键列`id`查找满足条件`id = 1`的行。[示例 2-3](#ex-idx-where-pk)是完整查询的EXPLAIN计划。
+- en: Example 2-3\. EXPLAIN plan for primary key lookup
+  id: totrans-177
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-3\. 主键查找的EXPLAIN计划
+- en: '[PRE2]'
+  id: totrans-178
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'In [Example 2-3](#ex-idx-where-pk), `key: PRIMARY` confirms that MySQL will
+    use the primary key—an index lookup. Correspondingly, the access type (the `type`
+    field) is not `ALL` (table scan) or `index` (index scan), which is expected given
+    a simple primary key lookup. The secondary index is not listed in the `possible_keys`
+    field because MySQL cannot use it for this query: column `id` is not a leftmost
+    prefix of the secondary index on columns `a, b`.'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '在[示例 2-3](#ex-idx-where-pk)中，`key: PRIMARY`确认MySQL将使用主键——一个索引查找。相应地，访问类型（`type`字段）不是`ALL`（全表扫描）或`index`（索引扫描），这在简单的主键查找中是预期的。次要索引未列在`possible_keys`字段中，因为MySQL无法在此查询中使用它：列`id`不是列`a,
+    b`上次要索引的最左前缀。'
+- en: 'Access type `const` is a special case that occurs only when there are constant
+    conditions (`ref: const`) on all index columns of the primary key or a unique
+    secondary index. The result is a *constant row*. This is a little too in-depth
+    for an introduction, but since we’re here, let’s keep learning. Given the table
+    data ([Example 2-1](#elem)) and the fact that column `id` is the primary key,
+    the row identified by `id = 1` can be treated as constant because, when the query
+    is executed, `id = 1` can match only one row (or no row). MySQL reads that one
+    row and treats its values as constant, which is great for response time: `const`
+    access is extremely fast.'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '访问类型 `const` 是一个特例，只有当主键或唯一辅助索引的所有索引列上有常量条件 (`ref: const`) 时才会发生。结果是一个*常量行*。这对于入门来说有点深奥，但既然我们在这里，就让我们继续学习。考虑到表数据（[示例
+    2-1](#elem)）和列 `id` 是主键，标识为 `id = 1` 的行可以视为常量，因为在执行查询时，`id = 1` 只能匹配一行（或零行）。MySQL
+    读取那一行，并将其值视为常量，这对于响应时间非常有利：`const` 访问非常快速。'
+- en: '`Extra: NULL` is somewhat rare because real queries are more complex than these
+    examples. But here, `Extra: NULL` means that MySQL does not need to match rows.
+    Why? Because the constant row can match only one row (or no row). But matching
+    rows is the norm, so let’s see a more realistic example by changing the table
+    conditions to `id > 3 AND id < 6 AND c = ''Cd''`, as shown in [Figure 2-11](#idx-where-pk-range)
+    and the corresponding EXPLAIN plan in [Example 2-4](#ex-idx-where-pk-5).'
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Extra: NULL` 是比较罕见的，因为实际查询比这些示例更复杂。但在这里，`Extra: NULL` 表示 MySQL 不需要匹配行。为什么？因为常量行只能匹配一行（或零行）。但匹配行是正常情况，所以让我们通过将表条件更改为
+    `id > 3 AND id < 6 AND c = ''Cd''` 来看一个更现实的示例，如[图 2-11](#idx-where-pk-range)和相应的
+    EXPLAIN 计划中所示的 [示例 2-4](#ex-idx-where-pk-5)。'
+- en: '![emsp 0211](assets/emsp_0211.png)'
+  id: totrans-182
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0211](assets/emsp_0211.png)'
+- en: 'Figure 2-11\. `WHERE`: range access using primary key'
+  id: totrans-183
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: '图 2-11\. `WHERE`: 使用主键进行范围访问'
+- en: Example 2-4\. EXPLAIN plan for range access using primary key
+  id: totrans-184
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: Example 2-4\. 使用主键进行范围访问的解释计划
+- en: '[PRE3]'
+  id: totrans-185
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Note
+  id: totrans-186
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注
+- en: To highlight EXPLAIN plan changes, I prepend `>` characters to the pertinent
+    fields that changed. These highlights are not part of `EXPLAIN`.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了突出 EXPLAIN 计划的变化，我在发生变化的关键字段前面加上 `>` 字符。这些突出显示不是 `EXPLAIN` 的一部分。
+- en: 'By changing the table conditions to `id > 3 AND id < 6 AND c = ''Cd''`, the
+    EXPLAIN plan changes from [Example 2-3](#ex-idx-where-pk) to [Example 2-4](#ex-idx-where-pk-5),
+    which is more realistic for a single-table query. The query still uses the primary
+    key (`key: PRIMARY`), but the access type changes to a *range scan* (`type: range`):
+    using an index to read rows between a range of values. In this case, MySQL uses
+    the primary key to read rows where the value of column `id` is between 3 and 6.
+    The `ref` field is `NULL` because the conditions on column `id` are not constant
+    (and this is a single-table query, so there’s no preceding table to reference).
+    The condition `c = ''Cd''` is constant, but it’s not used for the index lookup
+    (the range scan), so `ref` does not apply. MySQL estimates that it will examine
+    two rows in the range (`rows: 2`). That’s correct for this trivial example, but
+    remember: `rows` is an estimate.'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '通过将表条件更改为 `id > 3 AND id < 6 AND c = ''Cd''`，EXPLAIN 计划从[示例 2-3](#ex-idx-where-pk)变更为更适合单表查询的
+    [示例 2-4](#ex-idx-where-pk-5)。查询仍然使用主键（`key: PRIMARY`），但访问类型更改为*范围扫描*（`type: range`）：使用索引读取值在
+    3 到 6 之间的行。`ref` 字段为 `NULL`，因为列 `id` 上的条件不是常量（这是单表查询，因此没有前置表可以引用）。条件 `c = ''Cd''`
+    是常量，但它不用于索引查找（范围扫描），因此 `ref` 不适用。MySQL 估计将在范围内检查两行（`rows: 2`）。对于这个简单的示例来说是正确的，但请记住：`rows`
+    是一个估算值。'
+- en: '“Using where” in the `Extra` field is so common that it’s expected. It means
+    that MySQL will find *matching rows* using the `WHERE` conditions: for each row
+    read, a row matches if all `WHERE` conditions are true. Since the conditions on
+    column `id` define the range, it’s really just the condition on column `c` that
+    MySQL will use to match rows in the range. Glancing back at [Example 2-1](#elem),
+    one row matches all the `WHERE` conditions:'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: “Using where” 在 `Extra` 字段中非常常见，这是预期的。它表示 MySQL 将使用 `WHERE` 条件来找到*匹配的行*：对于每一行读取，如果所有
+    `WHERE` 条件都为真，则行匹配。由于列 `id` 上的条件定义了范围，因此 MySQL 实际上只会使用列 `c` 上的条件来匹配范围内的行。回顾[示例
+    2-1](#elem)，一行匹配所有 `WHERE` 条件：
+- en: '[PRE4]'
+  id: totrans-190
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: The row with `id = 5` is in the range, so MySQL examines the row, but its column
+    `c` value (“Cd”) does not match the `WHERE` clause, so MySQL does not return the
+    row.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 具有 `id = 5` 的行在范围内，因此 MySQL 检查该行，但其列 `c` 的值（“Cd”）与 `WHERE` 子句不匹配，因此 MySQL 不返回该行。
+- en: To illustrate other query execution plans, let’s use both leftmost prefixes
+    of the secondary index, as shown in [Figure 2-12](#idx-where-sec) and the corresponding
+    EXPLAIN plans in [Example 2-5](#ex-idx-where-sec).
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了说明其他查询执行计划，让我们使用次要索引的左前缀，如[图 2-12](#idx-where-sec)所示，并在[示例 2-5](#ex-idx-where-sec)中使用相应的
+    EXPLAIN 计划。
+- en: '![emsp 0212](assets/emsp_0212.png)'
+  id: totrans-193
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0212](assets/emsp_0212.png)'
+- en: 'Figure 2-12\. `WHERE`: secondary index lookups'
+  id: totrans-194
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: '图 2-12\. `WHERE`: 次要索引查找'
+- en: Example 2-5\. EXPLAIN plans for secondary index lookups
+  id: totrans-195
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-5\. 次要索引查找的 EXPLAIN 计划
+- en: '[PRE5]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'For each EXPLAIN plan in [Example 2-5](#ex-idx-where-sec), `key: idx_a_b` confirms
+    that MySQL uses the secondary index because the conditions meet the leftmost prefix
+    requirement. The first `WHERE` clause uses only the first index part: column `a`.
+    The second `WHERE` clause uses both index parts: columns `a` and `b`. Using only
+    column `b` would not meet the leftmost prefix requirement—I show this in a moment.'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '对于[示例 2-5](#ex-idx-where-sec)中的每个 EXPLAIN 计划，`key: idx_a_b`确认 MySQL 使用次要索引，因为条件满足左前缀要求。第一个`WHERE`子句仅使用第一个索引部分：列`a`。第二个`WHERE`子句使用两个索引部分：列`a`和`b`。仅使用列`b`不会满足左前缀要求—稍后我会展示这一点。'
+- en: 'What’s new and important from previous EXPLAIN plans is the access type: `ref`.
+    In simplest terms, the `ref` access type is an equality (`=` or `<=>`) lookup
+    on a leftmost prefix of the index (the `key` field). Like any index lookup, `ref`
+    access is very fast as long as the estimated number of rows to examine (the `rows`
+    field) is reasonable.'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与以前的 EXPLAIN 计划相比，新的重要访问类型是：`ref`。简单来说，`ref`访问类型是索引左前缀（`key`字段）上的等值（`=`或`<=>`）查找。与任何索引查找一样，只要估计的要检查的行数（`rows`字段）合理，`ref`访问非常快速。
+- en: 'Although the conditions are constant, the `const` access type is not possible
+    because the index (`key: idx_a_b`) is nonunique, so the lookup can match more
+    than one row. And even though MySQL estimates that each `WHERE` clause will examine
+    only one row (`rows: 1`), that could change when the query is executed.'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '虽然条件是固定的，但由于索引（`key: idx_a_b`）不唯一，所以不可能使用`const`访问类型，因此查找可以匹配多行。即使 MySQL 估计每个`WHERE`子句只检查一行（`rows:
+    1`），在执行查询时可能会改变。'
+- en: '`Extra: NULL` occurs again because MySQL can find matching rows using only
+    the index since there are no conditions on non-indexed columns—so let’s add one.
+    [Figure 2-13](#idx-where-sec-c) shows a `WHERE` clause with conditions on columns
+    `a` and `c`, and [Example 2-6](#ex-idx-where-sec-c) is the corresponding EXPLAIN
+    plan.'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Extra: NULL`再次出现，因为 MySQL 可以仅使用索引找到匹配的行，而没有非索引列的条件—因此让我们添加一个。[图 2-13](#idx-where-sec-c)展示了在列`a`和`c`上带有条件的`WHERE`子句，而[示例 2-6](#ex-idx-where-sec-c)是相应的
+    EXPLAIN 计划。'
+- en: '![emsp 0213](assets/emsp_0213.png)'
+  id: totrans-201
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0213](assets/emsp_0213.png)'
+- en: 'Figure 2-13\. `WHERE`: index lookup and non-indexed column'
+  id: totrans-202
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: '图 2-13\. `WHERE`: 索引查找和非索引列'
+- en: Example 2-6\. EXPLAIN plan for index lookup and non-indexed column
+  id: totrans-203
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: Example 2-6\. 索引查找和非索引列的解释计划
+- en: '[PRE6]'
+  id: totrans-204
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'In [Figure 2-13](#idx-where-sec-c), there is no box around condition `c = ''Co''`
+    because the index does not cover column `c`. MySQL still uses the secondary index
+    (`key: idx_a_b`), but the condition on column `c` prevents MySQL from matching
+    rows using only the index. Instead, MySQL uses the index to look up and read rows
+    for the condition on column `a`, then it matches rows for the condition on column
+    `c` (`Extra: Using where`).'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '在[图 2-13](#idx-where-sec-c)中，条件`c = ''Co''`周围没有框，因为索引不覆盖列`c`。MySQL 仍然使用次要索引（`key:
+    idx_a_b`），但是对列`c`的条件阻止 MySQL 仅使用索引匹配行。相反，MySQL 使用索引查找和读取列`a`的行，然后匹配列`c`的条件（`Extra:
+    Using where`）。'
+- en: 'Glancing back at [Example 2-1](#elem) again, you’ll notice that zero rows match
+    this `WHERE` clause, but `EXPLAIN` reports `rows: 3`. Why? The index lookup on
+    column `a` matches three rows where `a = ''Al''` is true: row `id` values 3, 8,
+    and 9\. But none of these rows also matches `c = ''Co''`. The query examines three
+    rows but matches zero rows.'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '再次回顾[示例 2-1](#elem)，你会注意到零行匹配此`WHERE`子句，但`EXPLAIN`报告`rows: 3`。为什么？在列`a`上的索引查找匹配了三行，其中`a
+    = ''Al''`为真：行`id`值为3、8和9。但这些行中没有一行同时匹配`c = ''Co''`。查询检查了三行但匹配了零行。'
+- en: Tip
+  id: totrans-207
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: '`EXPLAIN` output `rows` is an estimate of the number of rows that MySQL will
+    examine when it executes the query, not the number of rows that will match all
+    table conditions.'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`EXPLAIN`输出的`rows`是 MySQL 执行查询时将检查的行数的估计值，而不是将匹配所有表条件的行数。'
+- en: As a final example of indexes, `WHERE`, and `EXPLAIN`, let’s *not* meet the
+    leftmost prefix requirement, as shown in [Figure 2-14](#idx-where-sec-b) and [Example 2-7](#ex-idx-where-sec-b).
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，作为索引、`WHERE` 和 `EXPLAIN` 的示例，让我们不满足左前缀的要求，正如 [图 2-14](#idx-where-sec-b) 和
+    [示例 2-7](#ex-idx-where-sec-b) 所示。
+- en: '![emsp 0214](assets/emsp_0214.png)'
+  id: totrans-210
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0214](assets/emsp_0214.png)'
+- en: Figure 2-14\. `WHERE` without leftmost prefix
+  id: totrans-211
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-14\. 没有左前缀的 `WHERE`
+- en: Example 2-7\. EXPLAIN plan for `WHERE` without leftmost prefix
+  id: totrans-212
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-7\. 没有左前缀的 `WHERE` 的 EXPLAIN 计划
+- en: '[PRE7]'
+  id: totrans-213
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: A dotted box outline (and lack of arrow) delineates a table condition and an
+    index column that MySQL cannot use because they do not meet the leftmost prefix
+    requirement.
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虚线框和缺少箭头标明了一个表条件和一个索引列，MySQL 无法使用它们，因为它们不满足左前缀的要求。
+- en: 'In [Figure 2-14](#idx-where-sec-b), there is no condition on column `a`, therefore
+    the index cannot be used for the condition on column `b`. The EXPLAIN plan ([Example 2-7](#ex-idx-where-sec-b))
+    confirms this: possible_keys: NULL and `key: NULL`. Without an index, MySQL is
+    forced to do a full table scan: `type: ALL`. Likewise, `rows: 10` reflects the
+    total number of rows, and `Extra: Using where` reflects that MySQL reads and then
+    filters rows not matching `b = ''Be''`.'
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '在 [图 2-14](#idx-where-sec-b) 中，列 `a` 没有任何条件，因此索引不能用于列 `b` 的条件。EXPLAIN 计划 ([示例 2-7](#ex-idx-where-sec-b))
+    证实了这一点：`possible_keys: NULL` 和 `key: NULL`。没有索引，MySQL 必须执行全表扫描：`type: ALL`。同样，`rows:
+    10` 反映了总行数，`Extra: Using where` 表明 MySQL 读取并过滤不符合 `b = ''Be''` 的行。'
+- en: '[Example 2-7](#ex-idx-where-sec-b) is an example of the worst possible EXPLAIN
+    plan. Whenever you see `type: ALL`, `possible_keys: NULL`, or `key: NULL`, stop
+    what you’re doing and analyze the query.'
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[示例 2-7](#ex-idx-where-sec-b) 是最糟糕的 EXPLAIN 计划的示例。每当你看到 `type: ALL`、`possible_keys:
+    NULL` 或 `key: NULL`，请停下当前的工作并分析这个查询。'
+- en: As simple as these examples have been, they represent the fundamentals of `EXPLAIN`
+    with respect to indexes and `WHERE` clauses. Real queries have more indexes and
+    `WHERE` conditions, but the fundamentals don’t change.
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管这些示例很简单，它们代表了关于索引和 `WHERE` 子句的 `EXPLAIN` 的基础。实际查询可能有更多的索引和 `WHERE` 条件，但基础原理不会改变。
+- en: GROUP BY
+  id: totrans-218
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: GROUP BY
+- en: MySQL can use an index to optimize `GROUP BY` because values are implicitly
+    grouped by index order. For the secondary index `idx_a_b` (on columns `a, b`),
+    there are five distinct groups of column `a` values, as shown in [Example 2-8](#a-col-groups).
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 可以使用索引优化 `GROUP BY`，因为值按照索引顺序隐式分组。对于二级索引 `idx_a_b`（在列 `a, b` 上），有五个不同的列
+    `a` 值分组，如 [示例 2-8](#a-col-groups) 所示。
+- en: Example 2-8\. Distinct groups of column `a` values
+  id: totrans-220
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-8\. 列 `a` 值的不同分组
+- en: '[PRE8]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: I separated the groups in [Example 2-8](#a-col-groups) with blank lines and
+    annotated the first row in each group. A query with `GROUP BY a` can use index
+    `idx_a_b` because column `a` is a leftmost prefix and the index is implicitly
+    grouped by column `a` values. [Example 2-9](#ex-idx-group-by-a) is a representative
+    EXPLAIN plan for the simplest type of `GROUP BY` optimization.
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我在 [示例 2-8](#a-col-groups) 中用空行分隔了分组，并对每组的第一行进行了注释。带有 `GROUP BY a` 的查询可以使用索引
+    `idx_a_b`，因为列 `a` 是左前缀，索引隐式地按列 `a` 的值分组。[示例 2-9](#ex-idx-group-by-a) 是最简单类型的 `GROUP
+    BY` 优化的代表性 EXPLAIN 计划。
+- en: Example 2-9\. EXPLAIN plan for `GROUP BY a`
+  id: totrans-223
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-9\. `GROUP BY a` 的 EXPLAIN 计划
+- en: '[PRE9]'
+  id: totrans-224
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: '`key: idx_a_b` confirms that MySQL uses the index to optimize the `GROUP BY`.
+    Since the index is ordered, MySQL is assured that each new value for column `a`
+    is a new group. For example, after reading the last “Ag” value, the index order
+    assures that no more “Ag” values will be read, so the “Ag” group is complete.'
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`key: idx_a_b` 确认 MySQL 使用索引优化了 `GROUP BY`。由于索引是有序的，MySQL 可以确保每个新的列 `a` 值都是一个新的分组。例如，在读取最后一个
+    "Ag" 值后，索引顺序保证不会再读取更多的 "Ag" 值，因此 "Ag" 组是完整的。'
+- en: “Using index” in the `Extra` field indicates that MySQL is reading column `a`
+    values only from the index; it’s not reading full rows from the primary key. I
+    cover this optimization in [“Covering Indexes”](#idx-covering-index).
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 `Extra` 字段中的 “Using index” 表示 MySQL 只从索引中读取列 `a` 值；它没有从主键读取完整的行。我在 [“覆盖索引”](#idx-covering-index)
+    中介绍了这种优化。
+- en: 'This query uses an index, but not for an index lookup: `type: index` denotes
+    an index scan (see [“Index scan”](#index-scan)). And since there’s no `WHERE`
+    clause to filter rows, MySQL reads all rows. If you add a `WHERE` clause, MySQL
+    can still use the index for the `GROUP BY`, but the leftmost prefix requirement
+    still applies. In this case, the query is using the leftmost index part (column
+    `a`), so the `WHERE` condition must be on column `a` or `b` to meet the leftmost
+    prefix requirement. Let’s first add a `WHERE` condition on column `a`, as shown
+    in [Figure 2-15](#idx-group-by-a-where) and [Example 2-10](#ex-idx-group-by-a-where).'
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '此查询使用了索引，但不是为了索引查找：`type: index` 表示索引扫描（见 [“索引扫描”](#index-scan)）。由于没有 `WHERE`
+    子句来过滤行，MySQL 会读取所有行。如果添加了 `WHERE` 子句，MySQL 仍然可以用于 `GROUP BY`，但左前缀要求仍然适用。在这种情况下，查询正在使用左前缀索引部分（列
+    `a`），因此 `WHERE` 条件必须在列 `a` 或 `b` 上才能满足左前缀要求。让我们先在列 `a` 上添加一个 `WHERE` 条件，如 [图 2-15](#idx-group-by-a-where)
+    和 [示例 2-10](#ex-idx-group-by-a-where) 所示。'
+- en: '![emsp 0215](assets/emsp_0215.png)'
+  id: totrans-228
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0215](assets/emsp_0215.png)'
+- en: Figure 2-15\. `GROUP BY` and `WHERE` on same index column
+  id: totrans-229
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-15\. 在同一索引列上的 `GROUP BY` 和 `WHERE`
+- en: Example 2-10\. EXPLAIN plan for `GROUP BY` and `WHERE` on same index column
+  id: totrans-230
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-10\. 在同一索引列上的 `GROUP BY` 和 `WHERE` 的 EXPLAIN 计划
+- en: '[PRE10]'
+  id: totrans-231
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: '“Using where” in the `Extra` field refers to `WHERE a != ''Ar''`. The interesting
+    change is `type: range`. The range access type works with the not-equal operator
+    (`!=` or `<>`). You can think of it like `WHERE a < ''Ar'' AND a > ''Ar''`, as
+    shown in [Figure 2-16](#idx-order-by-not-ar).'
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '“Using where” 在 `Extra` 字段中指的是 `WHERE a != ''Ar''`。有趣的变化是 `type: range`。范围访问类型与不等操作符
+    (`!=` 或 `<>`) 一起工作。你可以将它想象成 `WHERE a < ''Ar'' AND a > ''Ar''`，如 [图 2-16](#idx-order-by-not-ar)
+    所示。'
+- en: A condition on column `b` in the `WHERE` clause can still use the index because
+    the conditions, regardless of being in different SQL clauses, meet the leftmost
+    prefix requirement. [Figure 2-17](#idx-group-by-a-where-b) shows this, and [Example 2-11](#ex-idx-group-by-a-where-b)
+    shows the EXPLAIN plan.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`WHERE` 子句中对列 `b` 的条件仍然可以使用索引，因为条件虽然在不同的 SQL 子句中，但仍满足左前缀要求。[图 2-17](#idx-group-by-a-where-b)
+    展示了这一点，而 [示例 2-11](#ex-idx-group-by-a-where-b) 显示了 EXPLAIN 计划。'
+- en: '![emsp 0216](assets/emsp_0216.png)'
+  id: totrans-234
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0216](assets/emsp_0216.png)'
+- en: Figure 2-16\. Range for not-equal
+  id: totrans-235
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-16\. 不等号范围
+- en: '![emsp 0217](assets/emsp_0217.png)'
+  id: totrans-236
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0217](assets/emsp_0217.png)'
+- en: Figure 2-17\. `GROUP BY` and `WHERE` on different index columns
+  id: totrans-237
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-17\. 不同索引列上的 `GROUP BY` 和 `WHERE`
+- en: Example 2-11\. EXPLAIN plan for `GROUP BY` and `WHERE` on different index columns
+  id: totrans-238
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-11\. 不同索引列上的 `GROUP BY` 和 `WHERE` 的 EXPLAIN 计划
+- en: '[PRE11]'
+  id: totrans-239
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'The query in [Example 2-11](#ex-idx-group-by-a-where-b) has two important details:
+    an equality condition on column `b` in the `WHERE` clause, and selecting columns
+    `a` and `b` in the `SELECT` clause. These details enable the special “Using index
+    for group-by” optimization revealed in the `Extra` field. If, for example, the
+    equality (`=`) is changed to not-equal (`!=`), the query optimization is lost.
+    When it comes to query optimizations like this, details are critical. You must
+    read the MySQL manual to learn and apply the details. [“GROUP BY Optimization”](https://oreil.ly/ZknLf)
+    in the MySQL manual elaborates.'
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 示例 2-11 中的查询有两个重要细节：`WHERE` 子句中对列 `b` 的等式条件以及在 `SELECT` 子句中选择列 `a` 和 `b`。这些细节使得在
+    `Extra` 字段中揭示了特殊的“用于 `GROUP BY` 的索引优化”。例如，如果将等式 (`=`) 改为不等 (`!=`)，查询优化将丧失。在涉及到这样的查询优化时，细节至关重要。你必须阅读MySQL手册以了解和应用这些细节。MySQL
+    手册中的 [“GROUP BY 优化”](https://oreil.ly/ZknLf) 有详细说明。
+- en: The final `GROUP BY` example in [Figure 2-18](#idx-group-by-b) and [Example 2-12](#ex-idx-group-by-b)
+    might surprise you.
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 [图 2-18](#idx-group-by-b) 和 [示例 2-12](#ex-idx-group-by-b) 中的最终 `GROUP BY`
+    示例可能会让您感到惊讶。
+- en: '![emsp 0218](assets/emsp_0218.png)'
+  id: totrans-242
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0218](assets/emsp_0218.png)'
+- en: Figure 2-18\. `GROUP BY` without leftmost prefix
+  id: totrans-243
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-18\. 没有左前缀的 `GROUP BY`
+- en: Example 2-12\. EXPLAIN plan for `GROUP BY` without leftmost prefix
+  id: totrans-244
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-12\. 没有左前缀的 `GROUP BY` 的 EXPLAIN 计划
+- en: '[PRE12]'
+  id: totrans-245
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Notice `key: idx_a_b`: MySQL uses the index despite the query having no condition
+    on column `a`. What happened to the leftmost prefix requirement? It’s being met
+    because MySQL is scanning the index (`type: index`) on column `a`. You can imagine
+    a condition on column `a` that’s always true, like `a = a`.'
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '注意 `key: idx_a_b`：尽管查询条件中没有涉及列 `a`，MySQL 仍然使用了索引。左前缀要求是怎么实现的？因为MySQL正在扫描列 `a`
+    上的索引 (`type: index`)。你可以想象一个条件，如 `a = a`，在列 `a` 上总是为真。'
+- en: Would MySQL still index scan on column `a` for `GROUP BY c`? No, it would not;
+    it would do a full table scan. [Figure 2-18](#idx-group-by-b) works because the
+    index has column `b` values; it does not have column `c` values.
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 对于 `GROUP BY c` 仍然会在列 `a` 上进行索引扫描吗？不会，它会执行全表扫描。[图 2-18](#idx-group-by-b)之所以有效，是因为索引具有列
+    `b` 的值，而不具有列 `c` 的值。
+- en: “Using temporary” in the `Extra` field is a side effect of not having a strict
+    set of leftmost prefix conditions. As MySQL reads column `a` values from the index,
+    it collects column `b` values in a temporary table (in memory). After reading
+    all column `a` values, it table scans the temporary table to group and aggregate
+    for `COUNT(*)`.
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 `Extra` 字段中的“Using temporary”是没有严格的最左前缀条件的一个副作用。当MySQL从索引中读取列 `a` 的值时，它会在一个临时表中（内存中）收集列
+    `b` 的值。在读取所有列 `a` 的值后，它会扫描临时表以进行 `COUNT(*)` 的分组和聚合。
+- en: There is a lot more to learn about `GROUP BY` with respect to indexes and query
+    optimizations, but these examples are the fundamentals. Unlike `WHERE` clauses,
+    `GROUP BY` clauses tend to be simpler. The challenge is creating an index to optimize
+    `GROUP BY` plus other SQL clauses. MySQL has the same challenge when formulating
+    the query execution plan, so it might not optimize `GROUP BY` even when possible.
+    MySQL almost always chooses the best query execution plan, but if you want to
+    experiment with different ones, read [“Index Hints”](https://oreil.ly/mbBof) in
+    the MySQL manual.
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于 `GROUP BY` 与索引以及查询优化还有很多内容需要学习，但这些示例是基础知识。与 `WHERE` 子句不同，`GROUP BY` 子句往往更简单。挑战在于创建一个能够优化
+    `GROUP BY` 加其他 SQL 子句的索引。当制定查询执行计划时，MySQL 面临相同的挑战，因此即使可能也不一定会优化 `GROUP BY`。MySQL
+    几乎总是选择最佳的查询执行计划，但如果您想尝试不同的计划，请阅读MySQL手册中的[“索引提示”](https://oreil.ly/mbBof)。
+- en: ORDER BY
+  id: totrans-250
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: ORDER BY
+- en: Unsurprisingly, MySQL can use an ordered index to optimize `ORDER BY`. This
+    optimization avoids sorting rows, which takes a little more time, by accessing
+    rows in order. Without this optimization, MySQL reads all matching rows, sorts
+    them, then returns the sorted result set. When MySQL sorts rows, it prints “Using
+    filesort” in the `Extra` field of the EXPLAIN plan. *Filesort* means *sort rows*.
+    It’s a historical (and now misleading) term but still the prevalent term in MySQL
+    lingo.
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 毫不奇怪，MySQL 可以使用有序索引来优化 `ORDER BY`。这种优化避免了对行进行排序，通过按顺序访问行来节省一点时间。如果没有这种优化，MySQL
+    将读取所有匹配行，对它们进行排序，然后返回排序后的结果集。当MySQL对行进行排序时，在 EXPLAIN 计划的 `Extra` 字段中会打印“Using
+    filesort”。*Filesort* 意味着 *排序行*。这是一个历史悠久（现在有些误导性的）术语，但在MySQL术语中仍然很流行。
+- en: 'Filesort is a consternation for engineers because it has a reputation for being
+    slow. Sorting rows is extra work, so it does not improve response time, but it’s
+    usually not the root cause of slow response time. At the end of this section,
+    I use `EXPLAIN` `ANALYZE`, which is new as of MySQL 8.0.18, to measure the real-time
+    penalty of filesort. (Spoiler: sorting rows is very fast.) But first, let’s examine
+    how to use indexes to optimize `ORDER BY`.'
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于工程师来说，Filesort 是一个让人头疼的问题，因为它以慢速著称。排序行是额外的工作，因此它不会提高响应时间，但通常不是响应时间缓慢的根本原因。在本节的最后，我使用
+    `EXPLAIN` `ANALYZE`，这是自MySQL 8.0.18以来的新功能，来测量Filesort的实时性能影响。（剧透：排序行非常快。）但首先，让我们看看如何使用索引来优化
+    `ORDER BY`。
+- en: 'There are three ways to use an index to optimize `ORDER BY`. The first and
+    simplest way is using a leftmost prefix of an index for the `ORDER BY` clause.
+    For table `elem`, that means:'
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有三种方法可以使用索引来优化 `ORDER BY`。第一种和最简单的方法是使用索引的最左前缀来对 `ORDER BY` 子句进行排序。对于表 `elem`，即：
+- en: '`ORDER BY id`'
+  id: totrans-254
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ORDER BY id`'
+- en: '`ORDER BY a`'
+  id: totrans-255
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ORDER BY a`'
+- en: '`ORDER BY a, b`'
+  id: totrans-256
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ORDER BY a, b`'
+- en: The second way is to hold a leftmost part of the index constant and order by
+    the next index columns. For example, holding column `a` constant and ordering
+    by column `b`, as shown in [Figure 2-19](#idx-order-by-b-where-a) with corresponding
+    EXPLAIN plan in [Example 2-13](#ex-idx-order-by-b-where-a).
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二种方法是将索引的最左部分保持不变，并按照下一个索引列排序。例如，保持列 `a` 不变，并按列 `b` 排序，如[图 2-19](#idx-order-by-b-where-a)所示，其对应的
+    EXPLAIN 计划见[示例 2-13](#ex-idx-order-by-b-where-a)。
+- en: '![emsp 0219](assets/emsp_0219.png)'
+  id: totrans-258
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0219](assets/emsp_0219.png)'
+- en: Figure 2-19\. `ORDER BY` and `WHERE` on different index columns
+  id: totrans-259
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-19\. 不同索引列上的 `ORDER BY` 和 `WHERE`
+- en: Example 2-13\. EXPLAIN plan for `ORDER BY` and `WHERE` on different index columns
+  id: totrans-260
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-13\. 不同索引列上的 `ORDER BY` 和 `WHERE` 的 EXPLAIN 计划
+- en: '[PRE13]'
+  id: totrans-261
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: '`WHERE a = ''Ar'' ORDER BY b` can use index `(a, b)` because the `WHERE` condition
+    on the first index part (column `a`) is constant, so MySQL jumps to `a = ''Ar''`
+    in the index and, from there, reads column `b` values in order. [Example 2-14](#res-idx-order-by-b-where-a)
+    is the result set, and although it’s nothing fancy, it shows that column `a` is
+    constant (value “Ar”) and column `b` is sorted.'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`WHERE a = ''Ar'' ORDER BY b` 可以使用索引 `(a, b)`，因为对第一个索引部分（列 `a`）的 `WHERE` 条件是常量，所以
+    MySQL 直接跳到 `a = ''Ar''` 的位置，然后按顺序读取列 `b` 的值。 [示例 2-14](#res-idx-order-by-b-where-a)
+    是结果集，虽然没有什么特别之处，但显示了列 `a` 是常量（值为“Ar”），而列 `b` 是排序的。'
+- en: Example 2-14\. Result set of `WHERE a = 'Ar' ORDER BY b`
+  id: totrans-263
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-14\. `WHERE a = 'Ar' ORDER BY b` 的结果集
+- en: '[PRE14]'
+  id: totrans-264
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: If table `elem` had an index on columns `a, b, c`, a query like `WHERE a = 'Au'
+    AND b = 'Be' ORDER BY c` could use the index because the conditions on columns
+    `a` and `b` hold the leftmost part of the index.
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果表 `elem` 在列 `a, b, c` 上有索引，那么像 `WHERE a = 'Au' AND b = 'Be' ORDER BY c` 这样的查询可以使用索引，因为对列
+    `a` 和 `b` 的条件满足了索引的最左前缀要求。
+- en: The third way is a special case of the second. Before showing the figure that
+    explains it, see if you can determine why the query in [Example 2-15](#ex-idx-order-by-pk)
+    does *not* cause a filesort (why “Using filesort” is not reported in the `Extra`
+    field).
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第三种方式是第二种的特例。在展示解释它的图之前，看看能否确定为什么 [示例 2-15](#ex-idx-order-by-pk) 的查询 *不* 导致文件排序（为什么
+    `Extra` 字段没有报告“Using filesort”）。
+- en: Example 2-15\. EXPLAIN plan for `ORDER BY id`
+  id: totrans-267
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-15\. `ORDER BY id` 的 EXPLAIN 计划
+- en: '[PRE15]'
+  id: totrans-268
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: It’s understandable that the query uses index `idx_a_b` because the `WHERE`
+    conditions are a leftmost prefix, but shouldn’t `ORDER BY id` cause a filesort?
+    [Figure 2-20](#idx-order-by-pk) reveals the answer.
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以理解查询使用索引 `idx_a_b`，因为 `WHERE` 条件是最左前缀，但是 `ORDER BY id` 不应该导致文件排序吗？[图 2-20](#idx-order-by-pk)
+    揭示了答案。
+- en: '![emsp 0220](assets/emsp_0220.png)'
+  id: totrans-270
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0220](assets/emsp_0220.png)'
+- en: Figure 2-20\. `ORDER BY` using primary key appended to secondary index
+  id: totrans-271
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-20\. 使用附加到次要索引的主键的 `ORDER BY`
+- en: '[“Leftmost Prefix Requirement”](#LPR) has a paragraph that begins with, “Lurking
+    at the end (rightmost) of every secondary index is the primary key.” That’s what’s
+    happening in [Figure 2-20](#idx-order-by-pk): the dark box around index column
+    `id` reveals the “hidden” primary key appended to the secondary index. This `ORDER
+    BY` optimization might not seem useful with a little table like `elem`, but with
+    real tables it can be very useful—worth remembering.'
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[“最左前缀要求”](#LPR) 开头的段落说：“在每个次要索引的末尾（最右端）潜藏着主键。” 这正是 [图 2-20](#idx-order-by-pk)
+    中发生的：围绕索引列 `id` 的深色框显示了附加到次要索引的“隐藏”主键。这种 `ORDER BY` 优化在像 `elem` 这样的小表中可能看起来不那么有用，但在真实的表中却非常有用——值得记住。'
+- en: To prove that the “hidden” primary key allows the `ORDER BY` to avoid a filesort,
+    let’s remove the condition on column `b` to invalidate the optimization, as shown
+    in [Figure 2-21](#idx-order-by-pk-not) and followed by the resulting EXPLAIN plan
+    in [Example 2-16](#ex-idx-order-by-pk-not).
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了证明“隐藏”的主键允许 `ORDER BY` 避免文件排序，让我们去除对列 `b` 的条件以使优化失效，如 [图 2-21](#idx-order-by-pk-not)
+    中所示，并跟随结果的 EXPLAIN 计划在 [示例 2-16](#ex-idx-order-by-pk-not) 中展示。
+- en: '![emsp 0221](assets/emsp_0221.png)'
+  id: totrans-274
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0221](assets/emsp_0221.png)'
+- en: Figure 2-21\. `ORDER BY` without leftmost prefix
+  id: totrans-275
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-21\. 没有最左前缀的 `ORDER BY`
+- en: Example 2-16\. EXPLAIN plan for `ORDER BY` without leftmost prefix
+  id: totrans-276
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-16\. 没有最左前缀的 `ORDER BY` 的 EXPLAIN 计划
+- en: '[PRE16]'
+  id: totrans-277
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: By removing the condition on column `b`, there’s no longer a leftmost prefix
+    on the secondary index that allows MySQL to use the “hidden” primary key to optimize
+    `ORDER BY`. Therefore, for this particular query, “Using filesort” appears in
+    the `Extra` field.
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过移除列 `b` 的条件，次要索引上不再有最左前缀，MySQL 无法使用“隐藏”主键来优化 `ORDER BY`。因此，对于这个特定查询，“Using
+    filesort” 出现在 `Extra` 字段中。
+- en: 'The new optimization is “Using index condition,” which is called index condition
+    pushdown. *Index condition pushdown* means the storage engine uses an index to
+    matches rows for `WHERE` conditions. Normally, storage engines only read and write
+    rows, and MySQL handles the logic of matching rows. This is a clean separation
+    of concerns (which is a virtue for software design), but it’s inefficient when
+    rows don’t match: both MySQL and the storage engine waste time reading non-matching
+    rows. For the query in [Example 2-16](#ex-idx-order-by-pk-not), index condition
+    pushdown means the storage engine (InnoDB) uses index `idx_a_b` to match condition
+    `a = ''Al''`. Index condition pushdown helps improve response time, but don’t
+    exert yourself trying to optimize for it because MySQL uses it automatically when
+    possible. To learn more, read [“Index Condition Pushdown Optimization”](https://oreil.ly/L3Nzm)
+    in the MySQL manual.'
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 新的优化是“使用索引条件”，称为索引条件下推。*索引条件下推*意味着存储引擎使用索引来匹配`WHERE`条件的行。通常，存储引擎只读取和写入行，MySQL处理匹配行的逻辑。这是关注点的清晰分离（这是软件设计的优点），但当行不匹配时效率低下：MySQL和存储引擎都浪费时间读取非匹配的行。对于
+    [示例 2-16](#ex-idx-order-by-pk-not) 中的查询，索引条件下推意味着存储引擎（InnoDB）使用索引 `idx_a_b` 来匹配条件
+    `a = 'Al'`。索引条件下推有助于提高响应时间，但不必费力优化它，因为MySQL在可能时会自动使用它。要了解更多，请阅读MySQL手册中的 [“索引条件下推优化”](https://oreil.ly/L3Nzm)。
+- en: 'There’s an important detail that affects all `ORDER BY` optimizations: index
+    order is ascending by default, and `ORDER BY col` implies ascending: `ORDER BY
+    col ASC`. Optimizing `ORDER BY` works in only one direction for all columns: `ASC`
+    (ascending) or `DESC` (descending). Consequently, `ORDER BY a, b DESC` does not
+    work because column `a` is an implicit `ASC` sort, which is different than `b
+    DESC`.'
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有`ORDER BY`优化都受一个重要细节的影响：索引默认按升序排序，而`ORDER BY col`意味着升序：`ORDER BY col ASC`。对所有列只能进行一个方向的`ORDER
+    BY`优化：`ASC`（升序）或`DESC`（降序）。因此，`ORDER BY a, b DESC`不起作用，因为列`a`是隐式的`ASC`排序，与`b DESC`不同。
+- en: Note
+  id: totrans-281
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: MySQL 8.0 supports [descending indexes](https://oreil.ly/FDTsN).
+  id: totrans-282
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 8.0支持[降序索引](https://oreil.ly/FDTsN)。
+- en: What is the real time penalty of filesort? Prior to MySQL 8.0.18, it was neither
+    measured nor reported. But as of MySQL 8.0.18, [`EXPLAIN ANALYZE`](https://oreil.ly/DFPiF)
+    measures and reports it. For only [Example 2-17](#ex-2-17), I must use a different
+    table.
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文件排序的真正时间成本是多少？在MySQL 8.0.18之前，它既没有被测量也没有被报告。但从MySQL 8.0.18开始，[`EXPLAIN ANALYZE`](https://oreil.ly/DFPiF)对其进行了测量和报告。仅对
+    [示例 2-17](#ex-2-17)，我必须使用另一个表。
+- en: Example 2-17\. Sysbench table `sbtest`
+  id: totrans-284
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-17\. Sysbench表`sbtest`
+- en: '[PRE17]'
+  id: totrans-285
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'That’s a standard [`sysbench` table](https://oreil.ly/XAYX2); I loaded it with
+    one million rows. Let’s use a random, meaningless query with a large result set
+    and `ORDER BY`:'
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那是一个标准的[`sysbench`表](https://oreil.ly/XAYX2)；我加载了100万行数据。让我们使用一个随机的、无意义的查询，带有大量结果集和`ORDER
+    BY`：
+- en: '[PRE18]'
+  id: totrans-287
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'The query takes 1.15 seconds to sort and return a little over 68,000 rows.
+    But it’s not a bad query; check out its EXPLAIN plan:'
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询花费1.15秒来排序并返回超过68,000行。但这并不是一个糟糕的查询；看看它的EXPLAIN计划：
+- en: '[PRE19]'
+  id: totrans-289
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: The only new information in that EXPLAIN plan is “Using MRR” in the `Extra`
+    field, which refers to the [“Multi-Range Read Optimization”](https://oreil.ly/QX1wJ).
+    Otherwise, that EXPLAIN plan reports information already covered in this chapter.
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那个EXPLAIN计划中唯一的新信息是“使用MRR”在`Extra`字段中，它指的是 [“多范围读取优化”](https://oreil.ly/QX1wJ)。否则，该EXPLAIN计划报告的信息已在本章中涵盖。
+- en: 'Does filesort make this query slow? `EXPLAIN ANALYZE` reveals the answer, albeit
+    cryptically:'
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文件排序是否使得这个查询变慢？`EXPLAIN ANALYZE`揭示了答案，尽管是神秘的：
+- en: '[PRE20]'
+  id: totrans-292
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'The real output of `EXPLAIN ANALYZE` is wider, but I wrapped and numbered the
+    lines for print legibility and reference. `EXPLAIN ANALYZE` output is dense and
+    requires practice to grok; for now, let’s go straight to the point—or as straight
+    as possible since the output does not read sequentially. On line 4, `1174.981`
+    (milliseconds) means the index range scan (line 3) took 1.17 seconds (rounded).
+    On line 2, `1221.170..1229.306` means the filesort (line 1) *started* after 1,221
+    milliseconds and ended after 1,229 milliseconds, which means the filesort took
+    8 milliseconds. Total execution time is 1.23 seconds: 95% reading rows and less
+    than 1% sorting rows. The remaining 4%—roughly 49 milliseconds—is spent in other
+    stages: preparing, statistics, logging, cleaning up, and so forth.'
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`EXPLAIN ANALYZE` 的实际输出更宽，但我为打印的易读性和参考包装和编号了行。 `EXPLAIN ANALYZE` 的输出密集且需要实践才能理解；现在，让我们直奔主题——或尽可能直接，因为输出并非按顺序阅读。在第
+    4 行，`1174.981`（毫秒）表示索引范围扫描（第 3 行）花费了 1.17 秒（四舍五入）。在第 2 行，`1221.170..1229.306`
+    表示文件排序（第 1 行）*开始*于 1,221 毫秒，结束于 1,229 毫秒，这意味着文件排序花费了 8 毫秒。总执行时间为 1.23 秒：95% 的时间用于读取行，不到
+    1% 的时间用于排序行。剩下的 4%——大约 49 毫秒——花费在其他阶段：准备、统计、日志记录、清理等等。'
+- en: 'The answer is no: filesort does *not* make this query slow. The problem is
+    data access: 68,439 rows is not a small result set. Sorting 68,439 values is practically
+    zero work for a CPU that does *billions* of operations per second. But reading
+    68,439 rows is appreciable work for a relational database that must traverse indexes,
+    manage transactions, etc. To optimize a query like this, focus on [“Data Access”](ch03.html#data-access).'
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 答案是否定的：filesort *不会* 使得这个查询变慢。问题在于数据访问：68,439 行并不是一个小的结果集。对于必须遍历索引、管理事务等的关系数据库来说，读取
+    68,439 行是相当大的工作量。要优化这样的查询，重点放在 [“数据访问”](ch03.html#data-access) 上。
+- en: 'One last question to address: why does filesort have a reputation for being
+    slow? Because MySQL uses temporary files on disk when sorting data exceeds the
+    [`sort_buffer_size`](https://oreil.ly/x5mbN), and hard drives are orders of magnitude
+    slower than memory. This was especially true decades ago when spinning disks were
+    the norm; but today, SSD is the norm, and storage in general is quite fast. Filesort
+    might be an issue for a query at high throughput (QPS), but use `EXPLAIN ANALYZE`
+    to measure and verify.'
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后一个要解决的问题是：为什么 filesort 被认为是慢的？因为 MySQL 在排序数据超过 [`sort_buffer_size`](https://oreil.ly/x5mbN)
+    时使用磁盘上的临时文件，而硬盘比内存慢几个数量级。这在几十年前尤为明显，当时旋转硬盘是常态；但今天，SSD 是常态，总体存储速度相当快。对于高吞吐量（QPS）的查询，Filesort
+    可能是个问题，但使用 `EXPLAIN ANALYZE` 来测量和验证。
+- en: Warning
+  id: totrans-296
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: '`EXPLAIN ANALYZE` executes the query. To be safe, use `EXPLAIN` `ANALYZE` on
+    a read-only replica, not the source.'
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`EXPLAIN ANALYZE` 执行查询。为了安全起见，在只读复制品上使用 `EXPLAIN` `ANALYZE`，而不是源。'
+- en: 'Now back to table `elem` ([Example 2-1](#elem)) and the next case for which
+    MySQL can use an index: covering indexes.'
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在回到表 `elem`（[示例 2-1](#elem)）和 MySQL 可以使用索引的下一个案例：覆盖索引。
+- en: Covering Indexes
+  id: totrans-299
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 覆盖索引
+- en: A *covering index* includes all columns referenced in a query. [Figure 2-22](#idx-covering)
+    shows a covering index for a `SELECT` statement.
+  id: totrans-300
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*覆盖索引* 包括查询中引用的所有列。[图 2-22](#idx-covering) 展示了一个用于 `SELECT` 语句的覆盖索引。'
+- en: '![emsp 0222](assets/emsp_0222.png)'
+  id: totrans-301
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0222](assets/emsp_0222.png)'
+- en: Figure 2-22\. Covering indexes
+  id: totrans-302
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-22\. 覆盖索引
+- en: The `WHERE` conditions on columns `a` and `b` point to the corresponding index
+    columns as usual, but these index columns also point back to the corresponding
+    columns in the `SELECT` clause to signify that the values for these columns are
+    read from the index.
+  id: totrans-303
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`WHERE` 条件的列 `a` 和 `b` 如往常一样指向相应的索引列，但这些索引列也指向 `SELECT` 子句中相应的列，表示这些列的值是从索引中读取的。'
+- en: Normally, MySQL reads full rows from the primary key (recall [“InnoDB Tables
+    Are Indexes”](#tables-are-indexes)). But with a covering index, MySQL can read
+    only column values from the index. This is most helpful with secondary indexes
+    because it avoids the primary key lookup.
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常情况下，MySQL 从主键读取完整行（回顾 [“InnoDB Tables Are Indexes”](#tables-are-indexes)）。但是通过覆盖索引，MySQL
+    只能从索引中读取列值。这在处理次要索引时尤其有帮助，因为它避免了主键查找。
+- en: MySQL uses the covering index optimization automtically, and `EXPLAIN` reports
+    it as “Using index” in the `Extra` field. “Using index for group-by” is a similar
+    optimization specific to `GROUP BY` and `DISTINCT`, as demonstrated in [“GROUP
+    BY”](#idx-group-by). But “Using index condition” and “Using index for skip scan”
+    are completely different and unrelated optimizations.
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 自动使用覆盖索引优化，并在 `EXPLAIN` 中将其报告为“Using index”在 `Extra` 字段中。“Using index
+    for group-by” 是一个类似于 `GROUP BY` 和 `DISTINCT` 的优化，如[“GROUP BY”](#idx-group-by)中演示的那样。但是，“Using
+    index condition” 和 “Using index for skip scan” 是完全不同且无关的优化。
+- en: 'An index scan (`type: index`) plus a covering index (`Extra: Using index`)
+    is an index-only scan (see [“Index scan”](#index-scan)). There are two examples
+    in [“GROUP BY”](#idx-group-by): [Example 2-9](#ex-idx-group-by-a) and [Example 2-12](#ex-idx-group-by-b).'
+  id: totrans-306
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '索引扫描（`type: index`）加上覆盖索引（`Extra: Using index`）是仅索引扫描（参见[“索引扫描”](#index-scan)）。在[“GROUP
+    BY”](#idx-group-by)中有两个示例：[示例 2-9](#ex-idx-group-by-a) 和 [示例 2-12](#ex-idx-group-by-b)。'
+- en: Covering indexes are glamorous but rarely practical because realistic queries
+    have too many columns, conditions, and clauses for one index to cover. Do not
+    spend time trying to create covering indexes. When designing or analyzing simple
+    queries that use very few columns, take a moment to see if a covering index might
+    work. If it does, then congratulations. If not, that’s okay; no one expects covering
+    indexes.
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 覆盖索引很吸引眼球，但实际上很少实用，因为现实查询涉及太多列、条件和子句，一个索引很难覆盖。不要花时间尝试创建覆盖索引。在设计或分析使用非常少列的简单查询时，可以考虑一下是否适合使用覆盖索引。如果适合，那么恭喜你。如果不适合，没关系；没有人期望有覆盖索引。
+- en: Join Tables
+  id: totrans-308
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 连接表格
+- en: MySQL uses an index to join tables, and this usage is fundamentally the same
+    as using an index for anything else. The main difference is the source of values
+    used in join conditions for each table. This becomes more clear when visualized,
+    but first we need a second table to join. [Example 2-18](#elem-names-table) shows
+    the structure of table `elem_names` and the 14 rows that it contains.
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 使用索引来连接表，这种用法与用索引做其他事情基本相同。主要区别在于每个表连接条件中使用的值的来源。当可视化后更加清晰，但首先我们需要第二个表进行连接。[示例 2-18](#elem-names-table)
+    显示了表 `elem_names` 的结构及其包含的 14 行。
+- en: Example 2-18\. Table `elem_names`
+  id: totrans-310
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-18\. 表 `elem_names`
+- en: '[PRE21]'
+  id: totrans-311
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'Table `elem_name` has one index: the primary key on column `symbol`. The values
+    in column `symbol` match the values in table `elem` columns `a`, `b`, and `c`.
+    Therefore, we can join tables `elem` and `elem_names` on these columns.'
+  id: totrans-312
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 `elem_name` 有一个索引：在列 `symbol` 上的主键。列 `symbol` 中的值与表 `elem` 的列 `a`、`b` 和 `c`
+    中的值相匹配。因此，我们可以在这些列上连接表 `elem` 和 `elem_names`。
+- en: '[Figure 2-23](#idx-join-1) shows a `SELECT` statement that joins tables `elem`
+    and `elem_names`, and a visual representation of the conditions and indexes for
+    each table.'
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 2-23](#idx-join-1)显示了一个连接表 `elem` 和 `elem_names` 的 `SELECT` 语句，以及每个表的条件和索引的视觉表示。'
+- en: 'In previous figures, there’s only one index and SQL clause pair because there’s
+    only one table. But [Figure 2-23](#idx-join-1) has two pairs—one for each table—delineated
+    by large rightward-pointing chevrons with the table name commented in each: `/*
+    elem */` and `/* elem_names */`. Like `EXPLAIN`, these figures list tables in
+    join order: top to bottom. Table `elem` (at top) is the first table in the join
+    order and table `elem_names` (at bottom) is the second table.'
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的图表中，只有一个索引和 SQL 子句对，因为只有一个表。但是[图 2-23](#idx-join-1)有两对，每个表用大右指向的尖括号分隔，并在每个表中注释表名：`/*
+    elem */` 和 `/* elem_names */`。像 `EXPLAIN` 一样，这些图表按连接顺序列出表格：从上到下。表 `elem`（顶部）是连接顺序中的第一个表，表
+    `elem_names`（底部）是第二个表。
+- en: '![emsp 0223](assets/emsp_0223.png)'
+  id: totrans-315
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0223](assets/emsp_0223.png)'
+- en: Figure 2-23\. Join table on primary key lookup
+  id: totrans-316
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-23\. 在主键查找中连接表
+- en: 'Index usage on table `elem` is nothing new or special: MySQL uses the index
+    for the condition `a IN (`…`)`. So far, so good.'
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在表 `elem` 上使用索引并不新鲜或特别：MySQL 使用索引来进行条件 `a IN (`…`)`。到目前为止，一切顺利。
+- en: 'Index usage on table `elem_names`, which is joined to the preceding table,
+    is fundamentally the same with two minor differences. First, the `WHERE` clause
+    is a rewrite of the `JOIN`…`ON` clause—more on this later. Second, values for
+    the condition on column `symbol` come from the preceding table: `elem`. To represent
+    this, an arrow points from the preceding table to a column reference in angle
+    brackets: `<elem.a>`. On join, MySQL looks up rows in table `elem_names` using
+    column `a` values from matching rows in table `elem` for the join condition on
+    column `symbol`. In MySQL vernacular we’d say, “`symbol` is equal to column `a`
+    from table `elem`.” Given a value from the preceding table, the primary key lookup
+    on column `symbol` is nothing new or special: if a row matches, it’s returned
+    and joined with the row from the preceding table.'
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 `elem_names` 上的索引使用与前一张表连接基本相同，有两个小区别。首先，`WHERE` 子句是 `JOIN`…`ON` 子句的重写——稍后详细讨论。其次，列
+    `symbol` 条件的值来自前一张表 `elem`。为了表示这一点，箭头指向从前一张表到角括号中的列引用：`<elem.a>`。在连接时，MySQL 使用来自表
+    `elem` 中匹配行的列 `a` 值来查找表 `elem_names` 中的行，用于列 `symbol` 的连接条件。在 MySQL 的术语中，我们会说，“`symbol`
+    等于表 `elem` 中列 `a` 的值。”给定前一张表的值，对列 `symbol` 的主键查找没有什么新鲜或特别之处：如果匹配到行，则返回并与前一张表的行连接。
+- en: '[Example 2-19](#ex-idx-join-1) shows the EXPLAIN plan for the `SELECT` statement
+    in [Figure 2-23](#idx-join-1).'
+  id: totrans-319
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[示例 2-19](#ex-idx-join-1) 展示了在 [Figure 2-23](#idx-join-1) 中 `SELECT` 语句的 EXPLAIN
+    计划。'
+- en: Example 2-19\. EXPLAIN plan for join table on primary key lookup
+  id: totrans-320
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-19\. 主键查找连接表的 EXPLAIN 计划
+- en: '[PRE22]'
+  id: totrans-321
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'On a per-table basis, the EXPLAIN plan in [Example 2-19](#ex-idx-join-1) is
+    nothing new, but the join reveals two new details in the second table, `elem_names`.
+    The first is access type `eq_ref`: a single-row lookup using the primary key or
+    a unique not-null secondary index. (In this context, *not-null* means all secondary
+    index columns are defined as `NOT NULL`.) More on the `eq_ref` access type in
+    the next paragraph. The second is `ref: test.elem.a`, which you can read as “reference
+    column `elem.a`”. (The database name is `test`, hence the `test.` prefix.) To
+    join table `elem_names`, values from reference column `elem.a` are used to look
+    up rows by primary key (`key: PRIMARY`), which covers the join column: `symbol`.
+    This corresponds to the `JOIN` condition: `ON (elem.a = elem_names.symbol)`.'
+  id: totrans-322
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '在每张表的基础上，[示例 2-19](#ex-idx-join-1) 中的**EXPLAIN 计划**并不新鲜，但连接在第二张表 `elem_names`
+    中揭示了两个新细节。第一个是 `eq_ref` 访问类型：使用主键或唯一非空的次要索引进行单行查找。（在此上下文中，*非空* 表示所有次要索引列都定义为 `NOT
+    NULL`。）关于 `eq_ref` 访问类型的更多内容在下一段。第二个是 `ref: test.elem.a`，你可以理解为“参考列 `elem.a`”。（数据库名称为
+    `test`，因此带有 `test.` 前缀。）为了连接表 `elem_names`，通过参考列 `elem.a` 的值来通过主键（`key: PRIMARY`）查找行，这覆盖了连接列
+    `symbol`。这对应于 `JOIN` 条件：`ON (elem.a = elem_names.symbol)`。'
+- en: Tip
+  id: totrans-323
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: On a per-table basis, a join does not change how indexes are used. The main
+    difference is that values for the join condition come from the preceding table.
+  id: totrans-324
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在每张表的基础上，连接不会改变索引的使用方式。主要区别在于连接条件的值来自前一张表。
+- en: 'MySQL can join a table using any access method (see [“Table Access Methods”](#table-access-methods)),
+    but an index lookup using the `eq_ref` access type is the best and fastest because
+    it matches only one row. The `eq_ref` access type has two requirements: a primary
+    key or unique not-null secondary index *and* equality conditions on all index
+    columns. Together, these requirements guarantee that an `eq_ref` lookup matches
+    *at most* one row. If both requirements are not met, then MySQL will probably
+    use a `ref` index lookup, which is essentially the same but matches any number
+    of rows.'
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 可以使用任何访问方法连接表（参见 [“表访问方法”](#table-access-methods)），但是使用 `eq_ref` 访问类型的索引查找是最好且最快的，因为它仅匹配一行。`eq_ref`
+    访问类型有两个要求：主键或唯一非空次要索引 *和* 所有索引列上的等式条件。这两个要求一起保证了 `eq_ref` 查找最多匹配一行。如果这两个要求没有同时满足，则
+    MySQL 可能会使用 `ref` 索引查找，本质上与 `eq_ref` 相同，但匹配任意数量的行。
+- en: 'Going back to [Figure 2-23](#idx-join-1), how did I know to rewrite the `JOIN`…`ON`
+    clause to a `WHERE` clause for table `elem_names`? If you `SHOW WARNINGS` immediately
+    after `EXPLAIN`, MySQL prints how it rewrites the query. This is the abridged
+    output of `SHOW` `WARNINGS`:'
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 回到 [Figure 2-23](#idx-join-1)，我如何知道将 `JOIN`…`ON` 子句重写为 `elem_names` 表的 `WHERE`
+    子句？如果在 `EXPLAIN` 之后立即 `SHOW WARNINGS`，MySQL 将打印出它如何重写查询的输出。这是 `SHOW` `WARNINGS`
+    的摘要输出：
+- en: '[PRE23]'
+  id: totrans-327
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: Now you can see that `/* elem_names */ WHERE symbol = <elem.a>` in [Figure 2-23](#idx-join-1)
+    is correct.
+  id: totrans-328
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在你可以看到 [Figure 2-23](#idx-join-1) 中的 `/* elem_names */ WHERE symbol = <elem.a>`
+    是正确的。
+- en: Sometimes, running `SHOW WARNINGS` immediately after `EXPLAIN` to see how MySQL
+    rewrites a query is necessary to understand the table join order and indexes that
+    MySQL chose.
+  id: totrans-329
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时，在 `EXPLAIN` 之后立即运行 `SHOW WARNINGS`，查看 MySQL 如何重写查询是必要的，以了解表连接顺序和 MySQL 选择的索引。
+- en: Note
+  id: totrans-330
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Rewritten SQL statements shown by `SHOW WARNINGS` are not intended to be valid.
+    They’re only intended to show how MySQL interprets and rewrites the SQL statement.
+    Do not execute them.
+  id: totrans-331
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SHOW WARNINGS` 显示的重写 SQL 语句并不打算是有效的。它们只是展示了 MySQL 如何解释和重写 SQL 语句。不要执行它们。'
+- en: 'Table join order is critical because MySQL joins tables in the best order possible,
+    *not* the order tables are written in the query. You must use `EXPLAIN` to see
+    the table join order. `EXPLAIN` prints tables in the join order from top (first
+    table) to bottom (last table). The default join algorithm, *nested-loop join*,
+    follows the join order. I outline join algorithms at the end of this chapter:
+    [“Table Join Algorithms”](#table-join-algos).'
+  id: totrans-332
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表连接顺序至关重要，因为 MySQL 以最佳可能的顺序连接表，*而不是* 查询中表的顺序。您必须使用 `EXPLAIN` 来查看表连接顺序。`EXPLAIN`
+    按从顶部（第一个表）到底部（最后一个表）的连接顺序打印表格。默认的连接算法，*嵌套循环连接*，遵循连接顺序。我在本章末尾概述了连接算法：[“表连接算法”](#table-join-algos)。
+- en: Never guess or presume the table join order because small changes to a query
+    can yield a significantly different table join order or query execution plan.
+    To demonstrate, the `SELECT` statement in [Figure 2-24](#idx-join-2) is nearly
+    identically to the `SELECT` statement in [Figure 2-23](#idx-join-1) with one tiny
+    difference—can you spot it?
+  id: totrans-333
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 永远不要猜测或假设表连接顺序，因为查询的微小变化可能导致显著不同的表连接顺序或查询执行计划。为了证明这一点，在 [图 2-24](#idx-join-2)
+    中的 `SELECT` 语句几乎与 [图 2-23](#idx-join-1) 中的 `SELECT` 语句相同，只有一个微小的不同 — 你能找到它吗？
+- en: '![emsp 0224](assets/emsp_0224.png)'
+  id: totrans-334
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0224](assets/emsp_0224.png)'
+- en: Figure 2-24\. Join table on secondary index lookup
+  id: totrans-335
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 2-24\. 二级索引查找连接表
+- en: 'Here’s a hint: *it’s neither gold nor silver*. The tiny difference yields a
+    significantly different query execution plan, as shown in [Example 2-20](#ex-idx-join-2).'
+  id: totrans-336
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里有个提示：*它既不是黄金也不是银*. 微小的差异导致了一个显著不同的查询执行计划，如 [例 2-20](#ex-idx-join-2) 所示。
+- en: Example 2-20\. EXPLAIN plan for join table on secondary index lookup
+  id: totrans-337
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 例 2-20\. 二级索引查找连接表的 EXPLAIN 计划
+- en: '[PRE24]'
+  id: totrans-338
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'Syntactically, the `SELECT` statements in Figures [2-23](#idx-join-1) and [2-24](#idx-join-2)
+    are identical, but the execution plans (Examples [2-19](#ex-idx-join-1) and [2-20](#ex-idx-join-2))
+    are significantly different. What changed? In [Figure 2-24](#idx-join-2), a single
+    value was removed from the `IN()` list: “At.” This is a great example of how a
+    seemingly innocuous change can trigger something in the MySQL query execution
+    planner and voilà: a totally new and different EXPLAIN plan. Let’s examine [Example 2-20](#ex-idx-join-2)
+    table by table.'
+  id: totrans-339
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 语法上，图 [2-23](#idx-join-1) 和 [2-24](#idx-join-2) 中的 `SELECT` 语句是相同的，但执行计划（例 [2-19](#ex-idx-join-1)
+    和 [2-20](#ex-idx-join-2)）却有显著不同。发生了什么变化呢？在 [图 2-24](#idx-join-2) 中，从 `IN()` 列表中移除了一个单值：“At.”
+    这是一个很好的例子，展示了一个看似无害的变化如何触发 MySQL 查询执行计划器中的某些内容，然后，新的和不同的 EXPLAIN 计划就出来了。让我们一起分析
+    [例 2-20](#ex-idx-join-2) 中的表格。
+- en: 'The first table is `elem_names`, which is different than how the query is written:
+    `elem JOIN elem_names`. MySQL determines the table join order, not the `JOIN`
+    clause.^([2](ch02.html#idm45829113186976)) The `type` and `key` fields indicate
+    a range scan on the primary key, but where are the values coming from? The `ref`
+    field is `NULL`, and there are no `WHERE` conditions on this table. MySQL must
+    have rewritten the query; this is the abridged output of `SHOW WARNINGS`:'
+  id: totrans-340
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一个表是 `elem_names`，与查询写法 `elem JOIN elem_names` 不同。MySQL 决定表的连接顺序，而不是 `JOIN`
+    子句。^([2](ch02.html#idm45829113186976)) `type` 和 `key` 字段表明了对主键的范围扫描，但值从哪里来呢？`ref`
+    字段为 `NULL`，在这个表上没有 `WHERE` 条件。MySQL 必须已经重写了查询；这是 `SHOW WARNINGS` 的摘要输出：
+- en: '[PRE25]'
+  id: totrans-341
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'Yes, there it is on the last line: MySQL rewrites the query to use the `IN()`
+    list as the values for `elem_names.symbol`s instead of `elem.a` as originally
+    written in the query. Now you can see (or imagine) that index usage on table `elem_names.symbol`s
+    is a range scan to look up two values: “Ag” and “Au.” Using the primary key, that
+    will be an extremely fast index lookup and match only two rows that MySQL will
+    use to join the second table.'
+  id: totrans-342
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 是的，在最后一行看到了：MySQL 重写查询，使用 `IN()` 列表作为 `elem_names.symbol` 的值，而不是最初在查询中写的 `elem.a`。现在您可以看到（或者想象到），在
+    `elem_names.symbol` 表上的索引使用是一个范围扫描，用于查找两个值：“Ag” 和 “Au”。使用主键，这将是一个非常快速的索引查找，仅匹配
+    MySQL 将用于连接第二个表的两行。
+- en: 'The second table is `elem`, and the EXPLAIN plan is familiar: using index `idx_a_b`
+    to look up index values (not rows, because `Extra: Using index`) matching the
+    condition on column `a`. The values for that condition come from matching rows
+    in the preceding table, as indicated by `ref: test.elem_names.symbol`.'
+  id: totrans-343
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '第二个表是 `elem`，并且解释计划很熟悉：使用索引 `idx_a_b` 查找匹配条件（因为 `Extra: Using index`）的索引值，而不是行。该条件的值来自前一个表中匹配行，如
+    `ref: test.elem_names.symbol` 所示。'
+- en: Tip
+  id: totrans-344
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: MySQL joins tables in the best order possible, *not* the order that tables are
+    written in the query.
+  id: totrans-345
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 会按照最佳顺序连接表，*而不是*查询中表的书写顺序。
+- en: Although MySQL can change the join order and rewrite the query, index usage
+    for a join is fundamentally the same—on a per-table basis—as everything previously
+    demonstrated and explained in this chapter. Use `EXPLAIN` and `SHOW WARNINGS`,
+    and consider the execution plan table by table, from top to bottom.
+  id: totrans-346
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管 MySQL 可以改变连接顺序并重写查询，但连接的索引使用基本上与本章中先前展示和解释的一样——在每个表的基础上。使用 `EXPLAIN` 和 `SHOW
+    WARNINGS`，并逐个表从顶部到底部考虑执行计划。
+- en: MySQL can join tables without an index. This is called a *full join* and it’s
+    the single worst thing a query can do. A table scan on a single-table query is
+    bad, but a full join is worse because the table scan on the joined table does
+    not happen once, it happens for every matching row from the preceding table. [Example 2-21](#ex-idx-join-full)
+    shows a full join on the second table.
+  id: totrans-347
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 可以在没有索引的情况下连接表。这被称为*完全连接*，是查询中最糟糕的事情。单表查询的表扫描是糟糕的，但完全连接更糟，因为在连接表中，对连接表的表扫描不会发生一次，而是对前一个表的每个匹配行都会发生一次。[示例 2-21](#ex-idx-join-full)
+    展示了第二个表的完全连接。
+- en: Example 2-21\. EXPLAIN plan for full `JOIN`
+  id: totrans-348
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-21\. 完全 `JOIN` 的 EXPLAIN 计划
+- en: '[PRE26]'
+  id: totrans-349
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'Normally, MySQL would not choose this query execution plan, which is why I
+    had to force it with `STRAIGHT_JOIN` and `IGNORE INDEX (PRIMARY)`. An index-only
+    scan on the first table (`elem`) yields all ten rows.^([3](ch02.html#idm45829113052112))
+    For each row, MySQL joins the second table (`elem_names`) by doing a full table
+    scan (`type: ALL`) to find matching rows. Since this is a joined table (not the
+    first table in the join order), the table scan counts as a full join. A full join
+    is the single worst thing a query can do because it happens *for each row* from
+    the preceding table: ten full table scans on table `elem_names`. Whenever you
+    see `type: ALL` for a joined table, stop everything you’re doing and fix it. There’s
+    a query metric for full joins: [“Select full join”](ch01.html#Select-full-join).'
+  id: totrans-350
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '通常情况下，MySQL 不会选择这个查询执行计划，这就是为什么我不得不使用 `STRAIGHT_JOIN` 和 `IGNORE INDEX (PRIMARY)`
+    强制它执行。对第一个表 `elem` 进行的仅索引扫描返回了十行。^([3](ch02.html#idm45829113052112)) 对于每一行，MySQL
+    通过执行全表扫描 (`type: ALL`) 来查找匹配行，从而将第二个表 `elem_names` 加入。因为这是一个连接表（不是连接顺序中的第一个表），所以表扫描被视为完全连接。完全连接是查询中最糟糕的事情，因为它发生在前一个表的每一行上：对表
+    `elem_names` 的十次全表扫描。每当在连接表中看到 `type: ALL` 时，立即停止当前操作并修复它。有一个关于完全连接的查询指标：[“选择完全连接”](ch01.html#Select-full-join)。'
+- en: '“Using join buffer (hash join)” in the `Extra` field refers to the hash join
+    algorithm, which is new as of MySQL 8.0.18. I outline it (and other join algorithms)
+    at the end of this chapter: [“Table Join Algorithms”](#table-join-algos). Looking
+    ahead, the one-line explanation is: hash join builds an in-memory hash table of
+    values and uses that to lookup rows rather than doing repeated table scans. Hash
+    join is a huge performance improvement. Regardless, avoiding full joins remains
+    the best practice.'
+  id: totrans-351
+  prefs: []
+  type: TYPE_NORMAL
+  zh: “Using join buffer (hash join)” 在 `Extra` 字段中指的是哈希连接算法，自 MySQL 8.0.18 起推出。我在本章末尾概述了它（以及其他连接算法）：[“表连接算法”](#table-join-algos)。预览一下，简短的解释是：哈希连接构建一个内存中的哈希表来查找行，而不是进行重复的表扫描。哈希连接是巨大的性能提升。尽管如此，避免完全连接仍然是最佳实践。
+- en: Note
+  id: totrans-352
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'Prior to MySQL 8.0, the query in [Example 2-21](#ex-idx-join-full) reports
+    “Using join buffer (Block Nested Loop)” in the `Extra` field because it uses a
+    different join algorithm: block nested-loop. [“Table Join Algorithms”](#table-join-algos)
+    outlines this join algorithm.'
+  id: totrans-353
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 8.0 之前，[示例 2-21](#ex-idx-join-full) 中的查询在 `Extra` 字段中报告“Using join buffer
+    (Block Nested Loop)”，因为它使用了不同的连接算法：块嵌套循环。[“表连接算法”](#table-join-algos) 概述了这种连接算法。
+- en: At first glance, joining tables appears to be a categorically different type
+    of index usage, but it’s not. A join involves more tables and indexes, but on
+    a per-table basis, index usage and requirements are the same. Even the leftmost
+    prefix requirement is the same. The main difference is that, for joined tables,
+    values for join conditions come from the preceding table.
+  id: totrans-354
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 乍一看，连接表似乎是一种不同类别的索引使用，但实际上并非如此。连接涉及更多的表和索引，但基于每个表，索引使用和要求是相同的。甚至左前缀要求也是相同的。主要区别在于，对于连接的表，连接条件的值来自前面的表。
+- en: It’s been a long read since the first example in [“WHERE”](#idx-where). Now
+    you’ve seen many full-context examples of indexes, queries, and EXPLAIN plans
+    that cover the technical details and mechanics of MySQL indexes. This information
+    is the foundation of direct query optimization on which the next section builds.
+  id: totrans-355
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自从第一个例子[“WHERE”](#idx-where)以来已经阅读了很长时间。现在你已经看到了许多完整的上下文示例，涵盖了 MySQL 索引、查询和
+    EXPLAIN 计划的技术细节和机制。这些信息是直接查询优化的基础，下一节将在此基础上展开。
+- en: 'Indexing: How to Think Like MySQL'
+  id: totrans-356
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 索引：如何像 MySQL 一样思考
+- en: 'Indexes and indexing are different topics. The previous section introduced
+    indexes: standard B-tree indexes on InnoDB tables for `WHERE`, `GROUP BY`, `ORDER
+    BY`, covering indexes, and table joins. This section introduces *indexing*: applying
+    indexes for maximum leverage. You cannot simply index every column to effect amazing
+    performance. If it were that easy, there would be no DBAs. For maximum leverage,
+    you have to index the columns that allow MySQL to access the least number of rows
+    when executing a query. To state it metaphorically: maximum leverage is an index
+    that tells MySQL exactly where to find the needle in the haystack.'
+  id: totrans-357
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引和索引是不同的主题。前一节介绍了索引：InnoDB 表的标准 B 树索引适用于 `WHERE`、`GROUP BY`、`ORDER BY`、覆盖索引和表连接。本节介绍了*索引*：应用索引以最大程度地发挥其作用。你不能简单地为每一列都创建索引以实现出色的性能。如果那样简单，就不会有
+    DBA 了。要实现最大的效益，你必须为 MySQL 在执行查询时可以访问的行数最少的列创建索引。用比喻的方式来说：最大的效益是一种索引，告诉 MySQL 究竟在哪里找到大海捞针。
+- en: 'In my experience, engineers struggle with indexing because they conflate how
+    they think about a query with how MySQL “thinks” about a query. As engineers,
+    we think about a query in the context of the application: what part of the application
+    executes the query, why (the business logic), and the correct result set. But
+    MySQL does not know or care about any of that. MySQL thinks about a much smaller,
+    simpler context: indexes and table conditions. Under the hood, MySQL is considerably
+    more complex, but part of its indeterminable charm is how well it hides that complexity.'
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据我的经验，工程师在索引方面往往感到困惑，因为他们将如何思考查询与 MySQL 如何“思考”查询混淆了。作为工程师，我们在应用程序的上下文中思考查询：应用程序的哪个部分执行查询、为什么（业务逻辑）以及正确的结果集。但是
+    MySQL 不知道也不关心任何这些。MySQL 在一个更小、更简单的上下文中思考：索引和表条件。在幕后，MySQL 更复杂，但它成功隐藏了这种复杂性，这也是它迷人之处之一。
+- en: How do we know that MySQL thinks about indexes and table conditions? `EXPLAIN`.
+    And what is the primary information that `EXPLAIN` reports? Tables (in join order),
+    table access methods, indexes, and `Extra` information related to the access of
+    those tables with those indexes.
+  id: totrans-359
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们如何知道 MySQL 怎么考虑索引和表条件？ `EXPLAIN`。而 `EXPLAIN` 报告的主要信息是什么？表（按连接顺序）、表访问方法、索引以及与这些索引相关的`Extra`信息。
+- en: Thinking like MySQL make indexing easier because it’s a deterministic machine—algorithms
+    and heuristics. Human thought is entangled with superfluous details. Clear your
+    mind and get ready to think like a machine. The next four sections walk through
+    a simple, four-step process.
+  id: totrans-360
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以 MySQL 的方式思考使索引更容易，因为它是一个确定性的机器——算法和启发式。人类的思维被琐碎的细节所缠绕。清理你的思绪，准备好像机器一样思考。接下来的四节将通过一个简单的四步过程进行讲解。
+- en: Know the Query
+  id: totrans-361
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 了解查询
+- en: 'The first step toward thinking like MySQL is to know basic information about
+    the query that you’re optimizing. Start by gathering the following metadata for
+    each table:'
+  id: totrans-362
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 学习像 MySQL 一样思考的第一步是了解你正在优化的查询的基本信息。首先收集每个表的以下元数据：
+- en: '`SHOW CREATE TABLE`'
+  id: totrans-363
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SHOW CREATE TABLE`'
+- en: '`SHOW TABLE STATUS`'
+  id: totrans-364
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SHOW TABLE STATUS`'
+- en: '`SHOW INDEXES`'
+  id: totrans-365
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SHOW INDEXES`'
+- en: If the query is already running in production, then get its query report (see
+    [“Query report”](ch01.html#query-report)) and familiarize yourself with the current
+    values.
+  id: totrans-366
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果查询已经在生产中运行，请获取其查询报告（参见[“Query report”](ch01.html#query-report)）并熟悉当前的值。
+- en: 'Then answer the following questions:'
+  id: totrans-367
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后回答以下问题：
+- en: Query
+  id: totrans-368
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询
+- en: How many rows should the query access?
+  id: totrans-369
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 查询应该访问多少行？
+- en: How many rows should the query return?
+  id: totrans-370
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 查询应该返回多少行？
+- en: Which columns are selected (returned)?
+  id: totrans-371
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 选择了哪些列（返回）？
+- en: What are the `GROUP BY`, `ORDER BY,` and `LIMIT` clauses (if any)?
+  id: totrans-372
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`GROUP BY`、`ORDER BY`和`LIMIT`子句是什么？'
+- en: Are there subqueries? (If yes, repeat the process for each.)
+  id: totrans-373
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 是否有子查询？（如果有，请对每个子查询重复此过程。）
+- en: Table access (per-table)
+  id: totrans-374
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表访问（每个表）
+- en: What are the table conditions?
+  id: totrans-375
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 表条件是什么？
+- en: Which index should the query use?
+  id: totrans-376
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 查询应该使用哪个索引？
+- en: What other indexes could the query use?
+  id: totrans-377
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 其他哪些索引可以查询使用？
+- en: What is the cardinality of each index?
+  id: totrans-378
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 每个索引的基数是多少？
+- en: How large is the table—data size and row count?
+  id: totrans-379
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 表的大小有多大——数据大小和行数？
+- en: 'Those questions help you mentally parse the query because that’s what MySQL
+    does: parse the query. This is especially helpful for seeing complex queries in
+    simpler terms: tables, table conditions, indexes, and SQL clauses.'
+  id: totrans-380
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些问题帮助您在脑中解析查询，因为这就是MySQL所做的：解析查询。这对于以更简单的术语看待复杂查询尤为有用：表、表条件、索引和SQL子句。
+- en: This information helps you piece together a puzzle that, once complete, reveals
+    query response time. To improve response time, you’ll need to change some pieces.
+    But before doing that, the next step is to assemble the current pieces with the
+    help of `EXPLAIN`.
+  id: totrans-381
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些信息帮助您拼凑一个谜题，一旦完成，就能揭示查询响应时间。要改善响应时间，您需要更改一些部分。但在此之前，下一步是利用`EXPLAIN`组装当前的部分。
+- en: Understand with EXPLAIN
+  id: totrans-382
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 用`EXPLAIN`解释
+- en: 'The second step is to understand the current query execution plan reported
+    by `EXPLAIN`. Consider each table and its conditions with respect to its indexes,
+    starting with the index that MySQL chose: the `key` field in the `EXPLAIN` output.
+    Look at the table conditions to see how they meet the leftmost prefix requirement
+    for this index. If the `possible_keys` field lists other indexes, think about
+    how MySQL would access rows using those indexes—always with the leftmost prefix
+    requirement in mind. If the `Extra` field has information (it usually does), then
+    refer to [“EXPLAIN Output”](https://oreil.ly/GDF0g) in the MySQL manual to learn
+    what it means.'
+  id: totrans-383
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二步是理解`EXPLAIN`报告的当前查询执行计划。考虑每个表及其条件与其索引的关系，从MySQL选择的索引开始：`EXPLAIN`输出中的`key`字段。查看表条件，看它们如何满足此索引的最左前缀要求。如果`possible_keys`字段列出其他索引，请考虑MySQL如何使用这些索引访问行——始终牢记最左前缀要求。如果`Extra`字段有信息（通常有），则参考MySQL手册中的[“EXPLAIN输出”](https://oreil.ly/GDF0g)以了解其含义。
+- en: Tip
+  id: totrans-384
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Always `EXPLAIN` the query. Make this a habit because direct query optimization
+    is not possible without `EXPLAIN`.
+  id: totrans-385
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总是要`EXPLAIN`查询。养成这个习惯，因为没有`EXPLAIN`就无法进行直接的查询优化。
+- en: 'The query and its response time are a puzzle, but you have all the pieces:
+    execution plan, table conditions, table structures, table sizes, index cardinalities,
+    and query metrics. Keep connecting the pieces until the puzzle is complete—until
+    you can see the query working as MySQL explains it. There is always a reason for
+    the query execution plan.^([4](ch02.html#idm45829112993152)) Sometimes MySQL is
+    very clever and uses a nonobvious query optimization, usually mentioned in the
+    `Extra` field. If you encounter one for a `SELECT` statement, [“Optimizing SELECT
+    Statements”](https://oreil.ly/Bl4Ja) in the MySQL manual will elucidate it.'
+  id: totrans-386
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询及其响应时间是一个谜题，但您拥有所有的部分：执行计划、表条件、表结构、表大小、索引基数和查询指标。不断连接这些部分，直到谜题完成——直到您可以看到MySQL如何解释它的查询工作。查询执行计划总有其原因。[^4]
+    有时MySQL非常聪明，使用了一个不明显的查询优化，通常在`Extra`字段中提到。如果您遇到`SELECT`语句的情况，请参阅MySQL手册中的[“优化SELECT语句”](https://oreil.ly/Bl4Ja)。
+- en: 'If you get stuck, there are three increasing levels of support:'
+  id: totrans-387
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果遇到困难，有三个不断增强的支持级别：
+- en: As of MySQL 8.0.16, `EXPLAIN FORMAT=TREE` prints a more precise and descriptive
+    query execution plan in tree-like output. It’s a completely different output than
+    the traditional format, so you’ll need to learn how to interpret it, but it’s
+    worth the effort.
+  id: totrans-388
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 自MySQL 8.0.16起，`EXPLAIN FORMAT=TREE`以树状输出打印更精确和描述性的查询执行计划。这是与传统格式完全不同的输出，因此您需要学习如何解释它，但这是值得的努力。
+- en: Use [optimizer tracing](https://oreil.ly/Ump3C) to report an extremely detailed
+    query execution plan with costs, considerations, and reasons. This is a very advanced
+    feature with a high learning curve, so if you’re pressed for time, you might prefer
+    the third option.
+  id: totrans-389
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用[优化器跟踪](https://oreil.ly/Ump3C)报告一个极其详细的查询执行计划，包括成本、考虑因素和原因。这是一个非常高级的功能，学习曲线陡峭，所以如果您时间紧张，可能更喜欢第三个选项。
+- en: Ask your DBA or hire an expert.
+  id: totrans-390
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 询问您的DBA或聘请专家。
+- en: Optimize the Query
+  id: totrans-391
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 优化查询
+- en: 'The third step is direct query optimization: change the query, its indexes,
+    or both. This is where all the fun happens, and there’s no risk yet because these
+    changes are made in development or staging, *not* production. Be certain that
+    your development or staging environment has data that is representative of production
+    because data size and distribution affect how MySQL chooses indexes.'
+  id: totrans-392
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第三步是直接查询优化：修改查询、其索引或两者。这是所有有趣的地方，而且目前没有风险，因为这些更改是在开发或测试环境中进行的，*不是*生产环境。确保你的开发或测试环境具有生产环境的代表性数据，因为数据大小和分布会影响MySQL选择索引的方式。
+- en: At first, it might seem like the query cannot be modified because it fetches
+    the correct rows, so the query is written correctly. A query “is what it is,”
+    right? Not always; the same *result* can be achieved with different *methods*.
+    A query has a result—literally, a result set—and a method of obtaining that result.
+    These two are closely related but independent. Knowing that is tremendously helpful
+    when considering how to modify a query. Start by clarifying the intended result
+    of the query. A clear result allows you to explore new ways of writing the query
+    that achieve the same result.
+  id: totrans-393
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 起初，可能会觉得查询不能修改，因为它检索了正确的行，所以查询写得正确。一个查询就是一个查询，对吧？不总是这样；不同的*方法*可以达到相同的*结果*。一个查询有一个结果——确切地说，一个结果集——和获取该结果的方法。这两者密切相关但独立。当考虑如何修改查询时，了解这一点非常有帮助。首先澄清查询的预期结果。清晰的结果可以让你探索写入查询的新方法，以达到相同的结果。
+- en: Tip
+  id: totrans-394
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: There can be multiple ways to write a query that execute differently but return
+    the same result.
+  id: totrans-395
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以有多种方法编写查询，它们的执行方式不同但返回相同的结果。
+- en: For example, some time ago I was helping an engineer optimize a slow query.
+    His question to me was technical—something about `GROUP BY` and indexes—but I
+    asked him, “What does the query *do*? What’s it supposed to return?” He said,
+    “Oh! It returns the maximum value for a group.” After clarifying the intended
+    result of the query, I realized that he didn’t need the maximum group value, he
+    simply needed the maximum value. Consequently, the query was completely rewritten
+    to use the `ORDER BY col DESC LIMIT 1` optimization.
+  id: totrans-396
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，不久前我帮助一位工程师优化一个慢查询。他向我提出的问题很技术化——关于`GROUP BY`和索引的某些问题——但我问他：“这个查询做了什么？它应该返回什么？”他说：“哦！它返回每个组的最大值。”在澄清了查询的预期结果后，我意识到他并不需要每个组的最大值，他只需要整体的最大值。因此，查询完全被重写为使用`ORDER
+    BY col DESC LIMIT 1`优化。
+- en: 'When a query is extremely simple, like `SELECT col FROM tbl WHERE id = 1`,
+    there might truly be no way to rewrite it. But the simpler the query, the less
+    likely it needs to be rewritten. If a simple query is slow, the solution is likely
+    a change to indexes rather than the query. (And if index changes don’t solve the
+    problem, then the journey continues: *indirect* query optimization, addressed
+    in Chapters [3](ch03.html#ch03) and [4](ch04.html#ch04).)'
+  id: totrans-397
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当一个查询非常简单，比如`SELECT col FROM tbl WHERE id = 1`，可能真的没有办法重写它。但查询越简单，就越不需要重写它。如果一个简单的查询很慢，解决方案很可能是改变索引而不是查询本身。（如果索引更改无法解决问题，那么旅程将继续：*间接*查询优化，在第[3](ch03.html#ch03)章和第[4](ch04.html#ch04)章中讨论。）
+- en: 'Adding or modifying a index is a trade-off between access methods and query-specific
+    optimizations. For example, do you trade an `ORDER BY` optimization for a range
+    scan? Don’t get stuck trying to weigh the trade-offs; MySQL does that for you.^([5](ch02.html#idm45829112967856))
+    Your job is simple: add or alter an index that you think will provide MySQL greater
+    leverage, then use `EXPLAIN` to see if MySQL agrees by using the new index. Repeat
+    until you and MySQL agree on the most optimized way to write, index, and execute
+    the query.'
+  id: totrans-398
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 添加或修改索引是在访问方法和特定查询优化之间权衡的结果。例如，你会为了范围扫描交换`ORDER BY`优化吗？不要陷入权衡利弊的困境；MySQL会为你处理。^([5](ch02.html#idm45829112967856))
+    你的任务很简单：添加或修改一个你认为会为MySQL提供更大优势的索引，然后使用`EXPLAIN`来查看MySQL是否通过使用新索引来达成一致意见。重复此过程，直到你和MySQL就写入、索引和执行查询的最优方式达成一致。
+- en: Warning
+  id: totrans-399
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Do not modify indexes in production until you have thoroughly verified the changes
+    in staging.
+  id: totrans-400
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不要在生产环境中修改索引，直到你彻底验证了在测试环境中的更改。
+- en: Deploy and Verify
+  id: totrans-401
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 部署和验证
+- en: 'The last step is to deploy the changes and verify that they improve response
+    time. But first: know how to roll back the deployment—and be ready to do so—in
+    case the changes have unintended side effects. This happens for many reasons;
+    two examples are: queries running in production that use the index but were not
+    running in staging, or production data that is significantly different than staging
+    data. It’s most likely going to be fine, but be prepared for *not fine*.'
+  id: totrans-402
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后一步是部署更改并验证其是否改善了响应时间。但首先要知道如何回滚部署——并且随时准备做到这一点——以防更改带来意外副作用。这发生的原因有很多；两个例子是：在生产中运行但在演示中未运行的查询使用了索引，或者生产数据与演示数据显著不同。大多数情况下都会没事，但要为*可能不好*做好准备。
+- en: Tip
+  id: totrans-403
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Always know how to—and be ready to—roll back a deployment to production.
+  id: totrans-404
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总是要知道如何——并且随时准备——回滚到生产部署。
+- en: After deploying, verify the changes with query metrics and MySQL server metrics.
+    If the query optimization has significant impact, MySQL server metrics will reflect
+    it. ([Chapter 6](ch06.html#ch06) elaborates on MySQL server metrics.) It’s awesome
+    when this happens, but don’t be surprised or discouraged if it doesn’t because
+    the most important change is query response time—recall [“North Star”](ch01.html#north-star).
+  id: totrans-405
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 部署后，使用查询指标和MySQL服务器指标验证更改。如果查询优化有显著影响，MySQL服务器指标将反映出来。（[第6章](ch06.html#ch06)详细讨论了MySQL服务器指标。）这种情况发生时非常棒，但如果没有发生也不要感到惊讶或灰心，因为最重要的改变是查询响应时间——回顾[“北极星”](ch01.html#north-star)。
+- en: 'Wait five to ten minutes (preferably longer), then check response time in the
+    query profile and query report. (See [“Query profile”](ch01.html#query-profile)
+    and [“Query report”](ch01.html#query-report).) If response time improved, then
+    congratulations: you are doing and accomplishing what MySQL experts do; with this
+    skill, you can achieve remarkable MySQL performance. If response time did not
+    improve, don’t worry and don’t give up: even MySQL experts encounter queries that
+    require elbow grease. Repeat the process, and consider enlisting another engineer
+    because some queries require heavy lifting. If you’re certain the query cannot
+    be further optimized, then it’s time for the second part of the journey: indirect
+    query optimization. [Chapter 3](ch03.html#ch03) addresses changes to data, and
+    [Chapter 4](ch04.html#ch04) addresses changes to the application.'
+  id: totrans-406
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 等待五到十分钟（最好更长时间），然后在查询概要和查询报告中检查响应时间。 （参见[“查询概要”](ch01.html#query-profile)和[“查询报告”](ch01.html#query-report)。）如果响应时间有所改善，那么恭喜你：你正在做和完成MySQL专家所做的事情；有了这个技能，你可以实现卓越的MySQL性能。如果响应时间没有改善，不要担心，也不要放弃：即使是MySQL专家也会遇到需要费力的查询。重复这个过程，并考虑寻求另一位工程师的帮助，因为有些查询需要费力解决。如果确定查询无法进一步优化，那么就该进行旅程的第二部分了：间接查询优化。[第3章](ch03.html#ch03)讨论了数据的变化，[第4章](ch04.html#ch04)讨论了应用的变化。
+- en: It Was a Good Index Until…
+  id: totrans-407
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 直到……依然是一个好的索引
+- en: If *nothing* changes, a good index will stay a good index until the end of time.
+    (But if truly nothing changes, would time ever end?) Realistically, something
+    will change, render a good index bad, and decrease performance. Following are
+    common causes of this regrettable (but avoidable and correctable) decline.
+  id: totrans-408
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果*什么都不*改变，一个好的索引将一直是一个好的索引，直到时间的尽头。（但如果真的什么都不变，时间会结束吗？）现实情况是，总会有变化，使得一个好的索引变坏，并降低性能。以下是导致这种遗憾（但是可以避免和纠正的）下降的常见原因。
+- en: Queries Changed
+  id: totrans-409
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 查询发生变化
+- en: 'When queries change—and they often do—the leftmost prefix requirement can be
+    lost. The worst case is when there are no other indexes that MySQL can use, so
+    it reverts to brute force: a full table scan. But tables often have many indexes,
+    and MySQL is determined to use an index, so the more likely case is that query
+    response time becomes noticeably poor because the other indexes aren’t as good
+    as the original index. A query analysis and EXPLAIN plan quickly reveal this case.
+    Presuming the query changes were necessary, which is a safe presumption, the solution
+    is to re-index for the new variation of the query.'
+  id: totrans-410
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当查询发生变化——这种情况经常发生——最左前缀需求可能会丢失。最糟糕的情况是MySQL没有其他可用的索引，因此退而求其次：全表扫描。但表通常有很多索引，MySQL会努力使用一个索引，因此更可能的情况是查询响应时间因为其他索引不如原索引而明显变差。查询分析和EXPLAIN计划能够快速揭示这种情况。假设查询变更是必要的，这是一个合理的假设，解决方案是为新的查询变种重新建立索引。
+- en: Excessive, Duplicate, and Unused
+  id: totrans-411
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 过多、重复和未使用的
+- en: Indexes are necessary for performance, but sometimes engineers go overboard
+    with them, which results in too many indexes, duplicate indexes (*dupes*), and
+    unused indexes.
+  id: totrans-412
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引对于性能是必需的，但有时工程师们会过分依赖它们，导致过多的索引、重复的索引（*dupes*）和未使用的索引。
+- en: 'How many indexes is too many? One more than is necessary. An overabundance
+    of indexes creates two problems. The first was mentioned in [“Leftmost Prefix
+    Requirement”](#LPR): increased index size. More indexes use more RAM which, ironically,
+    decreases the RAM available for each index. The second problem is a decrease in
+    write performance because, when MySQL writes data, it must check, update, and
+    potentially reorganize (the internal B-tree structure of) every index. An inordinate
+    number of indexes can severely degrade write performance.'
+  id: totrans-413
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 多少索引才算太多？比需要的多一个。过多的索引会引起两个问题。第一个问题已在[“左前缀要求”](#LPR)中提到：增加了索引大小。更多的索引使用更多的RAM，具有讽刺意味的是，这会减少每个索引可用的RAM。第二个问题是写入性能的降低，因为当MySQL写入数据时，它必须检查、更新和可能重新组织（内部B树结构的）每个索引。过多的索引会严重降低写入性能。
+- en: 'When you create a duplicate index, the `ALTER` statement used to create it
+    generates a warning, but you have to `SHOW WARNINGS` to see it. To find existing
+    duplicate indexes, use [pt-duplicate-key-checker](https://oreil.ly/avm4L): it
+    safely finds and reports duplicate indexes.'
+  id: totrans-414
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您创建重复索引时，用于创建它的`ALTER`语句会生成一个警告，但您必须`SHOW WARNINGS`来查看它。要查找现有的重复索引，使用[pt-duplicate-key-checker](https://oreil.ly/avm4L)：它安全地查找和报告重复索引。
+- en: 'Unused indexes are even trickier to identify because, for example, what if
+    the index is only used once a week by a long-running analytics query? That edge
+    case aside, execute this query to list unused indexes:'
+  id: totrans-415
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 未使用的索引更难识别，因为例如，如果索引每周只被长时间运行的分析查询使用一次，那么怎么办呢？除了这种边缘情况外，执行以下查询以列出未使用的索引：
+- en: '[PRE27]'
+  id: totrans-416
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: That query uses the [MySQL sys Schema](https://oreil.ly/xxsL3), which is a collection
+    of ready-made views that return all sorts of information. The view `sys.schema_unused_indexes`
+    queries Performance Schema and Information Schema tables to determine which indexes
+    have not been used since MySQL started. (Execute `SHOW CREATE VIEW sys.schema_unused_indexes`
+    to see how this view works.) The Performance Schema must be enabled; if it is
+    not already enabled, talk with your DBA (or whoever manages MySQL) because enabling
+    it requires restarting MySQL.
+  id: totrans-417
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该查询使用[MySQL sys Schema](https://oreil.ly/xxsL3)，这是一组现成视图的集合，返回各种信息。视图`sys.schema_unused_indexes`查询性能模式和信息模式表，以确定自MySQL启动以来未使用的索引。
+    （执行`SHOW CREATE VIEW sys.schema_unused_indexes`以查看此视图的工作原理。）必须启用性能模式；如果尚未启用，请与您的DBA（或管理MySQL的其他人员）联系，因为启用它需要重新启动MySQL。
+- en: 'Be careful when dropping an index. As of MySQL 8.0, use [invisible indexes](https://oreil.ly/Wx1xT)
+    to verify that an index is not used or needed before dropping it: make the index
+    invisible, wait and verify that performance is not affected, then drop the index.
+    Invisible indexes are fantastic for this purpose because, when a mistake is made,
+    making an index visible is nearly instantaneous, whereas re-adding an index can
+    take minutes (or hours) on large tables, which feels like an eternity if the mistake
+    causes an application outage. Before MySQL 8.0, caution is the only solution:
+    talk with your team, search the application code, and use your knowledge of the
+    application to carefully and thoroughly verify that the index is not used or needed.'
+  id: totrans-418
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 删除索引时要小心。从MySQL 8.0开始，请使用[invisible indexes](https://oreil.ly/Wx1xT)来验证是否在删除之前未使用或不需要该索引：将索引设为不可见，等待并验证性能是否受影响，然后再删除索引。不可见索引非常适合此目的，因为一旦犯错，使索引可见几乎是瞬间完成的，而重新添加索引可能需要数分钟（或数小时）在大表上，如果错误导致应用停机，这将感觉像是漫长的永恒。在MySQL
+    8.0之前，谨慎是唯一的解决方案：与团队讨论，搜索应用程序代码，并利用您对应用程序的了解仔细彻底地验证该索引是否未使用或不需要。
+- en: Warning
+  id: totrans-419
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Be careful when dropping (removing) indexes. If a dropped index was used by
+    a query and MySQL cannot use another index, the query will revert to a full table
+    scan. If a dropped index affects several queries, which is not uncommon, it can
+    cause a ripple effect of performance degradation that leads to an application
+    outage.
+  id: totrans-420
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 删除（移除）索引时要小心。如果一个被删除的索引被查询使用，并且MySQL无法使用另一个索引，则查询将返回到全表扫描。如果删除的索引影响多个查询，这并不罕见，它可能会导致性能下降的连锁反应，最终导致应用程序停机。
+- en: Extreme Selectivity
+  id: totrans-421
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 极端选择性
+- en: '*Cardinality* is the number of unique values in an index. An index on values
+    `a, a, b, b` has a cardinality of 2: `a` and `b` are the two unique values. Use
+    [`SHOW INDEX`](https://oreil.ly/8hiGi) to see index cardinality.'
+  id: totrans-422
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*基数* 是索引中唯一值的数量。在值为 `a, a, b, b` 的索引上，基数为2：`a` 和 `b` 是两个唯一值。使用 [`SHOW INDEX`](https://oreil.ly/8hiGi)
+    查看索引基数。'
+- en: '*Selectivity* is cardinality divided by the number of rows in the table. Using
+    the same example, `a, a, b, b`, where each value is one row, the index selectivity
+    is 2 / 4 = 0.5\. Selectivity ranges from 0 to 1, where 1 is a unique index: a
+    value for every row. MySQL doesn’t show index selectivity; you have to calculate
+    it manually using `SHOW INDEX` for cardinality and `SHOW TABLE STATUS` for the
+    number of rows.'
+  id: totrans-423
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*选择性* 是基数除以表中行数。使用相同的示例 `a, a, b, b`，每个值为一行，索引选择性为 2 / 4 = 0.5\. 选择性范围从 0 到
+    1，其中 1 是唯一索引：每行一个值。MySQL 不显示索引选择性；您必须使用 `SHOW INDEX` 获取基数和 `SHOW TABLE STATUS`
+    获取行数来手动计算它。'
+- en: 'An index with extremely low selectivity provides little leverage because each
+    unique value could match a large number of rows. A classic example is an index
+    on a column with only two possible values: yes or no, true or false, coffee or
+    tea, on so on. If the table has 100,000 rows, then selectivity is practically
+    zero: 2 / 100,000 = 0.00002\. It’s an index, but not a good one because each value
+    could match many rows. How many? Flip the division: 100,000 rows / 2 unique values
+    = 50,000 rows per value. If MySQL were to use this index (which is unlikely),
+    a single index lookup could match 50,000 rows. That presumes values are evenly
+    distributed, but what if 99,999 rows have value `coffee` and only 1 row has value
+    `tea`? Then the index works great for tea but terribly for coffee.'
+  id: totrans-424
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 具有极低选择性的索引提供的影响很小，因为每个唯一值可能匹配大量行。经典示例是仅有两个可能值的列上的索引：是或否、真或假、咖啡或茶等等。如果表中有 100,000
+    行，则选择性几乎为零：2 / 100,000 = 0.00002\. 这是一个索引，但不是一个好的索引，因为每个值可能匹配许多行。有多少？反过来除：100,000
+    行 / 2 个唯一值 = 每个值 50,000 行。如果 MySQL 使用此索引（可能性很小），单个索引查找可能匹配 50,000 行。这假设值均匀分布，但如果
+    99,999 行的值为 `咖啡`，只有 1 行的值为 `茶` 呢？那么此索引对于茶来说效果很好，但对于咖啡则效果很差。
+- en: If a query uses an index with extremely low selectivity, see if you can create
+    a better, more selective index; or, consider rewriting the query to use a more
+    selective index; or, think about altering the schema to organize the data better
+    with respect to access patterns—more on this in [Chapter 4](ch04.html#ch04).
+  id: totrans-425
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果查询使用具有极低选择性的索引，请查看是否可以创建更好、更有选择性的索引；或者考虑重写查询以使用更有选择性的索引；或者考虑更改架构以更好地组织数据，以适应访问模式
+    —— 更多信息请参见[第四章](ch04.html#ch04)。
+- en: An index with extremely high selectivity might be over-leveraged. As the selectivity
+    of a nonunique secondary index approaches 1, it begins to raise the question of
+    whether or not the index should be unique or—even better—if the query can be rewritten
+    to use the primary key. Such an index doesn’t hurt performance, but it’s worth
+    exploring alternatives.
+  id: totrans-426
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 具有极高选择性的索引可能被过度利用。随着非唯一次要索引的选择性接近1，这就开始提出是否应该使索引唯一，或者甚至更好的是是否可以重写查询以使用主键。这样的索引不会影响性能，但值得探索替代方案。
+- en: 'If there are many secondary indexes with extremely high selectivity, it likely
+    indicates access patterns that view or search the whole table by different criteria
+    or dimensions (presuming the indexes are used and not duplicates). For example:
+    imagine a table with product inventory that the application searches by many different
+    criteria, each requiring an index to meet the leftmost prefix requirement. In
+    this case, [Elasticsearch](https://www.elastic.co) might serve the access patterns
+    better than MySQL.'
+  id: totrans-427
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果有许多具有极高选择性的次要索引，这可能表明访问模式通过不同的标准或维度查看或搜索整个表（假设索引被使用且不存在重复）。例如：想象一个产品库存表，应用程序通过许多不同的标准搜索，每个标准都需要满足最左前缀的索引要求。在这种情况下，[Elasticsearch](https://www.elastic.co)
+    可能比 MySQL 更好地服务访问模式。
+- en: It’s a Trap! (When MySQL Chooses Another Index)
+  id: totrans-428
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 这是一个陷阱！（当 MySQL 选择另一个索引时）
+- en: 'In very rare cases, MySQL chooses the wrong index. This is rare enough that
+    it should be your last suspicion if MySQL is using an index but query response
+    time is inexplicably slow. There are several reasons this can occur. A common
+    reason is that, when updating a large number of rows, the number is just shy of
+    triggering an automatic update of the index “stats.” Since index statistics are
+    one of many factors that influence which index MySQL chooses, index statistics
+    that have diverged significantly from reality can cause MySQL to choose the wrong
+    index. To be clear: the index itself is never inaccurate; it’s only the index
+    *statistics* that are inaccurate.'
+  id: totrans-429
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在非常罕见的情况下，MySQL 可能会选择错误的索引。这种情况很少见，如果 MySQL 使用了索引但查询响应时间不合理慢，这应该是最后怀疑的原因。这种情况可能发生的几个原因。一个常见的原因是，在更新大量行时，数值刚好未触发索引“stats”的自动更新。由于索引统计信息是影响
+    MySQL 选择索引的多种因素之一，如果索引统计信息与实际情况有显著偏差，可能会导致 MySQL 选择错误的索引。需要明确的是：索引本身永远不会不准确；只有索引的
+    *统计数据* 不准确。
+- en: Index statistics are estimates about how values are distributed in the index.
+    MySQL does random dives into the index to sample pages. (A *page* is a 16 KB unit
+    of logical storage. Almost everything is stored in pages.) If index values are
+    evenly distributed, then a few random dives accurately represent the whole index.
+  id: totrans-430
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引统计信息是关于索引中数值分布的估计。MySQL 对索引进行随机深入，以对页面进行采样。 （*页面* 是逻辑存储的 16 KB 单元。几乎所有内容都存储在页面中。）如果索引值均匀分布，则少数随机深入能准确代表整个索引。
+- en: 'MySQL updates index statistics for a table when:'
+  id: totrans-431
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当 MySQL 更新表的索引统计信息时：
+- en: The table is first opened
+  id: totrans-432
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 首次打开表
+- en: '`ANALYZE TABLE` is run'
+  id: totrans-433
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 运行 `ANALYZE TABLE`
+- en: 1/16th of the table has been modified since the last update
+  id: totrans-434
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 表自上次更新后修改了 1/16
+- en: '`innodb_stats_on_metadata` is enabled and one of the following occurs:'
+  id: totrans-435
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`innodb_stats_on_metadata` 已启用并且发生以下情况之一：'
+- en: '`SHOW INDEX` or `SHOW TABLE STATUS` is run'
+  id: totrans-436
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 运行 `SHOW INDEX` 或 `SHOW TABLE STATUS`
+- en: '`INFORMATION_SCHEMA.TABLES` or `INFORMATION_SCHEMA.STATISTICS` is queried'
+  id: totrans-437
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`INFORMATION_SCHEMA.TABLES` 或 `INFORMATION_SCHEMA.STATISTICS` 被查询'
+- en: 'Running `ANALYZE TABLE` is safe and usually very fast, but be careful on a
+    busy server: it requires a flush lock (except in Percona Server) that can block
+    all queries accessing the table.'
+  id: totrans-438
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 运行 `ANALYZE TABLE` 是安全且通常非常快速的，但在繁忙的服务器上要小心：它需要一个刷新锁（在 Percona Server 除外），可能会阻塞所有访问该表的查询。
+- en: Table Join Algorithms
+  id: totrans-439
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 表连接算法
+- en: 'A brief overview of MySQL table join algorithms helps you think about indexes
+    and indexing when analyzing and optimizing `JOIN`. The default table join algorithm
+    is called *nested-loop join* (NLJ), and it operates like nested `foreach` loops
+    in code. For example, suppose that a query joins three tables with a `JOIN` clause
+    like:'
+  id: totrans-440
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 简要介绍 MySQL 表连接算法可以帮助您在分析和优化 `JOIN` 时考虑索引和索引化。默认的表连接算法称为 *nested-loop join*（NLJ），它的操作类似于代码中的嵌套
+    `foreach` 循环。例如，假设查询使用 `JOIN` 子句连接三个表，如下：
+- en: '[PRE28]'
+  id: totrans-441
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: And suppose that `EXPLAIN` reports the join order as `t1`, `t2`, and `t3`. The
+    nested-loop join algorithm works like the pseudocode in [Example 2-22](#NLJ).
+  id: totrans-442
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设 `EXPLAIN` 报告连接顺序为 `t1`、`t2` 和 `t3`。嵌套循环连接算法的工作方式类似于 [Example 2-22](#NLJ)
+    中的伪代码。
+- en: Example 2-22\. NLJ algorithm
+  id: totrans-443
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 2-22\. NLJ 算法
+- en: '[PRE29]'
+  id: totrans-444
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'Using the NLJ algorithm, MySQL begins by using `some_index` to find matching
+    rows in the outermost table: `t1`. For each matching row in table `t1`, MySQL
+    joins table `t2` by using an index on the join column, `index_on_B`, to lookup
+    rows matching `t1.A`. For each matching row in table `t2`, MySQL joins table `t3`
+    using the same process, but—just for fun—let’s say there’s no index on the join
+    column, `t3.C`: the result is a full join. (Recall [“Select full join”](ch01.html#Select-full-join)
+    and [Example 2-21](#ex-idx-join-full).)'
+  id: totrans-445
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 NLJ 算法，MySQL 首先使用 `some_index` 在最外层表 `t1` 中查找匹配行：对于表 `t1` 中的每个匹配行，MySQL 使用连接列上的索引
+    `index_on_B` 查找与 `t1.A` 匹配的表 `t2` 中的行。对于表 `t2` 中的每个匹配行，MySQL 使用相同的过程连接表 `t3`，但是——只是为了好玩——假设连接列
+    `t3.C` 上没有索引：结果是一个完整连接。 （回顾 [“Select full join”](ch01.html#Select-full-join) 和
+    [Example 2-21](#ex-idx-join-full)。）
+- en: When no more rows in `t3` match the join column value from table `t2`, the next
+    matching row from `t2` is used. When no more rows in `t2` match the join column
+    value from table `t1`, the next matching row from `t1` is used. When no more rows
+    in `t1` match, the query completes.
+  id: totrans-446
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当表 `t3` 中没有更多行与表 `t2` 的连接列值匹配时，将使用表 `t2` 中下一个匹配行。当表 `t2` 中没有更多行与表 `t1` 的连接列值匹配时，将使用表
+    `t1` 中下一个匹配行。当表 `t1` 中没有更多行匹配时，查询完成。
+- en: 'The nested-loop join algorithm is simple and effective, but there’s one problem:
+    the innermost table is accessed very frequently, and the full join makes that
+    access very slow. In this example, table `t3` is accessed for every matching row
+    in `t1` multiplied by every matching row in `t2`. If both `t1` and `t2` have 10
+    matching rows, then `t3` is accessed 100 times. The *block nested-loop* join algorithm
+    addresses this problem. Join column values from matching rows in `t1` and `t2`
+    are saved in a *join buffer*. (The join buffer size is set by system variable
+    [`join_buffer_size`](https://oreil.ly/r1NeH).) When the join buffer is full, MySQL
+    scans `t3` and joins each `t3` row that matches join column values in the join
+    buffer. Although the join buffer is accessed many times (for each `t3` row), it’s
+    fast because it’s in memory—significantly faster than 100 table scans required
+    for the NLJ algorithm.'
+  id: totrans-447
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 嵌套循环连接算法简单有效，但存在一个问题：内部表访问非常频繁，完全连接使得该访问非常慢。 在这个例子中，表 `t3` 在每个匹配的 `t1` 行乘以每个匹配的
+    `t2` 行时都被访问。 如果 `t1` 和 `t2` 都有10行匹配，那么 `t3` 就会被访问100次。 *块嵌套循环* 连接算法解决了这个问题。 匹配行中的连接列值从
+    `t1` 和 `t2` 中保存在*连接缓冲区*中。 （连接缓冲区大小由系统变量[`join_buffer_size`](https://oreil.ly/r1NeH)设置。）
+    当连接缓冲区满时，MySQL扫描 `t3` 并连接每个 `t3` 行，该行与连接缓冲区中的连接列值匹配。 虽然连接缓冲区被访问多次（对于每个 `t3` 行），但它很快因为它在内存中——比NLJ算法需要的100次表扫描要快得多。
+- en: As of MySQL 8.0.20, the hash join algorithm replaces the block nested-loop join
+    algorithm.^([6](ch02.html#idm45829112777456)) *Hash join* creates an in-memory
+    hash table of join tables, like table `t3` in this example. MySQL uses the hash
+    table to look up rows in the join table, which is extremely fast because a hash
+    table lookup is a constant time operation. For details, read [“Hash Join Optimization”](https://oreil.ly/uS0s3)
+    in the MySQL manual.
+  id: totrans-448
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自MySQL 8.0.20起，哈希连接算法取代了块嵌套循环连接算法。^([6](ch02.html#idm45829112777456)) *哈希连接*
+    在内存中创建连接表的哈希表，就像本示例中的表 `t3` 一样。 MySQL使用哈希表在连接表中查找行，这是非常快的，因为哈希表查找是常数时间操作。有关详细信息，请阅读MySQL手册中的[“哈希连接优化”](https://oreil.ly/uS0s3)。
+- en: Tip
+  id: totrans-449
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: '`EXPLAIN` indicates a hash join by printing “Using join buffer (hash join)”
+    in the `Extra` field.'
+  id: totrans-450
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`EXPLAIN`通过在`Extra`字段中打印“Using join buffer (hash join)”来指示哈希连接。'
+- en: 'There are more details and nuances to MySQL joins, but this brief overview
+    helps you to think about joins like MySQL: one table at a time and one index per
+    table.'
+  id: totrans-451
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL连接还有更多细节和微妙之处，但这个简要概述帮助您像MySQL一样思考连接：一次处理一张表和每张表一次一个索引。
+- en: Summary
+  id: totrans-452
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: 'This chapter taught indexes and indexing with MySQL. The key takeaway points
+    are:'
+  id: totrans-453
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章介绍了MySQL的索引和索引。 关键要点是：
+- en: Indexes provide the most and the best leverage for MySQL performance.
+  id: totrans-454
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 索引提供了MySQL性能的最大和最佳杠杆。
+- en: Do not scale up hardware to improve performance until exhausting other options.
+  id: totrans-455
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在耗尽其他选项之前，不要扩展硬件以改善性能。
+- en: Tuning MySQL is not necessary to improve performance with a reasonable configuration.
+  id: totrans-456
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 调整MySQL不是必要的，以合理的配置提高性能即可。
+- en: An InnoDB table is a B-tree index organized by the primary key.
+  id: totrans-457
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: InnoDB表是按主键组织的B树索引。
+- en: MySQL accesses a table by index lookup, index scan, or full table scan—index
+    lookup is the best access method.
+  id: totrans-458
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL通过索引查找、索引扫描或全表扫描来访问表—索引查找是最佳访问方法。
+- en: To use an index, a query must use a leftmost prefix of the index—the *leftmost
+    prefix requirement*.
+  id: totrans-459
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要使用索引，查询必须使用索引的最左前缀—*最左前缀要求*。
+- en: MySQL uses an index to find rows matching `WHERE`, group rows for `GROUP BY`,
+    sort rows for `ORDER BY`, avoid reading rows (covering index), and join tables.
+  id: totrans-460
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL使用索引查找匹配`WHERE`的行，为`GROUP BY`分组行，为`ORDER BY`排序行，避免读取行（覆盖索引）和连接表。
+- en: '`EXPLAIN` prints a *query execution plan* (or *EXPLAIN plan*) that details
+    how MySQL executes a query.'
+  id: totrans-461
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`EXPLAIN`打印一个*查询执行计划*（或*EXPLAIN计划*），详细说明MySQL如何执行查询。'
+- en: Indexing requires thinking like MySQL to understand the query execution plan.
+  id: totrans-462
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 索引需要像MySQL一样思考来理解查询执行计划。
+- en: Good indexes can lose effectiveness for a variety of reasons.
+  id: totrans-463
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 优秀的索引可能因多种原因失效。
+- en: 'MySQL uses three algorithms to join tables: NLJ, block nested-loop, and hash
+    join.'
+  id: totrans-464
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL使用三种算法来连接表：NLJ、块嵌套循环和哈希连接。
+- en: The next chapter begins to address indirect query optimization with respect
+    to data.
+  id: totrans-465
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一章开始讨论关于数据的间接查询优化。
+- en: 'Practice: Find Duplicate Indexes'
+  id: totrans-466
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实践：查找重复索引
+- en: 'The goal of this practice is to identify duplicate indexes using [pt-duplicate-key-checker](https://oreil.ly/Oxvjr):
+    a command-line tool that prints duplicate indexes.'
+  id: totrans-467
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此实践的目标是使用[pt-duplicate-key-checker](https://oreil.ly/Oxvjr)来识别重复索引：一个命令行工具，打印重复索引。
+- en: 'The practice is simple but useful: download and run `pt-duplicate-key-checker`.
+    By default, it checks all tables and prints a report for each duplicate index,
+    such as the following:'
+  id: totrans-468
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种练习简单而有用：下载并运行 `pt-duplicate-key-checker`。默认情况下，它会检查所有表，并打印每个重复索引的报告，如下所示：
+- en: '[PRE30]'
+  id: totrans-469
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'For each index and its duplicate, the report includes:'
+  id: totrans-470
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于每个索引及其重复，报告包括：
+- en: 'A reason: why one index duplicates the other'
+  id: totrans-471
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个原因：为什么一个索引与另一个索引重复
+- en: Both index definitions
+  id: totrans-472
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 两个索引定义
+- en: Column definitions that the indexes cover
+  id: totrans-473
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 索引覆盖的列定义
+- en: An `ALTER TABLE` statement to drop the duplicate index
+  id: totrans-474
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个 `ALTER TABLE` 语句以删除重复索引
+- en: pt-duplicate-key-checker is mature and well tested, but always think carefully
+    before dropping an index—especially in production.
+  id: totrans-475
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`pt-duplicate-key-checker` 是成熟且经过充分测试的，但在删除索引之前，请务必深思熟虑，尤其是在生产环境中。'
+- en: 'Like [“Practice: Identify Slow Queries”](ch01.html#ch01-ai), this practice
+    is simple—but you would be surprised how many engineers never check for duplicate
+    indexes. Checking for and removing duplicate indexes is practicing MySQL performance
+    like an expert.'
+  id: totrans-476
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 像 [“练习：识别慢查询”](ch01.html#ch01-ai) 这样的练习很简单，但你会惊讶于有多少工程师从不检查重复索引。检查并移除重复索引是像专家一样练习
+    MySQL 性能的方法。
+- en: '^([1](ch02.html#idm45829114802704-marker)) Unless you’re Vadim Tkachenko, in
+    which case: please keep tuning.'
+  id: totrans-477
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch02.html#idm45829114802704-marker)) 除非你是瓦迪姆·特卡琴科，如果是这样的话：请继续调优。
+- en: ^([2](ch02.html#idm45829113186976-marker)) Unless `STRAIGHT_JOIN` is used, but
+    don’t use this. Let the MySQL query optimizer choose the join order for the best
+    query execution plan.
+  id: totrans-478
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch02.html#idm45829113186976-marker)) 除非使用 `STRAIGHT_JOIN`，但不要使用这个。让 MySQL
+    查询优化器选择最佳的查询执行计划的连接顺序。
+- en: '^([3](ch02.html#idm45829113052112-marker)) Strictly speaking, the index-only
+    scan on table `elem` yields ten values, not rows, because full rows are not needed:
+    only column `a` values are needed.'
+  id: totrans-479
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([3](ch02.html#idm45829113052112-marker)) 严格来说，对 `elem` 表的仅索引扫描返回十个值，而不是行数，因为不需要完整的行：只需列
+    `a` 的值。
+- en: ^([4](ch02.html#idm45829112993152-marker)) Extremely rare query optimizer bugs
+    notwithstanding.
+  id: totrans-480
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([4](ch02.html#idm45829112993152-marker)) 即使存在极为罕见的查询优化器错误也是如此。
+- en: ^([5](ch02.html#idm45829112967856-marker)) Try to outsmart MySQL if you’re bored,
+    but don’t expect to win. It has seen attack ships on fire off the shoulder of
+    Orion. It watched C-beams glitter in the dark near the Tannhäuser Gate.
+  id: totrans-481
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([5](ch02.html#idm45829112967856-marker)) 如果你感到无聊，可以尝试智胜 MySQL，但不要期望能够赢。它曾在猎户座大熊座附近的黑暗中看见攻击船在肩上燃烧。它看着C梁在坦哈伊泽门附近的黑暗中闪烁。
+- en: ^([6](ch02.html#idm45829112777456-marker)) Hash join exists as of MySQL 8.0.18
+    but replaces block nested-loop as of MySQL 8.0.20.
+  id: totrans-482
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([6](ch02.html#idm45829112777456-marker)) 哈希连接自 MySQL 8.0.18 起存在，但从 MySQL 8.0.20
+    起替代块嵌套循环。

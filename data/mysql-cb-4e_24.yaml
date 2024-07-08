@@ -1,0 +1,2056 @@
+- en: Chapter 24\. Security
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第24章 安全
+- en: 24.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 24.0 简介
+- en: 'This chapter covers security-related topics:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章涵盖与安全相关的主题：
+- en: The `mysql.user` table that contains MySQL account information
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 包含MySQL账户信息的`mysql.user`表
+- en: Statements for managing MySQL user accounts
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 管理MySQL用户账户的语句
+- en: Password strength checking and policy
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 密码强度检查和策略
+- en: Password expiration
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 密码过期
+- en: Finding and removing anonymous accounts and accounts that permit connections
+    from many hosts
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 查找和移除允许从多个主机连接的匿名账户和账户
+- en: If you like, you can skip over the initial section that describes the `mysql.user`
+    table, but I think you’ll find that reading it will help you better understand
+    later sections, which often discuss how SQL operations map onto underlying changes
+    in that table.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你愿意，可以跳过描述`mysql.user`表的初始部分，但我认为阅读它将有助于你更好地理解后面的部分，这些部分通常讨论SQL操作如何映射到该表的基础变更。
+- en: Scripts shown in this chapter are located in the *routines* directory of the
+    `recipes` distribution.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章展示的脚本位于`recipes`分发的*routines*目录中。
+- en: Note
+  id: totrans-10
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Whether you use the MySQL 5.7 or 8.0 release series, it is best to use a recent
+    version within the series. Changes to the authentication system occur in early
+    development versions that may produce results that differ from the descriptions
+    here.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论你使用MySQL 5.7还是8.0版本系列，最好使用系列内的最新版本。早期开发版本对身份验证系统的更改可能会导致与这里描述不同的结果。
+- en: Tip
+  id: totrans-12
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Many of the techniques shown here require administrative access, such as the
+    ability to modify tables in the `mysql` system database or use statements that
+    require the privileges that allow to administer MySQL server. For this reason,
+    to carry out the operations described here, connect to the server as `root` rather
+    than as `cbuser`.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里展示的许多技术需要管理访问权限，例如修改`mysql`系统数据库中的表或使用需要管理员权限的语句来管理MySQL服务器。因此，为了执行这里描述的操作，请以`root`身份连接到服务器，而不是`cbuser`。
+- en: 24.1 Understanding the mysql.user Table
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 24.1 理解mysql.user表
+- en: 'MySQL stores user account information in tables in the `mysql` system database.
+    The `user` table is the most important because it contains account names and credentials.
+    To see its structure, use this statement:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL将用户账户信息存储在`mysql`系统数据库的表中。`user`表最为重要，因为它包含账户名和凭据。要查看其结构，请使用以下语句：
+- en: '[PRE0]'
+  id: totrans-16
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'The `user` table columns that concern us here specify account names and authentication
+    information:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里关注的`user`表列指定了账户名称和身份验证信息：
+- en: The `User` and `Host` columns identify the account. MySQL account names comprise
+    a combination of username and hostname values. For example, in the `user` table
+    row for a `'cbuser'@'localhost'` account, the `User` and `Host` column values
+    are `cbuser` and `localhost`, respectively. For a `'myuser'@'myhost.example.com'`
+    account, those columns are `myuser` and `myhost.example.com`.
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`User`和`Host`列标识账户。MySQL账户名由用户名和主机名值的组合构成。例如，在`''cbuser''@''localhost''`账户的`user`表行中，`User`和`Host`列的值分别为`cbuser`和`localhost`。对于`''myuser''@''myhost.example.com''`账户，这些列分别为`myuser`和`myhost.example.com`。'
+- en: The `plugin`, and `authentication_string` columns store authentication credentials.
+    MySQL does not store literal passwords in the `user` sytem table because that
+    is insecure. Instead, the server computes a hash value from the password and stores
+    the hash string.
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`plugin`和`authentication_string`列存储身份验证凭据。MySQL不会在`user`系统表中存储明文密码，因为那样是不安全的。相反，服务器会从密码计算哈希值并存储哈希字符串。'
+- en: The `plugin` column indicates which authentication plugin the server uses to
+    check credentials for clients that attempt to use the account. Different plug-ins
+    implement password hashing methods of varying encryption strength. The [Table 24-1](#nch-security-user-table-auth-methods)
+    shows the plug-ins this chapter discusses.
+  id: totrans-20
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`plugin`列指示服务器使用的身份验证插件，用于检查试图使用账户的客户端的凭据。不同的插件实现了不同加密强度的密码哈希方法。[表 24-1](#nch-security-user-table-auth-methods)显示了本章讨论的插件。'
+- en: Table 24-1\. Authentication Plugins
+  id: totrans-21
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 表 24-1 身份验证插件
+- en: '| Plug-in | Authentication method |'
+  id: totrans-22
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_TB
+  zh: '| 插件 | 身份验证方法 |'
+- en: '| --- | --- |'
+  id: totrans-23
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `mysql_native_password` | Native password hashing |'
+  id: totrans-24
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_TB
+  zh: '| `mysql_native_password` | 原生密码哈希 |'
+- en: '| `sha256_password` | SHA-256 password hashing (from MySQL 5.6.6 to MySQL 8.0)
+    |'
+  id: totrans-25
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_TB
+  zh: '| `sha256_password` | 使用SHA-256密码哈希（从MySQL 5.6.6到MySQL 8.0） |'
+- en: '| `caching_sha2_password` | SHA-256 password hashing with server-side caching
+    (MySQL 5.7 or later) |'
+  id: totrans-26
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_TB
+  zh: '| `caching_sha2_password` | 使用SHA-256密码哈希和服务器端缓存（MySQL 5.7或更高版本） |'
+- en: MySQL Enterprise, the commercial version of MySQL, includes additional plug-ins
+    for authenticating using PAM or Windows credentials. These enable use of passwords
+    external to MySQL, such as Unix login passwords or native Windows services.
+  id: totrans-27
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: MySQL Enterprise，MySQL 的商业版本，包含额外的插件，用于使用 PAM 或 Windows 凭据进行身份验证。这些插件使得可以使用
+    MySQL 外部的密码，例如 Unix 登录密码或本机 Windows 服务。
+- en: The `authentication_string` column represents a hashed password in the format
+    required by the respective plug-in. For example, `sha256_password` uses `authentication_string`
+    to store SHA-256 password hash values, which are cryptographically superior to
+    native hashing, used by the `mysql_native_password` plugin. An empty `authentication_string`
+    value means “no password”, which is insecure.
+  id: totrans-28
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`authentication_string` 列以所需的格式表示哈希密码。例如，`sha256_password` 使用 `authentication_string`
+    存储 SHA-256 密码哈希值，这比 `mysql_native_password` 插件使用的本机哈希方法更为安全。空的 `authentication_string`
+    值表示“无密码”，这是不安全的。'
+- en: Before MySQL 5.7.2, the server permits the `plugin` value to be empty. As of
+    MySQL 5.7.2, the `plugin` column *must* be nonempty and the server disables any
+    empty-plug-in account until a nonempty plug-in is assigned.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 5.7.2 之前，服务器允许 `plugin` 值为空。从 MySQL 5.7.2 开始，`plugin` 列必须非空，并且服务器将禁用任何空插件帐户，直到分配了非空插件。
+- en: 24.2 Managing User Accounts
+  id: totrans-30
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 24.2 管理用户帐户
+- en: Problem
+  id: totrans-31
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You are responsible for setting up accounts on your MySQL server.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您负责在 MySQL 服务器上设置帐户。
+- en: Solution
+  id: totrans-33
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Learn to use the account-management SQL statements.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 学习使用帐户管理的 SQL 语句。
+- en: Discussion
+  id: totrans-35
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'It’s possible to modify the grant tables in the `mysql` database directly with
+    SQL statements such as `INSERT` or `UPDATE`, but the MySQL account-management
+    statements are more convenient. This section describes their use and covers these
+    topics:'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以直接使用 SQL 语句（如 `INSERT` 或 `UPDATE`）修改 `mysql` 数据库中的授权表，但是使用 MySQL 的帐户管理语句更为方便。本节描述了它们的使用，并涵盖了以下主题：
+- en: Creating accounts (`CREATE` `USER`, `SET` `PASSWORD` `ALTER USER`)
+  id: totrans-37
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 创建帐户（`CREATE` `USER`，`SET` `PASSWORD`，`ALTER USER`）
+- en: Assigning and checking privileges (`GRANT`, `REVOKE`, `SHOW` `GRANTS`)
+  id: totrans-38
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 分配和检查权限（`GRANT`，`REVOKE`，`SHOW` `GRANTS`）
+- en: Removing and renaming accounts (`DROP` `USER`, `RENAME` `USER`)
+  id: totrans-39
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 移除和重命名帐户（`DROP` `USER`，`RENAME` `USER`）
+- en: Creating accounts
+  id: totrans-40
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 创建帐户
+- en: 'To create an account, use the `CREATE` `USER` statement, which creates a row
+    in the `mysql.user` table. But before you do so, decide these three things:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要创建帐户，请使用 `CREATE` `USER` 语句，在 `mysql.user` 表中创建一行。但在执行此操作之前，请决定以下三件事：
+- en: The account name, expressed in `'`*`user_name`*`'@'`*`host_name`*`'` format
+    naming the user and the host from which the user will connect
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 帐户名以 `'`*`user_name`*`'@'`*`host_name`*`'` 格式表示，命名了用户和用户将连接的主机
+- en: The account password
+  id: totrans-43
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 帐户密码
+- en: The authentication plug-in the server should execute when clients attempt to
+    use the account
+  id: totrans-44
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 客户端尝试使用帐户时服务器应执行的身份验证插件
+- en: 'Authentication plug-ins use hashing to encrypt passwords for storage and transmission.
+    MySQL has several built-in plug-ins from which to choose:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 身份验证插件使用哈希算法加密密码以进行存储和传输。MySQL 提供了几个内置的插件供选择：
+- en: '`mysql_native_password` implements the default password hashing method before
+    version 8.0.'
+  id: totrans-46
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`mysql_native_password` 在 8.0 版本之前实现了默认的密码哈希方法。'
+- en: '`sha256_password` authenticates using SHA-256 password hash values, which are
+    cryptographically more secure than hashes generated by `mysql_native_password`.
+    This plug-in is available as of MySQL 5.6.6 and deprecated in version 8.0 in favor
+    to its improved version `caching_sha2_password`. It provides security beyond that
+    afforded by `mysql_native_password`, but additional setup is required to use it.
+    (Clients must connect using SSL or provide an RSA certificate.)'
+  id: totrans-47
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`sha256_password` 使用 SHA-256 密码哈希值进行身份验证，这比由 `mysql_native_password` 生成的哈希在密码学上更安全。该插件从
+    MySQL 5.6.6 开始可用，在 8.0 版本中被其改进版本 `caching_sha2_password` 取代。它提供比 `mysql_native_password`
+    更高的安全性，但需要额外的设置才能使用（客户端必须使用 SSL 连接或提供 RSA 证书）。'
+- en: '`caching_sha2_password` is similar to `sha256_password` but uses caching on
+    the server side for better performance. This is default authentication plugin
+    since MySQL 8.0.'
+  id: totrans-48
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`caching_sha2_password` 类似于 `sha256_password`，但在服务器端使用缓存以获得更好的性能。这是 MySQL 8.0
+    以后的默认身份验证插件。'
+- en: 'The `CREATE` `USER` statement is commonly used in one of these forms:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`CREATE` `USER` 语句通常以以下形式之一使用：'
+- en: '[PRE1]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: The first syntax creates the account and sets its password with a single statement.
+    It also assigns an authentication plug-in implicitly to the plug-in named by the
+    `--default-authentication-plugin` setting (which is `caching_sha2_password`, unless
+    you change it at server startup).
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一个语法用单个语句创建账户并设置其密码。它还隐式地将认证插件分配给由`--default-authentication-plugin`设置指定的插件（默认为`caching_sha2_password`，除非在服务器启动时更改）。
+- en: To assign privileges to the new account, which has none initially, use the `GRANT`
+    statement described later in this section.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要为初始没有任何权限的新账户分配权限，请使用本节后面描述的`GRANT`语句。
+- en: '`CREATE` `USER` fails if the account already exists.'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果账户已经存在，则`CREATE` `USER`会失败。
+- en: Assigning and checking privileges
+  id: totrans-54
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 分配和检查权限
+- en: Suppose that you have just created an account named `'user1'@'localhost'`. You
+    can assign privileges to it with `GRANT`, remove privileges from it with `REVOKE`,
+    and check its privileges with `SHOW` `GRANTS`.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您刚刚创建了一个名为`'user1'@'localhost'`的账户。您可以使用`GRANT`为其分配权限，使用`REVOKE`撤销其权限，并使用`SHOW`
+    `GRANTS`检查其权限。
+- en: '`GRANT` has this syntax:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`GRANT`的语法如下：'
+- en: '[PRE2]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Here, *`account`* names the account to be granted the privileges, *`privileges`*
+    indicates what they are, and *`scope`* indicates the privilege scope, or level
+    at which they apply. The *`privileges`* value can be `ALL` (or `ALL` `PRIVILEGES`)
+    to specify all privileges available at the given level, or a comma-separated list
+    of one or more privilege names such as `SELECT` or `CREATE`. (For a full discussion
+    of available privileges and `GRANT` syntax not shown here, see the *MySQL Reference
+    Manual.*)
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，*`account`*表示要授予权限的账户，*`privileges`*表示权限内容，*`scope`*表示权限的范围或适用级别。*`privileges`*的值可以是`ALL`（或`ALL`
+    `PRIVILEGES`）以指定在给定级别上所有可用的权限，或是一个逗号分隔的一个或多个权限名称，如`SELECT`或`CREATE`。（有关可用权限和未在此处显示的`GRANT`语法的全面讨论，请参阅*MySQL参考手册*。）
+- en: The following examples illustrate the syntax for granting privileges at each
+    level.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下示例说明了在每个级别授予权限的语法。
+- en: 'Granting privileges globally enables the account to perform administrative
+    operations or operations on any database:'
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在全局级别授予权限使得该账户能够执行管理操作或在任何数据库上执行操作：
+- en: '[PRE3]'
+  id: totrans-61
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Granting privileges at the database level enables the account to perform operations
+    on objects within the named database:'
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在数据库级别授予权限使得该账户能够在指定数据库中的对象上执行操作：
+- en: '[PRE4]'
+  id: totrans-63
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'Granting privileges at the table level enables the account to perform operations
+    on the named table:'
+  id: totrans-64
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在表级别授予权限使得该账户能够在指定表上执行操作：
+- en: '[PRE5]'
+  id: totrans-65
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Granting privileges at the column level enables the account to perform operations
+    on the named table column:'
+  id: totrans-66
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在列级别授予权限使得该账户能够在指定表列上执行操作：
+- en: '[PRE6]'
+  id: totrans-67
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'Granting privileges at the procedure level enables the account to perform operations
+    on the named stored procedure:'
+  id: totrans-68
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在过程级别授予权限使得该账户能够在指定存储过程上执行操作：
+- en: '[PRE7]'
+  id: totrans-69
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Use `FUNCTION` rather than `PROCEDURE` if the routine is a stored function.
+  id: totrans-70
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如果例程是存储函数，请使用`FUNCTION`而不是`PROCEDURE`。
+- en: 'To verify the privilege assignments, use `SHOW` `GRANTS`:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要验证权限分配，请使用`SHOW` `GRANTS`：
+- en: '[PRE8]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: To see your own privileges, omit the `FOR` clause.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看自己的权限，请省略`FOR`子句。
+- en: '`REVOKE` syntax is generally similar to `GRANT` but uses `FROM` rather than
+    `TO`:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`REVOKE`语法通常与`GRANT`类似，但使用`FROM`而不是`TO`：'
+- en: '[PRE9]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Thus, to remove the privileges just granted to `''user1''@''localhost''`, use
+    these `REVOKE` statements (and `SHOW` `GRANTS` to verify that they were removed):'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，要撤销刚刚授予给`'user1'@'localhost'`的权限，请使用这些`REVOKE`语句（并使用`SHOW` `GRANTS`来验证它们是否已被移除）：
+- en: '[PRE10]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: Removing accounts
+  id: totrans-78
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 删除账户
+- en: 'To get rid of an account, use the `DROP` `USER` statement:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要删除一个账户，请使用`DROP` `USER`语句：
+- en: '[PRE11]'
+  id: totrans-80
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: The statement removes all rows associated with the account in all grant tables;
+    you need not use `REVOKE` to remove its privileges first. An error occurs if the
+    account does not exist.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该语句从所有授权表中移除与账户关联的所有行；您无需使用`REVOKE`先删除其权限。如果账户不存在，则会发生错误。
+- en: Renaming accounts
+  id: totrans-82
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 重命名账户
+- en: 'To change an account name, use `RENAME` `USER`, specifying the current and
+    new names:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要更改账户名称，请使用`RENAME` `USER`，指定当前名称和新名称：
+- en: '[PRE12]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: An error occurs if the current account does not exist or the new account already
+    exists.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果当前账户不存在或新账户已经存在，则会发生错误。
+- en: 24.3 Implementing a Password Policy
+  id: totrans-86
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 24.3 实施密码策略
+- en: Problem
+  id: totrans-87
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to ensure that MySQL accounts do not use weak passwords.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望确保MySQL账户不使用弱密码。
+- en: Solution
+  id: totrans-89
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the `validate_password` plug-in to implement a password policy. New passwords
+    must satisfy the policy, whether those chosen by the DBA for new accounts or by
+    existing users changing their password.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`validate_password`插件实施密码策略。新密码必须符合策略，无论是由DBA为新帐户选择还是由现有用户更改密码。
+- en: Discussion
+  id: totrans-91
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: This technique requires the `validate_password` plug-in to be enabled. For plug-in
+    installation instructions, see [Recipe 22.2](ch22.xhtml#nch-admin-plugin-interface).
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此技术要求启用`validate_password`插件。有关插件安装说明，请参见[Recipe 22.2](ch22.xhtml#nch-admin-plugin-interface)。
+- en: 'When `validate_password` is enabled, it exposes a set of system variables that
+    enable you to configure it. These are the default values:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当启用`validate_password`时，它会暴露一组系统变量，使您能够对其进行配置。这些是默认值：
+- en: '[PRE13]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'Suppose that you want to implement a policy that enforces these requirements
+    for passwords:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您希望实施一个策略，强制执行这些密码要求：
+- en: At least 10 characters long
+  id: totrans-96
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 至少为10个字符长
+- en: Contains uppercase and lowercase characters
+  id: totrans-97
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 包含大写和小写字符
+- en: Contains at least two digits
+  id: totrans-98
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 包含至少两个数字
+- en: Contains at least one special (nonalphanumeric) character
+  id: totrans-99
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 包含至少一个特殊（非字母数字）字符
+- en: 'To put that policy in place, start the server with options that enable the
+    plug-in and set the values of the system variables that configure the policy requirements.
+    For example, put these lines in your server option file:'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要实施该策略，可以在服务器选项文件中添加启用插件并设置配置策略要求的值的选项。例如，将以下行放入您的服务器选项文件中：
+- en: '[PRE14]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'After starting the server, verify the settings:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 启动服务器后，请验证这些设置：
+- en: '[PRE15]'
+  id: totrans-103
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Now the `validate_password` plug-in prevents assigning passwords too weak for
+    the policy:'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在`validate_password`插件防止分配太弱的密码：
+- en: '[PRE16]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'The preceding instructions leave the `validate_password_policy` system variable
+    set to its default value (`MEDIUM`), but you can change it to control how the
+    server tests passwords:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前述说明使`validate_password_policy`系统变量保持其默认值（`MEDIUM`），但您可以更改以控制服务器如何测试密码：
+- en: '`MEDIUM` enables tests for password length and the number of numeric, uppercase/lowercase,
+    and special characters.'
+  id: totrans-107
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`MEDIUM`启用密码长度和数字、大写/小写字符以及特殊字符的测试。'
+- en: To be less rigorous, set the policy to `LOW`, which enables only the length
+    test. To also permit shorter passwords, decrease the required length (`validate_password_length`).
+  id: totrans-108
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要减少严格性，将策略设置为`LOW`，仅启用长度测试。还可以允许更短的密码，减少所需长度（`validate_password_length`）。
+- en: To be more rigorous, set the policy to `STRONG`, which is like `MEDIUM` but
+    also enables you to have passwords checked against a dictionary file, to prevent
+    use of passwords that match any word in the file. Comparisons are not case sensitive.
+  id: totrans-109
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要更严格地设置策略为`STRONG`，类似于`MEDIUM`但还允许您根据字典文件检查密码，以防止使用文件中的任何单词作为密码。比较不区分大小写。
+- en: To use a dictionary file, set the value of `validate_password_dictionary_file`
+    to the filename at server startup. The file should contain lowercase words, one
+    per line. MySQL distributions include a *dictionary.txt* file in the *share* directory
+    that you can use, and Unix systems often have a */usr/share/dict/words* file.
+  id: totrans-110
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 要使用字典文件，请在服务器启动时将`validate_password_dictionary_file`的值设置为文件名。该文件应包含每行一个小写单词。MySQL发行版包括一个*dictionary.txt*文件在*share*目录中，您可以使用，Unix系统通常有一个*/usr/share/dict/words*文件。
+- en: Putting a password policy in place has no effect on existing passwords. To require
+    users to choose a new password that satisfies the policy, expire their current
+    password (see [Recipe 24.5](#nch-security-password-expiration)).
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 设定密码策略对现有密码没有影响。若要求用户选择符合策略的新密码，需将当前密码过期（见[Recipe 24.5](#nch-security-password-expiration)）。
+- en: 24.4 Checking Password Strength
+  id: totrans-112
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 24.4 检查密码强度
+- en: Problem
+  id: totrans-113
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to assign or change a password but verify first that it’s not weak.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要分配或更改密码，但首先验证它是否强密码。
+- en: Solution
+  id: totrans-115
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the `VALIDATE_PASSWORD_STRENGTH()` function.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`VALIDATE_PASSWORD_STRENGTH()`函数。
+- en: Discussion
+  id: totrans-117
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'The `validate_password` plug-in not only implements policy for new passwords,
+    it also provides a SQL function, `VALIDATE_PASSWORD_STRENGTH()`, that enables
+    strength testing of prospective passwords. Uses for this function include:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`validate_password`插件不仅实施新密码的策略，还提供了一个SQL函数，`VALIDATE_PASSWORD_STRENGTH()`，可用于测试潜在密码的强度。此函数的用途包括：'
+- en: An administrator wants to check passwords to be assigned to new accounts.
+  id: totrans-119
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 管理员希望检查分配给新帐户的密码。
+- en: An individual user wants to choose a new password but seeks assurance in advance
+    how strong it is.
+  id: totrans-120
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个个体用户想要选择一个新密码，但事先希望得到它的强度保证。
+- en: To use `VALIDATE_PASSWORD_STRENGTH()`, the `validate_password` plug-in must
+    be enabled. For plug-in installation instructions, see [Recipe 22.2](ch22.xhtml#nch-admin-plugin-interface).
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用`VALIDATE_PASSWORD_STRENGTH()`，必须启用`validate_password`插件。有关插件安装说明，请参见[Recipe
+    22.2](ch22.xhtml#nch-admin-plugin-interface)。
+- en: '`VALIDATE_PASSWORD_STRENGTH()` returns a value from 0 (weak) to 100 (strong):'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`VALIDATE_PASSWORD_STRENGTH()`返回一个从0（弱）到100（强）的值：'
+- en: '[PRE17]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 24.5 Expiring Passwords
+  id: totrans-124
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 24.5 密码过期
+- en: Problem
+  id: totrans-125
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want users to pick a new MySQL password.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望用户选择一个新的MySQL密码。
+- en: Solution
+  id: totrans-127
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: The `ALTER` `USER` statement expires passwords.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ALTER USER`语句会使密码过期。'
+- en: Discussion
+  id: totrans-129
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'MySQL 5.6.7 and up provides an `ALTER` `USER` statement that enables an administrator
+    to expire an account’s password:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 5.6.7及以上版本提供了一个`ALTER USER`语句，使管理员可以使账户的密码过期：
+- en: '[PRE18]'
+  id: totrans-131
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Here are some uses for password expiration:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里有一些密码过期的用途：
+- en: 'You can implement a policy that new users must select a new password when first
+    connecting: immediately expire the password for each new account you create.'
+  id: totrans-133
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以实施一个策略，要求新用户在首次连接时选择一个新密码：立即使每个新创建的账户的密码过期。
+- en: If you impose a stricter policy on acceptable passwords (see [Recipe 24.3](#nch-security-password-policy)),
+    you can expire all existing passwords to require each user to choose a new one
+    that meets the more stringent requirements.
+  id: totrans-134
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果您对可接受密码施加了更严格的策略（参见[Recipe 24.3](#nch-security-password-policy)），您可以使所有现有密码过期，要求每个用户选择一个符合更严格要求的新密码。
+- en: '`ALTER` `USER` affects a single account. It works by setting the `password_expired`
+    column to `Y` for the appropriate `mysql.user` row. To <q>cheat</q> and expire
+    passwords for all nonanonymous accounts at once, do this (anonymous users cannot
+    reset their password, so expiring those would have the same effect as removing
+    these accounts from):'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ALTER USER` 影响单个账户。它通过将适当的`mysql.user`行的`password_expired`列设置为`Y`来工作。为了 <q>欺骗</q>
+    并立即使所有非匿名账户的密码过期，请执行以下操作（匿名用户无法重置其密码，因此使这些用户的密码过期会产生相同效果）：'
+- en: '[PRE19]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'Alternatively, to affect all accounts but avoid modifying the grant tables
+    directly, use a stored procedure that loops through all accounts and executes
+    `ALTER` `USER` for each:'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，为了影响所有账户但避免直接修改授权表，使用一个存储过程，循环遍历所有账户并为每个执行`ALTER USER`：
+- en: '[PRE20]'
+  id: totrans-138
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: The procedure requires the `exec_stmt()` helper routine (see [Recipe 11.6](ch11.xhtml#nch-routines-dynamic-sql-helpers)).
+    Scripts to create these routines are located in the *routines* directory of the
+    `recipes` distribution.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该过程需要`exec_stmt()`辅助程序（参见[Recipe 11.6](ch11.xhtml#nch-routines-dynamic-sql-helpers)）。用于创建这些例程的脚本位于`recipes`分发的*routines*目录中。
+- en: 24.6 Assigning Yourself a New Password
+  id: totrans-140
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 24.6 分配一个新密码给自己
+- en: Problem
+  id: totrans-141
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to change your password.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要更改您的密码。
+- en: Solution
+  id: totrans-143
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use `ALTER USER` or `SET PASSWORD` statements.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`ALTER USER`或`SET PASSWORD`语句。
+- en: Discussion
+  id: totrans-145
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'To assign yourself a new password, use the `SET PASSWORD` statement:'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要分配一个新密码给自己，请使用`SET PASSWORD`语句：
+- en: '[PRE21]'
+  id: totrans-147
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: '`SET` `PASSWORD` permits a `FOR` clause that enables you to specify which account
+    gets the new password:'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SET PASSWORD` 允许使用`FOR`子句，您可以指定哪个账户获得新密码：'
+- en: '[PRE22]'
+  id: totrans-149
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: This latter syntax is primarily for DBAs because it requires the `UPDATE` privilege
+    for the `mysql` database.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种后续语法主要面向DBA，因为它需要对`mysql`数据库具有`UPDATE`权限。
+- en: 'Alternatively, use `ALTER USER` statement:'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，使用`ALTER USER`语句：
+- en: '[PRE23]'
+  id: totrans-152
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'If you want to use `ALTER USER` statement to assign yourself a password you
+    can check your account name first by running function *CURRENT_USER*:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您想要使用`ALTER USER`语句为自己分配密码，您可以首先通过运行函数*CURRENT_USER*检查您的账户名：
+- en: '[PRE24]'
+  id: totrans-154
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: To check the strength of a password you’re considering, use the `VALIDATE_PASSWORD_STRENGTH()`
+    function (see [Recipe 24.4](#nch-security-password-strength)).
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要检查您考虑的密码的强度，请使用`VALIDATE_PASSWORD_STRENGTH()`函数（参见[Recipe 24.4](#nch-security-password-strength)）。
+- en: 24.7 Resetting an Expired Password
+  id: totrans-156
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 24.7 重置已过期密码
+- en: Problem
+  id: totrans-157
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You cannot use MySQL because your DBA expired your password.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于您的DBA使您的密码过期，您无法使用MySQL。
+- en: Solution
+  id: totrans-159
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Assign yourself a new password.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分配一个新密码给自己。
+- en: Discussion
+  id: totrans-161
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'If the MySQL administrator has expired your password, MySQL will let you connect,
+    but not do much of anything else:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果MySQL管理员已经使您的密码过期，MySQL会允许您连接，但不能做其他任何事情：
+- en: '[PRE25]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'If you see that message, reset your password so that you can work normally
+    again:'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您看到该消息，请重置您的密码，以便您可以正常工作：
+- en: '[PRE26]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: Technically, MySQL does not require a *new* password to replace an expired password,
+    so you can assign yourself your current password to unexpire it. The exception
+    is that if the password policy has become more restrictive and your current password
+    no longer satisfies it, a stronger password must be chosen.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从技术上讲，MySQL 不要求用一个 *新* 密码替换过期的密码，因此你可以用当前的密码来取消过期状态。唯一的例外是，如果密码策略变得更加严格，你当前的密码不再符合条件，就必须选择一个更强的密码。
+- en: For more information about changing your password, see [Recipe 24.6](#nch-security-assigning-password).
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于如何修改密码的更多信息，请参见 [Recipe 24.6](#nch-security-assigning-password)。
+- en: 24.8 Finding and Removing Anonymous Accounts
+  id: totrans-168
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 24.8 查找和移除匿名账户
+- en: Problem
+  id: totrans-169
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to ensure that your MySQL server can be used only by accounts associated
+    with specific usernames.
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你希望确保你的 MySQL 服务器只能被与特定用户名关联的账户使用。
+- en: Solution
+  id: totrans-171
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Identify and remove anonymous accounts.
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 识别并移除匿名账户。
+- en: Discussion
+  id: totrans-173
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'An <q>anonymous</q> account is one that has an empty user part in the account
+    name, such as `''''@''localhost''`. An empty user matches any name because the
+    purpose of an anonymous account is to permit anyone who knows its password to
+    connect from the named host (`localhost` in this case). This is a convenience
+    because the DBA need not set up individual accounts for separate users. But there
+    are security implications as well:'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个 <q>匿名</q> 账户是指账户名中用户部分为空，例如 `''@'localhost'`。空用户匹配任何名称，因为匿名账户的目的是允许知道其密码的任何人从指定的主机连接（在这种情况下是
+    `localhost`）。这样做是为了方便，因为数据库管理员不需要为不同的用户设置单独的账户。但这也存在安全风险：
+- en: Such accounts often are given no password, enabling their use with no authentication
+    at all.
+  id: totrans-175
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 这类账户通常没有密码，使得它们可以在无需任何认证的情况下使用。
+- en: You cannot associate database activity with specific users (for example, by
+    checking the server query log or examining `SHOW` `PROCESSLIST` output), making
+    it more difficult to tell who is doing what.
+  id: totrans-176
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你无法将数据库活动与特定用户关联起来（例如，通过检查服务器查询日志或检查 `SHOW PROCESSLIST` 输出），这使得更难以确定谁在执行何种操作。
+- en: 'If the preceding points persuade you that anonymous accounts are not a good
+    thing, use the following instructions to identify and remove them:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果以上几点让你确信匿名账户并不是好事，请使用以下说明来识别并移除它们：
+- en: 'The `User` column is empty in the `mysql.user` rows for anonymous accounts,
+    so you can identify them like this:'
+  id: totrans-178
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对于匿名账户，`mysql.user` 行中的 `User` 列为空，因此你可以这样识别它们：
+- en: '[PRE27]'
+  id: totrans-179
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'The `SELECT` output shows two anonymous accounts. Remove each using a `DROP`
+    `USER` statement with the corresponding account name:'
+  id: totrans-180
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`SELECT` 输出显示了两个匿名账户。使用相应的账户名和 `DROP USER` 语句分别移除它们：'
+- en: '[PRE28]'
+  id: totrans-181
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 24.9 Modifying <q>Any Host</q> and <q>Many Host</q> Accounts
+  id: totrans-182
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 24.9 修改 <q>任何主机</q> 和 <q>多主机</q> 账户
+- en: Problem
+  id: totrans-183
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to ensure that MySQL accounts cannot be used from an overly broad set
+    of hosts.
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你希望确保 MySQL 账户不能从过于广泛的主机使用。
+- en: Solution
+  id: totrans-185
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Find and fix accounts containing `%` or `_` in the host part.
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查找和修复主机部分包含 `%` 或 `_` 的账户。
+- en: Discussion
+  id: totrans-187
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: The host part of MySQL account names can contain the SQL pattern characters
+    `%` and `_` (see [Recipe 7.10](ch07.xhtml#nch-strings-strings-pat-sql)). These
+    names match client connection attempts from any host that matches the pattern.
+    For example, the account `'user1'@'%'` permits `user1` to connect from any host
+    whatsoever, and `'user2'@'%.example.com'` permits `user2` to connect from any
+    host in the `example.com` domain.
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 账户名的主机部分可以包含 SQL 模式字符 `%` 和 `_`（见 [Recipe 7.10](ch07.xhtml#nch-strings-strings-pat-sql)）。这些名称匹配任何与模式匹配的主机的客户端连接尝试。例如，账户
+    `'user1'@'%'` 允许 `user1` 从任何主机连接，而 `'user2'@'%.example.com'` 允许 `user2` 从 `example.com`
+    域中的任何主机连接。
+- en: Patterns in the host part of account names provide a convenience that enables
+    a DBA to create an account that permits connections from multiple hosts. They
+    correspondingly increase security risks by increasing the number of hosts from
+    which intruders can attempt to connect. If you consider this a concern, identify
+    the accounts and either remove them or change the host part to be more specific.
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 账户名中主机部分的模式提供了便利，使得数据库管理员可以创建一个允许从多个主机连接的账户。但这同时增加了安全风险，因为这样做会增加入侵者尝试连接的主机数量。如果你认为这是一个问题，识别这些账户并删除它们或将主机部分修改为更具体的。
+- en: 'There are several ways to find accounts with `%` or `_` in the host part. Here
+    are two:'
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有几种方法可以查找在主机部分包含 `%` 或 `_` 的账户。以下是两种方法：
+- en: '[PRE29]'
+  id: totrans-191
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'The `LIKE` expression is more complex because we must look for each pattern
+    character separately and escape it to search for literal instances. The `REGEXP`
+    expression requires no escaping because those characters are not special in regular
+    expressions, and a character class permits both to be found with a single pattern.
+    So let’s use that expression:'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LIKE` 表达式更复杂，因为我们必须单独查找每个模式字符并转义它以搜索文字实例。`REGEXP` 表达式不需要转义，因为这些字符在正则表达式中不是特殊字符，字符类允许使用单个模式找到这两个。因此，让我们使用该表达式：'
+- en: 'Identify pattern-host accounts in the `mysql.user` table like this:'
+  id: totrans-193
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在 `mysql.user` 表中如此识别模式主机账户：
+- en: '[PRE30]'
+  id: totrans-194
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'To remove an identified account, use `DROP` `USER`:'
+  id: totrans-195
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 要移除已识别的账户，使用 `DROP` `USER`：
+- en: '[PRE31]'
+  id: totrans-196
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'Alternatively, rename an account to make the host part more specific:'
+  id: totrans-197
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 或者，重命名账户以使主机部分更具体：
+- en: '[PRE32]'
+  id: totrans-198
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 24.10 Using TLS (SSL)
+  id: totrans-199
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 24.10 使用 TLS（SSL）
+- en: Problem
+  id: totrans-200
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to encrypt traffic between MySQL client and the server.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望在 MySQL 客户端和服务器之间加密流量。
+- en: Solution
+  id: totrans-202
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use TLS (Transport Layer Security) protocol.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 TLS（传输层安全）协议。
+- en: Discussion
+  id: totrans-204
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL does not use anything additional to the standard TCP protocol to encrypt
+    traffic between the client and the server. Therefore, if someone wants to read
+    data, sent in either direction, they can easily do it with help of *tcpdump* and
+    similar tools. Any sensitive information, such as user passwords, or stored credit
+    card numbers, could be exposed. To prevent this, MySQL supports TLS protocol to
+    secure communications.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 在客户端和服务器之间加密流量时，并不使用除标准 TCP 协议外的任何其他内容。因此，如果有人想要读取传输的数据，无论是从客户端到服务器还是反过来，他们可以轻松地使用
+    *tcpdump* 和类似工具完成。任何敏感信息，比如用户密码或存储的信用卡号码，都可能被泄露。为了防止这种情况发生，MySQL 支持 TLS 协议来保护通信。
+- en: Note
+  id: totrans-206
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Modern versions of MySQL use TLS protocol to encrypt traffic between the client
+    and the server. However, due to historical reasons, configuration options and
+    User Reference Manual often refer to TLS as SSL (Secure Socket Layer) even having
+    that the latter is not used anymore, because its encryption is weak. In this book
+    we will use the term TLS in the text whenever is possible.
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现代版本的 MySQL 使用 TLS 协议来加密客户端和服务器之间的流量。然而，由于历史原因，配置选项和用户参考手册通常将 TLS 称为 SSL（安全套接字层），尽管后者已不再使用，因为其加密较弱。在本书中，我们将尽可能在文本中使用
+    TLS 这一术语。
+- en: 'To secure traffic between the MySQL client and the server you need:'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在 MySQL 客户端和服务器之间保护流量，您需要：
+- en: On the server
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在服务器端
+- en: Enable `ssl` option. This is the default value and you only need to ensure that
+    it is not disabled in the configuraiton file.
+  id: totrans-210
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 启用 `ssl` 选项。这是默认值，您只需确保在配置文件中未禁用它。
+- en: The Certificate Authority (CA) file that could be used to verify certificates.
+    It could be a single file, specified by the option `ssl_ca` or a path to a directory,
+    containing multiple such files, specified by the option `ssl_capath`.
+  id: totrans-211
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 可用于验证证书的证书颁发机构（CA）文件。它可以是单个文件，由 `ssl_ca` 选项指定，或者是包含多个此类文件的目录路径，由 `ssl_capath`
+    选项指定。
+- en: The public key certificate file, specified by the option `ssl_cert`. This certificate
+    will be sent to the client to authenticate against the client’s Certificate Authority.
+  id: totrans-212
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 由 `ssl_cert` 选项指定的公钥证书文件。此证书将发送给客户端，用于对抗客户端的证书颁发机构进行身份验证。
+- en: The private key, specified by the option `ssl_key`.
+  id: totrans-213
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 由 `ssl_key` 选项指定的私钥。
+- en: On the client
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在客户端
+- en: 'Specify for the option `ssl-mode` one of the following values:'
+  id: totrans-215
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 为 `ssl-mode` 选项指定以下值之一：
+- en: '`PREFERRED`'
+  id: totrans-216
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`PREFERRED`'
+- en: To establish an encrypted connection if the server supports TLS and fail back
+    to the unencrypted if it does not. This is the default value.
+  id: totrans-217
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如果服务器支持 TLS，则建立加密连接，并在不支持时回退到未加密连接。这是默认值。
+- en: '`REQUIRED`'
+  id: totrans-218
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`REQUIRED`'
+- en: To establish an encrypted connection if the server supports TLS and fail connection
+    attempt if it does not.
+  id: totrans-219
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如果服务器支持 TLS，则建立加密连接，并在不支持时失败连接尝试。
+- en: '`VERIFY_CA`'
+  id: totrans-220
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`VERIFY_CA`'
+- en: Performs the same check as `REQUIRED` and additionally verifies the server CA
+    file against the configured CA certificates.
+  id: totrans-221
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 执行与 `REQUIRED` 相同的检查，并额外验证服务器 CA 文件与配置的 CA 证书的一致性。
+- en: '`VERIFY_IDENTITY`'
+  id: totrans-222
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`VERIFY_IDENTITY`'
+- en: Performs the same check as `VERIFY_CA` and additionally performs host name verification.
+    That’s said the server certificate should have client’s host name either in the
+    `"Subject Alternative Name"` or the `"Common Name"` fields.
+  id: totrans-223
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 执行与 `VERIFY_CA` 相同的检查，并额外进行主机名验证。也就是说，服务器证书应在 `"Subject Alternative Name"` 或
+    `"Common Name"` 字段中包含客户端主机名。
+- en: Value `DISABLED` disables TLS connections and should not be used if you want
+    to encrypt client-server traffic.
+  id: totrans-224
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 值`DISABLED`会禁用TLS连接，如果需要加密客户端-服务器流量，则不应使用。
+- en: The Certificate Authority (CA) file that could be used to verify certificates.
+    It could be a single file, specified by the option `ssl_ca` or a path to a directory,
+    containing multiple such files, specified by the option `ssl_capath`.
+  id: totrans-225
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 可用于验证证书的证书颁发机构（CA）文件。可以是单个文件，由选项`ssl_ca`指定，也可以是包含多个此类文件的目录路径，由选项`ssl_capath`指定。
+- en: The public key certificate file, specified by the option `ssl_cert`. This certificate
+    will be sent to the server to authenticate against the server’s Certificate Authority.
+  id: totrans-226
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 由选项`ssl_cert`指定的公钥证书文件。此证书将发送到服务器，用于根据服务器的证书颁发机构进行身份验证。
+- en: The private key, specified by the option `ssl_key`.
+  id: totrans-227
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 由选项`ssl_key`指定的私钥。
+- en: Note
+  id: totrans-228
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: All the Certificate Authority, certificate and key files should be in `PEM`
+    format.
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有的证书颁发机构、证书和密钥文件应该采用`PEM`格式。
+- en: If MySQL Server started with the option `ssl` enabled, but with empty values
+    for other encryption-related options, if will search for the TLS keys and certificates
+    in the data directory. If found, they will be used. Otherwise TLS support will
+    be disabled.
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果MySQL服务器启用了`ssl`选项，但其他与加密相关的选项为空值，则会在数据目录中搜索TLS密钥和证书。如果找到，将使用它们。否则，将禁用TLS支持。
+- en: 'Once you have all these pre-requisites you may test the TLS connection:'
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦您具备所有这些先决条件，可以测试TLS连接：
+- en: '[PRE33]'
+  id: totrans-232
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: MySQL supports options to further restrict TLS connections, such as `ssl-cipher`,
+    requiring to use only specified ciphers. Consult [“Configuring MySQL to Use Encrypted
+    Connections”](https://dev.mysql.com/doc/refman/8.0/en/using-encrypted-connections.html)
+    in the MySQL User Reference Manual for further details.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL支持进一步限制TLS连接的选项，比如`ssl-cipher`，要求只使用指定的加密算法。详细信息请参考MySQL用户参考手册中的[“配置MySQL使用加密连接”](https://dev.mysql.com/doc/refman/8.0/en/using-encrypted-connections.html)。
+- en: Creating Self-Signed Certificates
+  id: totrans-234
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 创建自签名证书
+- en: 'MySQL distribution includes *mysql_ssl_rsa_setup* command that can create self-signed
+    keys and certificates. It invokes *openssl* command and can be used as:'
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL分发包含*mysql_ssl_rsa_setup*命令，可用于创建自签名密钥和证书。它调用*openssl*命令，可以这样使用：
+- en: '[PRE34]'
+  id: totrans-236
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: Upon completetion it creates in the data directory files as listed in the [Table 24-2](#nch-security-security-ssl-files)
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 完成后，将在数据目录中创建以下表中列出的文件 [Table 24-2](#nch-security-security-ssl-files)
+- en: Table 24-2\. Files, created by *mysql_ssl_rsa_setup*
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表24-2\. *mysql_ssl_rsa_setup*创建的文件
+- en: '| File | Description |'
+  id: totrans-239
+  prefs: []
+  type: TYPE_TB
+  zh: '| 文件 | 描述 |'
+- en: '| --- | --- |'
+  id: totrans-240
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `ca.pem` | Self-signed Certificate Authority (CA) |'
+  id: totrans-241
+  prefs: []
+  type: TYPE_TB
+  zh: '| `ca.pem` | 自签名证书颁发机构（CA） |'
+- en: '| `ca-key.pem` | CA private key |'
+  id: totrans-242
+  prefs: []
+  type: TYPE_TB
+  zh: '| `ca-key.pem` | CA私钥 |'
+- en: '| `server-cert.pem` | Server certificate |'
+  id: totrans-243
+  prefs: []
+  type: TYPE_TB
+  zh: '| `server-cert.pem` | 服务器证书 |'
+- en: '| `server-key.pem` | Server key |'
+  id: totrans-244
+  prefs: []
+  type: TYPE_TB
+  zh: '| `server-key.pem` | 服务器密钥 |'
+- en: '| `client-cert.pem` | Client certificate |'
+  id: totrans-245
+  prefs: []
+  type: TYPE_TB
+  zh: '| `client-cert.pem` | 客户端证书 |'
+- en: '| `client-key.pem` | Client key |'
+  id: totrans-246
+  prefs: []
+  type: TYPE_TB
+  zh: '| `client-key.pem` | 客户端密钥 |'
+- en: '| `private_key.pem` | RSA private key to use over unencrypted connection for
+    accounts, authenticated by either `sha256_password` or `caching_sha2_password`
+    plugins |'
+  id: totrans-247
+  prefs: []
+  type: TYPE_TB
+  zh: '| `private_key.pem` | RSA私钥，用于未加密连接的帐户，由`sha256_password`或`caching_sha2_password`插件认证
+    |'
+- en: '| `public_key.pem` | RSA public key to use over unencrypted connection for
+    accounts, authenticated by either `sha256_password` or `caching_sha2_password`
+    plugins |'
+  id: totrans-248
+  prefs: []
+  type: TYPE_TB
+  zh: '| `public_key.pem` | RSA公钥，用于未加密连接的帐户，由`sha256_password`或`caching_sha2_password`插件认证
+    |'
+- en: Keys and certificates, created by the *mysql_ssl_rsa_setup*, are very basic
+    and do not contain such fields as `"Common Name"`. If you want to add these custom
+    values to your TLS files you need to create them manually. We will not include
+    instructions on how to do so in the book, because there are plenty of documentation,
+    available online, including [Creating SSL and RSA Certificates and Keys](https://dev.mysql.com/doc/refman/8.0/en/creating-ssl-rsa-files.html)
+    in the MySQL User Reference Manual. Alternatively you may perform a test run of
+    the *mysql_ssl_rsa_setup* command with option `--verbose` that will print *openssl*
+    commands it executes. You will only need to repeat them with custom options.
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysql_ssl_rsa_setup*创建的密钥和证书非常基础，不包含像“Common Name”这样的字段。如果希望向TLS文件添加这些自定义值，需要手动创建。本书不包含此过程的详细说明，因为网上有大量文档，包括MySQL用户参考手册中的[创建SSL和RSA证书及密钥](https://dev.mysql.com/doc/refman/8.0/en/creating-ssl-rsa-files.html)。或者，您可以使用*mysql_ssl_rsa_setup*命令的`--verbose`选项进行测试运行，它会打印出执行的*openssl*命令。然后您只需重复执行这些命令并加入自定义选项即可。'
+- en: Tip
+  id: totrans-250
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: If you simply want to test how MySQL TLS connections work and do not want to
+    create any new keys and certificates, you may use standard keys and certificates
+    from the [MySQL Test Suite](https://dev.mysql.com/doc/extending-mysql/8.0/en/mysql-test-suite.html),
+    located inside the `mysql-test/std_data` directory of your MySQL installation.
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您只想测试MySQL TLS连接的工作原理，并且不想创建任何新的密钥和证书，您可以使用MySQL安装中`mysql-test/std_data`目录中的[MySQL测试套件](https://dev.mysql.com/doc/extending-mysql/8.0/en/mysql-test-suite.html)中的标准密钥和证书。
+- en: 24.11 Using Roles
+  id: totrans-252
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 24.11 使用角色
+- en: Problem
+  id: totrans-253
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to grant the same set of privileges to different users, but do not
+    want them to share the same user account.
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望将相同的权限集授予不同的用户，但不希望他们共享同一个用户帐户。
+- en: Solution
+  id: totrans-255
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use roles.
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用角色。
+- en: Discussion
+  id: totrans-257
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: When MySQL installation is used by multiple people you may need to give similar
+    privileges to some of them. For example, application users may need access to
+    tables in their application database while administrators may need to execute
+    administrative commands. While you have a single application user or single database
+    administrator you can simply create two user accounts. But when your organization
+    and MySQL usage grows you may need to allow different people to perform the same
+    tasks.
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当多人使用MySQL安装时，您可能需要为其中一些人提供类似的特权。例如，应用程序用户可能需要访问其应用程序数据库中的表，而管理员可能需要执行管理命令。当您只有一个应用程序用户或一个数据库管理员时，可以简单地创建两个用户帐户。但是，当您的组织和MySQL使用增长时，您可能需要允许不同的人执行相同的任务。
+- en: You may resolve such a problem by sharing single user account between different
+    people. But this is insecure for various reasons, including situation when a user
+    leaves the company, and should lose access to the database. Or, if someone from
+    the group leaks their access credentials all the database users are compromised.
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过将单个用户帐户共享给不同的人来解决此类问题。但由于各种原因，包括用户离开公司或应该失去对数据库的访问权限的情况，这种做法是不安全的。或者，如果组中的某人泄露了他们的访问凭据，所有数据库用户都会受到威胁。
+- en: Another solution is to duplicate privilege lists for individual user accounts.
+    While it is more secure it becomes error-prone when you need to add or remove
+    a privilege. Doing it manually for dozens of users may easily lead to mistakes.
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个解决方案是为各个用户帐户复制特权列表。虽然这样更安全，但在需要添加或删除权限时容易出错。对几十个用户手动执行此操作可能很容易导致错误。
+- en: To resolve these drawbacks, MySQL 8.0 introduced roles that are, practically,
+    are the named collections of privileges.
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为解决这些缺点，MySQL 8.0引入了角色，实际上是特权的命名集合。
+- en: You can create a role like any other user account. You just do not need to specify
+    access credentials for it.
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以像创建任何其他用户帐户一样创建角色。您只需不需要为其指定访问凭据。
+- en: '[PRE35]'
+  id: totrans-263
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: In the listing above we created a role `cookbook` that will have access to the
+    cookbook database and a role `admin` that will be used for the database administration.
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上面的列表中，我们创建了一个名为`cookbook`的角色，该角色将访问cookbook数据库，以及一个名为`admin`的角色，用于数据库管理。
+- en: Next step is to assign privileges to our new roles.
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一步是为我们的新角色分配权限。
+- en: '[PRE36]'
+  id: totrans-266
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'Once roles are set up, we can assign them to different users. For example,
+    to give access to the `cookbook` database to users `cbuser`, `sveta` and `alkin`
+    use these commands:'
+  id: totrans-267
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 设置角色后，我们可以将其分配给不同的用户。例如，要将对`cookbook`数据库的访问权限分配给用户`cbuser`、`sveta`和`alkin`，请使用以下命令：
+- en: '[PRE37]'
+  id: totrans-268
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'To grant administrator access to users `paul` and `amelia` use commands:'
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要授予用户`paul`和`amelia`管理员访问权限，请使用以下命令：
+- en: '[PRE38]'
+  id: totrans-270
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'Revoking role access is as easy as granting:'
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 撤销角色访问权限与授予访问权限一样简单：
+- en: '[PRE39]'
+  id: totrans-272
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: See Also
+  id: totrans-273
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 另请参阅
+- en: MySQL supports other operations with roles, such as setting default role for
+    the newly added users or activating and de-activating roles. For additional information
+    about roles in MySQL, see [Using Roles in the MySQL User Reference Manual](https://dev.mysql.com/doc/refman/8.0/en/roles.html).
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL支持其他与角色相关的操作，例如为新添加的用户设置默认角色或激活和停用角色。有关MySQL中角色的更多信息，请参见[MySQL用户参考手册中的使用角色](https://dev.mysql.com/doc/refman/8.0/en/roles.html)。
+- en: 24.12 Using Views to Secure Data Access
+  id: totrans-275
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 24.12 使用视图保护数据访问
+- en: Problem
+  id: totrans-276
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to give users access only to certain query results, but do not want
+    them to see the actual data, stored in the tables.
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望仅允许用户访问某些查询结果，但不希望他们看到存储在表中的实际数据。
+- en: Solution
+  id: totrans-278
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use views.
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用视图。
+- en: Discussion
+  id: totrans-280
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: You may want certain users to be able to get access to the query results, but
+    want to cover real data, stored in the tables. For example, the statistical department
+    may want to know the number of patients in the hospital, their gender and age
+    distribution, and how this data correlates to the recovery rate, but should not
+    have access to actual data of the patients, such as their names, ID numbers or
+    be able to correlate their identity and diagnosis.
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可能希望某些用户能够访问查询结果，但不希望他们访问存储在表中的实际数据。例如，统计部门可能希望了解医院内的患者数量、其性别和年龄分布，以及这些数据与康复率的相关性，但不应访问患者的实际数据，例如他们的姓名、身份证号或能够关联其身份和诊断的信息。
+- en: To achieve this goal you may create a view, querying for certain data and grant
+    specific users access only to this view.
+  id: totrans-282
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要实现此目标，您可以创建一个视图，查询特定数据，并仅为此视图授予特定用户访问权限。
+- en: 'Consider a `patients` table:'
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 考虑一个`patients`表：
+- en: '[PRE40]'
+  id: totrans-284
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: If you want to give access for this data to statistical department you may want
+    to expose access to the `gender`, `age`, `diagnosis`, `result` columns, but want
+    to restrict access to `national_id`, `name`, `surname` and `additional_data`.
+    You also may want to let them know how many days a patient spent in the hospital
+    and in which month and year they arrived, but do not want let them explore actual
+    arriving and departing dates. In other words, restrict access to `date_arrived`
+    and `date_departed` still providing data that could be calculated based on values,
+    stored in these columns.
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您希望为统计部门提供对`gender`、`age`、`diagnosis`、`result`列的访问权限，但希望限制对`national_id`、`name`、`surname`和`additional_data`的访问权限，您还可以让他们了解患者在医院中停留了多少天，以及他们到达的月份和年份，但不想让他们探索实际的到达和离开日期。换句话说，限制对`date_arrived`和`date_departed`的访问，同时提供基于这些列中存储的值计算出的数据。
+- en: 'You can do this by creating a view:'
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过创建视图来实现此目标：
+- en: '[PRE41]'
+  id: totrans-287
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: Then create a user for the statistics department that has read-only access to
+    this view and does not have access to the underlying table.
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后为统计部门创建一个用户，该用户只能对此视图进行只读访问，并且不能访问底层表。
+- en: '[PRE42]'
+  id: totrans-289
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: Now statistics department can login and run analytical queries, such as finding
+    a most frequent diagnosis, or how many patients with such a diagnosis arrived
+    per month.
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在统计部门可以登录并运行分析查询，例如找出最常见的诊断或每月有多少这样的诊断患者到达。
+- en: '[PRE43]'
+  id: totrans-291
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'But they would not be able to access the table data directly:'
+  id: totrans-292
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但他们将无法直接访问表数据：
+- en: '[PRE44]'
+  id: totrans-293
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: Note
+  id: totrans-294
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Views support `SQL SECURITY` clause, allowing to specify security context when
+    executing a view. This clause discussed in detail in [Recipe 24.13](#nch-security-security-routines).
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 视图支持`SQL SECURITY`子句，允许在执行视图时指定安全上下文。有关详细信息，请参见[Recipe 24.13](#nch-security-security-routines)。
+- en: See Also
+  id: totrans-296
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 另请参阅
+- en: For additional information about using views, see [Recipe 5.7](ch05.xhtml#nch-select-select-view).
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 获取有关使用视图的更多信息，请参阅[Recipe 5.7](ch05.xhtml#nch-select-select-view)。
+- en: 24.13 Using Stored Routines to Secure Data Modifications
+  id: totrans-298
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 24.13 使用存储过程来保护数据修改
+- en: Problem
+  id: totrans-299
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to let users to modify their personal data, but want to prevent them
+    from accessing similar data for others.
+  id: totrans-300
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望让用户修改其个人数据，但希望防止他们访问其他人的类似数据。
+- en: Solution
+  id: totrans-301
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use stored routines.
+  id: totrans-302
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用存储过程。
+- en: Discussion
+  id: totrans-303
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: You may want to let users to view and change their own personal information.
+    For example, patients can marry and change surname or decide to add new additional
+    information about themselves, such as address, weight and so on. But you do not
+    want them to see similar information for other patients. In this case restricting
+    access only on the column level would not work.
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可能希望让用户查看和更改自己的个人信息。例如，患者可以结婚、改姓或决定添加关于自己的新附加信息，例如地址、体重等等。但您不希望他们看到其他患者的类似信息。在这种情况下，仅在列级别上限制访问不起作用。
+- en: 'Stored routines support `SQL SECURITY` clause that allows you to specify if
+    you want to execute the routine with access privileges of the `DEFINER`: user
+    that created the procedure or `INVOKER`: user that is currently executing the
+    procedure.'
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储过程支持`SQL SECURITY`子句，允许您指定是否要以创建过程的`DEFINER`用户的访问权限执行该过程，还是以当前执行该过程的`INVOKER`用户的访问权限执行。
+- en: In our case we do not want to grant `INVOKER` any privilege that allows them
+    to access data, stored in the sensitive columns. Therefore we need to grant such
+    privileges to the `DEFINER` of the procedure and specify argument `SQL SECURITY
+    DEFINER`.
+  id: totrans-306
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的情况下，我们不希望授予`INVOKER`访问敏感列中存储的数据的任何特权。因此，我们需要将这些特权授予过程的`DEFINER`，并指定参数`SQL
+    SECURITY DEFINER`。
+- en: Tip
+  id: totrans-307
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: The default value for `SQL SECURITY` is `DEFINER`, therefore this clause could
+    be omitted.
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SQL SECURITY`的默认值为`DEFINER`，因此此子句可以省略。'
+- en: To illustrate this let’s take `patients` table from the previous recipe. But
+    now we will access only columns, containing sensitive data.
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了说明这一点，让我们从上一个示例中获取`patients`表。但现在我们将仅访问包含敏感数据的列。
+- en: '[PRE45]'
+  id: totrans-310
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: First, let’s prepare a user that will be a `DEFINER` for our procedure. We do
+    not want this account to be used by anyone, except the stored routine, so first
+    let’s install `mysql_no_login` authentication plugin.
+  id: totrans-311
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，让我们为我们的存储过程准备一个用户，该用户将作为`DEFINER`。我们不希望任何人使用此帐户，除非是存储过程，所以首先让我们安装`mysql_no_login`认证插件。
+- en: '[PRE46]'
+  id: totrans-312
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: Then let’s create the user account and grant it access on the table `patients`.
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后让我们创建用户帐户，并授予它对`patients`表的访问权限。
+- en: '[PRE47]'
+  id: totrans-314
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: Now let’s create a procedure that will return sensitive data for a patient,
+    identified by `national_id`.
+  id: totrans-315
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们创建一个过程，该过程将返回由`national_id`标识的患者的敏感数据。
+- en: '[PRE48]'
+  id: totrans-316
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: And a procedure that will update the record.
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 和一个更新记录的过程。
+- en: '[PRE49]'
+  id: totrans-318
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: Then, add privileges to execute these procedures to our `DEFINER`.
+  id: totrans-319
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，为我们的`DEFINER`添加执行这些过程的权限。
+- en: '[PRE50]'
+  id: totrans-320
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: Finally, let’s create a user that will use these procedures without any additional
+    privileges.
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，让我们创建一个用户，该用户将在没有任何其他特权的情况下使用这些过程。
+- en: '[PRE51]'
+  id: totrans-322
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: Now let’s login as this user and check how our procedures work.
+  id: totrans-323
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们登录为这个用户，并检查我们的过程如何工作。
+- en: '[PRE52]'
+  id: totrans-324
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: As you see we can change details for the specific patient, identifying them
+    by a national ID while having no access to the data of other patients.
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如您所见，我们可以通过国家身份证号更改特定患者的详细信息，而无需访问其他患者的数据。
+- en: See Also
+  id: totrans-326
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: For additional information about stored routines, see [Chapter 11](ch11.xhtml#nch-routines).
+  id: totrans-327
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关存储过程的更多信息，请参阅[第11章](ch11.xhtml#nch-routines)。

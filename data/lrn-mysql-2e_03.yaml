@@ -1,0 +1,2486 @@
+- en: Chapter 3\. Basic SQL
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第 3 章\. 基本 SQL
+- en: As mentioned in [Chapter 2](ch02.xhtml#CH2_DESIGN), Dr. Edgar F. Codd conceived
+    the relational database model and its normal forms in the early 1970s. In 1974,
+    researchers at IBM’s San Jose lab began work on a major project intended to prove
+    the relational model’s viability, called System R. At the same time, Dr. Donald
+    Chamberlin and his colleagues were also working to define a database language.
+    They developed the Structured English Query Language (SEQUEL), which allowed users
+    to query a relational database using clearly defined English-style sentences.
+    This was later renamed Structured Query Language (SQL), for legal reasons.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如[第 2 章](ch02.xhtml#CH2_DESIGN)所述，Edgar F. Codd 博士在 20 世纪 70 年代初提出了关系数据库模型及其规范形式。1974
+    年，IBM 旧金山实验室的研究人员开始了一个名为 System R 的旨在证明关系模型可行性的重大项目。同时，Donald Chamberlin 博士及其同事们也在努力定义一种数据库语言。他们开发了结构化英语查询语言（SEQUEL），允许用户使用明确定义的英语风格句子查询关系数据库。后来出于法律原因，这一语言被重命名为结构化查询语言（SQL）。
+- en: The first database management systems based on SQL became available commercially
+    by the end of the ’70s. With the growing activity surrounding the development
+    of database languages, standardization emerged to simplify things, and the community
+    settled on SQL. Both the American and international standards organizations (ANSI
+    and ISO) took part in the standardization process, and in 1986 the first SQL standard
+    was approved. The standard was later revised several times, with the names (SQL:1999,
+    SQL:2003, SQL:2008, etc.) indicating the versions released in the corresponding
+    years. We will use the phrase *the SQL standard* or *standard SQL* to mean the
+    current version of the SQL standard at any time.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一批基于 SQL 的数据库管理系统于 70 年代末商业化推出。随着围绕数据库语言开发活动的增加，标准化工作出现以简化事务，并最终社区统一了 SQL。美国和国际标准组织（ANSI
+    和 ISO）参与了标准化过程，并于 1986 年批准了第一个 SQL 标准。标准随后多次修订，版本名称（SQL:1999、SQL:2003、SQL:2008
+    等）表示对应年份发布的版本。我们将使用术语 *SQL 标准* 或 *标准 SQL* 表示任何时间的当前 SQL 标准版本。
+- en: MySQL extends the standard SQL, providing extra features. For example, MySQL
+    implements the [`STRAIGHT_JOIN`](https://oreil.ly/rAHrZ), which is syntax not
+    recognized by other DBMSs.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 扩展了标准 SQL，提供了额外的功能。例如，MySQL 实现了[`STRAIGHT_JOIN`](https://oreil.ly/rAHrZ)，这是其他
+    DBMS 不认可的语法。
+- en: 'This chapter introduces MySQL’s SQL implementation, which we often refer to
+    as the *CRUD* operations: `create`, `read`, `update`, and `delete`. We will show
+    you how to read data from a database with the `SELECT` statement and choose what
+    data to retrieve and in which order it is displayed. We’ll also show you the basics
+    of modifying your databases with the `INSERT` statement to add data, `UPDATE`
+    to change data, and `DELETE` to remove data. Finally, we’ll explain how to use
+    the nonstandard `SHOW TABLES` and `SHOW COLUMNS` statements to explore your database.'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章介绍了 MySQL 的 SQL 实现，我们通常将其称为 *CRUD* 操作：`create`、`read`、`update` 和 `delete`。我们将向您展示如何使用
+    `SELECT` 语句从数据库中读取数据，并选择要检索的数据以及显示顺序。我们还将向您展示如何使用 `INSERT` 语句添加数据，使用 `UPDATE`
+    修改数据，以及使用 `DELETE` 删除数据的基础知识。最后，我们将解释如何使用非标准的 `SHOW TABLES` 和 `SHOW COLUMNS` 语句来探索您的数据库。
+- en: Using the sakila Database
+  id: totrans-5
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用 sakila 数据库
+- en: In [Chapter 2](ch02.xhtml#CH2_DESIGN), we showed you the principles of how to
+    build a database diagram using the ER model. We also introduced the steps you
+    take to convert an ER model to a format that makes sense for constructing a relational
+    database. This section will show you the structure of the MySQL `sakila` database
+    so you can start to get familiar with different database relational models. We
+    won’t explain the SQL statements used to create the database here; that’s the
+    subject of [Chapter 4](ch04.xhtml#CH4_MODIFY).
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如[第 2 章](ch02.xhtml#CH2_DESIGN)所示，我们向您展示了如何使用 ER 模型构建数据库图的原则。我们还介绍了将 ER 模型转换为适合构建关系数据库的格式的步骤。本节将向您展示
+    MySQL `sakila` 数据库的结构，以便您开始熟悉不同的数据库关系模型。我们不会在这里解释用于创建数据库的 SQL 语句；这是[第 4 章](ch04.xhtml#CH4_MODIFY)的主题。
+- en: If you haven’t imported the database yet, follow the steps in [“Entity Relationship
+    Modeling Examples”](ch02.xhtml#BAS-SEC-MODELING-EXAMPLES) to perform the task.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您还没有导入数据库，请按照[“实体关系建模示例”](ch02.xhtml#BAS-SEC-MODELING-EXAMPLES)中的步骤执行该任务。
+- en: 'To choose the `sakila` database as our current database, we will use the `USE`
+    statement. Type the following command:'
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要选择 `sakila` 数据库作为我们当前的数据库，我们将使用 `USE` 语句。输入以下命令：
+- en: '[PRE0]'
+  id: totrans-9
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: '[PRE1]'
+  id: totrans-10
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'You can check which is the active database by typing the **`SELECT DATABASE();`**
+    command:'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过输入**`SELECT DATABASE();`**命令可以查看当前活动的数据库：
+- en: '[PRE2]'
+  id: totrans-12
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: '[PRE3]'
+  id: totrans-13
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Now, let’s explore what tables make up the `sakila` database using the `SHOW
+    TABLES` statement:'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们使用`SHOW TABLES`语句探索构成`sakila`数据库的表格：
+- en: '[PRE4]'
+  id: totrans-15
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: '[PRE5]'
+  id: totrans-16
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'So far, there have been no surprises. Let’s find out more about each of the
+    tables that make up the `sakila` database. First, let’s use the `SHOW COLUMNS`
+    statement to explore the `actor` table (note that the output has been wrapped
+    to fit with the page margins):'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，没有什么意外。让我们更多地了解构成`sakila`数据库的每个表。首先，让我们使用`SHOW COLUMNS`语句来探索`actor`表（请注意，输出已换行以适应页面边距）：
+- en: '[PRE6]'
+  id: totrans-18
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: '[PRE7]'
+  id: totrans-19
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'The `DESCRIBE` keyword is identical to `SHOW COLUMNS FROM`, and we can abbreviate
+    it to just `DESC`, so we can write the previous query as follows:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DESCRIBE`关键字与`SHOW COLUMNS FROM`相同，我们可以缩写为`DESC`，因此可以将前一个查询写成如下形式：'
+- en: '[PRE8]'
+  id: totrans-21
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'The output produced is identical. Let’s examine the table structure more closely.
+    The `actor` table contains four columns, `actor_id`, `first_name`, `last_name`,
+    and `last_update`. We can also extract the types of the columns: a `smallint`
+    for `actor_id`, `varchar(45)` for `first_name` and `last_name`, and `timestamp`
+    for `last_update`. None of the columns accepts `NULL` (empty) value, `actor_id`
+    is the primary key (`PRI`), and `last_name` is the first column of a nonunique
+    index (`MUL`). Don’t worry about the details; all that’s important right now are
+    the column names we will use for the SQL commands.'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 生成的输出相同。让我们更仔细地查看表的结构。`actor`表包含四列，`actor_id`、`first_name`、`last_name`和`last_update`。我们还可以提取列的类型：`actor_id`是`smallint`，`first_name`和`last_name`是`varchar(45)`，`last_update`是`timestamp`。没有任何列接受`NULL`（空）值，`actor_id`是主键（`PRI`），`last_name`是非唯一索引的第一列（`MUL`）。不必担心细节；现在重要的是我们将在SQL命令中使用的列名。
+- en: 'Next let’s explore the `city` table by executing the `DESC` statement:'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，通过执行`DESC`语句来探索`city`表格：
+- en: '[PRE9]'
+  id: totrans-24
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: '[PRE10]'
+  id: totrans-25
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: Note
+  id: totrans-26
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The DEFAULT_GENERATED that you see in the Extra column indicates that this particular
+    column uses a default value. This information is a MySQL 8.0 notation particularity,
+    and it is not present in MySQL 5.7 or MariaDB 10.5.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在“额外”列中看到的`DEFAULT_GENERATED`表示该特定列使用默认值。这是MySQL 8.0的特殊标注，不适用于MySQL 5.7或MariaDB
+    10.5。
+- en: Again, what’s important is getting familiar with the columns in each table,
+    as we’ll make frequent use of these later when we discuss querying.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再次强调的是要熟悉每个表中的列名，因为我们在讨论查询时会频繁使用这些列。
+- en: The next section shows you how to explore the data that MySQL stores in the
+    `sakila` database and its tables.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一节将向您展示如何探索MySQL存储在`sakila`数据库及其表中的数据。
+- en: The SELECT Statement and Basic Querying Techniques
+  id: totrans-30
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: '`SELECT`语句与基本查询技术'
+- en: 'The previous chapters showed you how to install and configure MySQL and use
+    the MySQL command line, and introduced the ER model. Now you’re ready to start
+    learning the SQL language that all MySQL clients use to explore and manipulate
+    data. This section introduces the most commonly used SQL keyword: the `SELECT`
+    keyword. We explain the fundamental elements of style and syntax and the features
+    of the `WHERE` clause, Boolean operators, and sorting (much of this also applies
+    to our later discussions of `INSERT`, `UPDATE`, and `DELETE`). This isn’t the
+    end of our discussion of `SELECT`; you’ll find more in [Chapter 5](ch05.xhtml#CH5_ADV1),
+    where we show you how to use its advanced features.'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前几章向您展示了如何安装和配置MySQL，使用MySQL命令行，并介绍了ER模型。现在您已经准备好开始学习所有MySQL客户端都使用的SQL语言，用于探索和操作数据。本节介绍了最常用的SQL关键字：`SELECT`关键字。我们解释了风格和语法的基本要素以及`WHERE`子句、布尔运算符和排序的特性（这在我们后续讨论`INSERT`、`UPDATE`和`DELETE`时也大多适用）。这不是我们关于`SELECT`讨论的结束；在[第五章](ch05.xhtml#CH5_ADV1)中，我们将展示如何使用其高级功能。
+- en: Single-Table SELECTs
+  id: totrans-32
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 单表查询
+- en: 'The most basic form of `SELECT` reads the data in all rows and columns from
+    a table. Connect to MySQL using the command line and choose the `sakila` database:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最基本的`SELECT`形式从表中读取所有行和列的数据。使用命令行连接到MySQL并选择`sakila`数据库：
+- en: '[PRE11]'
+  id: totrans-34
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: '[PRE12]'
+  id: totrans-35
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Let’s retrieve all of the data in the `language` table:'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们检索`language`表中的所有数据：
+- en: '[PRE13]'
+  id: totrans-37
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: '[PRE14]'
+  id: totrans-38
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: The output has six rows, and each row contains the values for all the columns
+    present in the table. We now know that there are six languages, and we can see
+    the languages, their identifiers, and the last time each language was updated.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出有六行，每行包含表中所有列的值。我们现在知道有六种语言，可以看到语言、它们的标识符以及每种语言的最后更新时间。
+- en: 'A simple `SELECT` statement has four components:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 简单的`SELECT`语句有四个组成部分：
+- en: The keyword `SELECT`.
+  id: totrans-41
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 关键字`SELECT`。
+- en: The columns to be displayed. The asterisk (`*`) symbol is a wildcard character
+    meaning all columns.
+  id: totrans-42
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 要显示的列。星号（`*`）符号是一个通配符，表示所有列。
+- en: The keyword `FROM`.
+  id: totrans-43
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 关键词`FROM`。
+- en: The table name.
+  id: totrans-44
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 表名。
+- en: So in this example, we’ve asked for all columns from the `language` table, and
+    that’s what MySQL has returned to us.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个例子中，我们要求从`language`表中获取所有列，这就是MySQL返回给我们的结果。
+- en: 'Let’s try another simple `SELECT`. This time, we’ll retrieve all columns from
+    the `city` table:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们再试一个简单的`SELECT`。这次，我们将从`city`表中检索所有列：
+- en: '[PRE15]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: '[PRE16]'
+  id: totrans-48
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: There are 600 cities, and the output has the same basic structure as in our
+    first example.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有600个城市，输出与我们第一个例子的基本结构相同。
+- en: This example provides some insight into how the relationships between the tables
+    work. Consider the first row of the results. In the column `country_id`, you will
+    see the value 87\. As you’ll see later, we can check the `country` table to find
+    out that the country with code 87 is Spain. We’ll discuss how to write queries
+    on relationships between tables in [“Joining Two Tables”](#BAS-SEC-JOINS).
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此示例提供了关于表之间关系如何工作的一些见解。考虑结果的第一行。在`country_id`列中，您将看到值87。正如稍后将看到的那样，我们可以检查`country`表，找出代码为87的国家是西班牙。我们将在[“连接两个表”](#BAS-SEC-JOINS)中讨论如何编写关于表之间关系的查询。
+- en: If you look at the complete output, you’ll also see that there are several different
+    cities with the same `country_id`. Having repeated `country_id` values isn’t a
+    problem since we expect a country to have many cities (a one-to-many relationship).
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果查看完整的输出，您还会看到多个具有相同`country_id`的不同城市。重复的`country_id`值不是问题，因为我们期望一个国家有多个城市（一对多关系）。
+- en: You should now feel comfortable choosing a database, listing its tables, and
+    retrieving all of the data from a table using the `SELECT` statement. To practice,
+    you might want to experiment with the other tables in the `sakila` database. Remember
+    that you can use the `SHOW TABLES` statement to find out the table names.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在您应该能够选择数据库，列出其表，并使用`SELECT`语句从表中检索所有数据。为了练习，您可能想尝试在`sakila`数据库中的其他表上进行实验。请记住，您可以使用`SHOW
+    TABLES`语句查找表名。
+- en: Choosing Columns
+  id: totrans-53
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 选择列
+- en: 'Earlier, we used the `*` wildcard character to retrieve all the columns in
+    a table. If you don’t want to display all the columns, it’s easy to be more specific
+    by listing the columns you want, in the order you want them, separated by commas.
+    For example, if you want only the `city` column from the `city` table, you’d type:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 早些时候，我们使用`*`通配符字符检索表中的所有列。如果您不想显示所有列，可以通过按照您想要的顺序以逗号分隔列出所需的列来更具体地操作。例如，如果您只想从`city`表中获取`city`列，您可以输入：
+- en: '[PRE17]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: '[PRE18]'
+  id: totrans-56
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'If you want both the `city` and `city_id` columns, in that order, you’d use:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您想要`city`和`city_id`两列，那么您将按照顺序使用：
+- en: '[PRE19]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: '[PRE20]'
+  id: totrans-59
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'You can even list columns more than once:'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您甚至可以多次列出列：
+- en: '[PRE21]'
+  id: totrans-61
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: '[PRE22]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: Although this may seem pointless, it can be useful when combined with aliases
+    in more advanced queries, as you’ll see in [Chapter 5](ch05.xhtml#CH5_ADV1).
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管这看起来可能毫无意义，但结合在更高级查询中使用别名时，它可以很有用，正如您将在[第5章](ch05.xhtml#CH5_ADV1)中看到的那样。
+- en: 'You can specify database, table, and column names in a `SELECT` statement.
+    This allows you to avoid the `USE` command and work with any database and table
+    directly with `SELECT`; it also helps resolve ambiguities, as we’ll show in [“Joining
+    Two Tables”](#BAS-SEC-JOINS). For example, suppose you want to retrieve the `name`
+    column from the `language` table in the `sakila` database. You can do this with
+    the following command:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以在`SELECT`语句中指定数据库、表和列名。这样可以避免使用`USE`命令，并直接在任何数据库和表上使用`SELECT`；它还有助于解决歧义，正如我们将在[“连接两个表”](#BAS-SEC-JOINS)中展示的那样。例如，假设您想从`sakila`数据库的`language`表中检索`name`列。您可以使用以下命令实现：
+- en: '[PRE23]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: '[PRE24]'
+  id: totrans-66
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: The `sakila.language` component after the `FROM` keyword specifies the `sakila`
+    database and its `language` table. There’s no need to enter **`USE sakila;`**
+    before running this query. This syntax can also be used with other SQL statements,
+    including the `UPDATE`, `DELETE`, `INSERT`, and `SHOW` statements we discuss later
+    in this chapter.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`FROM`关键字后面的`sakila.language`部分指定了`sakila`数据库及其`language`表。在运行此查询之前，无需输入**`USE
+    sakila;`**命令。此语法也可用于其他SQL语句，包括我们稍后在本章讨论的`UPDATE`、`DELETE`、`INSERT`和`SHOW`语句。'
+- en: Selecting Rows with the WHERE Clause
+  id: totrans-68
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用WHERE子句选择行
+- en: This section introduces the `WHERE` clause and explains how to use operators
+    to write expressions. You’ll see these in `SELECT` statements and other statements
+    such as `UPDATE` and `DELETE`; we’ll show you examples later in this chapter.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节介绍 `WHERE` 子句，并解释如何使用运算符编写表达式。你将在 `SELECT` 语句以及其他语句如 `UPDATE` 和 `DELETE` 中看到这些内容；我们稍后在本章中会展示示例。
+- en: WHERE basics
+  id: totrans-70
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: WHERE 基础
+- en: The `WHERE` clause is a powerful tool that allows you to filter which rows are
+    returned from a `SELECT` statement. You use it to return rows that match a condition,
+    such as having a column value that exactly matches a string, a number greater
+    or less than a value, or a string that is a prefix of another. Almost all our
+    examples in this and later chapters contain `WHERE` clauses, and you’ll become
+    very familiar with them.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`WHERE` 子句是一个强大的工具，允许你从 `SELECT` 语句中过滤返回哪些行。你可以使用它来返回满足条件的行，比如具有完全匹配字符串的列值，大于或小于某个值的数字，或者是一个字符串是另一个字符串的前缀。几乎本章和后续章节的所有示例都包含
+    `WHERE` 子句，你会非常熟悉它们。'
+- en: 'The simplest `WHERE` clause is one that exactly matches a value. Consider an
+    example where you want to find out the English language’s details in the `language`
+    table. Here’s what you’d type:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最简单的 `WHERE` 子句是完全匹配一个值的子句。考虑一个例子，你想查找 `language` 表中英语语言的详细信息。你会输入：
+- en: '[PRE25]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: '[PRE26]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: MySQL returns all rows that match your search criteria—in this case, just the
+    one row and all its columns.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 返回所有匹配你搜索条件的行，本例中只返回一个行及其所有列。
+- en: 'Let’s try another exact match example. Suppose you want to find out the first
+    name of the actor with an `actor_id` value of 4 in the `actor` table. You would
+    type:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再试一个精确匹配的例子。假设你想找出 `actor` 表中 `actor_id` 值为 4 的演员的名字。你会输入：
+- en: '[PRE27]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: '[PRE28]'
+  id: totrans-78
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: Here you provide a column and a row, including the column `first_name` after
+    the `SELECT` keyword and specifying the `WHERE actor_id = 4`.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，你提供了一个列和一行，包括在 `SELECT` 关键字之后的列 `first_name` 并指定 `WHERE actor_id = 4`。
+- en: 'If a value matches more than one row, the results will contain all the matches.
+    Suppose you want to see all the cities belonging to Brazil, which has a `country_id`
+    of 15\. You would type in:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果一个值匹配多个行，结果将包含所有匹配项。假设你想查看所有属于 `country_id` 为 15 的巴西的城市，你会输入：
+- en: '[PRE29]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: '[PRE30]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: The results show the names of the 28 cities that belong to Brazil. If we could
+    join the information we get from the `city` table with information we get from
+    the `country` table, we could display the cities’ names with their respective
+    countries. We’ll see how to perform this type of query in [“Joining Two Tables”](#BAS-SEC-JOINS).
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果显示属于巴西的 28 个城市的名称。如果我们能将从 `city` 表获取的信息与从 `country` 表获取的信息连接起来，我们就能显示城市名称及其对应的国家。我们将在
+    [“连接两个表”](#BAS-SEC-JOINS) 中看到如何执行此类查询。
+- en: 'Now let’s retrieve values that belong to a range. Retrieving multiple values
+    is simple for numeric ranges, so let’s start by finding all cities’ names with
+    a `city_id` less than 5\. To do this, execute the following statement:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们检索属于范围的值。对于数值范围，检索多个值很简单，所以让我们从查找所有 `city_id` 小于 5 的城市名称开始。要执行此操作，请执行以下语句：
+- en: '[PRE31]'
+  id: totrans-85
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: '[PRE32]'
+  id: totrans-86
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: For numbers, the frequently used operators are equal (`=`), greater than (`>`),
+    less than (`<`), less than or equal (`<=`), greater than or equal (`>=`), and
+    not equal (`<>` or `!=`).
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于数字，经常使用的运算符包括等于 (`=`)，大于 (`>`)，小于 (`<`)，小于或等于 (`<=`)，大于或等于 (`>=`)，不等于 (`<>`
+    或 `!=`)。
+- en: 'Consider one more example. If you want to find all languages that don’t have
+    a `language_id` of 2, you’d type:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再考虑一个例子。如果你想找出所有没有 `language_id` 为 2 的语言，你会输入：
+- en: '[PRE33]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: '[PRE34]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: The previous output shows the first, third, and all subsequent languages in
+    the table. Note that you can use either the `<>` or `!=` operator for the *not-equal*
+    condition.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的输出显示了表中的第一个、第三个和所有后续语言。请注意，你可以为 *不等于* 条件使用 `<>` 或 `!=` 运算符。
+- en: 'You can use the same operators for strings. By default, string comparisons
+    are not case-sensitive and use the current character set. For example:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于字符串，你可以使用相同的运算符。默认情况下，字符串比较不区分大小写，并使用当前字符集。例如：
+- en: '[PRE35]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: '[PRE36]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'By “not case-sensitive” we mean that `B` and `b` will be considered the same
+    filter, so this query will provide the same result:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: “不区分大小写” 意味着 `B` 和 `b` 将被视为相同的过滤器，因此此查询将提供相同的结果：
+- en: '[PRE37]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: '[PRE38]'
+  id: totrans-97
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'Another common task to perform with strings is to find matches that begin with
+    a prefix, contain a string, or end in a suffix. For example, we might want to
+    find all album names beginning with the word “Retro.” We can do this with the
+    `LIKE` operator in a `WHERE` clause. Let’s see an example where we are searching
+    for a film with a title that contains the word `family`:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个常见的字符串任务是查找以前缀开头、包含字符串或以后缀结尾的匹配项。例如，我们可能想要查找所有以词组 “Retro” 开头的专辑名称。我们可以在 `WHERE`
+    子句中使用 `LIKE` 运算符来实现这一点。让我们看一个例子，我们正在搜索标题包含单词 `family` 的电影：
+- en: '[PRE39]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: '[PRE40]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: Let’s take a look at how this works. The `LIKE` clause is used with strings
+    and means that a match must meet the pattern in the string that follows. In our
+    example, we’ve used `LIKE '%family%'`, which means the string must contain `family`,
+    and it can be preceded or followed by zero or more characters. Most strings used
+    with `LIKE` contain the percentage character (`%`) as a wildcard character that
+    matches all possible strings. You can use it to define a string that ends in a
+    suffix—such as `"%ing"`—or a string that starts with a particular substring, such
+    as `"Corruption%"`.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看看这是如何工作的。`LIKE` 子句用于字符串，并表示匹配必须符合后面的字符串中的模式。在我们的示例中，我们使用了 `LIKE '%family%'`，这意味着字符串必须包含
+    `family`，并且可以在前后包含零个或多个字符。大多数与 `LIKE` 结合使用的字符串包含百分号字符 (`%`) 作为通配符字符，可以匹配所有可能的字符串。你可以用它来定义以后缀结尾的字符串，比如
+    `"%ing"`，或者以特定子串开头的字符串，比如 `"Corruption%"`。
+- en: For example, `"John%"` would match all strings starting with `John`, such as
+    `John Smith` and `John Paul Getty`. The pattern `"%Paul"` matches all strings
+    that have `Paul` at the end. Finally, the pattern `"%Paul%"` matches all strings
+    that have `Paul` in them, including at the start or at the end.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，`"John%"` 将匹配所有以 `John` 开头的字符串，如 `John Smith` 和 `John Paul Getty`。模式 `"%Paul"`
+    匹配所有以 `Paul` 结尾的字符串。最后，模式 `"%Paul%"` 匹配所有包含 `Paul` 的字符串，包括在开头或结尾。
+- en: 'If you want to match exactly one wildcard character in a `LIKE` clause, you
+    use the underscore character (`_`). For example, if you want the titles of all
+    movies starring an actor whose name begins with the three letters NAT, you use:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你想在 `LIKE` 子句中匹配恰好一个通配符字符，你可以使用下划线 (`_`) 字符。例如，如果你想要所有以 NAT 开头的演员名字的电影标题，你可以使用：
+- en: '[PRE41]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: '[PRE42]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: Tip
+  id: totrans-106
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: 'In general, you should avoid using the percentage (`%`) wildcard at the beginning
+    of the pattern, like in the following example:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，你应该避免在模式的开头使用百分号 (`%`) 通配符，就像以下例子中一样：
+- en: '[PRE43]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: You will get the results, but MySQL will not use the index under this condition.
+    Using the wildcard will force MySQL to read the entire table to retrieve the results,
+    which can cause a severe performance impact if the table has millions of rows.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你将得到结果，但 MySQL 不会在此条件下使用索引。使用通配符将强制 MySQL 读取整个表以检索结果，如果表有数百万行，这可能会严重影响性能。
+- en: Combining conditions with AND, OR, NOT, and XOR
+  id: totrans-110
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用 AND、OR、NOT 和 XOR 结合条件
+- en: So far, we’ve used the `WHERE` clause to test one condition, returning all rows
+    that meet it. You can combine two or more conditions using the Boolean operators
+    `AND`, `OR`, `NOT`, and `XOR`.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们使用 `WHERE` 子句来测试一个条件，返回所有满足条件的行。你可以使用布尔运算符 `AND`、`OR`、`NOT` 和 `XOR`
+    来组合两个或更多条件。
+- en: 'Let’s start with an example. Suppose you want to find the titles of sci-fi
+    movies that are rated PG. This is straightforward with the `AND` operator:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们从一个例子开始。假设你想找到评级为 PG 的科幻电影的标题。这在使用 `AND` 运算符时非常简单：
+- en: '[PRE44]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: '[PRE45]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: The `AND` operation in the `WHERE` clause restricts the results to those rows
+    that meet both conditions.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`WHERE` 子句中的 `AND` 操作将结果限制为满足两个条件的行。'
+- en: 'The `OR` operator is used to find rows that meet at least one of several conditions.
+    To illustrate, imagine now that you want a list of movies in the Children or Family
+    categories. You can do this with `OR` and two `LIKE` clauses:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`OR` 操作符用于查找满足多个条件之一的行。例如，现在想象一下你想要一个儿童或家庭类别电影的列表。你可以使用 `OR` 和两个 `LIKE` 子句来实现这一点：'
+- en: '[PRE46]'
+  id: totrans-117
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: '[PRE47]'
+  id: totrans-118
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: The `OR` operation in the `WHERE` clause restricts the answers to those that
+    meet either of the two conditions. As an aside, we can observe that the results
+    are ordered. This is merely a coincidence; in this case, they’re reported in the
+    order they were added to the database. We’ll return to sorting output in [“The
+    ORDER BY Clause”](#BAS-SEC-ORDERBY).
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`WHERE` 子句中的 `OR` 操作将答案限制为满足两个条件之一的答案。顺便说一句，我们可以观察到结果是有序的。这只是一个巧合；在这种情况下，它们按照添加到数据库中的顺序报告。我们将在
+    [“排序子句”](#BAS-SEC-ORDERBY) 返回到排序输出。'
+- en: 'You can combine `AND` and `OR`, but you need to make it clear whether you want
+    to first `AND` the conditions or `OR` them. Parentheses cluster parts of a statement
+    together and help make expressions readable; you can use them just as you would
+    in basic math. Let’s say that now you want sci-fi or family movies that are rated
+    PG. You can write this query as follows:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以结合使用`AND`和`OR`，但需要明确首先`AND`条件还是`OR`条件。括号可以将语句的部分聚集在一起，并帮助使表达式更易读；你可以像在基本数学中一样使用它们。假设现在你想要获取评级为PG的科幻或家庭电影。你可以将此查询写成以下形式：
+- en: '[PRE48]'
+  id: totrans-121
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: '[PRE49]'
+  id: totrans-122
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'The parentheses make the evaluation order clear: you want movies from either
+    the Sci-Fi or the Family category, but all of them need to be PG-rated.'
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 括号清楚地表明了评估顺序：你希望获取来自科幻或家庭类别的电影，但它们都需要是PG级别的。
+- en: 'With the use of parentheses, it is possible to change the evaluation order.
+    The easiest way to see how this works is by playing around with calculations:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用括号可以改变评估顺序。最简单的方法是通过计算进行一些操作：
+- en: '[PRE50]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: '[PRE51]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: '[PRE52]'
+  id: totrans-127
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: '[PRE53]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: Note
+  id: totrans-129
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'One of the most difficult problems to diagnose is a query that is running with
+    no syntax errors, but it is returning values different from those expected. While
+    the parentheses do not affect the `AND` operator, the `OR` operator is significantly
+    impacted by them. For example, consider the result of this statement:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最难诊断的问题之一是运行没有语法错误但返回与预期值不同的查询。尽管括号不影响`AND`运算符，但`OR`运算符受其影响较大。例如，考虑以下语句的结果：
+- en: '[PRE54]'
+  id: totrans-131
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: '[PRE55]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: 'If we change the ordering of the operators, we will obtain a different result:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果改变运算符的顺序，将得到不同的结果：
+- en: '[PRE56]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: '[PRE57]'
+  id: totrans-135
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: Using parentheses makes the queries much easier to understand and increases
+    the likelihood that you’ll get the results you’re expecting. We recommend that
+    you use parentheses whenever there’s a chance MySQL could misinterpret your intention;
+    there’s no good reason to rely on MySQL’s implicit evaluation order.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用括号使查询更易于理解，并增加了获得预期结果的可能性。我们建议在MySQL可能误解意图的情况下使用括号；依赖MySQL的隐式评估顺序没有充分的理由。
+- en: 'The unary `NOT` operator negates a Boolean statement. Earlier we gave the example
+    of listing all languages with a `language_id` not equal to 2\. You can also write
+    this query with the `NOT` operator:'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一元`NOT`运算符否定布尔语句。前面我们举了一个列出所有`language_id`不等于2的语言的例子。你也可以用`NOT`运算符编写此查询：
+- en: '[PRE58]'
+  id: totrans-138
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: '[PRE59]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: The expression in parentheses, `(language_id = 2)`, gives the condition to match,
+    and the `NOT` operation negates it, so you get everything but those results that
+    match the condition. There are several other ways you can write a `WHERE` clause
+    with the same idea. In [Chapter 5](ch05.xhtml#CH5_ADV1), you will see that some
+    have better performance than others.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 括号中的表达式`(language_id = 2)`给出匹配条件，并且`NOT`操作对其取反，因此你会得到除符合条件之外的所有结果。有几种其他方式可以编写带有相同思想的`WHERE`子句。在[第5章](ch05.xhtml#CH5_ADV1)中，你会看到其中一些具有比其他更好的性能。
+- en: 'Consider another example using `NOT` and parentheses. Suppose you want to get
+    a list of all movie titles with an `FID` less than 7, but not those numbered 4
+    or 6\. You can do this with the following query:'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再举一个使用`NOT`和括号的例子。假设你想获取所有`FID`小于7但不为4或6的电影标题列表，可以使用以下查询语句实现：
+- en: '[PRE60]'
+  id: totrans-142
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: '[PRE61]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: 'Understanding operator precedence can be a little tricky, and sometimes it
+    takes DBAs a long time to debug a query and identify why it is not returning the
+    requested values. The following list shows the available operators in order from
+    the highest priority to the lowest. Operators that are shown together on a line
+    have the same priority:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理解运算符优先级可能有些棘手，有时候DBA需要很长时间来调试查询并确定为何没有返回请求的值。以下列表显示了按优先级从高到低排列的可用运算符。同一行显示在一起的运算符具有相同的优先级：
+- en: '`INTERVAL`'
+  id: totrans-145
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`INTERVAL`'
+- en: '`BINARY`, `COLLATE`'
+  id: totrans-146
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`BINARY`, `COLLATE`'
+- en: '`!`'
+  id: totrans-147
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`!`'
+- en: '`-` (unary minus), `~` (unary bit inversion)'
+  id: totrans-148
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`-`（一元减），`~`（一元位反转）'
+- en: ^
+  id: totrans-149
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: ^
+- en: '`*`, `/`, `DIV`, `%`, `MOD`'
+  id: totrans-150
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`*`, `/`, `DIV`, `%`, `MOD`'
+- en: '`-`,`+`'
+  id: totrans-151
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`-`,`+`'
+- en: '`<<`, `>>`'
+  id: totrans-152
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`<<`, `>>`'
+- en: '`&`'
+  id: totrans-153
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`&`'
+- en: '`\`|'
+  id: totrans-154
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`\`|'
+- en: '`=` (comparison), `<=>`, `>=`, `>`, `<=`, `<`, `<>`, `!=`, `IS`, `LIKE`, `REGEXP`,
+    `IN`, `MEMBER OF`'
+  id: totrans-155
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`=`（比较），`<=>`，`>=`，`>`，`<=`，`<`，`<>`，`!=`，`IS`，`LIKE`，`REGEXP`，`IN`，`MEMBER
+    OF`'
+- en: '`BETWEEN`, `CASE`, `WHEN`, `THEN`, `ELSE`'
+  id: totrans-156
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`BETWEEN`, `CASE`, `WHEN`, `THEN`, `ELSE`'
+- en: '`NOT`'
+  id: totrans-157
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`NOT`'
+- en: '`AND`, `&&`'
+  id: totrans-158
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`AND`, `&&`'
+- en: '`XOR`'
+  id: totrans-159
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`XOR`'
+- en: '`OR`, `\|\|`'
+  id: totrans-160
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`OR`, `\|\|`'
+- en: '`=` (assignment), `:=`'
+  id: totrans-161
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`=`（赋值），`:=`'
+- en: 'It is possible to combine these operators in diverse ways to get the desired
+    results. For example, you can write a query to get the titles of any movies that
+    have a price range between $2 and $4, belong to the Documentary or Horror category,
+    and have an actor named Bob:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以以多种方式组合这些运算符以获得所需的结果。例如，您可以编写查询来获取价格介于 $2 和 $4 之间，并属于纪录片或恐怖类别，且演员名为 Bob 的任何电影的标题：
+- en: '[PRE62]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: '[PRE63]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: 'Finally, before we move on to sorting, note that it is possible to execute
+    queries that do not match any results. In this case, the query will return an
+    empty set:'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，在我们继续排序之前，请注意，可以执行不匹配任何结果的查询。在这种情况下，查询将返回一个空集：
+- en: '[PRE64]'
+  id: totrans-166
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: '[PRE65]'
+  id: totrans-167
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: The ORDER BY Clause
+  id: totrans-168
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: ORDER BY 子句
+- en: We’ve discussed how to choose the columns and which rows are returned as part
+    of the query result, but not how to control how the result is displayed. In a
+    relational database, the rows in a table form a set; there is no intrinsic order
+    between the rows, so we have to ask MySQL to sort the results if we want them
+    in a particular order. This section explains how to use the `ORDER BY` clause
+    to do this. Sorting does not affect *what* is returned; it only affects *what
+    order* the results are returned in.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经讨论了如何选择列和返回作为查询结果的行，但没有讨论如何控制结果的显示方式。在关系型数据库中，表中的行形成一个集合；行之间没有固有的顺序，因此如果要按特定顺序返回结果，必须要求
+    MySQL 对其进行排序。本节将解释如何使用 `ORDER BY` 子句来实现这一点。排序不影响返回的*内容*，只影响返回结果的*顺序*。
+- en: Tip
+  id: totrans-170
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: InnoDB tables in MySQL have a special index called the *clustered index* that
+    stores row data. When you define a primary key on a table, InnoDB uses it as the
+    clustered index. Suppose you are executing queries based on the primary key. In
+    that case, the rows will be returned ordered in ascending order by the primary
+    key. However, we always recommending using the `ORDER BY` clause if you want to
+    enforce a particular order.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 中的 InnoDB 表有一个称为*聚集索引*的特殊索引，用于存储行数据。当您在表上定义主键时，InnoDB 将其用作聚集索引。假设您基于主键执行查询。那么返回的行将按主键升序排序。但是，如果您希望强制执行特定顺序，我们始终建议使用
+    `ORDER BY` 子句。
+- en: 'Suppose you want to return a list of the first 10 customers in the `sakila`
+    database, sorted alphabetically by `name`. Here’s what you’d type:'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您想要返回 `sakila` 数据库中按 `name` 字母顺序排序的前 10 位客户列表。这是您要输入的内容：
+- en: '[PRE66]'
+  id: totrans-173
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: '[PRE67]'
+  id: totrans-174
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: The `ORDER` `BY` clause indicates that sorting is required, followed by the
+    column that should be used as the sort key. In this example, you’re sorting by
+    name in alphabetically ascending order—the default sort is case-insensitive and
+    in ascending order, and MySQL automatically sorts alphabetically because the columns
+    are character strings. The way strings are sorted is determined by the character
+    set and collation order that are being used. We discuss these in [“Collation and
+    Character Sets”](ch04.xhtml#SEC-COLLATIONS). For most of this book, we assume
+    that you’re using the default settings.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ORDER BY` 子句表示需要排序，后跟应用作排序键的列。在这个示例中，按照字母顺序升序排列名字——默认排序不区分大小写且升序，MySQL会自动按字母顺序排序，因为列是字符字符串。字符串的排序方式由使用的字符集和排序顺序确定。我们在[“排序和字符集”](ch04.xhtml#SEC-COLLATIONS)中讨论这些内容。在本书的大部分内容中，我们假设您使用默认设置。'
+- en: 'Let’s look at another example. This time, you’ll sort the output from the `address`
+    table in ascending order based on the `last_update` column and show just the first
+    five results:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看另一个例子。这一次，您将按 `address` 表中 `last_update` 列的升序排列输出，并仅显示前五个结果：
+- en: '[PRE68]'
+  id: totrans-177
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: '[PRE69]'
+  id: totrans-178
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: 'As you can see, it is possible to sort different types of columns. Moreover,
+    we can compound the sorting with two or more columns. For example, let’s say you
+    want to sort the addresses alphabetically, but grouped by district:'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如您所见，可以对不同类型的列进行排序。此外，我们可以将排序与两个或更多列结合起来。例如，假设您要按字母顺序对地址进行排序，但按区分组：
+- en: '[PRE70]'
+  id: totrans-180
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: '[PRE71]'
+  id: totrans-181
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: 'You can also sort in descending order, and you can control this behavior for
+    each sort key. Suppose you want to sort the addresses by descending alphabetical
+    order and the districts in ascending order. You would type this:'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以按降序排序，并且可以针对每个排序键控制此行为。假设您希望按字母逆序对地址进行排序，并按区升序进行排序。您将输入以下内容：
+- en: '[PRE72]'
+  id: totrans-183
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: '[PRE73]'
+  id: totrans-184
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: If a collision of values occurs and you don’t specify another sort key, the
+    sort order is undefined. This may not be important for you; you may not care about
+    the order in which two customers with the identical name “John A. Smith” appear.
+    If you want to enforce a certain order in this case, you need to add more columns
+    to the ORDER BY clause, as demonstrated in the previous example.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果发生值的冲突，并且您没有指定另一个排序键，那么排序顺序是未定义的。这对您可能并不重要；您可能不关心两个姓名相同的客户“John A. Smith”出现的顺序。如果您希望在这种情况下强制执行特定顺序，您需要向`ORDER
+    BY`子句添加更多列，如前面的示例所示。
+- en: The LIMIT Clause
+  id: totrans-186
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: '`LIMIT`子句'
+- en: 'As you may have noted, a few of the previous queries used the `LIMIT` clause.
+    This is a useful nonstandard SQL statement that allows you to control how many
+    rows are output. Its basic form allows you to limit the number of rows returned
+    from a `SELECT` statement, which is useful when you want to restrict the amount
+    of data communicated over a network or output to the screen. You might use it,
+    for example, to get a sample of the data from a table, as shown here:'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你可能注意到的，前几个查询使用了`LIMIT`子句。这是一个有用的非标准SQL语句，允许你控制输出多少行。它的基本形式允许你限制从`SELECT`语句返回的行数，在你想要限制通过网络通信或输出到屏幕的数据量时非常有用。例如，你可以使用它从表中获取数据样本，如下所示：
+- en: '[PRE74]'
+  id: totrans-188
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: '[PRE75]'
+  id: totrans-189
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: 'The `LIMIT` clause can have two arguments. In this case, the first argument
+    specifies the first row to return, and the second specifies the maximum number
+    of rows to return. The first argument is known as the *offset*. Suppose you want
+    five rows, but you want to skip the first five rows, which means the result will
+    start at the sixth row. Record offsets for `LIMIT` start at 0, so you can do this
+    as follows:'
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LIMIT`子句可以有两个参数。在这种情况下，第一个参数指定要返回的第一行，第二个参数指定要返回的最大行数。第一个参数被称为*偏移量*。假设你想要五行，但是你想跳过前五行，这意味着结果将从第六行开始。`LIMIT`的记录偏移从0开始，所以你可以这样做：'
+- en: '[PRE76]'
+  id: totrans-191
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: '[PRE77]'
+  id: totrans-192
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: The output is rows 6 to 10 from the `SELECT` query.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出是`SELECT`查询的第6到第10行。
+- en: 'There’s an alternative syntax that you might see for the `LIMIT` keyword: instead
+    of writing `LIMIT 10, 5`, you can write `LIMIT 10 OFFSET 5`. The `OFFSET` syntax
+    discards the *N* values specified in it.'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还有一个您可能看到的`LIMIT`关键字的替代语法：而不是写`LIMIT 10, 5`，你可以写`LIMIT 10 OFFSET 5`。`OFFSET`语法丢弃其中指定的*N*值。
+- en: 'Here’s an example with no offset:'
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个没有偏移量的例子：
+- en: '[PRE78]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: '[PRE79]'
+  id: totrans-197
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: 'And here are the results with an offset of 5:'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个偏移量为5的结果：
+- en: '[PRE80]'
+  id: totrans-199
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: '[PRE81]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: Joining Two Tables
+  id: totrans-201
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 连接两个表
+- en: So far we’ve only been working with one table in our `SELECT` queries. However,
+    the majority of cases will require information from more than one table at once.
+    As we’ve explored the tables in the `sakila` database, it’s become obvious that
+    by using relationships, we can answer more interesting queries. For example, it’d
+    be useful to know the country each city is in. This section shows you how to answer
+    queries like that by joining two tables. We’ll return to this issue as part of
+    a longer, more advanced discussion of joins in [Chapter 5](ch05.xhtml#CH5_ADV1).
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们在`SELECT`查询中只使用了一个表。然而，大多数情况下需要从多个表中获取信息。当我们探索`sakila`数据库中的表时，通过使用关系，可以回答更有趣的查询变得显而易见。例如，了解每个城市所在的国家将是有用的。本节将向您展示如何通过连接两个表来回答这类查询。我们将在[第5章](ch05.xhtml#CH5_ADV1)中作为更长、更高级讨论的一部分返回这个问题。
+- en: 'We use only one join syntax in this chapter. There are two more (`LEFT` and
+    `RIGHT JOIN`), and each gives you a different way to bring together data from
+    two or more tables. The syntax we use here is the `INNER JOIN`, which is the most
+    commonly used in daily activities. Let’s look at an example, and then we’ll explain
+    more about how it works:'
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们只使用了一种连接语法。还有两种更多（`LEFT JOIN`和`RIGHT JOIN`），每一种都可以让您以不同的方式将两个或更多表的数据组合在一起。我们在这里使用的语法是`INNER
+    JOIN`，它是日常活动中最常用的。让我们看一个例子，然后我们将更详细地解释它是如何工作的：
+- en: '[PRE82]'
+  id: totrans-204
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: '[PRE83]'
+  id: totrans-205
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: The output shows the cities in each country with a `country_id` lower than 5\.
+    You can see for the first time which cities are in each country.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出显示了每个国家中`country_id`低于5的城市。你可以首次看到每个国家中有哪些城市。
+- en: 'How does the `INNER JOIN` work? The statement has two parts: first, two table
+    names separated by the `INNER JOIN` keywords; and second, the `ON` keyword that
+    specifies the required columns to compose the condition. In this example, the
+    two tables to be joined are `city` and `country`, expressed as `city INNER JOIN
+    country` (for the basic `INNER JOIN`, it doesn’t matter what order you list the
+    tables in, so using `country INNER JOIN city` would have the same effect). The
+    `ON` clause (`ON city.country_id = country.country_id`) is where we tell MySQL
+    the columns that hold the relationship between the tables; you should recall this
+    from our design and our previous discussion in [Chapter 2](ch02.xhtml#CH2_DESIGN).'
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INNER JOIN`如何工作？该语句由两部分组成：首先是由`INNER JOIN`关键字分隔的两个表名；其次是`ON`关键字，指定组成条件的必需列。在这个例子中，要连接的两个表是`city`和`country`，表示为`city
+    INNER JOIN country`（对于基本的`INNER JOIN`，表的列名顺序无关紧要，因此使用`country INNER JOIN city`效果相同）。`ON`子句（`ON
+    city.country_id = country.country_id`）告诉MySQL两个表之间的关系列；您应该从我们的设计中回忆这一点，以及我们在[第二章](ch02.xhtml#CH2_DESIGN)中的先前讨论。'
+- en: 'If in the join condition the column names in both tables used for matching
+    are the same, you can use the `USING` clause instead:'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果在连接条件中用于匹配的两个表中的列名相同，则可以改用`USING`子句：
+- en: '[PRE84]'
+  id: totrans-209
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE84]'
+- en: '[PRE85]'
+  id: totrans-210
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE85]'
+- en: The Venn diagram in [Figure 3-1](#FIG-VENN-INNER-JOIN) illustrates the inner
+    join.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 3-1](#FIG-VENN-INNER-JOIN)中的维恩图展示了内连接。'
+- en: 'Before we leave `SELECT`, we’ll give you a taste of one of the functions you
+    can use to aggregate values. Suppose you want to count how many cities Italy has
+    in our database. You can do this by joining the two tables and counting the number
+    of rows with that `country_id`. Here’s how it works:'
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们离开`SELECT`之前，我们将让您尝试一个聚合值函数的例子。假设您想计算我们数据库中意大利城市的数量。您可以通过连接两个表并计算具有该`country_id`的行数来实现此目的。以下是它的工作原理：
+- en: '[PRE86]'
+  id: totrans-213
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE86]'
+- en: '[PRE87]'
+  id: totrans-214
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE87]'
+- en: We explain more features of `SELECT` and aggregate functions in [Chapter 5](ch05.xhtml#CH5_ADV1).
+    For more on the `COUNT()` function, see [“Aggregate functions”](ch05.xhtml#ADV1-AGGREGATE-FUNCTIONS).
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在[第五章](ch05.xhtml#CH5_ADV1)中详细解释了`SELECT`和聚合函数的更多特性。关于`COUNT()`函数的更多信息，请参见[“聚合函数”](ch05.xhtml#ADV1-AGGREGATE-FUNCTIONS)。
+- en: '![lm2e 0301](Images/lm2e_0301.png)'
+  id: totrans-216
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 0301](Images/lm2e_0301.png)'
+- en: Figure 3-1\. The Venn diagram representation of the INNER JOIN
+  id: totrans-217
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 3-1\. 内连接的维恩图表示
+- en: The INSERT Statement
+  id: totrans-218
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 插入语句
+- en: The `INSERT` statement is used to add new data to tables. This section explains
+    its basic syntax and walks through some simple examples that add new rows to the
+    `sakila` database. In [Chapter 4](ch04.xhtml#CH4_MODIFY), we’ll discuss how to
+    load data from existing tables or external data sources.
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INSERT`语句用于向表中添加新数据。本节介绍了其基本语法，并通过一些简单示例演示了如何向`sakila`数据库添加新行。在[第四章](ch04.xhtml#CH4_MODIFY)中，我们将讨论如何从现有表或外部数据源加载数据。'
+- en: INSERT Basics
+  id: totrans-220
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 插入基础
+- en: 'Inserting data typically occurs in two situations: when you bulk-load in a
+    large batch as you create your database, and when you add data on an ad hoc basis
+    as you use the database. In MySQL, different optimizations are built into the
+    server for each situation. Importantly, different SQL syntaxes are available to
+    make it easy for you to work with the server in both cases. We’ll explain the
+    basic `INSERT` syntax in this section and show you examples of using it for bulk
+    and single-record insertion.'
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据插入通常出现在两种情况下：在创建数据库时批量加载时和在使用数据库时按需添加数据时。在MySQL中，服务器内置了针对每种情况的不同优化。重要的是，不同的SQL语法可用于使您在这两种情况下轻松地与服务器进行交互。我们将在本节中解释基本的`INSERT`语法，并展示如何在批量和单记录插入中使用示例。
+- en: 'Let’s start with the basic task of inserting one new row into the `language`
+    table. To do this, you need to understand the table’s structure. As we explained
+    in [“Using the sakila Database”](#BAS-SEC-SAKILACREATE), you can discover this
+    with the `SHOW COLUMNS` statement:'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们从向`language`表中插入一个新行的基本任务开始。要做到这一点，您需要了解表的结构。正如我们在[“使用sakila数据库”](#BAS-SEC-SAKILACREATE)中解释的那样，您可以使用`SHOW
+    COLUMNS`语句发现这一点：
+- en: '[PRE88]'
+  id: totrans-223
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE88]'
+- en: '[PRE89]'
+  id: totrans-224
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE89]'
+- en: This tells you that the `language_id` column is auto-generated, and the `last_update`
+    column is updated every time an `UPDATE` operation happens. You’ll learn more
+    about the `AUTO_INCREMENT` shortcut to automatically assign the next available
+    identifier in [Chapter 4](ch04.xhtml#CH4_MODIFY).
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这告诉你`language_id`列是自动生成的，并且`last_update`列在每次`UPDATE`操作发生时都会更新。您将在[第四章](ch04.xhtml#CH4_MODIFY)中了解更多关于`AUTO_INCREMENT`快捷方式的信息，以自动分配下一个可用的标识符。
+- en: 'Let’s add a new row for the language Portuguese. There are two ways to do this.
+    The most common is to let MySQL fill in the default value for the `language_id`,
+    like this:'
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们为葡萄牙语添加一行新记录。有两种方法可以做到这一点。最常见的方法是让MySQL填写`language_id`的默认值，如下所示：
+- en: '[PRE90]'
+  id: totrans-227
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE90]'
+- en: '[PRE91]'
+  id: totrans-228
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE91]'
+- en: 'If you we execute a `SELECT` on the table now, we’ll see that MySQL inserted
+    the row:'
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们现在对表执行`SELECT`，我们将看到MySQL已经插入了这一行：
+- en: '[PRE92]'
+  id: totrans-230
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE92]'
+- en: '[PRE93]'
+  id: totrans-231
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE93]'
+- en: Note that we used the function [`NOW()`](https://oreil.ly/5YBth) in the `last_update`
+    column. The `NOW()` function returns the current date and time of the MySQL server.
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们在`last_update`列中使用了函数[`NOW()`](https://oreil.ly/5YBth)。`NOW()`函数返回MySQL服务器当前的日期和时间。
+- en: 'The second option is to insert the value of the `language_id` column manually.
+    Now that we already have seven languages, we should use 8 for the next value of
+    the `language_id`. We can verify that with this SQL instruction:'
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二种选择是手动插入`language_id`列的值。现在我们已经有了七种语言，我们应该为`language_id`的下一个值使用8。我们可以用以下SQL指令来验证：
+- en: '[PRE94]'
+  id: totrans-234
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE94]'
+- en: '[PRE95]'
+  id: totrans-235
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE95]'
+- en: The `MAX()` function tells you the maximum value for the column supplied as
+    a parameter. This is cleaner than using `SELECT language_id FROM language`, which
+    prints out all the rows and requires you to inspect them to find the maximum value.
+    Adding an `ORDER BY` and a `LIMIT` clause makes this easier, but using `MAX()`
+    is much simpler than `SELECT language_id FROM language ORDER BY language_id DESC
+    LIMIT 1`, which returns the same answer.
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`MAX()`函数告诉您作为参数提供的列的最大值。这比使用`SELECT language_id FROM language`更清晰，后者会打印出所有行并要求您检查它们以找到最大值。添加`ORDER
+    BY`和`LIMIT`子句可以使这个过程更简单，但使用`MAX()`比`SELECT language_id FROM language ORDER BY
+    language_id DESC LIMIT 1`简单得多，后者返回相同的答案。'
+- en: 'We’re now ready to insert the row. In this `INSERT`, we are going to insert
+    the `last_update` value manually too. Here’s the needed command:'
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们可以插入这一行了。在这个`INSERT`中，我们也将手动插入`last_update`的值。以下是所需的命令：
+- en: '[PRE96]'
+  id: totrans-238
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE96]'
+- en: '[PRE97]'
+  id: totrans-239
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE97]'
+- en: 'MySQL reports that one row has been affected (added, in this case), which we
+    can confirm by checking the contents of the table again:'
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL报告已影响了一行（在这种情况下是添加），我们可以通过再次检查表的内容来确认：
+- en: '[PRE98]'
+  id: totrans-241
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE98]'
+- en: '[PRE99]'
+  id: totrans-242
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE99]'
+- en: 'The single-row `INSERT` style detects primary key duplicates and stops as soon
+    as it finds one. For example, suppose we try to insert another row with the same
+    `language_id`:'
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 单行`INSERT`样式会检测主键重复，并在找到重复键时立即停止。例如，假设我们尝试插入另一行具有相同的`language_id`：
+- en: '[PRE100]'
+  id: totrans-244
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE100]'
+- en: '[PRE101]'
+  id: totrans-245
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE101]'
+- en: 'The `INSERT` operation stops when it detects the duplicate key. You can add
+    an `IGNORE` clause to prevent the error if you want, but note that the row still
+    will not be inserted:'
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当检测到重复键时，`INSERT`操作会停止。如果需要，您可以添加一个`IGNORE`子句来防止错误，但请注意该行仍然不会被插入：
+- en: '[PRE102]'
+  id: totrans-247
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE102]'
+- en: '[PRE103]'
+  id: totrans-248
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE103]'
+- en: In most cases you’ll want to know about possible problems, though (after all,
+    primary keys are supposed to be unique), so this `IGNORE` syntax is rarely used.
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在大多数情况下，您可能希望了解可能的问题（毕竟，主键应该是唯一的），因此这种`IGNORE`语法很少使用。
+- en: 'It is also possible to insert multiple values at once:'
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 也可以一次插入多个值：
+- en: '[PRE104]'
+  id: totrans-251
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE104]'
+- en: '[PRE105]'
+  id: totrans-252
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE105]'
+- en: Note that MySQL reports the results of bulk insertion differently from single
+    insertion.
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，MySQL以不同于单次插入的方式报告了批量插入的结果。
+- en: 'The first line tells you how many rows were inserted, while the first entry
+    in the second line tells you how many rows (or records) were actually processed.
+    If you use `INSERT IGNORE` and try to insert a duplicate record (one for which
+    the primary key matches that of an existing row), MySQL will quietly skip inserting
+    it and report it as a duplicate in the second entry on the second line:'
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一行告诉您插入了多少行，而第二行的第一个条目告诉您实际处理了多少行（或记录）。如果使用`INSERT IGNORE`并尝试插入重复记录（其主键与现有行的主键匹配），MySQL将悄悄地跳过插入它，并在第二行的第二个条目中报告它为重复：
+- en: '[PRE106]'
+  id: totrans-255
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE106]'
+- en: '[PRE107]'
+  id: totrans-256
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE107]'
+- en: We discuss the causes of warnings, shown as the third entry on the second line
+    of output, in [Chapter 4](ch04.xhtml#CH4_MODIFY).
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在[第四章](ch04.xhtml#CH4_MODIFY)中讨论警告的原因，显示为输出第二行的第三个条目。
+- en: Alternative Syntaxes
+  id: totrans-258
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 替代语法
+- en: There are several alternatives to the `VALUES` syntax demonstrated in the previous
+    section. This section walks through them and explains the advantages and drawbacks
+    of each. If you’re happy with the basic syntax we’ve described so far and want
+    to move on to a new topic, feel free to skip ahead to [“The DELETE Statement”](#BAS-SEC-DELETE).
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一节中展示的`VALUES`语法有几种替代方法。本节将逐一介绍它们，并解释每种方法的优缺点。如果您对我们迄今描述的基本语法感到满意，并希望进入新的主题，请随时跳到[“DELETE语句”](#BAS-SEC-DELETE)。
+- en: 'There are some advantages to the `VALUES` syntax we’ve been using: it works
+    for both single and bulk inserts, you get an error message if you forget to supply
+    values for all the columns, and you don’t have to type in the column names. However,
+    it also has some disadvantages: you need to remember the order of the columns,
+    you need to provide a value for each column, and the syntax is closely tied to
+    the underlying table structure. That is, if you change the table’s structure,
+    you need to change the `INSERT` statements. Fortunately, we can avoid these disadvantages
+    by varying the syntax.'
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们一直在使用的`VALUES`语法有一些优点：它适用于单行和批量插入，如果你忘记为所有列提供值，会得到错误消息，并且你不必输入列名。然而，它也有一些缺点：你需要记住列的顺序，每个列都需要提供一个值，并且语法与底层表结构紧密相关。也就是说，如果你改变了表的结构，就需要修改`INSERT`语句。幸运的是，我们可以通过改变语法来避免这些缺点。
+- en: 'Suppose you know that the `actor` table has four columns, and you recall their
+    names, but you’ve forgotten their order. You can insert a row using the following
+    approach:'
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设你知道`actor`表有四列，并且记得它们的名称，但忘记了它们的顺序。你可以使用以下方法插入一行记录：
+- en: '[PRE108]'
+  id: totrans-262
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE108]'
+- en: '[PRE109]'
+  id: totrans-263
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE109]'
+- en: The column names are included in parentheses after the table name, and the values
+    stored in those columns are listed in parentheses after the `VALUES` keyword.
+    So, in this example, a new row is created, and the value `201` is stored as the
+    `actor_id` (remember, `actor_id` has the `auto_increment` property), `Vinicius`
+    is stored as the `first_name`, `Grippa` is stored as the `last_name`, and the
+    `last_update` column is populated with the current timestamp. This syntax’s advantages
+    are that it’s readable and flexible (addressing the third disadvantage we described)
+    and order-independent (addressing the first disadvantage). The burden is that
+    you need to know the column names and type them in.
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 列名包含在表名后的括号内，并且这些列的值在`VALUES`关键字后的括号内列出。所以，在这个例子中，创建了一行新记录，`actor_id`存储为`201`（记住，`actor_id`具有`auto_increment`属性），`first_name`存储为`Vinicius`，`last_name`存储为`Grippa`，并且`last_update`列填充了当前时间戳。这种语法的优点是可读性强且灵活（解决了我们描述的第三个缺点），并且不受顺序影响（解决了第一个缺点）。缺点是你需要知道列名并手动输入。
+- en: 'This new syntax can also address the second disadvantage of the simpler approach—that
+    is, it can allow you to insert values for only some columns. To understand how
+    this might be useful, let’s explore the `city` table:'
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种新的语法也可以解决简单方法的第二个缺点——也就是说，它可以允许你仅为某些列插入值。为了理解这种方法可能有用的情况，让我们探讨一下`city`表：
+- en: '[PRE110]'
+  id: totrans-266
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE110]'
+- en: '[PRE111]'
+  id: totrans-267
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE111]'
+- en: 'Notice that the `last_update` column has a default value of `CURRENT_TIMESTAMP`.
+    This means that if you don’t insert a value for the `last_update` column, MySQL
+    will insert the current date and time by default. This is just what we want: when
+    we store a record, we don’t want to bother checking the date and time and typing
+    it in. Let’s try inserting an incomplete entry:'
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，`last_update`列的默认值是`CURRENT_TIMESTAMP`。这意味着如果你不插入`last_update`列的值，MySQL会默认插入当前日期和时间。这正是我们想要的：当我们存储一条记录时，我们不想麻烦检查日期和时间并手动输入。让我们尝试插入一条不完整的记录：
+- en: '[PRE112]'
+  id: totrans-269
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE112]'
+- en: '[PRE113]'
+  id: totrans-270
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE113]'
+- en: 'We didn’t set a value for the `city_id` column, so MySQL defaults it to the
+    next available value (because of the `auto_increment` property), and `last_update`
+    stores the current date and time. You can check this with a query:'
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们没有为`city_id`列设置值，因此MySQL将其默认为下一个可用值（由于具有`auto_increment`属性），并且`last_update`存储当前日期和时间。你可以使用查询来验证这一点：
+- en: '[PRE114]'
+  id: totrans-272
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE114]'
+- en: '[PRE115]'
+  id: totrans-273
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE115]'
+- en: 'You can also use this approach for bulk insertion, as follows:'
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你也可以使用这种方法进行批量插入，如下所示：
+- en: '[PRE116]'
+  id: totrans-275
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE116]'
+- en: '[PRE117]'
+  id: totrans-276
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE117]'
+- en: In addition to needing to remember and type in column names, a disadvantage
+    of this approach is that you can accidentally omit values for columns. MySQL will
+    set the omitted columns to the default values. All columns in a MySQL table have
+    a default value of `NULL`, unless another default value is explicitly assigned
+    when the table is created or modified.
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了需要记住和输入列名之外，这种方法的缺点是你可能会意外地省略列的值。MySQL将省略的列设置为默认值。MySQL表中的所有列默认值为`NULL`，除非在创建或修改表时明确分配了其他默认值。
+- en: 'When you need to use default values for the table columns, you might want to
+    use the `DEFAULT` keyword (supported by MySQL 5.7 and later). Here’s an example
+    that adds a row to the `country` table using `DEFAULT`:'
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你需要使用表列的默认值时，你可能想使用`DEFAULT`关键字（MySQL 5.7及更高版本支持）。以下是使用`DEFAULT`向`country`表添加行的示例：
+- en: '[PRE118]'
+  id: totrans-279
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE118]'
+- en: '[PRE119]'
+  id: totrans-280
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE119]'
+- en: The keyword `DEFAULT` tells MySQL to use the default value for that column,
+    so the current date and time are inserted in our example. This approach’s advantages
+    are that you can use the bulk-insert feature with default values, and you can
+    never accidentally omit a column.
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关键词`DEFAULT`告诉MySQL使用该列的默认值，所以当前的日期和时间将被插入到我们的示例中。这种方法的优点是你可以使用默认值进行批量插入，并且你永远不会意外地省略列。
+- en: 'There’s another alternative `INSERT` syntax. In this approach, you list the
+    column names and values together, so you don’t have to mentally map the list of
+    values to the earlier list of columns. Here’s an example that adds a new row to
+    the `country` table:'
+  id: totrans-282
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还有另一种`INSERT`语法的选择。在这种方法中，你将列名和值一起列出，因此你不必将值列表与前面的列名列表进行对应。这里有一个向`country`表添加新行的示例：
+- en: '[PRE120]'
+  id: totrans-283
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE120]'
+- en: '[PRE121]'
+  id: totrans-284
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE121]'
+- en: The syntax requires you to list a table name, the keyword `SET`, and then column-equals-value
+    pairs, separated by commas. Columns for which values aren’t supplied are set to
+    their default values. Again, the disadvantages are that you can accidentally omit
+    values for columns and that you need to remember and type in column names. A significant
+    additional disadvantage is that you can’t use this method for bulk insertion.
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 语法要求你列出表名，关键词`SET`，然后是由逗号分隔的列=值对。未提供值的列将被设置为它们的默认值。同样，缺点是你可能会意外地省略列的值，并且需要记住和输入列名。一个显著的额外缺点是你不能用这种方法进行大批量插入。
+- en: You can also insert using values returned from a query. We discuss this in [Chapter 7](ch07.xhtml#CH7_DOING_MORE).
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你也可以使用从查询返回的值进行插入。我们将在[第7章](ch07.xhtml#CH7_DOING_MORE)讨论这个。
+- en: The DELETE Statement
+  id: totrans-287
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 删除语句
+- en: The `DELETE` statement is used to remove one or more rows from a table. We explain
+    single-table deletes here and discuss multitable deletes—which remove data from
+    two or more tables through one statement—in [Chapter 7](ch07.xhtml#CH7_DOING_MORE).
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DELETE`语句用于从表中移除一个或多个行。我们在这里解释单表删除，并在[第7章](ch07.xhtml#CH7_DOING_MORE)讨论多表删除——它通过一个语句从两个或更多表中删除数据。'
+- en: DELETE Basics
+  id: totrans-289
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 删除基础
+- en: 'The simplest use of `DELETE` is to remove all the rows in a table. Suppose
+    you want to empty your `rental` table. You can do this with:'
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DELETE`的最简单用法是删除表中的所有行。假设你想清空你的`rental`表。你可以这样做：'
+- en: '[PRE122]'
+  id: totrans-291
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE122]'
+- en: '[PRE123]'
+  id: totrans-292
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE123]'
+- en: 'The `DELETE` syntax doesn’t include column names since it’s used to remove
+    whole rows and not just values from a row. To reset or modify a value in a row,
+    you use the `UPDATE` statement, described in [“The UPDATE Statement”](#BAS-SEC-UPDATE).
+    Note that the `DELETE` statement doesn’t remove the table itself. For example,
+    having deleted all the rows in the `rental` table, you can still query the table:'
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DELETE`语法不包括列名，因为它用于移除整行而不仅仅是行中的值。要重置或修改行中的值，你可以使用在[“更新语句”](#BAS-SEC-UPDATE)中描述的`UPDATE`语句。请注意，`DELETE`语句不会移除表本身。例如，删除了`rental`表中的所有行后，你仍然可以查询该表：'
+- en: '[PRE124]'
+  id: totrans-294
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE124]'
+- en: '[PRE125]'
+  id: totrans-295
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE125]'
+- en: You can also continue to explore its structure using `DESCRIBE` or `SHOW CREATE
+    TABLE`, and insert new rows using `INSERT`. To remove a table, you use the `DROP`
+    statement described in [Chapter 4](ch04.xhtml#CH4_MODIFY).
+  id: totrans-296
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你也可以继续使用`DESCRIBE`或`SHOW CREATE TABLE`来探索其结构，并使用`INSERT`插入新的行。要删除表，你可以使用在[第4章](ch04.xhtml#CH4_MODIFY)中描述的`DROP`语句。
+- en: 'Note that if the table has a relationship with another table, the delete might
+    fail because of the foreign key constraint:'
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果表与另一张表有关联，删除可能会因为外键约束而失败：
+- en: '[PRE126]'
+  id: totrans-298
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE126]'
+- en: '[PRE127]'
+  id: totrans-299
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE127]'
+- en: Using WHERE, ORDER BY, and LIMIT
+  id: totrans-300
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用WHERE、ORDER BY和LIMIT
+- en: If you deleted rows in the previous section, reload your `sakila` database now
+    by following the instructions in [“Entity Relationship Modeling Examples”](ch02.xhtml#BAS-SEC-MODELING-EXAMPLES).
+    You’ll need the rows in the `rental` table restored for the examples in this section.
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你在前面的章节中删除了行，请按照[“实体关系建模示例”](ch02.xhtml#BAS-SEC-MODELING-EXAMPLES)中的说明重新加载你的`sakila`数据库。你将需要在本节的示例中恢复`rental`表中的行。
+- en: 'To remove one or more rows, but not all rows in a table, use a `WHERE` clause.
+    This works in the same way as it does for `SELECT`. For example, suppose you want
+    to remove all rows from the `rental` table with a `rental_id` less than 10\. You
+    can do this with:'
+  id: totrans-302
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要移除一张表中的一个或多个行，但不是所有行，请使用`WHERE`子句。这与`SELECT`的工作方式相同。例如，假设你想从`rental`表中移除所有`rental_id`小于10的行。你可以这样做：
+- en: '[PRE128]'
+  id: totrans-303
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE128]'
+- en: '[PRE129]'
+  id: totrans-304
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE129]'
+- en: The result is that the nine rows that match the criterion are removed.
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果是符合条件的九行将被移除。
+- en: 'Now suppose you want to remove all the payments from a customer called Mary
+    Smith from the database. First, perform a `SELECT` with the `customer` and `payment`
+    tables using `INNER JOIN` (as described in [“Joining Two Tables”](#BAS-SEC-JOINS)):'
+  id: totrans-306
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设现在你想从数据库中删除名为 Mary Smith 的客户的所有付款记录。首先，使用 `INNER JOIN` 在 `customer` 和 `payment`
+    表中执行 `SELECT` 操作（如 [“连接两个表”](#BAS-SEC-JOINS) 所述）：
+- en: '[PRE130]'
+  id: totrans-307
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE130]'
+- en: '[PRE131]'
+  id: totrans-308
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE131]'
+- en: 'Next, perform the following `DELETE` operation to remove the row with a *customer_id*
+    of 1 from the `payment` table:'
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，执行以下 `DELETE` 操作，从 `payment` 表中删除 `customer_id` 为 1 的行：
+- en: '[PRE132]'
+  id: totrans-310
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE132]'
+- en: '[PRE133]'
+  id: totrans-311
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE133]'
+- en: 'You can use the `ORDER BY` and `LIMIT` clauses with `DELETE`. You usually do
+    this when you want to limit the number of rows deleted. For example:'
+  id: totrans-312
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以在 `DELETE` 语句中使用 `ORDER BY` 和 `LIMIT` 子句。通常在想要限制删除行数时使用这种方式。例如：
+- en: '[PRE134]'
+  id: totrans-313
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE134]'
+- en: '[PRE135]'
+  id: totrans-314
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE135]'
+- en: Tip
+  id: totrans-315
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: We highly recommend using `DELETE` and `UPDATE` operations for small sets of
+    rows, due to performance issues. The appropriate value varies depending on the
+    hardware, but a good rule of thumb is around 20,000–40,000 rows per batch.
+  id: totrans-316
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们强烈建议对小数据集使用 `DELETE` 和 `UPDATE` 操作，由于性能问题。适当的值取决于硬件，但一个良好的经验法则是每批约 20,000
+    到 40,000 行。
+- en: Removing All Rows with TRUNCATE
+  id: totrans-317
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用 TRUNCATE 删除所有行
+- en: If you want to remove all the rows in a table, there’s a faster method than
+    removing them with `DELETE`. When you use the `TRUNCATE` `TABLE` statement, MySQL
+    takes the shortcut of dropping the table, removing the table structures, and then
+    re-creating them. When there are many rows in a table, this is much faster.
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果要删除表中的所有行，有一种比使用 `DELETE` 更快的方法。当你使用 `TRUNCATE TABLE` 语句时，MySQL 采取了快捷方式，直接删除表，移除表结构，然后重新创建。当表中有许多行时，这种方法要快得多。
+- en: Note
+  id: totrans-319
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: As a curiosity, there is a bug in MySQL 5.6 that can cause it to stall MySQL
+    when performing a `TRUNCATE` operation when MySQL is configured with a large InnoDB
+    buffer pool (200 GB or more). See the [bug report for details](https://oreil.ly/I40U9).
+  id: totrans-320
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有趣的是，在 MySQL 5.6 中存在一个 bug，当配置了大的 InnoDB 缓冲池（200 GB 或更多）时，执行 `TRUNCATE` 操作可能会导致
+    MySQL 陷入停滞。详细信息请参见 [bug 报告](https://oreil.ly/I40U9)。
+- en: 'If you want to remove all the data in the `payment` table, you can execute
+    this:'
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果要删除 `payment` 表中的所有数据，可以执行以下操作：
+- en: '[PRE136]'
+  id: totrans-322
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE136]'
+- en: '[PRE137]'
+  id: totrans-323
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE137]'
+- en: 'Notice that the number of rows affected is shown as zero: to speed up the operation,
+    MySQL doesn’t count the number of rows that are deleted, so the number shown does
+    not reflect the actual number of rows deleted.'
+  id: totrans-324
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，受影响的行数显示为零：为了加快操作，MySQL 不统计删除的行数，因此显示的数字不反映实际删除的行数。
+- en: 'The `TRUNCATE TABLE` statement differs from `DELETE` in a lot of ways, but
+    it is worth mentioning a few:'
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TRUNCATE TABLE` 语句在很多方面与 `DELETE` 不同，但值得一提的是几点：'
+- en: '`TRUNCATE` operations drop and re-create the table, which is much faster than
+    deleting rows one by one, particularly for large tables.'
+  id: totrans-326
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`TRUNCATE` 操作会删除并重新创建表，相比逐行删除，特别是对于大表来说速度要快得多。'
+- en: '`TRUNCATE` operations cause an implicit commit, so you can’t roll them back.'
+  id: totrans-327
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`TRUNCATE` 操作会造成隐式提交，因此无法回滚。'
+- en: You cannot perform `TRUNCATE` operations if the session holds an active table
+    lock.
+  id: totrans-328
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果会话持有活动的表锁，则无法执行 `TRUNCATE` 操作。
+- en: Table types, transactions, and locking are discussed in [Chapter 5](ch05.xhtml#CH5_ADV1).
+    None of these limitations affects most applications in practice, and you can use
+    `TRUNCATE TABLE` to speed up your processing. Of course, it’s not common to delete
+    whole tables during regular operation. An exception is temporary tables used to
+    store query results for a particular user session temporarily, which can be deleted
+    without losing the original data.
+  id: totrans-329
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表类型、事务和锁定在 [第 5 章](ch05.xhtml#CH5_ADV1) 中有讨论。这些限制并不影响大多数应用程序的实际应用，你可以使用 `TRUNCATE
+    TABLE` 来加速处理过程。当然，在正常运行中删除整个表并不常见。一个例外是临时表，用于临时存储某个用户会话的查询结果，可以在不丢失原始数据的情况下删除。
+- en: The UPDATE Statement
+  id: totrans-330
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 更新语句
+- en: The `UPDATE` statement is used to change data. In this section, we show you
+    how to update one or more rows in a single table. Multitable updates are discussed
+    in [“Updates”](ch07.xhtml#ADV2-SEC-UPDATES).
+  id: totrans-331
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`UPDATE` 语句用于更改数据。在本节中，我们将向你展示如何在单个表中更新一个或多个行。多表更新在 [“更新”](ch07.xhtml#ADV2-SEC-UPDATES)
+    中有讨论。'
+- en: If you’ve deleted rows from your `sakila` database, reload it before continuing.
+  id: totrans-332
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果已从 `sakila` 数据库中删除行，请在继续之前重新加载。
+- en: Examples
+  id: totrans-333
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 例子
+- en: 'The simplest use of the `UPDATE` statement is to change all the rows in a table.
+    Suppose you need to update the `amount` column of the `payment` table by adding
+    10% for all payments. You could do this by executing:'
+  id: totrans-334
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`UPDATE`语句的最简单用法是更改表中的所有行。假设您需要通过执行以下操作向`payment`表的`amount`列添加10%的所有付款。您可以这样做：'
+- en: '[PRE138]'
+  id: totrans-335
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE138]'
+- en: '[PRE139]'
+  id: totrans-336
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE139]'
+- en: 'Note that we forgot to update the `last_update` status. To make it coherent
+    with the expected database model, you can fix this by running the following statement:'
+  id: totrans-337
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们忘记更新`last_update`状态。为了使其与预期的数据库模型一致，您可以通过执行以下语句来修复此问题：
+- en: '[PRE140]'
+  id: totrans-338
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE140]'
+- en: '[PRE141]'
+  id: totrans-339
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE141]'
+- en: Tip
+  id: totrans-340
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: 'You can use the `NOW()` function to update the `last_update` column with the
+    current timestamp of the execution. For example:'
+  id: totrans-341
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用`NOW()`函数将`last_update`列更新为执行时的当前时间戳。例如：
+- en: '[PRE142]'
+  id: totrans-342
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE142]'
+- en: 'The second row reported by an `UPDATE` statement shows the overall effect of
+    the statement. In our example, you see:'
+  id: totrans-343
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`UPDATE`语句报告的第二行显示了语句的整体效果。在我们的示例中，您可以看到：'
+- en: '[PRE143]'
+  id: totrans-344
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE143]'
+- en: 'The first column reports the number of rows that were retrieved as matches;
+    in this case, since there’s no `WHERE` or `LIMIT` clause, all rows in the table
+    match the query. The second column reports how many rows needed to be changed,
+    which is always equal to or less than the number of rows that match. If you repeat
+    the statement, you’ll see a different result:'
+  id: totrans-345
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一列报告了作为匹配结果检索到的行数；在这种情况下，由于没有`WHERE`或`LIMIT`子句，表中的所有行都匹配查询。第二列报告了需要更改的行数，这总是等于或小于匹配的行数。如果您重复执行该语句，您会看到不同的结果：
+- en: '[PRE144]'
+  id: totrans-346
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE144]'
+- en: '[PRE145]'
+  id: totrans-347
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE145]'
+- en: This time, since the date is already set to `2021-02-28 17:53:00` and there
+    is no `WHERE` condition, all the rows still match the query but none are changed.
+    Note also the number of rows changed is always equal to the number of rows affected,
+    as reported on the first line of the output.
+  id: totrans-348
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这一次，由于日期已设置为`2021-02-28 17:53:00`并且没有`WHERE`条件，所有行仍然与查询匹配，但没有更改。请注意输出的第一行报告的更改行数始终等于受影响行数。
+- en: Using WHERE, ORDER BY, and LIMIT
+  id: totrans-349
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用WHERE、ORDER BY和LIMIT
+- en: Often, you don’t want to change all the rows in a table. Instead, you want to
+    update one or more rows that match a condition. As with `SELECT` and `DELETE`,
+    the `WHERE` clause is used for the task. In addition, in the same way as with
+    `DELETE`, you can use `ORDER BY` and `LIMIT` together to control how many rows
+    are updated from an ordered list.
+  id: totrans-350
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，您不希望更改表中的所有行。相反，您希望更新一个或多个与条件匹配的行。与`SELECT`和`DELETE`一样，`WHERE`子句用于此任务。此外，与`DELETE`类似，您可以使用`ORDER
+    BY`和`LIMIT`一起来控制从排序列表中更新多少行。
+- en: 'Let’s try an example that modifies one row in a table. Suppose that the actress
+    Penelope Guiness has changed her last name. To update it in the `actor` table
+    of the database, you need to execute:'
+  id: totrans-351
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们尝试修改表中的一行的示例。假设演员Penelope Guiness已更改了她的姓氏。要在数据库的`actor`表中更新她的姓氏，您需要执行：
+- en: '[PRE146]'
+  id: totrans-352
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE146]'
+- en: '[PRE147]'
+  id: totrans-353
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE147]'
+- en: As expected, MySQL matched one row and changed one row.
+  id: totrans-354
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如预期，MySQL匹配了一行并更改了一行。
+- en: 'To control how many updates occur, you can use the combination of `ORDER BY`
+    and `LIMIT`:'
+  id: totrans-355
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要控制更新操作的数量，您可以使用`ORDER BY`和`LIMIT`的组合：
+- en: '[PRE148]'
+  id: totrans-356
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE148]'
+- en: '[PRE149]'
+  id: totrans-357
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE149]'
+- en: As with `DELETE`, you would do this because you either want to perform the operation
+    in small chunks or modify only some rows. Here, you can see that 10 rows were
+    matched and changed.
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与`DELETE`类似，您可能会因为要将操作分成小块或仅修改某些行而执行此操作。在这里，您可以看到匹配并更改了10行。
+- en: 'The previous query also illustrates an important aspect of updates. As you’ve
+    seen, updates have two phases: a matching phase, where rows are found that match
+    the `WHERE` clause, and a modification phase, where the rows that need changing
+    are updated.'
+  id: totrans-359
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的查询还说明了更新的一个重要方面。正如您所见，更新有两个阶段：匹配阶段，在此阶段找到与`WHERE`子句匹配的行，以及修改阶段，在此阶段更新需要更改的行。
+- en: Exploring Databases and Tables with SHOW and mysqlshow
+  id: totrans-360
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用SHOW和mysqlshow探索数据库和表
+- en: We’ve already explained how you can use the `SHOW` command to obtain information
+    on the structure of a database, its tables, and the table columns. In this section,
+    we’ll review the most common types of the `SHOW` statement with brief examples
+    using the `sakila` database. The `mysqlshow` command-line program performs the
+    same functions as several `SHOW` command variants, but without you needing to
+    start the MySQL client.
+  id: totrans-361
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经解释过如何使用`SHOW`命令获取有关数据库、表及其列结构的信息。在本节中，我们将简要介绍使用`sakila`数据库的`SHOW`语句的最常见类型，并进行简短的示例。`mysqlshow`命令行程序执行与几个`SHOW`命令变体相同的功能，但无需启动MySQL客户端。
+- en: 'The `SHOW DATABASES` statement lists the databases you can access. If you’ve
+    followed our sample database installation steps in [“Entity Relationship Modeling
+    Examples”](ch02.xhtml#BAS-SEC-MODELING-EXAMPLES) and deployed the bank model in
+    [“Creating a Bank Database ER Model”](ch02.xhtml#CREATE-BANK), your output should
+    be as follows:'
+  id: totrans-362
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SHOW DATABASES`语句列出您可以访问的数据库。如果您按照我们的示例数据库安装步骤在[“实体关系建模示例”](ch02.xhtml#BAS-SEC-MODELING-EXAMPLES)中和在[“创建银行数据库ER模型”](ch02.xhtml#CREATE-BANK)中部署了银行模型，您的输出应如下所示：'
+- en: '[PRE150]'
+  id: totrans-363
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE150]'
+- en: '[PRE151]'
+  id: totrans-364
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE151]'
+- en: 'These are the databases that you can access with the `USE` command (discussed
+    in [Chapter 4](ch04.xhtml#CH4_MODIFY)); if you have access privileges for other
+    databases on your server, these will be listed too. You can only see databases
+    for which you have some privileges, unless you have the global `SHOW DATABASES`
+    privilege. You can get the same effect from the command line using the `mysqlshow`
+    program:'
+  id: totrans-365
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些是您可以使用`USE`命令访问的数据库（在[第4章](ch04.xhtml#CH4_MODIFY)讨论）；如果您对服务器上其他数据库有访问权限，则这些也将列出。您只能查看您具有某些权限的数据库，除非您具有全局的`SHOW
+    DATABASES`权限。您可以通过命令行使用`mysqlshow`程序来获得相同的效果：
+- en: '[PRE152]'
+  id: totrans-366
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE152]'
+- en: 'You can add a `LIKE` clause to `SHOW DATABASES`. This is useful if you have
+    many databases and want a short list as output. For example, to see only databases
+    whose names begin with `s`, run:'
+  id: totrans-367
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以在`SHOW DATABASES`中添加一个`LIKE`子句。如果你有很多数据库并且希望输出一个简短的列表，这将非常有用。例如，要仅查看名称以`s`开头的数据库，运行：
+- en: '[PRE153]'
+  id: totrans-368
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE153]'
+- en: '[PRE154]'
+  id: totrans-369
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE154]'
+- en: The `LIKE` statement’s syntax is identical to its use in `SELECT`.
+  id: totrans-370
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LIKE`语句的语法与其在`SELECT`中的用法完全相同。'
+- en: 'To see the statement used to create a database, you can use the `SHOW CREATE`
+    `DATABASE` statement. For example, to see how you created `sakila`, type:'
+  id: totrans-371
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看用于创建数据库的语句，您可以使用`SHOW CREATE DATABASE`语句。例如，要查看如何创建`sakila`，请键入：
+- en: '[PRE155]'
+  id: totrans-372
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE155]'
+- en: '[PRE156]'
+  id: totrans-373
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE156]'
+- en: 'This is perhaps the least exciting `SHOW` statement; it only displays the statement.
+    Note, though, that some additional comments are included, `/*!` and `*/`:'
+  id: totrans-374
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这可能是最不令人兴奋的`SHOW`语句；它只显示语句本身。但请注意，还包括一些额外的注释，`/*!`和`*/`：
+- en: '[PRE157]'
+  id: totrans-375
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE157]'
+- en: These comments contain MySQL-specific keywords that provide instructions that
+    are unlikely to be understood by other database programs. A database server other
+    than MySQL will ignore this comment text, so the syntax is usable by both MySQL
+    and other database server software. The optional number at the start of the comment
+    indicates the minimum version of MySQL that can process this particular instruction
+    (for example, `40100` indicates version 4.01.00); older versions of MySQL ignore
+    such instructions. You’ll learn about creating databases in [Chapter 4](ch04.xhtml#CH4_MODIFY).
+  id: totrans-376
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些注释包含MySQL特定的关键字，提供其他数据库程序不太可能理解的指令。除MySQL外的数据库服务器将忽略此注释文本，因此该语法可同时用于MySQL和其他数据库服务器软件。注释开头的可选数字表示能处理该特定指令的MySQL最低版本（例如，`40100`表示版本4.01.00）；较旧的MySQL版本将忽略这类指令。您将在[第4章](ch04.xhtml#CH4_MODIFY)了解有关创建数据库的内容。
+- en: 'The `SHOW TABLES` statement lists the tables in a database. To check the tables
+    in `sakila`, type:'
+  id: totrans-377
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SHOW TABLES`语句列出数据库中的表。要检查`sakila`中的表，请键入：'
+- en: '[PRE158]'
+  id: totrans-378
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE158]'
+- en: '[PRE159]'
+  id: totrans-379
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE159]'
+- en: 'If you’ve already selected the `sakila` database with the `USE sakila` command,
+    you can use the shortcut:'
+  id: totrans-380
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您已使用`USE sakila`命令选择了`sakila`数据库，则可以使用以下快捷方式：
+- en: '[PRE160]'
+  id: totrans-381
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE160]'
+- en: 'You can get a similar result by specifying the database name to the `mysqlshow`
+    program:'
+  id: totrans-382
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以通过向`mysqlshow`程序指定数据库名称来获得类似的结果：
+- en: '[PRE161]'
+  id: totrans-383
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE161]'
+- en: As with `SHOW DATABASES`, you can’t see tables that you don’t have privileges
+    for. This means you can’t see tables in a database you can’t access, even if you
+    have the `SHOW DATABASES` global privilege.
+  id: totrans-384
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与`SHOW DATABASES`一样，您无法查看没有权限的表。这意味着您无法查看无法访问的数据库中的表，即使您具有`SHOW DATABASES`全局权限。
+- en: 'The `SHOW COLUMNS` statement lists the columns in a table. For example, to
+    check the columns of `country`, type:'
+  id: totrans-385
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SHOW COLUMNS`语句列出表中的列。例如，要检查`country`表的列，请键入：'
+- en: '[PRE162]'
+  id: totrans-386
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE162]'
+- en: '[PRE163]'
+  id: totrans-387
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE163]'
+- en: The output reports the names of all the columns, their types and sizes, whether
+    they can be `NULL`, whether they are part of a key, their default values, and
+    any extra information. Types, keys, `NULL` values, and defaults are discussed
+    further in [Chapter 4](ch04.xhtml#CH4_MODIFY). If you haven’t already chosen the
+    `sakila` database with the `USE` command, then you can add the database name before
+    the table name, as in `sakila.country`. Unlike with the previous `SHOW` statements,
+    you can always see all column names if you have access to a table; it doesn’t
+    matter that you don’t have certain privileges for all columns.
+  id: totrans-388
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出报告了所有列的名称、类型和大小、是否可以为 `NULL`、是否是键的一部分、它们的默认值以及任何额外信息。类型、键、`NULL` 值和默认值将在[第四章](ch04.xhtml#CH4_MODIFY)中进一步讨论。如果尚未使用
+    `USE` 命令选择 `sakila` 数据库，则可以在表名前添加数据库名，例如 `sakila.country`。与前面的 `SHOW` 命令不同，如果您可以访问表，则始终可以看到所有列名；不需要为所有列获得某些特权。
+- en: 'You can get a similar result by using `mysqlshow` with the database and table
+    name:'
+  id: totrans-389
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `mysqlshow` 命令和数据库名以及表名，您可以获得类似的结果：
+- en: '[PRE164]'
+  id: totrans-390
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE164]'
+- en: 'You can see the statement used to create a particular table using the `SHOW
+    CREATE TABLE` statement (we’ll also look at creating tables in [Chapter 4](ch04.xhtml#CH4_MODIFY)).
+    Some users prefer this output to that of `SHOW COLUMNS`, since it has the familiar
+    format of a `CREATE TABLE` statement. Here’s an example for the `country` table:'
+  id: totrans-391
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用 `SHOW CREATE TABLE` 命令查看创建特定表的语句（我们也将在[第四章](ch04.xhtml#CH4_MODIFY)中讨论创建表）。有些用户更喜欢这种输出而不是
+    `SHOW COLUMNS` 的输出，因为它具有 `CREATE TABLE` 语句的熟悉格式。以下是 `country` 表的示例：
+- en: '[PRE165]'
+  id: totrans-392
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE165]'
+- en: '[PRE166]'
+  id: totrans-393
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE166]'

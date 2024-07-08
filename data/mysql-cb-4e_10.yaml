@@ -1,0 +1,2395 @@
+- en: Chapter 10\. Generating Summaries
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第十章。生成摘要
+- en: 10.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.0 简介
+- en: Database systems are not only useful for data storage and retrieval, but they
+    can also summarize your data in more concise forms. Summaries are useful when
+    you want the overall picture, not the details. They’re more readily understood
+    than a long list of records. They enable you to answer questions such as <q>How
+    many?</q> or <q>What is the total?</q> or <q>What is the range of values?</q>
+    If you run a business, you may want to know how many customers you have in each
+    state, or how much sales volume you generate each month.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库系统不仅对数据存储和检索有用，还可以以更简洁的形式对数据进行总结。摘要在您想要整体图景而不是详细信息时非常有用。它们比长列表的记录更容易理解。它们使您能够回答诸如“有多少？”、“总共多少？”或“值的范围是多少？”这样的问题。如果您经营一家企业，您可能想知道每个州有多少客户，或者每个月的销售额是多少。
+- en: 'The preceding examples include two common summary types: counting summaries
+    and content summaries. The first (the number of customer records per state) is
+    a counting summary. The content of each record is important only for purposes
+    of placing it into the proper group or category for counting. Such summaries are
+    essentially histograms, where you sort items into a set of bins and count the
+    number of items in each bin. The second example (sales volume per month) is a
+    content summary, in which sales totals are based on sales values in order records.'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前述示例包括两种常见的摘要类型：计数摘要和内容摘要。第一种（每个州的客户记录数）是计数摘要。每条记录的内容仅在将其放入适当的组或类别以进行计数时才重要。这些摘要本质上是直方图，您将项目分类到一组箱中，并计算每个箱中的项目数。第二个示例（每月销售额）是内容摘要，其中销售总额基于订单记录中的销售值。
+- en: Another summary type produces neither counts nor sums, but simply a list of
+    unique values. This is useful if you care *which* values are present rather than
+    how many of each there are. To determine the states in which you have customers,
+    you need a list of the distinct state names contained in the records, not a list
+    consisting of the state value from every record.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种摘要类型既不产生计数也不产生总和，而只是一个唯一值列表。如果您关心的是存在哪些值而不是每个值有多少个，这将非常有用。要确定您的客户所在的州，请获取记录中包含的唯一州名列表，而不是从每条记录中获取的州值列表。
+- en: The summary types available to you depend on the nature of your data. A counting
+    summary can be generated from all kinds of values, whether they be numbers, strings,
+    or dates. Summaries that produce sums or averages apply only to numeric values.
+    You can count instances of customer state names to produce a demographic analysis
+    of your customer base. And sometimes it makes sense to apply one summary technique
+    to the result of another. For example, to determine how many states your customers
+    live in, generate a list of unique customer states, then count them.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可用于您的摘要类型取决于数据的性质。计数摘要可以从各种值生成，无论它们是数字、字符串还是日期。生成总和或平均值的摘要仅适用于数值。您可以计算客户州名称的实例数量，以生成客户基础的人口统计分析。有时，将一个摘要技术应用于另一个的结果是有意义的。例如，要确定客户居住在多少州中，请生成唯一客户州的列表，然后计数它们。
+- en: 'Summary operations in MySQL involve the following SQL constructs:'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL中的摘要操作涉及以下SQL结构：
+- en: To compute a summary value from a set of individual values, use one of the functions
+    known as aggregate functions. These are so called because they operate on aggregates
+    (groups) of values. Aggregate functions include `COUNT()`, which counts rows or
+    values in a query result; `MIN()` and `MAX()`, which find smallest and largest
+    values; and `SUM()` and `AVG()`, which produce sums and means of values. These
+    functions can be used to compute a value for the entire result set, or with a
+    `GROUP` `BY` clause to group rows into subsets and obtain an aggregate value for
+    each one.
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要从一组单独的值计算摘要值，请使用称为聚合函数之一的函数。它们之所以被称为聚合函数，是因为它们操作值的聚合（组）。聚合函数包括`COUNT()`，用于计算查询结果中的行或值数量；`MIN()`和`MAX()`，用于查找最小和最大值；以及`SUM()`和`AVG()`，用于生成值的总和和平均值。这些函数可以用于计算整个结果集的值，或者与`GROUP
+    BY`子句一起用于将行分组到子集中，并为每个子集获取聚合值。
+- en: To obtain a list of unique values, use `SELECT` `DISTINCT` rather than `SELECT`.
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要获取唯一值的列表，请使用`SELECT DISTINCT`而不是`SELECT`。
+- en: To count unique values, use `COUNT(DISTINCT)` rather than `COUNT()`.
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要计算唯一值，请使用`COUNT(DISTINCT)`而不是`COUNT()`。
+- en: The recipes in this chapter first illustrate basic summary techniques, and then
+    show how to perform more complex summary operations. You’ll find additional examples
+    of summary methods in later chapters, particularly those that cover joins and
+    statistical operations. (See [Chapter 16](ch16.xhtml#nch-multi) and [Chapter 17](ch17.xhtml#nch-stats).)
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的食谱首先说明了基本的汇总技术，然后展示了如何执行更复杂的汇总操作。您将在后续章节中找到更多汇总方法的示例，特别是涉及连接和统计操作的章节。（参见[第16章](ch16.xhtml#nch-multi)和[第17章](ch17.xhtml#nch-stats).）
+- en: Summary queries sometimes involve complex expressions. For summaries that you
+    execute often, keep in mind that views can make queries easier to use. [Recipe
+    5.7](ch05.xhtml#nch-select-select-view) demonstrates the basic technique of creating
+    a view. [Recipe 10.5](#nch-sum-sum-view) shows how it applies to summary simplification,
+    and you’ll easily see how it can be used in later sections of the chapter as well.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 汇总查询有时涉及复杂的表达式。对于您经常执行的汇总，请记住视图可以使查询更容易使用。[Recipe 5.7](ch05.xhtml#nch-select-select-view)演示了创建视图的基本技术。[Recipe
+    10.5](#nch-sum-sum-view)展示了它如何应用于汇总简化，您将很容易看到它如何在本章的后续部分中使用。
+- en: 'The primary tables used for examples in this chapter are the `driver_log` and
+    `mail` tables. These were also used in [Chapter 9](ch09.xhtml#nch-sort), so they
+    should look familiar. A third table used throughout the chapter is `states`, which
+    has rows containing a few columns of information for each of the United States:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中示例使用的主要表是`driver_log`和`mail`表。这些表也在[第9章](ch09.xhtml#nch-sort)中使用过，所以应该看起来很熟悉。本章中经常使用的第三个表是`states`，其中每个美国州都有几列信息：
+- en: '[PRE0]'
+  id: totrans-13
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: The `name` and `abbrev` columns list the full state name and the corresponding
+    abbreviation. The `statehood` column indicates the day on which the state entered
+    the Union. `pop` is the state population from the 2010 census, as reported by
+    the US Census Bureau.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`name`和`abbrev`列列出完整的州名和相应的缩写。`statehood`列表示州加入联盟的日期。`pop`是2010年人口普查时的州人口，由美国人口普查局报告。'
+- en: This chapter uses other tables occasionally as well. You can create them with
+    scripts found in the *tables* directory of the `recipes` distribution. [Recipe
+    7.15](ch07.xhtml#nch-strings-strings-full-text-intro) describes the `reviews`
+    table.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章偶尔还使用其他表。您可以使用`recipes`发行版的`tables`目录中找到的脚本创建它们。[Recipe 7.15](ch07.xhtml#nch-strings-strings-full-text-intro)描述了`reviews`表。
+- en: 10.1 Summarizing with COUNT()
+  id: totrans-16
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.1 使用COUNT()进行汇总
+- en: Problem
+  id: totrans-17
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to count the number of rows in an entire table or that match particular
+    conditions.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想计算整个表中的行数或符合特定条件的行数。
+- en: Solution
+  id: totrans-19
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the `COUNT()` function.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`COUNT()`函数。
+- en: Discussion
+  id: totrans-21
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'The `COUNT()` function calculates number of rows. For example, to display the
+    rows in a table, use a `SELECT` `*` statement, but to count them instead, use
+    `SELECT` `COUNT(*)`. Without a `WHERE` clause, the statement counts all the rows
+    in the table, such as in the following statement that shows how many rows the
+    `driver_log` table contains:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`COUNT()`函数计算行数。例如，要显示表中的行，请使用`SELECT *`语句，但要计算行数，请使用`SELECT COUNT(*)`。如果没有`WHERE`子句，则该语句计算表中的所有行数，如下面显示的`driver_log`表包含多少行的语句：'
+- en: '[PRE1]'
+  id: totrans-23
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'If you don’t know how many US states there are (perhaps you think there are
+    57?), this statement tells you:'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你不知道美国有多少个州（也许你认为有57个？），这个声明告诉你：
+- en: '[PRE2]'
+  id: totrans-25
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: '`COUNT(*)` with no `WHERE` clause performs a full table scan unless storage
+    engine optimized this function. For MyISAM tables, that stores exact number of
+    rows, this is very quick. For InnoDB tables, that scans all entries in the primary
+    key to perform `COUNT(*)`, you may want to avoid using this function because it
+    can be slow for large tables. If an approximate row count is good enough, avoid
+    a full scan by extracting the `TABLE_ROWS` value from the `INFORMATION_SCHEMA`
+    database:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果没有`WHERE`子句的`COUNT(*)`执行完整的表扫描，除非存储引擎优化了这个函数。对于存储确切行数的MyISAM表来说，这非常快速。对于需要扫描主键中所有条目来执行`COUNT(*)`的InnoDB表来说，您可能希望避免使用这个函数，因为对于大表来说速度可能会很慢。如果近似的行数足够好，请通过从`INFORMATION_SCHEMA`数据库提取`TABLE_ROWS`值来避免全表扫描：
+- en: '[PRE3]'
+  id: totrans-27
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'To count only the number of rows that match certain conditions, include an
+    appropriate `WHERE` clause in a `SELECT` `COUNT(*)` statement. The conditions
+    can be chosen to make `COUNT(*)` useful for answering many kinds of questions:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要仅计算符合特定条件的行数，请在`SELECT COUNT(*)`语句中包含适当的`WHERE`子句。可以选择条件以使`COUNT(*)`适用于回答许多种类的问题：
+- en: How many times did drivers travel more than 200 miles in a day?
+  id: totrans-29
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 驾驶员一天内超过200英里的次数有多少次？
+- en: '[PRE4]'
+  id: totrans-30
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: How many days did Suzi drive?
+  id: totrans-31
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Suzi开车了多少天？
+- en: '[PRE5]'
+  id: totrans-32
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: How many of the United States joined the Union in the 19th century?
+  id: totrans-33
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 19世纪有多少个美国州加入联盟？
+- en: '[PRE6]'
+  id: totrans-34
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'The `COUNT()` function actually has two forms. The form we’ve been using, `COUNT(*)`,
+    counts rows. The other form, `COUNT(`*`expr`*`)`, takes a column name or expression
+    argument and counts the number of non-`NULL` values. The following statement shows
+    how to produce both a row count for a table and a count of the number of non-`NULL`
+    values in one of its columns:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数`COUNT()`实际上有两种形式。我们一直在使用的形式`COUNT(*)`用于计算行数。另一种形式`COUNT(`*`expr`*`)`接受列名或表达式作为参数，用于计算非`NULL`值的数量。以下语句展示了如何同时为表格计算行数和某列非`NULL`值的数量：
+- en: '[PRE7]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'The fact that `COUNT(`*`expr`*`)` doesn’t count `NULL` values is useful for
+    producing multiple counts from the same set of rows. To count the number of Saturday
+    and Sunday trips in the `driver_log` table with a single statement, do this:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`COUNT(`*`expr`*`)`不计算`NULL`值的事实在从同一组行中生成多个计数时非常有用。要在`driver_log`表中使用单个语句计算星期六和星期日的行程数，请执行以下操作：'
+- en: '[PRE8]'
+  id: totrans-38
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Or to count weekend versus weekday trips, do this:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者要计算周末与工作日的行程数，请执行以下操作：
+- en: '[PRE9]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: The `IF()` expressions determine, for each column value, whether it should be
+    counted. If so, the expression evaluates to `1` and `COUNT()` counts it. If not,
+    the expression evaluates to `NULL` and `COUNT()` ignores it. The effect is to
+    count the number of values that satisfy the condition given as the first argument
+    to `IF()`.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`IF()`表达式确定每个列值是否应计数。如果是，则表达式评估为`1`，`COUNT()`对其计数。如果不是，则表达式评估为`NULL`，`COUNT()`将忽略它。这样做的效果是计算满足`IF()`第一个参数给定条件的值的数量。'
+- en: Tip
+  id: totrans-42
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 小贴士
+- en: Function `COUNT()` calculates number of elements, so you can replace `1` with
+    any other value. The result will be the same.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数`COUNT()`计算元素的数量，因此您可以用任何其他值替换`1`。结果将相同。
+- en: See Also
+  id: totrans-44
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 另请参阅
+- en: For the further discussion on the difference between `COUNT(*)` and `COUNT(expr)`,
+    see [Recipe 10.9](#nch-sum-sum-null).
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于`COUNT(*)`和`COUNT(expr)`之间的区别进一步讨论，请参见[Recipe 10.9](#nch-sum-sum-null)。
+- en: 10.2 Summarizing with MIN() and MAX()
+  id: totrans-46
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.2 使用MIN()和MAX()进行汇总
+- en: Problem
+  id: totrans-47
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to find the smallest or the largest values in the dataset.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要找到数据集中最小或最大的值。
+- en: Solution
+  id: totrans-49
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use functions `MIN()` and `MAX()` correspondingly.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用函数`MIN()`和`MAX()`相应地。
+- en: Discussion
+  id: totrans-51
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Finding smallest or largest values in a dataset is somewhat akin to sorting,
+    except that instead of producing an entire set of sorted values, you select only
+    a single value at one end or the other of the sorted range. This operation applies
+    to questions about smallest, largest, oldest, newest, most expensive, least expensive,
+    and so forth. One way to find such values is to use the `MIN()` and `MAX()` functions.
+    (Another way is to use `LIMIT`; see [Recipe 5.9](ch05.xhtml#nch-select-select-limit).)
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在数据集中找到最小或最大的值有点类似于排序，不同之处在于它不是生成整个排序值集合，而是仅选择排序范围的一个端点的单个值。这种操作适用于关于最小、最大、最老、最新、最昂贵、最便宜等问题。查找这些值的一种方法是使用`MIN()`和`MAX()`函数。（另一种方法是使用`LIMIT`；请参见[Recipe
+    5.9](ch05.xhtml#nch-select-select-limit)。）
+- en: 'Because `MIN()` and `MAX()` determine the extreme values in a set, they’re
+    useful for characterizing ranges:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为`MIN()`和`MAX()`确定集合中的极端值，它们用于表征范围：
+- en: What date range is represented by the rows in the `mail` table? What are the
+    smallest and largest messages sent?
+  id: totrans-54
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 邮件表中的行代表的是哪个日期范围？最早和最晚发送的消息是什么？
+- en: '[PRE10]'
+  id: totrans-55
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: What are the smallest and largest US state populations?
+  id: totrans-56
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 美国各州人口中最小和最大的是哪些？
+- en: '[PRE11]'
+  id: totrans-57
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: What are the first and last state names, lexically speaking? What is the length
+    of the shortest and longest names?
+  id: totrans-58
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从字面上来看，第一个和最后一个州名是什么？最短和最长名称的长度是多少？
+- en: '[PRE12]'
+  id: totrans-59
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: The final query illustrates that `MIN()` and `MAX()` need not be applied directly
+    to column values; they’re also useful for expressions or values derived from column
+    values.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后一个查询示例说明了`MIN()`和`MAX()`不必直接应用于列值；它们还对从列值派生的表达式或值非常有用。
+- en: 10.3 Summarizing with SUM() and AVG()
+  id: totrans-61
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.3 使用SUM()和AVG()进行汇总
+- en: Problem
+  id: totrans-62
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to calculate total or average (mean) of a set of values.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要计算一组值的总和或平均值（均值）。
+- en: Solution
+  id: totrans-64
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use functions `SUM()` and `AVG()`.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用函数`SUM()`和`AVG()`。
+- en: Discussion
+  id: totrans-66
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: '`SUM()` and `AVG()` produce the total and average (mean) of a set of values:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SUM()`和`AVG()`计算一组值的总和和平均值（均值）：'
+- en: What is the total amount of mail traffic in bytes and the average size of each
+    message?
+  id: totrans-68
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 邮件流量的总字节数及每条消息的平均大小是多少？
+- en: '[PRE13]'
+  id: totrans-69
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: How many miles did the drivers in the `driver_log` table travel? What was the
+    average number of miles traveled per day?
+  id: totrans-70
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`driver_log`表中的驾驶员行驶了多少英里？每天的平均行驶英里数是多少？'
+- en: '[PRE14]'
+  id: totrans-71
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: What is the total population of the United States?
+  id: totrans-72
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 美国的总人口是多少？
+- en: '[PRE15]'
+  id: totrans-73
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: The value represents the population reported for the 2021 census.
+  id: totrans-74
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 该值表示2021年人口普查报告的人口。
+- en: '`SUM()` and `AVG()` are numeric functions, so they can’t be used with strings
+    or temporal values. But sometimes you can convert nonnumeric values to useful
+    numeric forms. Suppose that a table stores `TIME` values that represent elapsed
+    time:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SUM()`和`AVG()`是数值函数，因此不能与字符串或时间值一起使用。但有时可以将非数值值转换为有用的数值形式。假设一个表存储表示经过时间的`TIME`值：'
+- en: '[PRE16]'
+  id: totrans-76
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'To compute the total elapsed time, use `TIME_TO_SEC()` to convert the values
+    to seconds before summing them. The resulting sum is also in seconds; pass it
+    to `SEC_TO_TIME()` to convert it back to `TIME` format:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要计算总经过时间，请使用`TIME_TO_SEC()`将值转换为秒，然后再求和。得到的总和也是秒数；将其传递给`SEC_TO_TIME()`以将其转换回`TIME`格式：
+- en: '[PRE17]'
+  id: totrans-78
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: See Also
+  id: totrans-79
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 另请参阅
+- en: The `SUM()` and `AVG()` functions are especially useful in statistical applications.
+    They’re explored further in [Chapter 17](ch17.xhtml#nch-stats), along with `STD()`,
+    a related function that calculates standard deviations.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SUM()`和`AVG()`函数在统计应用中特别有用。它们在[第17章](ch17.xhtml#nch-stats)中进一步探讨，还有一个相关函数`STD()`，用于计算标准偏差。'
+- en: 10.4 Using DISTINCT to eliminate duplicates
+  id: totrans-81
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.4 使用DISTINCT消除重复项
+- en: Problem
+  id: totrans-82
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to skip duplicate values when performing calculations.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望在执行计算时跳过重复值。
+- en: Solution
+  id: totrans-84
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use keyword `DISTINCT`.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用关键词`DISTINCT`。
+- en: Discussion
+  id: totrans-86
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'A summary operation that uses no aggregate functions is determining the unique
+    values or rows in a dataset. Do this with `DISTINCT` (or `DISTINCTROW`, a synonym).
+    `DISTINCT` boils down a query result, and often is combined with `ORDER` `BY`
+    to place values in more meaningful order. This query lists in lexical order the
+    drivers named in the `driver_log` table:'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不使用聚合函数的汇总操作是确定数据集中唯一值或行。可以使用`DISTINCT`（或其同义词`DISTINCTROW`）来实现这一点。`DISTINCT`将查询结果简化，并经常与`ORDER
+    BY`结合使用以使值按更有意义的顺序排列。此查询按词汇顺序列出了`driver_log`表中的驾驶员名单：
+- en: '[PRE18]'
+  id: totrans-88
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Without `DISTINCT`, the statement produces the same names, but is not nearly
+    as easy to understand, even with a small dataset:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 没有`DISTINCT`，该语句生成相同的名称，但即使是在小数据集中，也不容易理解：
+- en: '[PRE19]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'To determine the number of different drivers, use `COUNT(DISTINCT)`:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定不同驾驶员的数量，请使用`COUNT(DISTINCT)`：
+- en: '[PRE20]'
+  id: totrans-92
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: '`COUNT(DISTINCT)` ignores `NULL` values. To count `NULL` as one of the values
+    in the set if it’s present, use one of the following expressions:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`COUNT(DISTINCT)`会忽略`NULL`值。如果需要将`NULL`视为集合中的一个值，请使用以下表达式之一：'
+- en: '[PRE21]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: In this example we first calculate number of distinct `NOT NULL` values, then
+    add `1` if the sum of `NULL` values is greater than zero.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个例子中，我们首先计算非空值的不同值的数量，然后如果`NULL`值的总和大于零，则再加`1`。
+- en: '`DISTINCT` queries often are useful in conjunction with aggregate functions
+    to more fully characterize your data. Suppose that a `customer` table contains
+    a `state` column indicating customer location. Applying `COUNT(*)` to the `customer`
+    table indicates how many customers you have, using `DISTINCT` on the `state` column
+    tells you the number of states in which you have customers, and `COUNT(DISTINCT)`
+    on the `state` column tells you how many states your customer base represents.'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DISTINCT`查询通常与聚合函数结合使用，以更全面地描述您的数据。假设`customer`表包含一个指示客户位置的`state`列。对`customer`表应用`COUNT(*)`可以告诉您有多少客户，对`state`列应用`DISTINCT`可以告诉您有客户的州数，而对`state`列应用`COUNT(DISTINCT)`可以告诉您客户群体代表了多少州。'
+- en: 'When used with multiple columns, `DISTINCT` shows the different combinations
+    of values in the columns and `COUNT(DISTINCT)` counts the number of combinations.
+    The following statements show the different sender/recipient pairs in the `mail`
+    table and the number of such pairs:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当与多列一起使用时，`DISTINCT`显示列中值的不同组合，`COUNT(DISTINCT)`计算组合的数量。以下语句显示了`mail`表中不同的发件人/收件人对及其数量：
+- en: '[PRE22]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 10.5 Creating a View to Simplify Using a Summary
+  id: totrans-99
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.5 创建一个视图以简化使用汇总
+- en: Problem
+  id: totrans-100
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to make it easier to perform a summary.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望更容易地执行汇总操作。
+- en: Solution
+  id: totrans-102
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Create a view that does it for you.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建一个自动完成此操作的视图。
+- en: Discussion
+  id: totrans-104
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'If you often need a given summary, a technique that enables you to avoid typing
+    the summarizing expressions repeatedly is to use a view (see [Recipe 5.7](ch05.xhtml#nch-select-select-view)).
+    For example, the following view implements the weekend versus weekday trip summary
+    discussed in [Recipe 10.1](#nch-sum-sum-basic-count):'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您经常需要特定的摘要，一种使您避免重复输入总结表达式的技术是使用视图（参见[食谱 5.7](ch05.xhtml#nch-select-select-view)）。例如，以下视图实现了周末与工作日行程总结的讨论（参见[食谱
+    10.1](#nch-sum-sum-basic-count)）：
+- en: '[PRE23]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'Selecting from this view is much easier than selecting directly from the underlying
+    table:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从此视图中选择比直接从底层表中选择更容易：
+- en: '[PRE24]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: While
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然
+- en: 10.6 Finding Values Associated with Minimum and Maximum Values
+  id: totrans-110
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.6 寻找与最小值和最大值相关的值
+- en: Problem
+  id: totrans-111
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know the values for other columns in the row that contains a minimum
+    or maximum value.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你想知道包含最小值或最大值的行中其他列的值。
+- en: Solution
+  id: totrans-113
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use two statements and a user-defined variable. Or a subquery. Or a join. Or
+    a CTE.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用两个语句和一个用户定义的变量。或者一个子查询。或者一个连接。或者一个 CTE。
+- en: Discussion
+  id: totrans-115
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: '`MIN()` and `MAX()` find an endpoint of a range of values, but you may also
+    be interested in other values from the row in which the value occurs. For example,
+    you can find the largest state population like this:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`MIN()` 和 `MAX()` 找到值范围的端点，但您可能也对包含该值的行中的其他值感兴趣。例如，您可以像这样找到最大的州人口：'
+- en: '[PRE25]'
+  id: totrans-117
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'But that doesn’t show you which state has this population. The obvious attempt
+    at getting that information looks like this:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但这并不能告诉你哪个州拥有这一人口。想要获取这些信息的显而易见的尝试如下：
+- en: '[PRE26]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'Probably everyone tries something like that sooner or later, but it doesn’t
+    work. Aggregate functions such as `MIN()` and `MAX()` cannot be used in `WHERE`
+    clauses, which require expressions that apply to individual rows. The intent of
+    the statement is to determine which row has the maximum population value and display
+    the associated state name. The problem is that although you and I know perfectly
+    well what we mean by writing such a thing, it makes no sense at all in SQL. The
+    statement fails because SQL uses the `WHERE` clause to determine which rows to
+    select, but the value of an aggregate function is known only *after* selecting
+    the rows from which the function’s value is determined! So, in a sense, the statement
+    is self-contradictory. To solve this problem, save the maximum population value
+    in a user-defined variable, then compare rows to the variable value:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或许每个人迟早都会尝试这样做，但这是行不通的。聚合函数如 `MIN()` 和 `MAX()` 不能在 `WHERE` 子句中使用，后者需要适用于单个行的表达式。该语句的目的是确定哪一行具有最大的人口值，并显示相关的州名。问题在于，虽然你我都清楚地知道我们写这样一段话的意图，但在
+    SQL 中完全没有任何意义。该语句失败是因为 SQL 使用 `WHERE` 子句来确定选择哪些行，但聚合函数的值只有在选择确定该函数值的行后才能知道！因此，从某种意义上说，该语句是自相矛盾的。为了解决这个问题，将最大人口值保存在用户定义的变量中，然后将行与变量值进行比较：
+- en: '[PRE27]'
+  id: totrans-121
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'Alternatively, for a single-statement solution, use a subquery in the `WHERE`
+    clause that returns the maximum population value:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，对于单语句解决方案，请在 `WHERE` 子查询中使用子查询返回最大人口值：
+- en: '[PRE28]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'This technique also works even if the minimum or maximum value itself isn’t
+    actually contained in the row, but is only derived from it. To determine the length
+    of the shortest review in the sample Amazon Reviews Data, do this:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使样本亚马逊评论数据中没有实际包含最小值或最大值本身，而是从中推导出来，这种技术也同样适用。要确定样本中最短评论的长度，请执行以下操作：
+- en: '[PRE29]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'If you want to know <q>Which review is that?</q> do this instead:'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你想知道<q>这是哪一次评审？</q>请使用以下方法代替：
+- en: '[PRE30]'
+  id: totrans-127
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'Yet another way to select other columns from rows containing a minimum or maximum
+    value is to use a join. Select the value into another table, then join it to the
+    original table to select the row that matches the value. To find the row for the
+    state with the highest population, use a join like this:'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择包含最小值或最大值的行中的其他列的另一种方法是使用连接。将该值选入另一个表，然后将其与原始表连接以选择与该值匹配的行。要找到人口最多的州的行，请使用如下连接：
+- en: '[PRE31]'
+  id: totrans-129
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: As of MySQL 8.0 you can use Common Table Expressions (CTE) to perform the same
+    search.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自 MySQL 8.0 起，您可以使用公共表达式（CTE）执行相同的搜索。
+- en: '[PRE32]'
+  id: totrans-131
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'Two above code snippets use the same idea: create a temporary table to store
+    the maximum population number and join it with the original table. But latter
+    performs this operation in the single query, so you do not need to care about
+    destroying the temporary table after getting the result. We discuss CTE in detail
+    in [Recipe 10.18](#nch-sum-sum-with).'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述两个代码片段使用了相同的思想：创建一个临时表来存储最大人口数，并将其与原始表连接。但后者在单个查询中执行此操作，因此您无需在获得结果后担心销毁临时表。我们将在[配方
+    10.18](#nch-sum-sum-with)中详细讨论 CTE。
+- en: See Also
+  id: totrans-133
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: '[Recipe 16.7](ch16.xhtml#nch-multi-multi-per-group) extends the discussion
+    here to the problem of finding rows that contain minimum or maximum values for
+    multiple groups in a dataset.'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[配方 16.7](ch16.xhtml#nch-multi-multi-per-group)扩展了对在数据集中查找包含多个组的最小或最大值的行的讨论。'
+- en: 10.7 Controlling String Case Sensitivity for MIN() and MAX()
+  id: totrans-135
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.7 控制 `MIN()` 和 `MAX()` 的字符串大小写敏感性
+- en: Problem
+  id: totrans-136
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: '`MIN()` and `MAX()` select strings in case-sensitive fashion when you don’t
+    want them to, or vice versa.'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`MIN()` 和 `MAX()` 在您不希望它们以区分大小写的方式选择字符串时，或者反之时，以区分大小写的方式选择字符串。'
+- en: Solution
+  id: totrans-138
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use different comparison characteristics of the strings.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用字符串的不同比较特性。
+- en: Discussion
+  id: totrans-140
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: '[Recipe 7.1](ch07.xhtml#nch-strings-strings-properties) discusses how string-comparison
+    properties depend on whether the strings are binary or nonbinary:'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[配方 7.1](ch07.xhtml#nch-strings-strings-properties)讨论了字符串比较属性如何取决于字符串是二进制还是非二进制的：'
+- en: Binary strings are sequences of bytes. They are compared byte by byte using
+    numeric byte values. Character set and lettercase have no meaning for comparisons.
+  id: totrans-142
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 二进制字符串是字节序列。它们按照数值字节值逐字节进行比较。字符集和大小写对比较没有意义。
+- en: Nonbinary strings are sequences of characters. They have a character set and
+    collation and are compared character by character using the order defined by the
+    collation.
+  id: totrans-143
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 非二进制字符串是字符序列。它们有字符集和排序规则，并按照排序规则定义的顺序逐字符进行比较。
+- en: These properties also apply to string columns used as the argument to the `MIN()`
+    or `MAX()` function because they are based on comparison. To alter how these functions
+    work with a string column, alter the column’s comparison properties. [Recipe 7.7](ch07.xhtml#nch-strings-strings-compare)
+    discusses how to control these properties, and [Recipe 9.4](ch09.xhtml#nch-sort-sort-string)
+    shows how they apply to string sorts. The same principles apply to finding minimum
+    and maximum string values, so I’ll just summarize here; read [Recipe 9.4](ch09.xhtml#nch-sort-sort-string)
+    for additional details.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些属性也适用于作为 `MIN()` 或 `MAX()` 函数参数的字符串列，因为它们基于比较。要改变这些函数如何处理字符串列的方式，请修改列的比较属性。[配方
+    7.7](ch07.xhtml#nch-strings-strings-compare)讨论了如何控制这些属性，而[配方 9.4](ch09.xhtml#nch-sort-sort-string)展示了它们如何应用于字符串排序。相同的原则适用于查找最小和最大字符串值，因此我在这里只做总结；阅读[配方
+    9.4](ch09.xhtml#nch-sort-sort-string)获取更多详情。
+- en: 'To compare case-insensitive strings in case-sensitive fashion, order the values
+    using a case-sensitive collation:'
+  id: totrans-145
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要以区分大小写的方式比较大小写不敏感的字符串，请使用区分大小写的排序规则对值进行排序：
+- en: '[PRE33]'
+  id: totrans-146
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'To compare case-sensitive strings in case-insensitive fashion, order the values
+    using a case-insensitive collation:'
+  id: totrans-147
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要以区分大小写的方式比较大小写敏感的字符串，请使用区分大小写的排序规则对值进行排序：
+- en: '[PRE34]'
+  id: totrans-148
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'Another possibility is to compare values that have all been converted to the
+    same lettercase, which makes lettercase irrelevant. However, that also changes
+    the retrieved values:'
+  id: totrans-149
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 另一个可能性是比较已全部转换为相同大小写的值，从而使大小写无关紧要。但这也会改变检索到的值：
+- en: '[PRE35]'
+  id: totrans-150
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'Binary strings compare using numeric byte values, so there is no concept of
+    lettercase involved. However, because letters in different cases have different
+    byte values, comparisons of binary strings effectively are case sensitive. (That
+    is, `a` and `A` are unequal.) To compare binary strings using a case-insensitive
+    ordering, convert them to nonbinary strings and apply an appropriate collation:'
+  id: totrans-151
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 二进制字符串使用数值字节值进行比较，因此没有字母大小写的概念。然而，因为不同大小写的字母具有不同的字节值，所以二进制字符串的比较实际上是大小写敏感的。（即，`a`
+    和 `A` 是不相等的。）要以区分大小写的顺序比较二进制字符串，请将它们转换为非二进制字符串并应用适当的排序规则：
+- en: '[PRE36]'
+  id: totrans-152
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: If the default collation is case insensitive (as is true for `utf8mb4`), you
+    can omit the `COLLATE` clause.
+  id: totrans-153
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如果默认排序规则不区分大小写（例如`utf8mb4`），则可以省略`COLLATE`子句。
+- en: 10.8 Dividing a Summary into Subgroups
+  id: totrans-154
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.8 将摘要分成子组
+- en: Problem
+  id: totrans-155
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want a summary for each subgroup of a set of rows, not an overall summary
+    value.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望为一组行的每个子组生成摘要，而不是整体摘要值。
+- en: Solution
+  id: totrans-157
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a `GROUP` `BY` clause to arrange rows into groups.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `GROUP BY` 子句将行分组。
+- en: Discussion
+  id: totrans-159
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'The summary statements shown so far calculate summary values over all rows
+    in the result set. For example, the following statement determines the number
+    of records in the `mail` table, and thus the total number of mail messages sent:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止显示的汇总语句计算了结果集中所有行的汇总值。例如，以下语句确定了`mail`表中的记录数，因此也是发送的邮件总数：
+- en: '[PRE37]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'To arrange a set of rows into subgroups and summarize each group, use aggregate
+    functions in conjunction with a `GROUP` `BY` clause. To determine the number of
+    messages per sender, group the rows by sender name, count how many times each
+    name occurs, and display the names with the counts:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将一组行排列成子组并总结每个组，请与`GROUP BY`子句一起使用聚合函数。要确定每个发件人的消息数量，请按发件人名称对行进行分组，计算每个名称出现的次数，并显示名称及其计数：
+- en: '[PRE38]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'That query summarizes the same column that is used for grouping (`srcuser`),
+    but that’s not always necessary. Suppose that you want a quick characterization
+    of the `mail` table, showing for each sender listed in it the total amount of
+    traffic sent (in bytes) and the average number of bytes per message. In this case,
+    you still use the `srcuser` column to group the rows, but summarize the `size`
+    values:'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该查询汇总了用于分组的同一列（`srcuser`），但这并不总是必要的。假设您想要快速了解`mail`表，显示在其中列出的每个发送者发送的总流量（以字节为单位）及每条消息的平均字节数。在这种情况下，您仍然使用`srcuser`列对行进行分组，但汇总`size`值：
+- en: '[PRE39]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'Use as many grouping columns as necessary to achieve a grouping as fine-grained
+    as you require. The earlier query that shows the number of messages per sender
+    is a coarse summary. To be more specific and find out how many messages each sender
+    sent from each host, use two grouping columns. This produces a result with nested
+    groups (groups within groups):'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用尽可能多的分组列以达到您需要的细粒度分组。早先显示每个发送者发送的消息数量的查询是一种粗略的汇总。要更具体地了解每个发送者从每个主机发送了多少消息，请使用两个分组列。这会生成一个带有嵌套组的结果（组中的组）：
+- en: '[PRE40]'
+  id: totrans-167
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'The preceding examples in this section used `COUNT()`, `SUM()`, and `AVG()`
+    for per-group summaries. You can use `MIN()` or `MAX()`, too. With a `GROUP` `BY`
+    clause, they return the smallest or largest value per group. The following query
+    groups `mail` table rows by message sender, displaying for each the size of the
+    largest message sent and the date of the most recent message:'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节中的前述示例使用了`COUNT()`、`SUM()`和`AVG()`来进行每组汇总。您也可以使用`MIN()`或`MAX()`。配合`GROUP BY`子句，它们会返回每组的最小值或最大值。以下查询将`mail`表的行按消息发送者分组，显示每个发送者发送的最大消息的大小和最近消息的日期：
+- en: '[PRE41]'
+  id: totrans-169
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'You can group by multiple columns and display a maximum for each combination
+    of values in those columns. This query finds the size of the largest message sent
+    between each pair of sender and recipient values listed in the `mail` table:'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以按多个列进行分组，并显示每对这些列值之间的最大值。此查询查找了在`mail`表中列出的每对发送者和接收者值之间发送的最大消息的大小：
+- en: '[PRE42]'
+  id: totrans-171
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: 'When using aggregate functions to produce per-group summary values, watch out
+    for the following trap, which involves selecting nonsummary table columns not
+    related to the grouping columns. Suppose that you want to know the longest trip
+    per driver in the `driver_log` table:'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用聚合函数生成每组汇总值时，请注意以下陷阱，这涉及选择与分组列不相关的非汇总表列。假设您想知道`driver_log`表中每位驾驶员的最长行程：
+- en: '[PRE43]'
+  id: totrans-173
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'But what if you also want to show the date on which each driver’s longest trip
+    occurred? Can you just add `trav_date` to the output column list? Sorry, that
+    doesn’t work:'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是如果你还想显示每位司机最长行程发生的日期怎么办？你只需将`trav_date`添加到输出列列表中吗？抱歉，这样不起作用：
+- en: '[PRE44]'
+  id: totrans-175
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: 'The query does produce a result, but if you compare it to the full table (shown
+    here), you’ll see that although the dates for Ben and Henry are correct, the date
+    for Suzi is not:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询确实产生了结果，但是如果您将其与完整表格（如此处所示）进行比较，您会看到虽然本和亨利的日期是正确的，但苏茜的日期却不正确：
+- en: '[PRE45]'
+  id: totrans-177
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: So what’s going on? Why does the summary statement produce incorrect results?
+    This happens because when you include a `GROUP` `BY` clause in a query, the only
+    values that you can meaningfully select are the grouping columns or summary values
+    calculated from the groups. If you display additional table columns, they’re not
+    tied to the grouped columns and the values displayed for them are indeterminate.
+    (For the statement just shown, it appears that MySQL may simply be picking the
+    first date for each driver, regardless of whether it matches the driver’s maximum
+    mileage value.)
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到底发生了什么？为什么汇总语句产生了不正确的结果？这是因为当您在查询中包含`GROUP BY`子句时，您只能有意义地选择分组列或从分组计算的汇总值。如果显示其他表列，它们与分组列不相关，显示的值是不明确的。（对于刚刚显示的语句，MySQL
+    可能会简单地选择每个驱动程序的第一个日期，而不管它是否与驱动程序的最大里程值匹配。）
+- en: 'To make queries that pick indeterminate values illegal so that you won’t inadvertantly
+    suppose that the `trav_date` values are correct, set the `ONLY_FULL_GROUP_BY`
+    SQL mode:'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 若要避免不小心假定`trav_date`的值是正确的并且设置`ONLY_FULL_GROUP_BY` SQL 模式，使得选择不明确的值非法：
+- en: '[PRE46]'
+  id: totrans-180
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: SQL Mode `ONLY_FULL_GROUP_BY` is part of the default settings since MySQL 5.7\.
+    However, we have seen many legacy applications that disable this option. We suggest
+    you to always have `ONLY_FULL_GROUP_BY` enabled and fix queries that return error
+    otherwise.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQL 模式`ONLY_FULL_GROUP_BY`自 MySQL 5.7 默认设置的一部分。但我们已经看到许多旧版应用程序禁用了此选项。我们建议您始终启用`ONLY_FULL_GROUP_BY`并修复返回错误的查询。
+- en: 'The general solution to the problem of displaying contents of rows associated
+    with minimum or maximum group values involves a join. The technique is described
+    in [Recipe 16.7](ch16.xhtml#nch-multi-multi-per-group). For the problem at hand,
+    produce the required results as follows:'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 解决显示与最小或最大组值相关联的行内容的一般问题涉及联接。该技术在[Recipe 16.7](ch16.xhtml#nch-multi-multi-per-group)中有描述。对于手头的问题，可以按以下方式生成所需的结果：
+- en: '[PRE47]'
+  id: totrans-183
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: 'Or, by using CTE:'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，通过使用 CTE：
+- en: '[PRE48]'
+  id: totrans-185
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: 10.9 Handling NULL Values with Aggregate Functions
+  id: totrans-186
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.9 使用聚合函数处理`NULL`值
+- en: Problem
+  id: totrans-187
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You’re summarizing a set of values that may include `NULL` values and you need
+    to know how to interpret the results.
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您正在汇总可能包含`NULL`值的一组值，并且需要知道如何解释结果。
+- en: Solution
+  id: totrans-189
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Understand how aggregate functions handle `NULL` values.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 了解聚合函数如何处理`NULL`值。
+- en: Discussion
+  id: totrans-191
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Most aggregate functions ignore `NULL` values. `COUNT()` is different: `COUNT(`*`expr`*`)`
+    ignores `NULL` instances of *`expr`*, but `COUNT(*)` counts rows, regardless of
+    content.'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数聚合函数会忽略`NULL`值。`COUNT()`不同：`COUNT(`*`expr`*`)`会忽略`NULL`实例的*`expr`*，但`COUNT(*)`会计算行数，不考虑内容。
+- en: 'Suppose that an `expt` table contains experimental results for subjects who
+    are to be given four tests each and that lists the test score as `NULL` for tests
+    not yet administered:'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设一个`expt`表包含要为每个科目进行四次测试的实验结果，并且对于尚未进行的测试，将测试分数标记为`NULL`：
+- en: '[PRE49]'
+  id: totrans-194
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'By using a `GROUP` `BY` clause to arrange the rows by subject name, the number
+    of tests taken by each subject, as well as the total, average, lowest, and highest
+    scores, can be calculated like this:'
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过使用`GROUP BY`子句按科目名称排列行，可以像这样计算每个科目的测试次数以及总数、平均数、最低分和最高分：
+- en: '[PRE50]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: You can see from the results in the column labeled `n` (number of tests) that
+    the query counts only five values, even though the table contains eight. Why?
+    Because the values in that column correspond to the number of non-`NULL` test
+    scores for each subject. The other summary columns display results that are calculated
+    only from the non-`NULL` scores as well.
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以从标记为`n`（测试次数）的列中的结果中看到，查询仅计算了五个值，即使表中包含了八个。为什么？因为该列中的值对应于每个科目的非`NULL`测试分数的数量。其他摘要列也仅显示从非`NULL`分数计算出的结果。
+- en: 'It makes a lot of sense for aggregate functions to ignore `NULL` values. If
+    they followed the usual SQL arithmetic rules, adding `NULL` to any other value
+    would produce a `NULL` result. That would make aggregate functions really difficult
+    to use: to avoid getting a `NULL` result, you’d have to filter out `NULL` values
+    every time you performed a summary. By ignoring `NULL` values, aggregate functions
+    become a lot more convenient.'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于聚合函数忽略`NULL`值是有很多意义的。如果它们遵循通常的 SQL 算术规则，将`NULL`添加到任何其他值会产生一个`NULL`结果。这将使得聚合函数非常难以使用：为了避免得到`NULL`结果，您每次执行汇总时都必须过滤`NULL`值。通过忽略`NULL`值，聚合函数变得更加方便。
+- en: 'However, be aware that even though aggregate functions may ignore `NULL` values,
+    some of them can still produce `NULL` as a result. This happens if there’s nothing
+    to summarize, which occurs if the set of values is empty or contains only `NULL`
+    values. The following query is the same as the previous one, with one small difference.
+    It selects only `NULL` test scores to illustrate what happens when there’s nothing
+    for the aggregate functions to operate on:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，即使聚合函数可能会忽略`NULL`值，其中一些仍然可能会生成`NULL`作为结果。如果没有要总结的内容，就会发生这种情况，即值集合为空或仅包含`NULL`值。以下查询与前一个查询相同，只有一个小差异。它仅选择`NULL`测试分数，以说明当聚合函数没有要操作的内容时会发生什么：
+- en: '[PRE51]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: 'For `COUNT()`, the number of scores per subject is zero and is reported that
+    way. On the other hand, `SUM()`, `AVG()`, `MIN()`, and `MAX()` return `NULL` when
+    there are no values to summarize. If you don’t want an aggregate value of `NULL`
+    to display as `NULL`, use `IFNULL()` to map it appropriately:'
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于`COUNT()`，每个科目的分数数量为零，并以此方式报告。另一方面，当没有要总结的值时，`SUM()`、`AVG()`、`MIN()`和`MAX()`返回`NULL`。如果不希望将聚合值为`NULL`显示为`NULL`，请使用`IFNULL()`适当映射它：
+- en: '[PRE52]'
+  id: totrans-202
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: '`COUNT()` is somewhat different with regard to `NULL` values than the other
+    aggregate functions. Like other aggregate functions, `COUNT(`*`expr`*`)` counts
+    only non-`NULL` values, but `COUNT(*)` counts rows, no matter what they contain.
+    You can see the difference between the forms of `COUNT()` like this:'
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`COUNT()`在处理`NULL`值方面与其他聚合函数略有不同。与其他聚合函数一样，`COUNT(`*`expr`*`)`仅计算非`NULL`值，但`COUNT(*)`计算行数，无论其内容如何。您可以通过以下方式查看`COUNT()`的不同形式之间的区别：'
+- en: '[PRE53]'
+  id: totrans-204
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 'This tells us that there are eight rows in the `expt` table but that only five
+    of them have the `score` value filled in. The different forms of `COUNT()` can
+    be very useful for counting missing values. Just take the difference:'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这告诉我们`expt`表中有八行，但只有五行填写了`score`值。`COUNT()`的不同形式对于计算缺失值非常有用。只需进行差异计算：
+- en: '[PRE54]'
+  id: totrans-206
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: 'Missing and nonmissing counts can be determined for subgroups as well. The
+    following query does so for each subject, providing an easy way to assess the
+    extent to which the experiment has been completed:'
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还可以为子组确定缺失和非缺失计数。以下查询对每个科目都这样做，提供了一种评估实验完成程度的简便方法：
+- en: '[PRE55]'
+  id: totrans-208
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: 10.10 Selecting Only Groups with Certain Characteristics
+  id: totrans-209
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.10 仅选择具有特定特征的群组
+- en: Problem
+  id: totrans-210
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to calculate group summaries but display results only for groups that
+    match certain criteria.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想计算群组摘要，但仅显示符合特定条件的群组结果。
+- en: Solution
+  id: totrans-212
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a `HAVING` clause.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`HAVING`子句。
+- en: Discussion
+  id: totrans-214
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'You’re familiar with the use of `WHERE` to specify conditions that rows must
+    satisfy to be selected by a statement. It’s natural, therefore, to use `WHERE`
+    to write conditions that involve summary values. The only trouble is that it doesn’t
+    work. To identify drivers in the `driver_log` table who drove more than three
+    days, you might write the statement like this:'
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您熟悉使用`WHERE`来指定语句必须满足的行条件。因此，自然而然地使用`WHERE`编写涉及总结值的条件。唯一的麻烦在于这样做行不通。要识别在`driver_log`表中驾驶超过三天的驾驶员，您可能会像这样写语句：
+- en: '[PRE56]'
+  id: totrans-216
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: 'The problem is that `WHERE` specifies the initial constraints that determine
+    which rows to select, but the value of `COUNT()` can be determined only after
+    the rows have been selected. The solution is to put the `COUNT()` expression in
+    a `HAVING` clause instead. `HAVING` is analogous to `WHERE`, but it applies to
+    group characteristics rather than to single rows. That is, `HAVING` operates on
+    the already-selected-and-grouped set of rows, applying additional constraints
+    based on aggregate function results that aren’t known during the initial selection
+    process. The preceding query therefore should be written like this:'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 问题在于`WHERE`指定了初始约束条件，确定了要选择哪些行，但只有在选择行后才能确定`COUNT()`的值。解决方案是将`COUNT()`表达式放在`HAVING`子句中。`HAVING`类似于`WHERE`，但它适用于组特征，而不是单个行。也就是说，`HAVING`在已选择和分组的行集上操作，根据聚合函数结果应用额外约束，这些结果在初始选择过程中是未知的。因此，前面的查询应该像这样编写：
+- en: '[PRE57]'
+  id: totrans-218
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: When you use `HAVING`, you can still include a `WHERE` clause, but only to select
+    rows to be summarized, not to test already calculated summary values.
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您使用`HAVING`时，仍然可以包括`WHERE`子句，但仅选择要总结的行，而不是测试已计算的汇总值。
+- en: '`HAVING` can refer to aliases, so the previous query can be rewritten like
+    this:'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`HAVING`可以引用别名，因此可以像这样重写先前的查询：'
+- en: '[PRE58]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: 10.11 Using Counts to Determine Whether Values Are Unique
+  id: totrans-222
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.11 使用计数确定值是否唯一
+- en: Problem
+  id: totrans-223
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know whether values in a table are unique.
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想知道表中的值是否是唯一的。
+- en: Solution
+  id: totrans-225
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use `HAVING` in conjunction with `COUNT()`.
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结合 `COUNT()` 使用 `HAVING`。
+- en: Discussion
+  id: totrans-227
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: '`DISTINCT` eliminates duplicates but doesn’t show which values actually were
+    duplicated in the original data. You can use `HAVING` to find unique values in
+    situations to which `DISTINCT` does not apply. `HAVING` can tell you which values
+    were unique or nonunique.'
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DISTINCT` 可以消除重复项，但不显示原始数据中实际重复的值。您可以使用 `HAVING` 找到 `DISTINCT` 不适用的情况中的唯一值。`HAVING`
+    可以告诉您哪些值是唯一的或非唯一的。'
+- en: 'The following statements show the days on which only one driver was active,
+    and the days on which more than one driver was active. They’re based on using
+    `HAVING` and `COUNT()` to determine which `trav_date` values are unique or nonunique:'
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面的语句显示了仅有一名司机活跃的日期以及有多名司机活跃的日期。它们基于使用 `HAVING` 和 `COUNT()` 来确定哪些 `trav_date`
+    值是唯一或非唯一的：
+- en: '[PRE59]'
+  id: totrans-230
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: 'This technique works for combinations of values, too. For example, to find
+    message sender/recipient pairs between whom only one message was sent, look for
+    combinations that occur only once in the `mail` table:'
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种技术也适用于值的组合。例如，要查找仅发送了一条消息的消息发送者/接收者对，请查找在 `mail` 表中仅出现一次的组合：
+- en: '[PRE60]'
+  id: totrans-232
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: Note that this query doesn’t print the count. The previous examples did so,
+    to show that the counts were being used properly, but you can refer to an aggregate
+    value in a `HAVING` clause without including it in the output column list.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，此查询不会打印计数。前面的示例这样做是为了展示计数的正确使用，但您可以在 `HAVING` 子句中引用聚合值，而无需将其包含在输出列列表中。
+- en: 10.12 Grouping by Expression Results
+  id: totrans-234
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.12 按表达式结果分组
+- en: Problem
+  id: totrans-235
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to group rows into subgroups based on values calculated from an expression.
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要根据从表达式计算的值将行分组为子组。
+- en: Solution
+  id: totrans-237
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: In the `GROUP` `BY` clause, use an expression that categorizes values.
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 `GROUP` `BY` 子句中，使用将值分类的表达式。
+- en: Discussion
+  id: totrans-239
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: '`GROUP` `BY`, like `ORDER` `BY`, can refer to expressions. This means you can
+    use calculations as the basis for grouping. As with `ORDER` `BY`, you can write
+    the grouping expression directly in the `GROUP` `BY` clause, or use an alias for
+    the expression (if it appears in the output column list), and refer to the alias
+    in the `GROUP` `BY`.'
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`GROUP` `BY` 和 `ORDER` `BY` 一样，可以引用表达式。这意味着您可以使用计算作为分组的依据。与 `ORDER` `BY` 类似，您可以直接在
+    `GROUP` `BY` 子句中编写分组表达式，或者在输出列列表中使用别名来引用该表达式，并在 `GROUP` `BY` 中引用该别名。'
+- en: 'To find days of the year on which more than one state joined the Union, group
+    by statehood month and day, and then use `HAVING` and `COUNT()` to find the nonunique
+    combinations:'
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要找出一年中有多个州加入联盟的日期，请按州加入日期和日进行分组，然后使用 `HAVING` 和 `COUNT()` 找到非唯一组合：
+- en: '[PRE61]'
+  id: totrans-242
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: 10.13 Summarizing Noncategorical Data
+  id: totrans-243
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.13 总结非分类数据
+- en: Problem
+  id: totrans-244
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to summarize a set of values that are not naturally categorical.
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要总结一组不自然分类的值。
+- en: Solution
+  id: totrans-246
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use an expression to group the values into categories.
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用表达式将值分组为类别。
+- en: Discussion
+  id: totrans-248
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: '[Recipe 10.12](#nch-sum-sum-expr) shows how to group rows by expression results.
+    One important application for this is to categorize values that are not categorical.
+    This is useful because `GROUP` `BY` works best for columns with repetitive values.
+    For example, you might attempt to perform a population analysis by grouping rows
+    in the `states` table using values in the `pop` column. That doesn’t work very
+    well due to the high number of distinct values in the column. In fact, they’re
+    *all* distinct:'
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[Recipe 10.12](#nch-sum-sum-expr) 展示了如何按表达式结果分组行。这一重要应用是对非分类值进行分类。这是有用的，因为
+    `GROUP` `BY` 最适合具有重复值的列。例如，您可以尝试使用 `states` 表中的值对行进行分组以执行人口分析。由于列中的独特值较多，这并不奏效。事实上，它们*全部*都是独特的：'
+- en: '[PRE62]'
+  id: totrans-250
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: 'In situations like this, in which values do not group nicely into a small number
+    of sets, use a transformation that forces them into categories. Begin by determining
+    the range of population values:'
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在像这样的情况下，数值不能很好地分组到少数集合中，可以使用一种强制将其强制分为类别的转换。首先确定人口值的范围：
+- en: '[PRE63]'
+  id: totrans-252
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: 'You can see from that result that if you divide the `pop` values by five million,
+    they’ll group into eight categories—a reasonable number. (The category ranges
+    will be 1 to 5,000,000, 5,000,001 to 10,000,000, and so forth.) To put each population
+    value in the proper category, divide by five million, and use the integer result:'
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以从该结果看出，如果将`pop`值除以500万，它们将分成八个类别——一个合理的数目。（类别范围将是1到5,000,000，5,000,001到10,000,000等等）。要将每个人口值放入正确的类别，请将其除以500万，并使用整数结果：
+- en: '[PRE64]'
+  id: totrans-254
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: 'Hmm. That’s not quite right. The expression groups the population values into
+    a small number of categories, but doesn’t report the category values properly.
+    Let’s try multiplying the `FLOOR()` results by five:'
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 嗯。这还不太对。该表达式将人口值分组到少量类别中，但未正确报告类别值。让我们尝试将`FLOOR()`结果乘以五：
+- en: '[PRE65]'
+  id: totrans-256
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: 'That still isn’t correct. The maximum state population was 35,893,799, which
+    should go into a category for 40 million, not one for 35 million. The problem
+    here is that the category-generating expression groups values toward the lower
+    bound of each category. To group values toward the upper bound instead, use the
+    following technique. For categories of size *`n`*, place a value *`x`* into the
+    proper category using this expression:'
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这仍然不正确。最大州人口为35,893,799，应该放入4000万类别中，而不是3500万类别中。问题在于生成类别表达式将值分组到每个类别的下限。为了将值分组到每个类别的上限，可以使用以下技术。对于大小为*n*的类别，使用以下表达式将值*x*放入正确的类别：
+- en: '[PRE66]'
+  id: totrans-258
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: 'So the final form of our query looks like this:'
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，我们的查询的最终形式如下所示：
+- en: '[PRE67]'
+  id: totrans-260
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: The result shows clearly that the majority of US states have a population of
+    five million or less.
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果清楚地显示，大多数美国州的人口为五百万或更少。
+- en: 'In some instances, it may be more appropriate to categorize groups on a logarithmic
+    scale. For example, treat the state population values that way as follows:'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某些情况下，将群组按对数刻度分类可能更为合适。例如，如下处理州人口数值：
+- en: '[PRE68]'
+  id: totrans-263
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: The query shows the number of states that have populations measured in hundreds
+    of thousands, millions, and tens of millions, respectively.
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询显示了人口分别以数十万、百万和数千万进行测量的州的数量。
+- en: You may have noticed that aliases in the preceding queries are written using
+    backticks (identifier quoting) rather than single quotes (string quoting). Quoted
+    aliases in the `GROUP` `BY` clause must use identifier quoting or the alias is
+    treated as a constant string expression and the grouping produces the wrong result.
+    Identifier quoting clarifies to MySQL that the alias refers to an output column.
+    The aliases in the output column list could have been written using string quoting;
+    we used backticks there to avoid mixing alias quoting styles within a given query.
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可能已经注意到，前面的查询中使用反引号（标识符引用）编写别名，而不是单引号（字符串引用）。在`GROUP BY`子句中引用的别名必须使用标识符引用，否则别名将被视为常量字符串表达式，导致分组产生错误的结果。标识符引用使MySQL明确知道别名是指输出列。输出列列表中的别名可以使用字符串引用进行编写；我们在这里使用反引号是为了避免在给定查询中混合别名引用风格。
+- en: 10.14 Finding Smallest or Largest Summary Values
+  id: totrans-266
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.14 查找最小或最大的摘要值
+- en: Problem
+  id: totrans-267
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to compute per-group summary values but display only the smallest or
+    largest of them.
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想计算每个群组的摘要值，但仅显示其中最小或最大的值。
+- en: Solution
+  id: totrans-269
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Add a `LIMIT` clause to the statement. Or use a user-defined variable or subquery
+    to pick the appropriate summary.
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在语句中添加`LIMIT`子句。或者使用用户定义变量或子查询来选择适当的摘要。
+- en: Discussion
+  id: totrans-271
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: '`MIN()` and `MAX()` find the values at the endpoints of a set of values, but
+    to find the endpoints of a set of summary values, those functions won’t work.
+    Their argument cannot be another aggregate function. For example, you can easily
+    find per-driver mileage totals:'
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`MIN()`和`MAX()`可以找到值集的端点值，但是要找到摘要值集的端点值，这些函数将无法工作。它们的参数不能是另一个聚合函数。例如，您可以轻松找到每位驾驶员的里程总数：'
+- en: '[PRE69]'
+  id: totrans-273
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: 'To select only the row for the driver with the most miles, the following doesn’t
+    work:'
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要仅选择具有最多英里数的驾驶员行，以下方法不起作用：
+- en: '[PRE70]'
+  id: totrans-275
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: 'Instead, order the rows with the largest `SUM()` values first and use `LIMIT`
+    to select the first row:'
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相反，首先按最大的`SUM()`值对行进行排序，并使用`LIMIT`选择第一行：
+- en: '[PRE71]'
+  id: totrans-277
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: 'However, if more than one row has the given summary value, a `LIMIT` `1` query
+    won’t tell you that. For example, you might attempt to ascertain the most common
+    initial letter for state names like this:'
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，如果多个行具有给定的摘要值，则`LIMIT 1`查询将不会告诉您。例如，您可能尝试查明州名字的最常见的初始字母：
+- en: '[PRE72]'
+  id: totrans-279
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: 'But eight state names also begin with `N`. To find all most-frequent values
+    when there may be more than one, use a user-defined variable or subquery to determine
+    the maximum count, then select those values with a count equal to the maximum:'
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，还有八个州名称以`N`开头。要找出可能有多个最频繁值时，请使用用户定义变量或子查询确定最大计数，然后选择计数等于最大值的这些值：
+- en: '[PRE73]'
+  id: totrans-281
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: 10.15 Producing Date-Based Summaries
+  id: totrans-282
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.15 生成基于日期的摘要
+- en: Problem
+  id: totrans-283
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to produce a summary based on date or time values.
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望根据日期或时间值生成摘要。
+- en: Solution
+  id: totrans-285
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use `GROUP` `BY` to place temporal values into categories of the appropriate
+    duration. Often this involves using expressions that extract the significant parts
+    of dates or times.
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`GROUP` `BY`将时间值放入适当时段的类别中。通常涉及使用提取日期或时间重要部分的表达式。
+- en: Discussion
+  id: totrans-287
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: To sort rows temporally, use `ORDER` `BY` with a temporal column. To summarize
+    rows instead, based on groupings into time intervals, determine how to categorize
+    rows into the proper intervals and use `GROUP` `BY` to group them accordingly.
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要根据时间对行进行排序，请使用带有时间列的`ORDER` `BY`。要根据时间间隔将行进行汇总，则需要确定如何将行分类到适当的间隔，并使用`GROUP`
+    `BY`相应地对它们进行分组。
+- en: For example, to determine how many drivers were on the road and how many miles
+    were driven each day, group the rows in the `driver_log` table by date:^([1](ch10.xhtml#idm45820368189088))
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，要确定每天路上有多少驾驶员及每天驾驶了多少英里，请按日期将`driver_log`表中的行分组：^([1](ch10.xhtml#idm45820368189088))
+- en: '[PRE74]'
+  id: totrans-290
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: 'However, this per-day summary grows lengthier as you add more rows to the table.
+    Over time, the number of distinct dates will become so large that the summary
+    fails to be useful, and you’d probably decide to increase the category size. For
+    example, this query categorizes by month:'
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，随着表中行数的增加，这种按天汇总会变得越来越长。随着时间的推移，不同日期的数量将变得非常多，使得摘要失去实用性，您可能决定增加类别的大小。例如，此查询按月进行分类：
+- en: '[PRE75]'
+  id: totrans-292
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: Now the number of summary rows grows much more slowly over time. Eventually,
+    you could summarize based only on year to collapse rows even more.
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，随着时间的推移，摘要行的数量增长速度大大放缓。最终，您可以仅基于年份进行汇总，以进一步折叠行。
+- en: 'Uses for temporal categorizations are numerous:'
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 时间分类的用途很多：
+- en: 'To produce daily summaries from `DATETIME` or `TIMESTAMP` columns that have
+    the potential to contain many unique values, strip the time-of-day part to collapse
+    all values occurring within a given day to the same value. Any of the following
+    `GROUP` `BY` clauses will do this, although the last one is likely to be slowest:'
+  id: totrans-295
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要从可能包含许多唯一值的`DATETIME`或`TIMESTAMP`列生成每日摘要，请去除一天中的时间部分，将所有出现在给定日期内的值折叠为相同值。以下任何一个`GROUP`
+    `BY`子句都可以做到这一点，尽管最后一个可能最慢：
+- en: '[PRE76]'
+  id: totrans-296
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: To produce monthly or quarterly sales reports, group by `MONTH(`*`col_name`*`)`
+    or `QUARTER(`*`col_name`*`)` to place dates into the correct part of the year.
+  id: totrans-297
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要生成每月或每季度的销售报告，请按照`MONTH(`*`col_name`*`)`或`QUARTER(`*`col_name`*`)`对日期进行分组，以确保数据能正确地对应到年度的相应部分。
+- en: 10.16 Working with Per-Group and Overall Summary Values Simultaneously
+  id: totrans-298
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.16 同时处理每组和总体摘要值
+- en: Problem
+  id: totrans-299
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to produce a report that requires different levels of summary detail.
+    Or you want to compare per-group summary values to an overall summary value.
+  id: totrans-300
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望生成一个需要不同级别摘要细节的报告。或者您想将每组的摘要值与总体摘要值进行比较。
+- en: Solution
+  id: totrans-301
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use two statements that retrieve different levels of summary information. Or
+    use a subquery to retrieve one summary value and refer to it in the outer query
+    that refers to other summary values. For applications that only display multiple
+    summary levels (rather than perform additional calculations on them), `WITH` `ROLLUP`
+    might be sufficient.
+  id: totrans-302
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用两个语句检索不同级别的摘要信息。或者使用子查询检索一个摘要值，并在外部查询中引用其他摘要值。对于仅显示多个摘要级别（而不对其执行其他计算）的应用程序，`WITH`
+    `ROLLUP`可能已足够。
+- en: Discussion
+  id: totrans-303
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Some reports involve multiple levels of summary information. The following
+    report displays the total number of miles per driver from the `driver_log` table,
+    along with each driver’s miles as a percentage of the total miles in the entire
+    table:'
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些报告涉及多层次的摘要信息。以下报告显示了从`driver_log`表中每位驾驶员的总英里数，以及每位驾驶员英里数占整个表总英里数的百分比：
+- en: '[PRE77]'
+  id: totrans-305
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: 'The percentages represent the ratio of each driver’s miles to the total miles
+    for all drivers. To perform the percentage calculation, you need a per-group summary
+    to get each driver’s miles and also an overall summary to get the total miles.
+    First, run a query to get the overall mileage total:'
+  id: totrans-306
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 百分比表示每位驾驶员英里数占所有驾驶员总英里数的比例。为执行百分比计算，您需要每组摘要以获取每位驾驶员的英里数，并且还需要总体摘要以获取总英里数。首先运行一个查询来获取总里程数：
+- en: '[PRE78]'
+  id: totrans-307
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: 'Then calculate the per-group values and use the overall total to compute the
+    percentages:'
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后计算每组的值，并使用总体总计计算百分比：
+- en: '[PRE79]'
+  id: totrans-309
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: 'To combine the two statements into one, use a subquery that computes the total
+    miles:'
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将两个语句合并为一个，使用子查询计算总英里数：
+- en: '[PRE80]'
+  id: totrans-311
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: 'A similar problem uses multiple summary levels to compare per-group summary
+    values with the corresponding overall summary value. Suppose that you want to
+    display drivers who had a lower average miles per day than the group average.
+    Calculate the overall average in a subquery, and then compare each driver’s average
+    to the overall average using a `HAVING` clause:'
+  id: totrans-312
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个类似的问题使用多个摘要级别比较每组摘要值与相应的总体摘要值。假设您希望显示驾驶员的平均每日英里数低于组平均值。在子查询中计算总体平均值，然后使用 `HAVING`
+    子句将每个驾驶员的平均值与总体平均值进行比较：
+- en: '[PRE81]'
+  id: totrans-313
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: 'To display different summary-level values (and not perform calculations involving
+    one summary level against another), add `WITH` `ROLLUP` to the `GROUP` `BY` clause:'
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要显示不同级别的摘要值（而不是执行一个摘要级别相对于另一个的计算），请将 `WITH` `ROLLUP` 添加到 `GROUP` `BY` 子句中：
+- en: '[PRE82]'
+  id: totrans-315
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: In each case, the output row with `NULL` in the `name` column represents the
+    overall sum or average calculated over all drivers.
+  id: totrans-316
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在每种情况下，`name` 列中带有 `NULL` 的输出行代表所有驾驶员的总和或平均值。
+- en: '`WITH` `ROLLUP` produces multiple summary levels if you group by more than
+    one column. The following statement shows the number of mail messages sent between
+    each pair of users:'
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果按多列分组，则 `WITH` `ROLLUP` 会生成多个摘要级别。以下语句显示了每对用户之间发送的邮件消息数量：
+- en: '[PRE83]'
+  id: totrans-318
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: 'Adding `WITH` `ROLLUP` causes the output to include an intermediate count for
+    each `srcuser` value (these are the lines with `NULL` in the `dstuser` column),
+    plus an overall count at the end:'
+  id: totrans-319
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 添加 `WITH` `ROLLUP` 会导致输出包含每个 `srcuser` 值的中间计数（这些是 `dstuser` 列中带有 `NULL` 的行），以及最后的总计数：
+- en: '[PRE84]'
+  id: totrans-320
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE84]'
+- en: 10.17 Generating a Report That Includes a Summary and a List
+  id: totrans-321
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.17 生成包含摘要和列表的报告
+- en: Problem
+  id: totrans-322
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to create a report that displays a summary, together with the list
+    of rows associated with each summary value.
+  id: totrans-323
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望创建一个报告，显示摘要以及与每个摘要值相关联的行的列表。
+- en: Solution
+  id: totrans-324
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use two statements that retrieve different levels of summary information. Or
+    use a programming language to do some of the work so that you can use a single
+    statement.
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用两个语句检索不同级别的摘要信息。或者使用编程语言执行部分工作，以便您可以使用单个语句。
+- en: Discussion
+  id: totrans-326
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Suppose that you want to produce a report that looks like this:'
+  id: totrans-327
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您想生成类似以下内容的报告：
+- en: '[PRE85]'
+  id: totrans-328
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE85]'
+- en: 'For each driver in the `driver_log` table, the report shows the following information:'
+  id: totrans-329
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 `driver_log` 表中的每个驾驶员，报告显示以下信息：
+- en: A summary line showing the driver name, the number of days on the road, and
+    the number of miles driven.
+  id: totrans-330
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 汇总行显示驾驶员姓名、上路天数和驾驶里程数。
+- en: A list that details dates and mileages for the individual trips from which the
+    summary values are calculated.
+  id: totrans-331
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 详细说明了从中计算摘要值的各个行程的日期和里程数的列表。
+- en: 'This scenario is a variation on the <q>different levels of summary information</q>
+    problem discussed in [Recipe 10.16](#nch-sum-sum-mixed). It may not seem like
+    it at first because one of the types of information is a list rather than a summary.
+    But that’s really just a <q>level zero</q> summary. This kind of problem appears
+    in many other forms:'
+  id: totrans-332
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种情况是[配方 10.16](#nch-sum-sum-mixed)中讨论的“不同级别的摘要信息”问题的变体。一开始可能看起来不像是这样，因为其中一种信息类型是列表而不是摘要。但这实际上只是“级别零”摘要。这种问题以许多其他形式出现：
+- en: You have a database that lists contributions to candidates in your political
+    party. The party chair requests a printout that shows, for each candidate, the
+    number of contributions and total amount contributed, as well as a list of contributor
+    names and addresses.
+  id: totrans-333
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您有一个列出政党内候选人捐款的数据库。党主席请求打印出每位候选人的捐款数和捐款总额，以及捐赠者姓名和地址列表。
+- en: You want to create a handout for a company presentation that summarizes total
+    sales per sales region with a list under each region showing the sales for each
+    state in the region.
+  id: totrans-334
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您希望为公司演示创建手册，其中总结每个销售区域的总销售额，并在每个区域下的列表中显示该区域每个州的销售额。
+- en: 'Such problems have multiple solutions:'
+  id: totrans-335
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这类问题有多种解决方案：
+- en: Run separate statements to get the information for each level of detail that
+    you require. (A single query won’t produce per-group summary values and a list
+    of each group’s individual rows.)
+  id: totrans-336
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 运行单独的语句以获取您需要的每个详细级别的信息。（单个查询不会生成每组摘要值和每组的各行列表。）
+- en: Fetch the rows that make up the lists and perform the summary calculations yourself
+    to eliminate the summary statement.
+  id: totrans-337
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 检索构成列表并执行摘要计算的行，以消除摘要语句。
+- en: 'Let’s use each approach to produce the driver report shown at the beginning
+    of this section. The following implementation (in Python) generates the report
+    using one query to summarize the days and miles per driver, and another to fetch
+    the individual trip rows for each driver:'
+  id: totrans-338
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们使用每种方法来生成本节开头显示的驾驶员报告。以下实现（使用Python）使用一个查询来汇总每个驾驶员的天数和英里数，另一个查询获取每个驾驶员的单独行程行：
+- en: '[PRE86]'
+  id: totrans-339
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE86]'
+- en: 'An alternative implementation performs summary calculations within the program,
+    which reduces the number of queries required. If you iterate through the trip
+    list and calculate the per-driver day counts and mileage totals yourself, a single
+    query suffices:'
+  id: totrans-340
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种实现在程序内执行摘要计算，从而减少所需的查询数量。如果您遍历行程列表并计算每个驾驶员的每日计数和里程总数，则只需一个查询即可：
+- en: '[PRE87]'
+  id: totrans-341
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE87]'
+- en: 'Should you require more levels of summary information, this type of problem
+    gets more difficult. For example, you might want to precede the report that shows
+    driver summaries and trip logs with a line that shows the total miles for all
+    drivers:'
+  id: totrans-342
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您需要更多级别的摘要信息，则此类问题会变得更加复杂。例如，您可能希望在显示驾驶员摘要和行程日志之前，先显示显示所有驾驶员总英里数的报告：
+- en: '[PRE88]'
+  id: totrans-343
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE88]'
+- en: In this case, you need either another query to produce the total mileage, or
+    another calculation in your program that computes the overall total.
+  id: totrans-344
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，您需要另一个查询以生成总里程，或者在您的程序中进行另一种计算来计算总体总数。
+- en: 10.18 Generating Summaries from Temporary Result Sets
+  id: totrans-345
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 10.18 从临时结果集生成摘要
+- en: Problem
+  id: totrans-346
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to generate summaries, but cannot achieve it without using temporary
+    result sets.
+  id: totrans-347
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 想要生成摘要，但如果不使用临时结果集则无法实现。
+- en: Solution
+  id: totrans-348
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use Common Table Expressions (CTE) by `WITH` clause.
+  id: totrans-349
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用通用表达式（CTE）通过`WITH`子句。
+- en: Discussion
+  id: totrans-350
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: We already discussed situations when a temporary table, holding result from
+    a query, helps to create a summary. In these cases we referred the temporary table
+    from the query, generating resulting summary. See [Recipe 10.6](#nch-sum-sum-assoc)
+    and [Recipe 10.8](#nch-sum-sum-subgroup) for examples.
+  id: totrans-351
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经讨论过临时表的情况，它保存来自查询的结果，有助于创建摘要。在这些情况下，我们从查询中引用了临时表，生成了结果摘要。参见[Recipe 10.6](#nch-sum-sum-assoc)和[Recipe
+    10.8](#nch-sum-sum-subgroup)进行示例。
+- en: 'Temporary tables are not always the best solution for such a task. They have
+    a number of disadvantages, particularly:'
+  id: totrans-352
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于这样的任务，临时表并非总是最佳解决方案。它们有许多缺点，特别是：
+- en: 'You need to maintain the table: delete all content when you are going to reuse
+    it and drop once you are finished to work with it.'
+  id: totrans-353
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您需要维护表格：在重新使用它时删除所有内容，并在完成使用后删除。
+- en: '`CREATE [TEMPORARY] TABLE ... SELECT` statement implicitly commits transaction,
+    therefore it cannot be used when there is a possibility that the content of the
+    original table changes after the data is inserted into the temporary table. You
+    have to create the table first, then insert data into it and generate summary
+    in the multiple statement transaction. For example, finding the longest trip per
+    driver that we discussed in [Recipe 10.8](#nch-sum-sum-subgroup) may end up with
+    the following code:'
+  id: totrans-354
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`CREATE [TEMPORARY] TABLE ... SELECT`语句隐式提交事务，因此当原始表的内容在数据插入临时表后可能发生变化时，不能使用它。您必须先创建表，然后插入数据并在多语句事务中生成摘要。例如，在[Recipe
+    10.8](#nch-sum-sum-subgroup)中讨论的查找每位司机最长行程可能会得到以下代码：'
+- en: '[PRE89]'
+  id: totrans-355
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE89]'
+- en: Optimizer has less options to improve performance of the query.
+  id: totrans-356
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 优化器的选项较少，无法提高查询的性能。
+- en: Common Table Expressions (CTE) allow to create a named temporary result set
+    inside the query. Syntax of CTE is
+  id: totrans-357
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通用表达式（CTE）允许在查询内部创建命名的临时结果集。CTE的语法是
+- en: '[PRE90]'
+  id: totrans-358
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE90]'
+- en: Then you can refer the named result in the following query like if it was a
+    regular table. You can define multiple CTE and can refer the same named result
+    multiple times when needed.
+  id: totrans-359
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，您可以在以下查询中引用命名的结果，就像它是一个常规表一样。您可以定义多个公共表达式（CTE），在需要时多次引用相同的命名结果。
+- en: Thus, example in [Recipe 10.17](#nch-sum-sum-sum-list), showing number of trips
+    per driver and total mileage together with trip details could be resolved with
+    a CTE.
+  id: totrans-360
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，[Recipe 10.17](#nch-sum-sum-sum-list)中的示例展示了每位司机的行程次数和总里程以及行程详细信息，可以通过CTE解决。
+- en: '[PRE91]'
+  id: totrans-361
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE91]'
+- en: '[![1](Images/1.png)](#co_nch-sum-sum-with-with_co)'
+  id: totrans-362
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![1](Images/1.png)](#co_nch-sum-sum-with-with_co)'
+- en: Keyword `WITH` starts CTE.
+  id: totrans-363
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关键词`WITH`开始CTE。
+- en: '[![2](Images/2.png)](#co_nch-sum-sum-with-trips_co)'
+  id: totrans-364
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![2](Images/2.png)](#co_nch-sum-sum-with-trips_co)'
+- en: Assign name `trips` to the `SELECT`, retrieving travel data.
+  id: totrans-365
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将名称`trips`分配给`SELECT`，检索旅行数据。
+- en: '[![3](Images/3.png)](#co_nch-sum-sum-with-summaries_co)'
+  id: totrans-366
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![3](Images/3.png)](#co_nch-sum-sum-with-summaries_co)'
+- en: The second named `SELECT` generates summary of the number of trips and total
+    mileage per driver.
+  id: totrans-367
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二个命名`SELECT`生成了每位司机的行程次数和总里程的摘要。
+- en: '[![4](Images/4.png)](#co_nch-sum-sum-with-outer_co)'
+  id: totrans-368
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![4](Images/4.png)](#co_nch-sum-sum-with-outer_co)'
+- en: The main query refers two named result sets and joins them using `LEFT JOIN`
+    as if they were regular tables.
+  id: totrans-369
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 主查询引用了两个命名结果集，并使用`LEFT JOIN`将它们联接，就像它们是常规表一样。
+- en: '[![5](Images/5.png)](#co_nch-sum-sum-with-result_co)'
+  id: totrans-370
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![5](Images/5.png)](#co_nch-sum-sum-with-result_co)'
+- en: Each resulting row contains number of trips, total amount of miles driven and
+    details of the individual trip.
+  id: totrans-371
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每行结果包含行程次数、驾驶的总里程数和各个行程的详细信息。
+- en: ^([1](ch10.xhtml#idm45820368189088-marker)) The result includes an entry only
+    for dates actually represented in the table. To generate a summary with an entry
+    for the range of dates in the table, use a join to fill in the <q>missing</q>
+    values. See [Recipe 16.8](ch16.xhtml#nch-multi-multi-fill-hole).
+  id: totrans-372
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch10.xhtml#idm45820368189088-marker)) 结果仅包括实际在表中表示的日期的条目。要生成包括表中日期范围内所有日期条目的摘要，请使用联接填充“缺失”值。参见[Recipe
+    16.8](ch16.xhtml#nch-multi-multi-fill-hole)。

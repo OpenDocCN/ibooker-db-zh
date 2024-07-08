@@ -1,0 +1,3316 @@
+- en: Chapter 7\. Doing More with MySQL
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第7章。更多 MySQL 操作
+- en: MySQL is feature-rich. Over the past three chapters, you’ve seen the wide variety
+    of techniques that can be used to query, modify, and manage data. However, there’s
+    still much more that MySQL can do, and some of those additional features are the
+    subject of this chapter.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 功能丰富。在过去的三章中，你已经看到了用于查询、修改和管理数据的多种技术。然而，MySQL 还有更多功能等待探索，本章将重点介绍其中一些附加功能。
+- en: 'In this chapter, you’ll learn how to:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，您将学习以下内容：
+- en: Insert data into a database from other sources, including with queries and from
+    text files.
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从其他来源（包括查询和文本文件）向数据库中插入数据。
+- en: Perform updates and deletes using multiple tables in a single statement.
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用单个语句在多个表中执行更新和删除操作。
+- en: Replace data.
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 替换数据。
+- en: Use MySQL functions in queries to meet more complex information needs.
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在查询中使用 MySQL 函数，以满足更复杂的信息需求。
+- en: Analyze queries using the `EXPLAIN` statement and then improve their performance
+    with simple optimization techniques.
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用`EXPLAIN`语句分析查询，然后通过简单的优化技术提高性能。
+- en: Use alternative storage engines to change table properties.
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用替代存储引擎更改表属性。
+- en: Inserting Data Using Queries
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用查询插入数据
+- en: 'Much of the time, you’ll create tables using data from another source. The
+    examples you saw in [Chapter 3](ch03.xhtml#CH3_BASICS) therefore illustrate only
+    part of the problem: they show you how to insert data that’s already in the form
+    you want (that is, formatted as a SQL `INSERT` statement). The other ways to insert
+    data include using SQL `SELECT` statements on other tables or databases and reading
+    in files from other sources. This section shows you how to tackle the former method
+    of inserting data; you’ll learn how to insert data from a file of comma-separated
+    values in the next section, [“Loading Data from Comma-Delimited Files”](#LOADCSV).'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大部分时间，您将使用来自其他来源的数据创建表。因此，您在[第3章](ch03.xhtml#CH3_BASICS)中看到的示例只是问题的一部分：它们向您展示了如何插入已经以
+    SQL `INSERT`语句格式化的数据。插入数据的其他方法包括使用 SQL `SELECT`语句从其他表或数据库中读取文件。本节将向您展示如何处理前一种插入数据方法；您将在下一节“从逗号分隔文件加载数据”中学习如何插入来自逗号分隔值文件的数据。
+- en: 'Suppose we’ve decided to create a new table in the `sakila` database. It’s
+    going to store a random list of movies that we want to advertise more heavily.
+    In the real world, you’d probably want to use some data science to find out what
+    movies to highlight, but we’re going to stick to the basics. This list of films
+    will be a way for customers to check out different parts of the catalog, rediscover
+    some old favorites, and learn about hidden treasures they haven’t yet explored.
+    We’ve decided to structure the table as follows:'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们决定在`sakila`数据库中创建一个新表。它将存储我们想要更多宣传的电影随机列表。在现实世界中，您可能希望使用一些数据科学方法找出要突出显示的电影，但我们将坚持基础知识。这些电影列表将是客户查看目录的不同部分、重新发现一些老片以及了解他们尚未探索的隐藏宝藏的一种方式。我们决定将表结构化如下：
+- en: '[PRE0]'
+  id: totrans-12
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: '[PRE1]'
+  id: totrans-13
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: This table stores a few details about each film, allowing you to find the actor,
+    category, and other information using simple queries on the other tables. It also
+    stores a `sequence_id`, which is a unique number that enumerates where the film
+    is in our short list. When you start using the recommendation feature, you’ll
+    first see the movie with a `sequence_id` of 1, then 2, and so on. You can see
+    that we’re using the MySQL `AUTO_INCREMENT` feature to allocate the `sequence_id`
+    values.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此表存储每部电影的少量详细信息，使您可以通过对其他表的简单查询找到演员、类别和其他信息。它还存储了一个`sequence_id`，这是一个唯一的数字，用于枚举电影在我们的短列表中的位置。当您开始使用推荐功能时，您将首先看到序列号为1的电影，然后是2，依此类推。您可以看到我们正在使用
+    MySQL 的`AUTO_INCREMENT`功能来分配`sequence_id`的值。
+- en: 'Now we need to fill up our new `recommend` table with a random selection of
+    films. Importantly, we’re going to do the `SELECT` and `INSERT` together in one
+    statement. Here we go:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们需要用一些随机选择的电影填充我们的新`recommend`表。重要的是，我们将在一条语句中同时执行`SELECT`和`INSERT`。我们开始吧：
+- en: '[PRE2]'
+  id: totrans-16
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: '[PRE3]'
+  id: totrans-17
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Now, let’s investigate what happened before we explain how this command works:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们先了解这条命令如何工作之前发生了什么：
+- en: '[PRE4]'
+  id: totrans-19
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: '[PRE5]'
+  id: totrans-20
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: You can see that we have 10 films in our recommendation list, numbered with
+    `sequence_id` values from 1 to 10\. We’re ready to start recommending the random
+    movie selection. Don’t worry if your results differ; it’s a consequence of how
+    the `RAND()` function works.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以看到我们的推荐列表中有10部电影，其`sequence_id`值从1到10。我们准备开始推荐随机选择的电影。如果您的结果不同，不要担心；这是`RAND()`函数工作方式的结果。
+- en: 'There are two parts to the SQL statement we used to populate the table: an
+    `INSERT INTO` and a `SELECT`. The `INSERT INTO` statement lists the destination
+    table into which the data will be stored, followed by an optional list of column
+    names in parentheses; if you omit the column names, all columns in the destination
+    table are assumed in the order they appear in the output of a `DESCRIBE TABLE`
+    or `SHOW CREATE TABLE` statement. The `SELECT` statement outputs columns that
+    must match the type and order of the list provided for the `INSERT INTO` statement
+    (or the implicit complete list if one isn’t provided). The overall effect is that
+    the rows output from the `SELECT` statement is inserted into the destination table
+    by the `INSERT INTO` statement. In our example, `film_id`, `language_id`, `release_year`,
+    `title`, and `length` values from the `film` table are inserted into the five
+    columns with the same names and types in the `recommend` table; the `sequence_id`
+    is automatically created using MySQL’s `AUTO_INCREMENT` feature, so it isn’t specified
+    in the statements.'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQL 语句有两部分用于填充表格：一个 `INSERT INTO` 和一个 `SELECT`。`INSERT INTO` 语句列出了数据将要存储的目标表，后面跟着一个可选的列名列表在括号中；如果省略列名，则假定所有列按照它们在
+    `DESCRIBE TABLE` 或 `SHOW CREATE TABLE` 语句输出中的顺序排列。`SELECT` 语句输出的列必须与为 `INSERT
+    INTO` 语句提供的列表的类型和顺序匹配（或者如果未提供，则是隐式完整列表）。总体效果是从 `SELECT` 语句输出的行被 `INSERT INTO`
+    语句插入到目标表中。在我们的示例中，`film` 表中的 `film_id`、`language_id`、`release_year`、`title` 和
+    `length` 值被插入到具有相同名称和类型的 `recommend` 表的五列中；`sequence_id` 是使用MySQL的 `AUTO_INCREMENT`
+    功能自动创建的，因此在语句中未指定。
+- en: 'Our example includes the clause `ORDER BY RAND()`; this orders the results
+    according to the MySQL function `RAND()`. The `RAND()` function returns a pseudorandom
+    number in the range 0 to 1:'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的示例包括子句 `ORDER BY RAND()`；这会按照MySQL函数 `RAND()` 的结果对结果进行排序。`RAND()` 函数返回范围在
+    0 到 1 之间的伪随机数：
+- en: '[PRE6]'
+  id: totrans-24
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: '[PRE7]'
+  id: totrans-25
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: A pseudorandom number generator doesn’t generate truly random numbers, but rather
+    generates numbers based on some property of the system, such as the time of day.
+    This is sufficiently random for most applications; a notable exception is cryptography
+    applications that depend on the true randomness of numbers for security.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 伪随机数生成器并不生成真正的随机数，而是基于系统的某些属性（如时间）生成数字。对于大多数应用来说，这已经足够随机；一个显著的例外是依赖数字真实随机性的密码学应用。
+- en: 'If you ask for the `RAND()` value in a `SELECT` operation, you’ll get a random
+    value for each returned row:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果在 `SELECT` 操作中请求 `RAND()` 值，你将得到每个返回行的随机值：
+- en: '[PRE8]'
+  id: totrans-28
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: '[PRE9]'
+  id: totrans-29
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Since the values are effectively random, you’ll almost certainly see different
+    results than we’ve shown here. Moreover, if you repeat the statement, you’ll also
+    see different values returned. It is possible to pass `RAND()` an integer argument
+    called *seed*. That will result in the `RAND()` function generating the same values
+    for the same inputs each time that seed is used—it’s not really useful for what
+    we’re trying to achieve here, but a possibility nonetheless. You can try running
+    the following statement as many times as you want, and the results won’t change:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于值是有效随机的，你几乎肯定会看到与我们这里显示的不同的结果。此外，如果你重复执行语句，你也会看到不同的返回值。可以向 `RAND()` 传递一个整数参数称为
+    *seed*。这将导致 `RAND()` 函数在每次使用相同输入时生成相同的值—虽然这对我们这里试图实现的目标不是真正有用，但这也是一个可能性。你可以尝试运行以下语句任意次数，结果都不会改变：
+- en: '[PRE10]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: Let’s return to the `INSERT` operation. When we ask that the results be ordered
+    by `RAND()`, the results of the `SELECT` statement are sorted in a pseudorandom
+    order. The `LIMIT 10` is there to limit the number of rows returned by the `SELECT`;
+    we’ve limited in this example simply for readability.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们回到 `INSERT` 操作。当我们要求结果按 `RAND()` 排序时，`SELECT` 语句的结果以伪随机顺序排序。`LIMIT 10` 用于限制
+    `SELECT` 返回的行数；在这个示例中，我们仅仅是为了可读性而限制了数量。
+- en: 'The `SELECT` statement in an `INSERT INTO` statement can use all of the usual
+    features of `SELECT` statements. You can use joins, aggregation, functions, and
+    any other features you choose. You can also query data from one database in another,
+    by prefacing the table names with the database name followed by a period (`.`)
+    character. For example, if you wanted to insert the `actor` table from the `film`
+    database into a new `art` database, you could do the following:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INSERT INTO`语句中的`SELECT`语句可以使用所有常规的`SELECT`语句特性。您可以使用连接、聚合、函数和任何其他您选择的功能。您还可以通过在表名前加上数据库名称后跟一个点（`.`）字符，从一个数据库中的数据查询另一个数据库中的数据。例如，如果要将`film`数据库中的`actor`表插入到新的`art`数据库中，可以执行以下操作：'
+- en: '[PRE11]'
+  id: totrans-34
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: '[PRE12]'
+  id: totrans-35
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: '[PRE13]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: '[PRE14]'
+  id: totrans-37
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: '[PRE15]'
+  id: totrans-38
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: '[PRE16]'
+  id: totrans-39
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: '[PRE17]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: '[PRE18]'
+  id: totrans-41
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: You can see that the new `people` table is referred to as `art.people` (though
+    it doesn’t need to be, since `art` is the database that’s currently in use), and
+    the `actor` table is referred to as `sakila.actor` (which it needs to be, since
+    that isn’t the database being used). Note also that the column names don’t need
+    to be the same for the `SELECT` and the `INSERT`.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 新的`people`表被称为`art.people`（尽管不需要这样，因为`art`是当前正在使用的数据库），`actor`表被称为`sakila.actor`（这是必需的，因为这不是当前使用的数据库）。注意，`SELECT`和`INSERT`中的列名不需要相同。
+- en: 'Sometimes, you’ll encounter duplication issues when inserting with a `SELECT`
+    statement. If you try to insert the same primary key value twice, MySQL will abort.
+    This won’t happen in the `recommend` table, as long as you automatically allocate
+    a new `sequence_id` using the `AUTO_INCREMENT` feature. However, we can force
+    a duplicate into the table to show the behavior:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时，在使用`SELECT`语句插入时会遇到重复的问题。如果尝试两次插入相同的主键值，MySQL将中止。这在`recommend`表中不会发生，只要您使用`AUTO_INCREMENT`功能自动分配新的`sequence_id`即可。但是，我们可以强制将重复项插入到表中以显示其行为：
+- en: '[PRE19]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: '[PRE20]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: '[PRE21]'
+  id: totrans-46
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: '[PRE22]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'If you want MySQL to ignore this and keep going, add the `IGNORE` keyword after
+    `INSERT`:'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果要MySQL忽略这一点并继续进行，请在`INSERT`之后添加`IGNORE`关键字：
+- en: '[PRE23]'
+  id: totrans-49
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: '[PRE24]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'MySQL doesn’t complain, but it does report that it encountered a duplicate.
+    Note that the data is not changed; all we did was ignore the error. This is useful
+    in bulk load operations where you don’t want to fail halfway through running a
+    script that inserts a million rows. We can inspect the warning to see the `*Duplicate
+    entry*` error as a warning now:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL不会抱怨，但它会报告遇到了重复。请注意，数据并未更改；我们所做的只是忽略了错误。这在大量加载操作中非常有用，您不希望在运行插入一百万行的脚本时半途而废。我们可以检查警告，看到现在将`*Duplicate
+    entry*`错误作为警告：
+- en: '[PRE25]'
+  id: totrans-52
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: '[PRE26]'
+  id: totrans-53
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'Finally, note that it is possible to insert into a table that’s listed in the
+    `SELECT` statement, but you still need to avoid duplicate primary keys:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，请注意，可以插入到`SELECT`语句中列出的表中，但仍然需要避免重复的主键：
+- en: '[PRE27]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: '[PRE28]'
+  id: totrans-56
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'There are two ways to avoid getting the error. First, the `actor` table has
+    `AUTO_INCREMENT` enabled for `actor_id`, so if you omit this column in the `INSERT`
+    completely, you won’t get an error, as the new values will be generated automatically.
+    (`INSERT` statement syntax is explained in [“Alternative Syntaxes”](ch03.xhtml#BAS-SEC-INSERT2).)
+    Here’s an example that would only one record (due to the `LIMIT` clause):'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 避免出现错误有两种方法。首先，`actor`表为`actor_id`启用了`AUTO_INCREMENT`，因此如果完全省略`INSERT`中的此列，就不会出现错误，因为新值将自动生成。（`INSERT`语句的语法在[“Alternative
+    Syntaxes”](ch03.xhtml#BAS-SEC-INSERT2)中有解释。）这是一个仅插入一条记录的示例（由于`LIMIT`子句）：
+- en: '[PRE29]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'The second way is to modify `actor_id` in the `SELECT` query in a way that
+    prevents collisions. Let’s try that:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二种方法是在`SELECT`查询中修改`actor_id`，以避免冲突。让我们试试这个：
+- en: '[PRE30]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: '[PRE31]'
+  id: totrans-61
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'Here, we’re copying the rows but increasing their `actor_id` values by 200
+    before we insert them, because we remember that there are 200 rows initially.
+    This is the result:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们复制了行，但在插入它们之前将它们的`actor_id`值增加了200，因为我们记得最初有200行。这是结果：
+- en: '[PRE32]'
+  id: totrans-63
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: '[PRE33]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: You can see how first names, last names, and `last_update` values start repeating
+    from the `actor_id` 201.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以看到`actor_id`从201开始，姓氏、名字和`last_update`值开始重复。
+- en: 'It’s also possible to use subqueries in the `INSERT SELECT` statements. For
+    example, the next statement is valid:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`INSERT SELECT`语句中还可以使用子查询。例如，下一条语句是有效的：
+- en: '[PRE34]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: Loading Data from Comma-Delimited Files
+  id: totrans-68
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 从逗号分隔文件加载数据
+- en: These days, databases are usually not an afterthought. They are ubiquitous and
+    easier than ever to use, and most IT professionals know about them. Nevertheless,
+    end users find them difficult, and unless specialized UIs are created, a lot of
+    data entry and analysis is instead done in various spreadsheet programs. These
+    programs typically have unique file formats, open or closed, but most of them
+    will allow you to export data as rows of comma-separated values (CSVs), also called
+    a *comma-delimited format*. You can then import the data with a little effort
+    into MySQL.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如今，数据库通常不再是一个事后补救的问题。它们无处不在，比以往任何时候都更容易使用，大多数 IT 专业人员都知道它们。尽管如此，最终用户发现它们很难使用，除非创建了专门的用户界面，否则大量的数据输入和分析将在各种电子表格程序中进行。这些程序通常具有独特的文件格式，开放或封闭，但它们大多数允许您将数据导出为逗号分隔的值（CSV），也称为
+    *逗号分隔格式*。然后，您可以通过一点努力将数据导入 MySQL。
+- en: Another common task that can be accomplished by working with CSVs is transferring
+    data in a heterogeneous environment. If you have various database software running
+    in your setup, and especially if you’re using a DBaaS in the cloud, moving data
+    between these systems can be daunting. However, the basic CSV data can be a lowest
+    common denominator for them. Note that in the case of any data transfer you should
+    always remember that CSV does not have the notions of schemas, data types, or
+    constraints. But as a flat data file format, it works well.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个常见的通过处理 CSV 完成的任务是在异构环境中传输数据。如果您的设置中运行着各种数据库软件，尤其是在云中使用 DBaaS，那么在这些系统之间传输数据可能会让人望而却步。然而，基本的
+    CSV 数据可以成为它们的最低公共分母。请注意，在任何数据传输的情况下，您应始终记住 CSV 没有模式、数据类型或约束的概念。但作为一种扁平的数据文件格式，它表现良好。
+- en: If you’re not using a spreadsheet program, you can still often use command-line
+    tools such as `sed` and `awk`—very old and powerful Unix utilities—to convert
+    text data into a CSV format suitable for import by MySQL. Some cloud databases
+    allow export of their data directly into CSV. In some other cases, small programs
+    have to be written that read data and produce a CSV file. This section shows you
+    the basics of how to import CSV data into MySQL.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您不使用电子表格程序，通常仍然可以使用命令行工具，如 `sed` 和 `awk` —— 这些是非常古老和强大的 Unix 实用工具 —— 将文本数据转换为适合
+    MySQL 导入的 CSV 格式。一些云数据库允许直接将其数据导出为 CSV。在其他一些情况下，可能需要编写小程序来读取数据并生成 CSV 文件。本节将向您展示如何将
+    CSV 数据导入 MySQL 的基础知识。
+- en: Let’s work through an example. We have a list of NASA facilities with their
+    addresses and contact information that we want to store in a database. At present,
+    it’s stored in a CSV file named *NASA_Facilities.csv* and has the format shown
+    in [Figure 7-1](#ADV2-FIG-NASAFACILITIES).
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们通过一个例子来详细说明。我们有一个包含 NASA 设施及其地址和联系信息的列表，我们希望将其存储在一个数据库中。目前，它存储在一个名为 *NASA_Facilities.csv*
+    的 CSV 文件中，并且其格式如 [图 7-1](#ADV2-FIG-NASAFACILITIES) 所示。
+- en: '![lm2e 0701](Images/lm2e_0701.png)'
+  id: totrans-73
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 0701](Images/lm2e_0701.png)'
+- en: Figure 7-1\. List of NASA facilities stored in a spreadsheet file
+  id: totrans-74
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-1\. 存储在电子表格文件中的 NASA 设施列表
+- en: 'You can see that each facility is associated with a center, and may list the
+    date it was occupied and optionally its status. The full column list is as follows:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以看到，每个设施都与一个中心相关联，可能列出了其占用日期及可选的状态。完整的列列表如下：
+- en: Center
+  id: totrans-76
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 中心
+- en: Center Search Status
+  id: totrans-77
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 中心搜索状态
+- en: Facility
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 设施
+- en: FacilityURL
+  id: totrans-79
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: FacilityURL
+- en: Occupied
+  id: totrans-80
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 占用
+- en: Status
+  id: totrans-81
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 状态
+- en: URL Link
+  id: totrans-82
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: URL 链接
+- en: Record Date
+  id: totrans-83
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 记录日期
+- en: Last Update
+  id: totrans-84
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 最后更新
+- en: Country
+  id: totrans-85
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 国家
+- en: Contact
+  id: totrans-86
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 联系人
+- en: Phone
+  id: totrans-87
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Phone
+- en: Location
+  id: totrans-88
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 位置
+- en: City
+  id: totrans-89
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 城市
+- en: State
+  id: totrans-90
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 州
+- en: Zipcode
+  id: totrans-91
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 邮政编码
+- en: This example comes directly from NASA’s publicly available [Open Data Portal](https://oreil.ly/xIm3A),
+    and the file is available in the book’s [GitHub repository](https://oreil.ly/ayDai).
+    Since this is already a CSV file, we don’t need to convert it from another file
+    format (like XLS). However, if you do need to do that in your own project, it’s
+    usually as easy as using the Save As command in the spreadsheet program; just
+    don’t forget to pick CSV as the output format.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该示例直接来自 NASA 的公开数据门户 [Open Data Portal](https://oreil.ly/xIm3A)，文件在本书的 [GitHub
+    仓库](https://oreil.ly/ayDai) 中可用。由于这已经是一个 CSV 文件，我们不需要将其从其他文件格式（如 XLS）转换过来。但是，如果您在自己的项目中需要这样做，通常只需使用电子表格程序的“另存为”命令即可；只需别忘记选择
+    CSV 作为输出格式。
+- en: 'If you open the *NASA_facilities.csv* file using a text editor, you’ll see
+    that it has one line per spreadsheet row, with the values for each column separated
+    by commas. If you’re on a non-Windows platform, you may find that in some CSV
+    files each line is terminated with a `^M`, but don’t worry about this; it’s an
+    artifact of the origins of Windows. Data in this format is often referred to as
+    *DOS format*, and most software applications can handle it without problem. In
+    our case, the data is in *Unix format*, and thus on Windows you may see that all
+    the lines are concatenated. You can try to use another text editor if that’s the
+    case. Here are a few width-truncated lines selected from *NASA_Facilities.csv*:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您使用文本编辑器打开*NASA_facilities.csv*文件，您会看到每个电子表格行都有一行，每列的值由逗号分隔。如果您在非Windows平台上，可能会发现在某些CSV文件中，每行以`^M`结尾，但不必担心这一点；这是Windows起源的遗留物。这种格式的数据通常称为*DOS格式*，大多数软件应用程序可以处理它而无需问题。在我们的情况下，数据处于*Unix格式*，因此在Windows上，您可能会看到所有行都被连接在一起。如果情况如此，您可以尝试使用另一个文本编辑器。以下是从*NASA_Facilities.csv*中选择的一些宽度截断行：
+- en: '[PRE35]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: If there are commas or other special symbols within values, the whole value
+    is enclosed in quotes, as in the last line shown here.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果值中有逗号或其他特殊符号，则整个值将用引号括起来，如所示的最后一行。
+- en: 'Let’s import this data into MySQL. First, create the new `nasa` database:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们将这些数据导入到MySQL中。首先，创建新的`nasa`数据库：
+- en: '[PRE36]'
+  id: totrans-97
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: '[PRE37]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'Choose this as the active database:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择此数据库作为活动数据库：
+- en: '[PRE38]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: '[PRE39]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'Now, create the `facilities` table to store the data. This needs to handle
+    all of the fields that we see in the CSV file, which conveniently has a header:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，创建`facilities`表来存储数据。这需要处理CSV文件中看到的所有字段，该文件方便地具有标题：
+- en: '[PRE40]'
+  id: totrans-103
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: '[PRE41]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: We’re cheating here somewhat with the data types. NASA provides the schema of
+    the dataset, but for most of the fields the type is given as the “Plain Text,”
+    and we can’t really store a “Website URL” as anything but text, either. We don’t,
+    however, know how much data each column will hold. Thus, we default to using the
+    `TEXT` type, which is similar to defining a column as `VARCHAR(65535)`. There
+    are some differences between the two types, as you can probably remember from
+    [“String types”](ch04.xhtml#SEC-STRING-COLUMN-TYPES), but they are not important
+    in this example. We don’t define any indexes and don’t put any constraints on
+    our table. If you’re loading a completely new dataset that’s quite small, it can
+    be beneficial to load it first and then analyze it. For larger datasets, make
+    sure the table is structured as well as possible, or you’ll spend a considerable
+    amount of time changing it later.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里我们在数据类型上有些作弊。NASA提供了数据集的模式，但对于大多数字段，类型都被给定为“纯文本”，而我们实际上无法将“网站URL”存储为除文本之外的任何东西。然而，我们并不知道每个列会容纳多少数据。因此，我们默认使用`TEXT`类型，这类似于将列定义为`VARCHAR(65535)`。两种类型之间存在一些差异，正如您可能从[“字符串类型”](ch04.xhtml#SEC-STRING-COLUMN-TYPES)中记得的那样，但在这个例子中并不重要。我们不定义任何索引，也不在表上设置任何约束。如果您要加载一个完全新的数据集，它相当小，先加载它然后再进行分析可能会有益。对于较大的数据集，请确保表结构尽可能良好，否则您将花费相当多的时间来修改它。
+- en: 'Now that we’ve set up the database table, we can import the data from the file
+    using the `LOAD DATA INFILE` command:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们已经设置了数据库表，可以使用`LOAD DATA INFILE`命令从文件中导入数据：
+- en: '[PRE42]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: '[PRE43]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'Oh, no! We got an error. By default, MySQL doesn’t let you load *any* data
+    using the `LOAD DATA INFILE` command. The behavior is controlled by the `secure_file_priv`
+    system variable. If the variable is set to a path, the file to be loaded should
+    reside in that particular path and be readable by the MySQL server. If the variable
+    isn’t set, which is considered insecure, then the file to be loaded should be
+    readable only by the MySQL server. By default, MySQL 8.0 on Linux sets this variable
+    as follows:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 哦，不！我们遇到了一个错误。默认情况下，MySQL不允许您使用`LOAD DATA INFILE`命令加载*任何*数据。该行为由`secure_file_priv`系统变量控制。如果该变量设置了路径，则要加载的文件应位于该特定路径中，并且MySQL服务器应能够读取它。如果未设置该变量，则认为它是不安全的，那么要加载的文件应仅由MySQL服务器可读取。默认情况下，Linux上的MySQL
+    8.0设置该变量如下：
+- en: '[PRE44]'
+  id: totrans-110
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: '[PRE45]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: 'And on Windows:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Windows上：
+- en: '[PRE46]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: '[PRE47]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: Note
+  id: totrans-115
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The value of the `secure_file_priv` system variable may be different in your
+    installation of MySQL, or it may even be empty. A `NULL` value for `secure_file_priv`
+    means that MySQL will allow loading a file in any location as long as that file
+    is accessible to the MySQL server. On Linux, that means that the file has to be
+    readable by the `mysqld` process, which usually runs under the `mysql` user. You
+    can change `secure_file_priv` variable’s value by updating your MySQL configuration
+    and restarting the server. You can find information on how to configure MySQL
+    in [Chapter 9](ch09.xhtml#CH9_OPTIONS_FILE).
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`secure_file_priv`系统变量的值可能因您的MySQL安装而异，甚至可能为空。对于`secure_file_priv`的`NULL`值意味着MySQL将允许在任何位置加载文件，只要MySQL服务器能访问到该文件。在Linux上，这意味着文件必须对`mysqld`进程可读，通常该进程以`mysql`用户身份运行。您可以通过更新MySQL配置并重新启动服务器来更改`secure_file_priv`变量的值。有关如何配置MySQL的信息，请参阅[第9章](ch09.xhtml#CH9_OPTIONS_FILE)。'
+- en: On Linux or other Unix-like systems, you need to copy the file into that directory,
+    possibly using `sudo` to allow the operation, and then change its permissions
+    so that the `mysqld` program can access the file. On Windows, you only need to
+    copy the file to the correct destination.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Linux或其他类Unix系统上，您需要将文件复制到该目录中，可能需要使用`sudo`以允许该操作，然后更改其权限，以便`mysqld`程序可以访问该文件。在Windows上，您只需将文件复制到正确的目标位置即可。
+- en: 'Let’s do this. On Linux or similar systems, you can run commands like this:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们开始吧。在Linux或类似系统上，您可以运行如下命令：
+- en: '[PRE48]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: On Windows, you can use the File Manager to copy or move the file.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Windows上，您可以使用文件管理器复制或移动文件。
+- en: 'Now we’re ready to try the loading again. When our target file is not in the
+    current directory, we need to pass the full path to the command:'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们准备再次尝试加载。当目标文件不在当前目录中时，我们需要将完整路径传递给命令：
+- en: '[PRE49]'
+  id: totrans-122
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: '[PRE50]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: 'Well, that doesn’t look correct: `Record Date` is indeed not a date, but a
+    column name. We’ve made a silly but common mistake, loading the CSV file with
+    the header. We need to tell MySQL to omit it:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 嗯，看起来不对：`Record Date`确实不是日期，而是列名。我们犯了一个愚蠢但常见的错误，加载包含标题的CSV文件。我们需要告诉MySQL省略它：
+- en: '[PRE51]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: '[PRE52]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: 'Turns out, that date format we have is not something MySQL expects. That’s
+    an extremely common issue. There are a couple of ways out. First, we can just
+    change our `record_date` column to the `TEXT` type. We’ll lose the niceties of
+    a proper date-time data type, but we’ll be able to get the data into our database.
+    Second, we can convert the data ingested from the file on the fly. To demonstrate
+    the difference in the results, we specified the `occupied` column (which is a
+    date field) to be `TEXT`. Before we jump into the conversion complexities, though,
+    let’s try running the same command on Windows:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果表明，我们拥有的日期格式不符合MySQL的期望。这是一个非常常见的问题。有几种解决方法。首先，我们可以将`record_date`列更改为`TEXT`类型。我们将失去正确日期时间数据类型的优势，但我们将能够将数据导入数据库。其次，我们可以在数据从文件中摄取时进行转换。为了展示结果的不同，我们指定了`occupied`列（这是一个日期字段）为`TEXT`。尽管我们将进入转换的复杂性之前，让我们尝试在Windows上运行相同的命令：
+- en: '[PRE53]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: '[PRE54]'
+  id: totrans-129
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: 'Even though the file is present in that directory, `LOAD DATA INFILE` errors
+    out. The reason for that is how MySQL works with paths on Windows. We can’t just
+    use regular Windows-style paths with this or other MySQL commands. We need to
+    escape each backslash (`\`) with another backslash, or change our path to use
+    forward slashes (`/`). Both will work…or rather, in this case, both will error
+    out due to the expected `record_date` conversion issue:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使文件存在于该目录中，`LOAD DATA INFILE`也会报错。这是因为MySQL在Windows上处理路径的方式。我们不能简单地使用常规的Windows风格路径来执行此或其他MySQL命令。我们需要用另一个反斜杠(`\`)转义每个反斜杠，或者改用正斜杠(`/`)作为路径。两者都可以……或者说，在这种情况下，两者都会由于预期的`record_date`转换问题而报错：
+- en: '[PRE55]'
+  id: totrans-131
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: '[PRE56]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: '[PRE57]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: '[PRE58]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: 'With that covered, let’s get back to our date conversion issue. As we mentioned,
+    this is an extremely common issue. You will inevitably face type conversion problems,
+    because CSV is typeless, and different databases have different expectations about
+    various types. In this case, the open dataset that we obtained has dates in the
+    following format: `03/01/1996 12:00:00 AM`. While this will make our operation
+    more complex, we believe converting the date values from our CSV file is a good
+    exercise. To convert an arbitrary string to a date, or at least to attempt such
+    a conversion, we can use the `STR_TO_DATE()` function. After reviewing the documentation,
+    we came up with the following cast:'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 说完这些，让我们回到日期转换问题上。正如我们所提到的，这是一个极为常见的问题。您将不可避免地遇到类型转换问题，因为CSV是无类型的，不同的数据库对各种类型有不同的期望。在这种情况下，我们获得的开放数据集中的日期格式如下：`03/01/1996
+    12:00:00 AM`。尽管这将使我们的操作更加复杂，但我们认为从CSV文件中转换日期值是一个很好的练习。为了将任意字符串转换为日期，或至少尝试这样的转换，我们可以使用`STR_TO_DATE()`函数。在查阅了文档后，我们得出了以下转换：
+- en: '[PRE59]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: '[PRE60]'
+  id: totrans-137
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: 'Since the function returns `NULL` when the cast is unsuccessful, we know we
+    have managed to find a correct invocation. Now we need to find out how to use
+    the function in the `LOAD DATA INFILE` command. The much longer version using
+    the function looks like this:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于函数在转换失败时返回`NULL`，我们知道我们已经成功找到了正确的调用方法。现在我们需要找出如何在`LOAD DATA INFILE`命令中使用该函数。使用函数的更长版本看起来像这样：
+- en: '[PRE61]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: '[PRE62]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: That’s a lot of command! Let’s break it down. The first line specifies our `LOAD
+    DATA INFILE` command and the path to a file. The second line specifies the target
+    table and begins the `FIELDS` specification, starting with `TERMINATED BY ','`,
+    which means our fields are delimited by commas, as expected for CSV. The third
+    line adds another parameter to the `FIELDS` specification and tells MySQL that
+    some fields (but not all) are enclosed by the `"` symbol. That’s important, because
+    our dataset has some entries with commas within `"..."` fields. On line four we
+    specify that we skip the first line of the file, where we know the header resides.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一条很长的命令！让我们来分解一下。第一行指定了我们的`LOAD DATA INFILE`命令及文件路径。第二行指定了目标表，并开始`FIELDS`规范，以`TERMINATED
+    BY ','`开头，这表示我们的字段是以逗号分隔的，符合CSV的预期。第三行在`FIELDS`规范中添加了另一个参数，并告诉MySQL一些字段（但不是所有字段）由`"`符号包围。这很重要，因为我们的数据集中有些条目在`"..."`字段内包含逗号。在第四行，我们指定跳过文件的第一行，我们知道标题位于其中。
+- en: Lines 5 through 7 have the column list specification. We need to convert two
+    date-time columns, and for that we need to read their values into variables, which
+    are then set to the `nasa.facilities` table’s column values. However, we can’t
+    tell that to MySQL without also specifying all the other columns. If we were to
+    omit some columns from the list or specify them in the wrong order, MySQL would
+    not assign the values correctly. CSV is inherently a position-based format. By
+    default, when the `FIELDS` specification is not given, MySQL will read each CSV
+    line and will expect each field in all lines to map to a column in the target
+    table (in the order of columns that the `DESCRIBE` or `SHOW CREATE TABLE` command
+    gives). By changing the order of columns in this specification, we can populate
+    a table from a CSV file that has fields misplaced. By specifying fewer columns,
+    we can populate a table from a file that is missing some of the fields.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第5至7行是列列表规范。我们需要转换两个日期时间列，并且为此需要将它们的值读入变量，然后将变量设置为`nasa.facilities`表的列值。然而，如果我们没有同时指定所有其他列或者顺序不正确，MySQL将无法正确分配值。CSV本质上是基于位置的格式。默认情况下，当未给出`FIELDS`规范时，MySQL将读取每个CSV行，并期望所有行中的每个字段按照目标表中列的顺序（由`DESCRIBE`或`SHOW
+    CREATE TABLE`命令给出）映射到列中。通过更改此规范中的列顺序，我们可以从具有字段错位的CSV文件填充表。通过指定较少的列，我们可以从缺少某些字段的文件中填充表。
+- en: 'Lines 8 through 15 are our function calls to convert the date-time values.
+    In the preceding column spec, we defined that field 8 is read into the `@var_record_date`
+    variable, and field 9 into `@var_last_update`. We know that fields 8 and 9 are
+    our problematic date-time fields. With the variables populated, we can define
+    the `SET` parameter, which allows modification of the target table column values
+    based on fields read from the CSV file. In this very basic example, you could
+    multiply a specific value by two. In our case, we cast two functions: first we
+    check that a variable is not empty (`,,` in CSV) by assessing the number of characters
+    read from the file, and second we call the actual conversion if the previous check
+    doesn’t return zero. If we found the length to be zero, we set the value to `NULL`.'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第 8 至 15 行是我们的函数调用，用于转换日期时间值。在前面的列规范中，我们定义了字段 8 被读入 `@var_record_date` 变量，字段
+    9 被读入 `@var_last_update`。我们知道字段 8 和 9 是我们的问题日期时间字段。有了填充的变量，我们可以定义 `SET` 参数，根据从
+    CSV 文件中读取的字段修改目标表列的值。在这个非常基本的示例中，您可以将特定值乘以二。在我们的情况下，我们执行了两个函数转换：首先，我们检查一个变量是否为空（在
+    CSV 中是 `,,`），通过评估从文件中读取的字符数，然后，如果前面的检查不返回零，则调用实际的转换。如果我们发现长度为零，则将该值设置为 `NULL`。
+- en: 'Finally, when the command has been executed, it’s possible to check the results:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，执行命令后，可以检查结果：
+- en: '[PRE63]'
+  id: totrans-145
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: '[PRE64]'
+  id: totrans-146
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: Remember we mentioned that `occupied` will remain `TEXT`. You can see that here.
+    While it can be used for sorting, no date functions will work on values in this
+    column unless they are explicitly cast to `DATETIME`.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记住我们提到过 `occupied` 保持为 `TEXT`。您可以在此处看到。虽然它可用于排序，但此列中的值如果未显式转换为 `DATETIME`，则无法使用日期函数。
+- en: This was a complex example, but it shows the unexpected complexity of loading
+    data and the power of the `LOAD DATA INFILE` command.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个复杂的例子，但它显示了加载数据的意外复杂性以及 `LOAD DATA INFILE` 命令的强大功能。
+- en: Writing Data into Comma-Delimited Files
+  id: totrans-149
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将数据写入逗号分隔的文件
+- en: You can use the `SELECT INTO OUTFILE` statement to write out the result of a
+    query into a CSV file that can be opened by a spreadsheet or other program.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用 `SELECT INTO OUTFILE` 语句将查询结果写入 CSV 文件，该文件可以被电子表格或其他程序打开。
+- en: 'Let’s export the list of current managers from our `employees` database into
+    a CSV file. The query used to list all the current managers is shown here:'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们将当前 `employees` 数据库中的管理者列表导出为 CSV 文件。用于列出所有当前管理者的查询如下所示：
+- en: '[PRE65]'
+  id: totrans-152
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: '[PRE66]'
+  id: totrans-153
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: '[PRE67]'
+  id: totrans-154
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: '[PRE68]'
+  id: totrans-155
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: 'We can change this `SELECT` query slightly to write this data into an output
+    file as comma-separated values. `INTO OUTFILE` is subject to the same `--secure-file-priv`
+    option rules as `LOAD DATA INFILE`. The file path by default is limited, and we
+    listed the default options in [“Loading Data from Comma-Delimited Files”](#LOADCSV):'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以稍微修改这个 `SELECT` 查询，以将这些数据写入一个输出文件作为逗号分隔值。 `INTO OUTFILE` 受 `LOAD DATA INFILE`
+    相同的 `--secure-file-priv` 选项规则限制。默认情况下，文件路径是有限的，并且我们在 [“从逗号分隔的文件加载数据”](#LOADCSV)
+    中列出了默认选项：
+- en: '[PRE69]'
+  id: totrans-157
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: '[PRE70]'
+  id: totrans-158
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: Here, we’ve saved the results into the file *managers.csv* in the */var/lib/mysql-files*
+    directory; the MySQL server must be able to write to the directory that you specify,
+    and it should be one listed in the `secure_file_priv` system variable (if set).
+    On a Windows system, specify a path such as *C:\ProgramData\MySQL\MySQL Server
+    8.0\Uploads\managers.csv* instead. If you omit the `FIELDS TERMINATED BY` clause,
+    the server will use tabs as the default separator between the data values.
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将结果保存在 */var/lib/mysql-files* 目录下的文件 *managers.csv* 中；MySQL 服务器必须能够写入您指定的目录，并且它应该是
+    `secure_file_priv` 系统变量中列出的一个目录（如果已设置）。在 Windows 系统上，请指定类似 *C:\ProgramData\MySQL\MySQL
+    Server 8.0\Uploads\managers.csv* 的路径。如果省略了 `FIELDS TERMINATED BY` 子句，服务器将使用制表符作为数据值之间的默认分隔符。
+- en: 'You can view the contents of the file *managers.csv* in a text editor, or import
+    it into a spreadsheet program:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以在文本编辑器中查看 *managers.csv* 文件的内容，或将其导入电子表格程序中：
+- en: '[PRE71]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: 'When our data fields contain commas or another delimiter of our choice, MySQL
+    by default will escape the delimiters within fields. Let’s switch to the `sakila`
+    database and test this:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们的数据字段包含逗号或其他我们选择的分隔符时，默认情况下，MySQL 将会转义字段中的分隔符。让我们切换到 `sakila` 数据库并测试这一点：
+- en: '[PRE72]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: '[PRE73]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: '[PRE74]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: '[PRE75]'
+  id: totrans-166
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: 'If you take a look at the data in the *film.csv* file now (again, feel free
+    to use a text editor, a spreadsheet program, or a command-line utility like `head`
+    on Linux), here’s what you’ll see:'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您现在查看 *film.csv* 文件中的数据（再次，可以使用文本编辑器、电子表格程序或 Linux 上的 `head` 命令），您将看到以下内容：
+- en: '[PRE76]'
+  id: totrans-168
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: Notice how in rows where the second field contains a comma, it has been automatically
+    escaped with a backslash to distinguish it from the separator. Some spreadsheet
+    programs may understand this and remove the backslashes when importing the file,
+    and some may not. MySQL will respect the escaping and not treat such commas as
+    separators. Note that if we specified `FIELDS TERMINATED BY '^'`, all `^` symbols
+    within fields would get escaped; this is not specific to commas.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在第二个字段包含逗号的行中，逗号已自动使用反斜杠进行转义，以区分其与分隔符。某些电子表格程序可能会理解这一点，并在导入文件时移除反斜杠，而有些则不会。MySQL
+    将尊重转义并不将这样的逗号视为分隔符。请注意，如果我们指定了 `FIELDS TERMINATED BY '^'`，则所有字段中的 `^` 符号将会被转义；这并不局限于逗号。
+- en: 'Since not all programs may deal with escapes gracefully, we can ask MySQL to
+    explicitly define fields by using the `ENCLOSED` option:'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于并非所有程序都可以优雅地处理转义字符，我们可以请求 MySQL 使用 `ENCLOSED` 选项显式定义字段：
+- en: '[PRE77]'
+  id: totrans-171
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: '[PRE78]'
+  id: totrans-172
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: 'We used this option before when loading data. Take a look at the results in
+    the file *film_quoted.csv*:'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在加载数据时曾使用过此选项。查看文件 *film_quoted.csv* 中的结果。
+- en: '[PRE79]'
+  id: totrans-174
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: 'Our delimiters—commas—are now not escaped, which may work better with modern
+    spreadsheet programs. You may wonder what will happen if there are double quotes
+    within exported fields: MySQL will escape those instead of the commas, which again
+    may cause problems. When doing data export, do not forget to make sure that the
+    resulting output will work for your consumers.'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的分隔符—逗号—现在不再被转义，这可能更适合现代电子表格程序。您可能会想知道，如果导出字段中包含双引号会发生什么：MySQL 将会转义这些引号而不是逗号，这可能会再次引起问题。在进行数据导出时，请务必确保生成的输出对您的消费者有效。
+- en: Creating Tables with Queries
+  id: totrans-176
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用查询创建表格
+- en: You can create a table or easily create a copy of a table using a query. This
+    is useful when you want to build a new database using existing data—for example,
+    you might want to copy across a list of countries—or when you want to reorganize
+    data for some reason. Data reorganization is common when producing reports, merging
+    data from two or more tables, and redesigning on the fly. This short section shows
+    you how it’s done.
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用查询创建表格或轻松创建表格的副本。这在您希望使用现有数据构建新数据库时非常有用，例如，您可能希望复制一些国家的列表，或者在某种原因下重新组织数据。数据重新组织在生成报告、合并两个或更多表的数据以及动态重设计时非常常见。本小节展示了如何操作。
+- en: Tip
+  id: totrans-178
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: We base all the examples here on the unmodified `sakila` database. You should
+    repeat the steps given in [“Entity Relationship Modeling Examples”](ch02.xhtml#BAS-SEC-MODELING-EXAMPLES)
+    to get the database back to its clean state before proceeding.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们所有的示例都基于未修改的 `sakila` 数据库。在继续之前，请重复执行 [“实体关系建模示例”](ch02.xhtml#BAS-SEC-MODELING-EXAMPLES)
+    中给出的步骤，使数据库恢复到其干净的状态。
+- en: 'In MySQL, you can easily duplicate the structure of a table using a variant
+    of the `CREATE TABLE` syntax:'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 中，您可以使用 `CREATE TABLE` 语法的变体轻松复制表的结构：
+- en: '[PRE80]'
+  id: totrans-181
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: '[PRE81]'
+  id: totrans-182
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: '[PRE82]'
+  id: totrans-183
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: '[PRE83]'
+  id: totrans-184
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: '[PRE84]'
+  id: totrans-185
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE84]'
+- en: '[PRE85]'
+  id: totrans-186
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE85]'
+- en: '[PRE86]'
+  id: totrans-187
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE86]'
+- en: '[PRE87]'
+  id: totrans-188
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE87]'
+- en: '[PRE88]'
+  id: totrans-189
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE88]'
+- en: The `LIKE` syntax allows you to create a new table with exactly the same structure
+    as another, including keys. You can see that it doesn’t copy the data across.
+    You can also use the `IF NOT EXISTS` and `TEMPORARY` features with this syntax.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LIKE` 语法允许您创建一个新表，其结构与另一个表完全相同，包括键。可以看到，它不会复制数据。您还可以在此语法中使用 `IF NOT EXISTS`
+    和 `TEMPORARY` 特性。'
+- en: 'If you want to create a table and copy some data, you can do that with a combination
+    of the `CREATE TABLE` and `SELECT` statements. Let’s remove the `actor_2` table
+    and re-create it using this new approach:'
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您想创建一个表并复制一些数据，您可以结合使用 `CREATE TABLE` 和 `SELECT` 语句来实现。让我们删除 `actor_2` 表，并使用这种新方法重新创建它：
+- en: '[PRE89]'
+  id: totrans-192
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE89]'
+- en: '[PRE90]'
+  id: totrans-193
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE90]'
+- en: '[PRE91]'
+  id: totrans-194
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE91]'
+- en: '[PRE92]'
+  id: totrans-195
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE92]'
+- en: '[PRE93]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE93]'
+- en: '[PRE94]'
+  id: totrans-197
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE94]'
+- en: An identical table, `actor_2`, is created, and all the data is copied across
+    by the `SELECT` statement. `CREATE TABLE AS SELECT`, or `CTAS`, is a common name
+    for this action, but it’s actually not mandatory to specify the `AS` part, and
+    we’ll omit that later.
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过 `SELECT` 语句创建了一个完全相同的 `actor_2` 表，并将所有数据复制过去。`CREATE TABLE AS SELECT` 或 `CTAS`
+    是此操作的常见名称，但实际上并非必须指定 `AS` 部分，稍后我们会省略它。
+- en: 'This technique is powerful. You can create new tables with new structures and
+    use powerful queries to populate them with data. For example, here’s a `report`
+    table that’s created to contain the names of the films in our database and their
+    categories:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种技术非常强大。您可以创建具有新结构的新表，并使用强大的查询将其填充数据。例如，这里是一个 `report` 表，用于包含我们数据库中电影的名称及其类别的信息：
+- en: '[PRE95]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE95]'
+- en: '[PRE96]'
+  id: totrans-201
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE96]'
+- en: 'You can see that the syntax is a little different from the previous example.
+    In this example, the new table name, `report`, is followed by a list of column
+    names and types in parentheses; this is necessary because we’re not duplicating
+    the structure of an existing table. Moreover, we actually change `name` to `category`.
+    Then, the `SELECT` statement follows, with its output matching the new columns
+    in the new table. You can check the contents of the new table to see the result:'
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到，这个语法与前面的例子有些不同。在这个例子中，新的表名`report`后面跟着一个列名和类型的列表，用括号括起来；这是必要的，因为我们不是复制现有表的结构。此外，我们实际上将`name`改为了`category`。然后，`SELECT`语句跟着，其输出与新表中的新列匹配。你可以检查新表的内容来查看结果：
+- en: '[PRE97]'
+  id: totrans-203
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE97]'
+- en: '[PRE98]'
+  id: totrans-204
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE98]'
+- en: So, in this example, the `title` and `name` values from the `SELECT` statement
+    are used to populate the new `title` and `category` columns in the `report` table.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，在这个例子中，`SELECT`语句中的`title`和`name`值用于填充`report`表中的新`title`和`category`列。
+- en: 'Creating tables with a query has a major caveat that you need to be careful
+    about: it doesn’t copy the indexes (or foreign keys, if you use them). This is
+    a feature, since it gives you a lot of flexibility, but it can be a catch if you
+    forget. Have a look at our `actor_2` example:'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用查询创建表有一个主要的注意事项，你需要注意：它不会复制索引（或外键，如果使用）。这是一个特性，因为它给你很大的灵活性，但如果你忘记了，它可能是一个陷阱。看看我们的`actor_2`示例：
+- en: '[PRE99]'
+  id: totrans-207
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE99]'
+- en: '[PRE100]'
+  id: totrans-208
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE100]'
+- en: '[PRE101]'
+  id: totrans-209
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE101]'
+- en: '[PRE102]'
+  id: totrans-210
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE102]'
+- en: You can see that there’s no primary key; the `idx_actor_last_name` key is missing
+    as well, as is the `AUTO_INCREMENT` property of the `actor_id` column.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到这里没有主键；`idx_actor_last_name`键也丢失了，`actor_id`列的`AUTO_INCREMENT`属性也没有了。
+- en: To copy indexes across to the new table, there are at least three things you
+    can do. The first is to use the `LIKE` statement to create the empty table with
+    the indexes, as described earlier, and then copy the data across using an `INSERT`
+    with a `SELECT` statement, as described in [“Inserting Data Using Queries”](#ADV2-SEC-INSERTQUERY).
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将索引复制到新表中，至少有三件事情可以做。第一种是使用`LIKE`语句创建带有索引的空表，如前面描述的那样，然后使用带有`SELECT`语句的`INSERT`将数据复制到新表中，如[“使用查询插入数据”](#ADV2-SEC-INSERTQUERY)所述。
+- en: The second thing you can do is to use `CREATE TABLE` with a `SELECT` statement
+    and then add indexes using `ALTER` `TABLE` as described in [Chapter 4](ch04.xhtml#CH4_MODIFY).
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二件事情是使用带有`SELECT`语句的`CREATE TABLE`，然后使用`ALTER TABLE`添加索引，如[第4章](ch04.xhtml#CH4_MODIFY)所述。
+- en: 'The third option is to use the `UNIQUE` (or `PRIMARY KEY` or `KEY`) keyword
+    in combination with `CREATE TABLE` and `SELECT` to add a primary key index. Here’s
+    an example of this approach:'
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第三个选项是结合`CREATE TABLE`和`SELECT`使用`UNIQUE`（或`PRIMARY KEY`或`KEY`）关键字来添加主键索引。以下是此方法的示例：
+- en: '[PRE103]'
+  id: totrans-215
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE103]'
+- en: '[PRE104]'
+  id: totrans-216
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE104]'
+- en: '[PRE105]'
+  id: totrans-217
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE105]'
+- en: '[PRE106]'
+  id: totrans-218
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE106]'
+- en: '[PRE107]'
+  id: totrans-219
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE107]'
+- en: '[PRE108]'
+  id: totrans-220
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE108]'
+- en: '[PRE109]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE109]'
+- en: The `UNIQUE` keyword is applied to the `actor_id` column, making it the primary
+    key in the newly created table. The keywords `UNIQUE` and `PRIMARY KEY` can be
+    interchanged.
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`UNIQUE`关键字应用于`actor_id`列，使其成为新创建表中的主键。关键字`UNIQUE`和`PRIMARY KEY`可以互换使用。'
+- en: 'You can use different modifiers when you’re creating tables using these techniques.
+    For example, here’s a table created with defaults and other settings:'
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你使用这些技术创建表时，可以使用不同的修饰符。例如，这里是使用默认和其他设置创建的表：
+- en: '[PRE110]'
+  id: totrans-224
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE110]'
+- en: '[PRE111]'
+  id: totrans-225
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE111]'
+- en: Here, we’ve set `NOT NULL` for the new columns, used the `AUTO_INCREMENT` feature
+    on `actor_id`, and created two keys. Anything you can do in a regular `CREATE
+    TABLE` statement can be done in this variant; just remember to add those indexes
+    explicitly!
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们为新列设置了`NOT NULL`，在`actor_id`上使用了`AUTO_INCREMENT`特性，并创建了两个键。在常规`CREATE
+    TABLE`语句中可以做的任何事情，在这个变体中都可以做到；只需记住显式添加这些索引即可！
+- en: Performing Updates and Deletes with Multiple Tables
+  id: totrans-227
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用多个表执行更新和删除
+- en: In [Chapter 3](ch03.xhtml#CH3_BASICS), we showed you how to update and delete
+    data. In the examples there, each update and delete affected one table and used
+    properties of that table to decide what to modify. This section shows you more
+    complex updates and deletes. As you’ll see, you can delete or update rows from
+    more than one table in one statement, and you can use those or other tables to
+    decide what rows to change.
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[第3章](ch03.xhtml#CH3_BASICS)中，我们向你展示了如何更新和删除数据。在那里的例子中，每次更新和删除都影响一个表，并使用该表的属性来决定要修改的内容。本节将向您展示更复杂的更新和删除操作。正如您将看到的，您可以在一个语句中从多个表中删除或更新行，并且您可以使用那些表或其他表来决定要更改哪些行。
+- en: Deletion
+  id: totrans-229
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 删除
+- en: Imagine you’re cleaning up a database, perhaps because you’re running out of
+    space. One way to solve this problem is to remove some data. For example, in the
+    `sakila` database, it might make sense to remove films that are present in our
+    inventory, but have never been rented. Unfortunately, this means you need to remove
+    data from the `inventory` table using information from the `rental` table.
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 想象一下你正在清理数据库，也许是因为你的空间不够了。解决这个问题的一种方法是删除一些数据。例如，在`sakila`数据库中，删除那些在我们的库存中存在但从未被租出的电影可能是有意义的。不幸的是，这意味着你需要使用`rental`表中的信息从`inventory`表中删除数据。
+- en: With the techniques we’ve described so far in the book, there’s no way of doing
+    this without creating a table that combines the two tables (perhaps using `INSERT`
+    with `SELECT`), removing unwanted rows, and copying the data back to its source.
+    This section shows you how you can perform this procedure and other more advanced
+    types of deletion more elegantly.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，在本书中我们描述的技术中，没有办法做到这一点，而不创建一个合并两个表的表（可能使用`INSERT`与`SELECT`），删除不需要的行，并将数据复制回其源。本节展示了如何执行此过程以及其他更高级的删除类型。
+- en: 'Consider the query you need to write to find films in the `inventory` table
+    that have never been rented. One way to do it is to use a nested query, employing
+    the techniques we showed you in [Chapter 5](ch05.xhtml#CH5_ADV1), with the `NOT
+    EXISTS` clause. Here’s the query:'
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 考虑你需要写的查询，以查找`inventory`表中从未出租过的电影。一种方法是使用嵌套查询，采用我们在[第5章](ch05.xhtml#CH5_ADV1)中展示的技术，带有`NOT
+    EXISTS`子句。以下是查询：
+- en: '[PRE112]'
+  id: totrans-233
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE112]'
+- en: '[PRE113]'
+  id: totrans-234
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE113]'
+- en: You can probably see how it works, but let’s briefly discuss it anyway before
+    we move on. You can see that this query uses a correlated subquery, where the
+    current row being processed in the outer query is referenced by the subquery;
+    you can tell this because the `inventory_id` column from `inventory` is referenced,
+    but the `inventory` table isn’t listed in the `FROM` clause of the subquery. The
+    subquery produces output when there’s a row in the `rental` table that matches
+    the current row in the outer query (and so an inventory entry was rented). However,
+    since the query uses `NOT EXISTS`, the outer query doesn’t produce output when
+    this is the case, and so the overall result is that rows are output for inventory
+    records of movies that haven’t been rented.
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能已经看到它是如何工作的，但在我们继续之前，让我们简要讨论一下。你可以看到，这个查询使用了一个相关子查询，在外部查询中正在处理的当前行被子查询引用；你可以看出这一点，因为从`inventory`中的`inventory_id`列被引用，但`inventory`表没有列在子查询的`FROM`子句中。当在`rental`表中有一行与外部查询中的当前行匹配时（因此出租了库存条目），子查询会生成输出。然而，由于查询使用了`NOT
+    EXISTS`，当出现这种情况时，外部查询不会生成输出，因此总体结果是为未出租的电影库存记录输出行。
+- en: 'Now let’s take our query and turn it into a `DELETE` statement. Here it is:'
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们将我们的查询转换为一个`DELETE`语句。这里是它：
+- en: '[PRE114]'
+  id: totrans-237
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE114]'
+- en: '[PRE115]'
+  id: totrans-238
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE115]'
+- en: 'You can see that the subquery remains the same, but the outer `SELECT` query
+    is replaced by a `DELETE` statement. Here, we’re following the standard `DELETE`
+    syntax: the keyword `DELETE` is followed by `FROM` and a specification of the
+    table or tables from which rows should be removed, then a `WHERE` clause (and
+    any other query clauses, such as `GROUP BY` or `HAVING`). In this query, rows
+    are deleted from the `inventory` table, but in the `WHERE` clause a subquery is
+    specified within a `NOT EXISTS` statement.'
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到子查询保持不变，但外部的`SELECT`查询被`DELETE`语句替换。在这里，我们遵循标准的`DELETE`语法：关键字`DELETE`之后是`FROM`和应该删除行的表的规范，然后是`WHERE`子句（以及其他查询子句，如`GROUP
+    BY`或`HAVING`）。在此查询中，从`inventory`表中删除行，但在`WHERE`子句中指定了一个`NOT EXISTS`语句内的子查询。
+- en: 'While this statement does indeed delete rows from one table based on data from
+    another table, it’s basically a variation of a regular `DELETE`. To convert this
+    particular statement into a multitable `DELETE`, we should switch from a nested
+    subquery to a `LEFT JOIN`, like so:'
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然这个语句确实根据另一张表中的数据删除行，但它基本上是一个常规`DELETE`的变体。要将此特定语句转换为多表`DELETE`，我们应该从嵌套子查询切换到`LEFT
+    JOIN`，如下所示：
+- en: '[PRE116]'
+  id: totrans-241
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE116]'
+- en: 'Note how the syntax changes to include the specific table (or tables) where
+    we want to delete the rows we find. These tables are specified after `DELETE`
+    but before the `FROM` and query specification. There’s another way to write this
+    query, however, and it’s the one we prefer:'
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意语法如何更改以包括我们希望删除找到的行的特定表（或表）。这些表在`DELETE`之后但在`FROM`和查询规范之前指定。然而，有另一种写这个查询的方式，这是我们更喜欢的一种：
+- en: '[PRE117]'
+  id: totrans-243
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE117]'
+- en: This query is a mix of the previous two. We do not specify the deletion targets
+    between `DELETE` and `FROM`, and write them down as if this were a regular deletion.
+    Instead, we use a special `USING` clause, which indicates that a filter query
+    (a join or otherwise) is going to follow. This is slightly clearer in our opinion
+    than the previous example of `DELETE` *`table`* `FROM` *`table`*. One downside
+    of using the `USING` keyword is that it can be mixed up with the `USING` keyword
+    of a `JOIN` statement. With some practice, you’ll never make that mistake, though.
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此查询是前两个查询的混合体。我们在`DELETE`和`FROM`之间没有指定删除目标，并将它们写成了一个常规的删除。相反，我们使用了一个特殊的`USING`子句，指示接下来将使用一个过滤查询（连接或其他方式）。我们认为这比之前的`DELETE`
+    *`table`* `FROM` *`table`*稍微清晰一些。使用`USING`关键字的一个缺点是，它可能会与`JOIN`语句的`USING`关键字混淆。然而，通过一些实践，你绝对不会犯这种错误。
+- en: 'Now that we know both multitable syntax variants, we can construct a query
+    that actually requires a multitable delete. One example of a situation that could
+    require such a statement is deleting records from tables that are involved in
+    foreign key relationships. In the `sakila` database, there are records for films
+    in the `film` table that have no associated records in the `inventory` table.
+    That is, there are films that there’s information on, but that cannot be rented.
+    Suppose that as part of the database cleanup operation, we’re tasked with removing
+    such dangling data. Initially this seems easy enough:'
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们知道了两种多表语法变体，我们可以构造一个确实需要多表删除的查询。需要这样一个语句的一个例子是从涉及外键关系的表中删除记录。在`sakila`数据库中，有一些在`film`表中有记录但在`inventory`表中没有关联记录的电影。也就是说，有些电影有信息，但不能被租用。假设作为数据库清理操作的一部分，我们的任务是删除这样的悬空数据。最初看起来这似乎很简单：
+- en: '[PRE118]'
+  id: totrans-246
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE118]'
+- en: '[PRE119]'
+  id: totrans-247
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE119]'
+- en: 'Alas, the integrity constraint prevents this deletion. We will have to remove
+    not only the films, but also relationships between those films and actors. That
+    may generate orphan actors, which can be deleted next. We could try to delete
+    films and references to actors in one go, like this:'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 遗憾的是，完整性约束阻止了此次删除。我们不仅需要删除电影，还需要删除这些电影与演员之间的关系。这可能会导致孤立的演员出现，这些演员可以在接下来被删除。我们可以尝试一次性删除电影和演员的引用，就像这样：
+- en: '[PRE120]'
+  id: totrans-249
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE120]'
+- en: 'Unfortunately, even though the `film_actor` table is listed before the `film`
+    table, the deletion from `film` still fails. It’s not possible to tell the optimizer
+    to process tables in a particular order. Even if this example were to have executed
+    successfully, it’s not a good practice to rely on such behavior as the optimizer
+    may later change the table order unpredictably, causing failures. This example
+    highlights a difference between MySQL and the SQL standard: the standard specifies
+    that the foreign keys are checked at transaction commit, whereas MySQL checks
+    them immediately, preventing this statement from succeeding. Even if we were able
+    to resolve this problem, films are also related to categories, so that will have
+    to be taken care of too.'
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，即使`film_actor`表在`film`表之前列出，从`film`表中删除仍然失败。无法告诉优化器按特定顺序处理表。即使这个例子能够成功执行，依赖这种行为也不是一个好的实践，因为优化器可能随后会不可预测地改变表的顺序，导致失败。这个例子突显了MySQL和SQL标准之间的差异：标准指定在事务提交时检查外键，而MySQL立即检查它们，阻止这个语句成功执行。即使我们能够解决这个问题，电影也与分类相关联，因此也必须处理这个问题。
+- en: 'MySQL allows a few ways out of this situation. The first one is to execute
+    a series of `DELETE` statements within one transaction (we talked more about transactions
+    in Chapter 6):'
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL允许通过几种方法摆脱这种情况。第一种方法是在一个事务中执行一系列的`DELETE`语句（我们在第6章更详细地讨论了事务）：
+- en: '[PRE121]'
+  id: totrans-252
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE121]'
+- en: '[PRE122]'
+  id: totrans-253
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE122]'
+- en: '[PRE123]'
+  id: totrans-254
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE123]'
+- en: '[PRE124]'
+  id: totrans-255
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE124]'
+- en: '[PRE125]'
+  id: totrans-256
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE125]'
+- en: '[PRE126]'
+  id: totrans-257
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE126]'
+- en: '[PRE127]'
+  id: totrans-258
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE127]'
+- en: '[PRE128]'
+  id: totrans-259
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE128]'
+- en: '[PRE129]'
+  id: totrans-260
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE129]'
+- en: '[PRE130]'
+  id: totrans-261
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE130]'
+- en: You can see that we executed `ROLLBACK` instead of `COMMIT` to preserve the
+    rows. In reality, you would of course use `COMMIT` to “save” the results of your
+    operation.
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到，我们执行了`ROLLBACK`而不是`COMMIT`来保留行。实际上，你当然会使用`COMMIT`来“保存”你的操作结果。
+- en: 'The second option is dangerous. It is possible to suspend foreign key constraints
+    by temporarily setting the `foreign_key_checks` system variable to `0` on the
+    session level. We recommend against this practice, but it’s the only way to delete
+    from all three tables at the same time:'
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二种选择是危险的。可以通过在会话级别临时设置`foreign_key_checks`系统变量为`0`来暂停外键约束。我们建议不要采用这种做法，但这是同时从这三个表中删除数据的唯一方法：
+- en: '[PRE131]'
+  id: totrans-264
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE131]'
+- en: '[PRE132]'
+  id: totrans-265
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE132]'
+- en: '[PRE133]'
+  id: totrans-266
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE133]'
+- en: '[PRE134]'
+  id: totrans-267
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE134]'
+- en: '[PRE135]'
+  id: totrans-268
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE135]'
+- en: '[PRE136]'
+  id: totrans-269
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE136]'
+- en: '[PRE137]'
+  id: totrans-270
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE137]'
+- en: '[PRE138]'
+  id: totrans-271
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE138]'
+- en: '[PRE139]'
+  id: totrans-272
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE139]'
+- en: '[PRE140]'
+  id: totrans-273
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE140]'
+- en: While we don’t recommend disabling foreign key checks, doing so allows us to
+    show the power of multitable deletes. Here, with one query it was possible to
+    achieve what took three queries in the previous example.
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然我们不建议禁用外键检查，但这样做可以展示多表删除的强大功能。在这里，一个查询就可以实现在前一个示例中需要三个查询才能完成的任务。
+- en: Let’s break down this query. The tables from which rows will be deleted (if
+    matched) are `film`, `film_actor`, and `film_category`. We specified them between
+    the `DELETE FROM` and `USING` terms for clarity. `USING` starts our query, the
+    filtering part of the `DELETE` statement. In this example, we have constructed
+    a four-table join. We have joined `film`, `film_actor`, and `film_category` using
+    `INNER JOIN`, as we need only matching rows. To the result of those joins, we
+    `LEFT JOIN` the `inventory` table. In this context, using a left join is extremely
+    important, because we are actually interested only in rows where `inventory` will
+    have no records. We express that with `WHERE inventory.film_id IS NULL`. The result
+    of this query is that we get all films not in `inventory`, then all film-actor
+    relationships for those films, along with all category relationships for the films.
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们分解这个查询。如果匹配，将从`film`、`film_actor`和`film_category`表中删除行。我们在`DELETE FROM`和`USING`之间明确指定了它们，以便清楚地表达。`USING`启动我们的查询，即`DELETE`语句的过滤部分。在这个示例中，我们构建了一个四表连接。我们使用`INNER
+    JOIN`连接了`film`、`film_actor`和`film_category`，因为我们只需要匹配的行。然后，我们将结果与`inventory`表进行了`LEFT
+    JOIN`。在这种情况下，使用左连接非常重要，因为我们实际上只对`inventory`中没有记录的行感兴趣。我们通过`WHERE inventory.film_id
+    IS NULL`表达了这一点。这个查询的结果是，我们得到了所有不在`inventory`中的电影，以及这些电影的所有演员关系和类别关系。
+- en: 'Is it possible to make this query safe to use with foreign keys? Not without
+    breaking it down, unfortunately, but we can do better than having to run three
+    queries:'
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 是否可能使此查询与外键安全使用？不幸的是，除非我们将其分解，否则无法做到，但我们可以比运行三个查询更好：
+- en: '[PRE141]'
+  id: totrans-277
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE141]'
+- en: '[PRE142]'
+  id: totrans-278
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE142]'
+- en: '[PRE143]'
+  id: totrans-279
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE143]'
+- en: '[PRE144]'
+  id: totrans-280
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE144]'
+- en: '[PRE145]'
+  id: totrans-281
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE145]'
+- en: '[PRE146]'
+  id: totrans-282
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE146]'
+- en: '[PRE147]'
+  id: totrans-283
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE147]'
+- en: '[PRE148]'
+  id: totrans-284
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE148]'
+- en: What we’ve done here is combined deletion from the `film_actor` and `film_category`
+    tables into a single `DELETE` statement, thus allowing deletion from `film` without
+    any error. The difference from the previous example is that we `DELETE FROM` two
+    tables instead of three.
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在这里做的是将从`film_actor`和`film_category`表中的删除合并为一个单独的`DELETE`语句，从而允许在没有任何错误的情况下从`film`中删除。与之前的示例不同之处在于，我们从两个表中`DELETE
+    FROM`，而不是三个表。
+- en: Let’s talk about the number of rows affected. In the first example, we deleted
+    42 rows from `film`, 42 rows from `film_category`, and 216 rows from the `film_actor`
+    table. In the second example, our single `DELETE` query removed 300 rows. In the
+    final example, we removed 258 rows combined from the `film_category` and `film_actor`
+    tables, and 42 rows from the `film` table. You can probably guess by now that
+    for a multitable delete MySQL will output the total number of rows deleted, without
+    a breakdown into individual tables. This makes it harder to keep track of exactly
+    how many rows were touched in each table.
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们谈谈受影响的行数。在第一个示例中，我们从`film`表中删除了42行，从`film_category`表中删除了42行，从`film_actor`表中删除了216行。在第二个示例中，我们的单个`DELETE`查询删除了300行。在最后一个示例中，我们从`film_category`和`film_actor`表中合计删除了258行，并从`film`表中删除了42行。现在你可能已经猜到了，对于多表删除，MySQL将输出删除的总行数，而不是单独的每个表。这使得很难准确地跟踪每个表中触及的行数。
+- en: Also, in multitable deletes you can’t use the `ORDER BY` or `LIMIT` clauses.
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，在多表删除中，不能使用`ORDER BY`或`LIMIT`子句。
+- en: Updates
+  id: totrans-288
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 更新
+- en: 'Now we’ll contrive an example using the `sakila` database to illustrate multiple-table
+    updates. We’ve decided to change the ratings of all horror films to R, regardless
+    of the original rating. To begin, let’s display the horror films and their ratings:'
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们将构建一个使用`sakila`数据库来说明多表更新的示例。我们决定将所有恐怖电影的评级更改为R级，不考虑原始评级。首先，让我们显示恐怖电影及其评级：
+- en: '[PRE149]'
+  id: totrans-290
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE149]'
+- en: '[PRE150]'
+  id: totrans-291
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE150]'
+- en: '[PRE151]'
+  id: totrans-292
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE151]'
+- en: '[PRE152]'
+  id: totrans-293
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE152]'
+- en: 'We don’t know about you, but we’d love to see a G-rated horror film! Now, let’s
+    put that query into an `UPDATE` statement:'
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们不知道你们怎么想，但我们很想看一部适合全年龄段观看的恐怖电影！现在，让我们将这个查询放入一个`UPDATE`语句中：
+- en: '[PRE153]'
+  id: totrans-295
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE153]'
+- en: '[PRE154]'
+  id: totrans-296
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE154]'
+- en: Let’s look at the syntax. A multiple-table update looks similar to a `SELECT`
+    query. The `UPDATE` statement is followed by a list of tables that incorporates
+    whatever join clauses you need or prefer; in this example, we’ve used `JOIN` (remember,
+    that’s `INNER JOIN`) to bring together the `film` and `film_category` tables.
+    This is followed by the keyword `SET`, with assignments to individual columns.
+    Here you can see that only one column is modified (to change the ratings to R),
+    so columns in all other tables besides `film` aren’t modified. The following `WHERE`
+    is optional, but is necessary in this example to only touch rows with the category
+    name `Horror`.
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们来看一下语法。多表更新看起来类似于 `SELECT` 查询。`UPDATE` 语句后面是一个包含所需联接条件的表列表；在这个例子中，我们使用了 `JOIN`（记住，这是
+    `INNER JOIN`）来联合 `film` 和 `film_category` 表。然后是关键字 `SET`，对各个列进行赋值。在这里你可以看到只有一个列被修改（将评级改为
+    R），所以除了 `film` 表之外的所有其他表的列都没有被修改。接下来的 `WHERE` 是可选的，但在这个例子中是必需的，以便只操作类别名为 `Horror`
+    的行。
+- en: Note how MySQL reports that 56 rows were matched, but only 42 updated. If you
+    look at the results of the previous `SELECT` queries, you’ll see that they show
+    the counts of films in the Horror category (56), and films in that category with
+    a rating other than R (42). Only 42 rows were updated because the other films
+    already had that rating.
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意 MySQL 报告匹配了 56 行，但只更新了 42 行。如果你查看前面的 `SELECT` 查询的结果，你会看到它们显示了 `Horror` 类别中的电影数（56），以及该类别中评级不是
+    R 的电影数（42）。只有 42 行被更新，因为其他电影已经有了那个评级。
+- en: 'As with multitable deletes, there are some limitations on multitable updates:'
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与多表删除一样，多表更新也有一些限制：
+- en: You can’t use `ORDER BY`.
+  id: totrans-300
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你不能使用 `ORDER BY`。
+- en: You can’t use `LIMIT`.
+  id: totrans-301
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你不能使用 `LIMIT`。
+- en: You can’t update a table that’s read from in a nested subquery.
+  id: totrans-302
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你不能在嵌套子查询中使用读取的表更新表。
+- en: Other than that, multitable updates are much the same as single-table ones.
+  id: totrans-303
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除此之外，多表更新与单表更新基本相同。
+- en: Replacing Data
+  id: totrans-304
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 替换数据
+- en: 'You’ll sometimes want to overwrite data. You can do this in two ways using
+    the techniques we’ve shown previously:'
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时候你会想要覆盖数据。你可以使用我们之前展示的技术以两种方式做到这一点：
+- en: Delete an existing row using its primary key and then insert a replacement with
+    the same primary key.
+  id: totrans-306
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用其主键删除现有行，然后插入具有相同主键的替代行。
+- en: Update a row using its primary key, replacing some or all of the values (except
+    the primary key).
+  id: totrans-307
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用其主键更新一行，替换一些或所有的值（除主键外）。
+- en: The `REPLACE` statement gives you a third, convenient way to change data. This
+    section explains how it works.
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`REPLACE` 语句为你提供了第三种便捷的修改数据的方式。本节解释了它的工作原理。'
+- en: The `REPLACE` statement is just like `INSERT`, but with one difference. You
+    can’t `INSERT` a new row if there is an existing row in the table with the same
+    primary key. You can get around this problem with a `REPLACE` query, which first
+    removes any existing row with the same primary key and then inserts the new one.
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`REPLACE` 语句就像 `INSERT`，但有一个区别。如果表中已经存在具有相同主键的行，则无法 `INSERT` 新行。你可以通过 `REPLACE`
+    查询来解决这个问题，它首先删除具有相同主键的任何现有行，然后插入新行。'
+- en: 'Let’s try an example, where we’ll replace the row for the actress `PENELOPE
+    GUINESS` in the `sakila` database:'
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们尝试一个例子，在这个例子中，我们将替换 `sakila` 数据库中女演员 `PENELOPE GUINESS` 的行：
+- en: '[PRE155]'
+  id: totrans-311
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE155]'
+- en: '[PRE156]'
+  id: totrans-312
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE156]'
+- en: 'Unfortunately, as you’ll have guessed after reading the previous paragraph,
+    `REPLACE` actually has to perform a `DELETE`. If your database is highly constrained
+    referentially, like the `sakila` database is, the `REPLACE` will often not work.
+    Let’s not fight against the database here and instead use the `actor_2` table
+    we created in [“Creating Tables with Queries”](#ADV2-SEC-CREATE):'
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，如你在读完前面一段后所猜到的那样，`REPLACE` 实际上必须执行 `DELETE`。如果你的数据库有很多约束引用，就像 `sakila`
+    数据库一样，`REPLACE` 往往无法工作。我们不要在这里与数据库对抗，而是使用我们在 [“使用查询创建表”](#ADV2-SEC-CREATE) 中创建的
+    `actor_2` 表：
+- en: '[PRE157]'
+  id: totrans-314
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE157]'
+- en: '[PRE158]'
+  id: totrans-315
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE158]'
+- en: 'You can see that MySQL reports that two rows were affected: first the old row
+    was deleted, and then the new row was inserted. You can see that the change we
+    made was minor—we just changed the case of the name—and therefore it could easily
+    have been accomplished with an `UPDATE`. Because the tables in the `sakila` database
+    are relatively small, it’s difficult to construct an example in which `REPLACE`
+    looks simpler than `UPDATE`.'
+  id: totrans-316
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到 MySQL 报告说影响了两行：首先删除了旧行，然后插入了新行。你可以看到我们所做的改动很小——我们只是改变了名字的大小写——因此很容易使用
+    `UPDATE` 完成。由于 `sakila` 数据库中的表相对较小，很难构建一个 `REPLACE` 看起来比 `UPDATE` 更简单的例子。
+- en: 'You can use the different `INSERT` syntaxes with `REPLACE`, including using
+    `SELECT` queries. Here are some examples:'
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用不同的`INSERT`语法与`REPLACE`，包括使用`SELECT`查询。以下是一些示例：
+- en: '[PRE159]'
+  id: totrans-318
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE159]'
+- en: '[PRE160]'
+  id: totrans-319
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE160]'
+- en: '[PRE161]'
+  id: totrans-320
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE161]'
+- en: '[PRE162]'
+  id: totrans-321
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE162]'
+- en: '[PRE163]'
+  id: totrans-322
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE163]'
+- en: '[PRE164]'
+  id: totrans-323
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE164]'
+- en: '[PRE165]'
+  id: totrans-324
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE165]'
+- en: '[PRE166]'
+  id: totrans-325
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE166]'
+- en: The first variant is almost identical to our previous example, except it includes
+    the optional `INTO` keyword (which, arguably, improves the readability of the
+    statement). The second variant explicitly lists the column names that the matching
+    values should be inserted into. The third variant is the same as the second, without
+    the optional `INTO` keyword. The final variant uses the `SET` syntax; you can
+    add the optional keyword `INTO` to this variant if you want. Note that if you
+    don’t specify a value for a column, it’s set to its default value, just like for
+    `INSERT`.
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一个变体与我们之前的示例几乎相同，除了包括可选的`INTO`关键字（可以说是提高了语句的可读性）。第二个变体明确列出了应将匹配值插入的列名。第三个变体与第二个相同，但没有可选的`INTO`关键字。最后一个变体使用了`SET`语法；如果需要，可以在此变体中添加可选关键字`INTO`。请注意，如果不为列指定值，则其被设置为其默认值，就像`INSERT`一样。
+- en: 'You can also bulk-replace into a table, removing and inserting more than one
+    row. Here’s an example:'
+  id: totrans-327
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你还可以批量替换成表格，移除并插入多行。以下是一个示例：
+- en: '[PRE167]'
+  id: totrans-328
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE167]'
+- en: '[PRE168]'
+  id: totrans-329
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE168]'
+- en: 'Note that four rows are affected: two deletions and two insertions. You can
+    also see that two duplicates were found, meaning the replacement of existing rows
+    succeeded. In contrast, if there isn’t a matching row in a `REPLACE` statement,
+    it acts just like an `INSERT`:'
+  id: totrans-330
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，影响了四行：两个删除和两个插入。您还可以看到找到了两个重复项，这意味着成功替换了现有行。相比之下，如果在`REPLACE`语句中没有匹配的行，则其行为就像`INSERT`一样：
+- en: '[PRE169]'
+  id: totrans-331
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE169]'
+- en: '[PRE170]'
+  id: totrans-332
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE170]'
+- en: You can tell that only the insert occurred, since only one row was affected.
+  id: totrans-333
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到仅插入了一行，因为只有一行受到了影响。
+- en: 'Replacing also works with a `SELECT` statement. Recall the `recommend` table
+    from [“Inserting Data Using Queries”](#ADV2-SEC-INSERTQUERY), at the beginning
+    of this chapter. Suppose you’ve added 10 films to it, but you don’t like the choice
+    of the seventh film in the list. Here’s how you can replace it with a random choice
+    of another film:'
+  id: totrans-334
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 替换也适用于`SELECT`语句。回想一下本章开头的[“使用查询插入数据”](#ADV2-SEC-INSERTQUERY)中的`recommend`表。假设您已向其添加了10部电影，但不喜欢列表中的第七部电影的选择。以下是如何使用随机选择的另一部电影替换它：
+- en: '[PRE171]'
+  id: totrans-335
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE171]'
+- en: '[PRE172]'
+  id: totrans-336
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE172]'
+- en: Again, the syntax is the same as with `INSERT`, but a deletion is attempted
+    (and succeeds!) before the insertion. Note that we keep the value of the `sequence_id`
+    as 7.
+  id: totrans-337
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 语法与`INSERT`相同，但是在插入之前尝试（并成功！）删除。请注意，我们保留了`sequence_id`的值为7。
+- en: 'If a table doesn’t have a primary key or another unique key, replacing doesn’t
+    make sense. This is because there’s no way of uniquely identifying a matching
+    row in order to delete it. When you use `REPLACE` on such a table, its behavior
+    is identical to `INSERT`. Also, as with `INSERT`, you can’t replace rows in a
+    table that’s used in a subquery. Finally, note the difference between `INSERT
+    IGNORE` and `REPLACE`: the first keeps the existing data with the duplicate key
+    and does not insert the new row, while the second deletes the existing row and
+    replaces it with the new one.'
+  id: totrans-338
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果表没有主键或其他唯一键，则替换操作没有意义。这是因为无法唯一标识匹配行以便删除。当在此类表上使用`REPLACE`时，其行为与`INSERT`相同。此外，与`INSERT`类似，不能在子查询中替换表中的行。最后，请注意`INSERT
+    IGNORE`和`REPLACE`之间的区别：第一个会保留具有重复键的现有数据，并且不会插入新行，而第二个会删除现有行并替换为新行。
+- en: When specifying a list of columns for `REPLACE`, you have to list every column
+    that does not have a default value. In our examples, we had to specify `actor_id`,
+    `first_name`, and `last_name`, but we omitted the `last_update` column, which
+    has a default value of `CURRENT_TIMESTAMP`.
+  id: totrans-339
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当为`REPLACE`指定列的列表时，您必须列出每个没有默认值的列。在我们的示例中，我们不得不指定`actor_id`、`first_name`和`last_name`，但我们省略了具有默认值`CURRENT_TIMESTAMP`的`last_update`列。
+- en: Warning
+  id: totrans-340
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: '`REPLACE` is a powerful statement, but be careful when using it, as the results
+    can be unexpected. Pay special attention when you have auto-increment columns
+    and multiple unique keys defined.'
+  id: totrans-341
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`REPLACE`是一条强大的语句，但在使用时要小心，因为结果可能出乎意料。特别是在具有自动增量列和多个唯一键定义的情况下，请特别注意。'
+- en: 'MySQL provides another nonstandard extension of SQL: `INSERT ... ON DUPLICATE
+    KEY UPDATE`. It is similar to `REPLACE`, but instead of `DELETE` followed by `INSERT`,
+    it executes an `UPDATE` whenever a duplicate key is found. At the beginning of
+    this section, we had an issue replacing a row in the `actor` table. MySQL refused
+    to run a `REPLACE`, because deleting a row from the `actor` table would violate
+    a foreign key constraint. It is, however, easily possible to achieve the desired
+    result with the following statement:'
+  id: totrans-342
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL提供了另一个SQL的非标准扩展：`INSERT ... ON DUPLICATE KEY UPDATE`。它类似于`REPLACE`，但不是执行`DELETE`后跟`INSERT`，而是在发现重复键时执行`UPDATE`。在本节的开始，我们曾遇到过在`actor`表格中替换行的问题。MySQL拒绝运行`REPLACE`，因为从`actor`表格中删除行将违反外键约束。但是，通过以下语句轻松实现所需的结果：
+- en: '[PRE173]'
+  id: totrans-343
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE173]'
+- en: '[PRE174]'
+  id: totrans-344
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE174]'
+- en: 'Note that we’re using the `actor_3` table created in [“Creating Tables with
+    Queries”](#ADV2-SEC-CREATE), as it has all the same constraints as the original
+    `actor` table. The statement that we’ve just shown is very similar to `REPLACE`
+    semantically, but has a few key differences. When you do not specify a value for
+    a field in a `REPLACE` command, that field must have a `DEFAULT` value, and that
+    default value will be set. That naturally follows from the fact that a completely
+    new row is inserted. In the case of `INSERT ... ON` `DUPLICATE` `KEY UPDATE`,
+    we are updating an existing row, so it’s not necessary to list every column. We
+    can do that if we want, though:'
+  id: totrans-345
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，我们在[“使用查询创建表格”](#ADV2-SEC-CREATE)中创建的`actor_3`表格，因为它具有与原始`actor`表格相同的所有约束条件。我们刚刚展示的语句在语义上与`REPLACE`非常相似，但有一些关键的不同之处。在`REPLACE`命令中，如果未为字段指定值，该字段必须具有`DEFAULT`值，并且将设置该默认值。这自然地由完全插入新行的事实而来。在`INSERT
+    ... ON DUPLICATE KEY UPDATE`的情况下，我们正在更新现有行，因此不需要列出每一列。不过，如果我们愿意，我们也可以这样做：
+- en: '[PRE175]'
+  id: totrans-346
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE175]'
+- en: '[PRE176]'
+  id: totrans-347
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE176]'
+- en: 'To minimize the amount of typing necessary for this command and to allow inserting
+    multiple rows, we can refer to the new field values in the `UPDATE` clause. Here’s
+    an example with multiple rows, one of which is new:'
+  id: totrans-348
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了最小化这个命令所需的输入量，并允许插入多行，我们可以在`UPDATE`子句中引用新的字段值。以下是一个包含多行的示例，其中有一行是新的：
+- en: '[PRE177]'
+  id: totrans-349
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE177]'
+- en: '[PRE178]'
+  id: totrans-350
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE178]'
+- en: 'Let’s review this query in more detail. We’re inserting four rows into the
+    `actor_3` table, and by using `ON DUPLICATE KEY UPDATE` we’re telling MySQL to
+    run an update on any duplicate rows it finds. Unlike in our previous example,
+    however, this time we don’t set updated column values explicitly. Instead, we
+    use the special `VALUES()` function to obtain the value of each column in the
+    rows we passed to the `INSERT`. For example, for the second row, `2, Nick, Walhberg`,
+    `VALUES(first_name)` will return `Nick`. Notice that MySQL reports we’ve updated
+    an odd number of rows: five. Whenever a new row is inserted, the number of affected
+    rows is incremented by one. Whenever an old row is updated, the number of affected
+    rows is incremented by two. Since we’ve already updated the record for `Penelope`
+    by running the previous query, our new insert doesn’t add anything new, and MySQL
+    will skip the update as well. We are left with two updates for duplicate rows,
+    and insertion of a completely new row, or five rows affected in total.'
+  id: totrans-351
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们更详细地审查这个查询。我们正在向`actor_3`表格中插入四行，并且通过使用`ON DUPLICATE KEY UPDATE`告诉MySQL在找到任何重复行时运行更新。然而，与我们之前的示例不同的是，这一次我们没有显式设置更新列的值。相反，我们使用特殊的`VALUES()`函数来获取我们传递给`INSERT`的每行中每列的值。例如，对于第二行`2,
+    Nick, Walhberg`，`VALUES(first_name)`将返回`Nick`。请注意，MySQL报告我们已经更新了奇数行：五行。每当插入新行时，受影响的行数会增加一行。每当更新旧行时，受影响的行数会增加两行。由于我们已经通过运行之前的查询更新了`Penelope`的记录，我们的新插入也没有添加任何新内容，MySQL也会跳过更新。对于重复行，我们留下两次更新和完全新行的插入，总共影响了五行。
+- en: Tip
+  id: totrans-352
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: In most situations, we recommend that you default to using `INSERT ... ON DUPLICATE
+    KEY UPDATE` instead of `REPLACE`.
+  id: totrans-353
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在大多数情况下，我们建议您默认使用`INSERT ... ON DUPLICATE KEY UPDATE`而不是`REPLACE`。
+- en: The EXPLAIN Statement
+  id: totrans-354
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: EXPLAIN语句
+- en: You’ll sometimes find that MySQL doesn’t run queries as quickly as you expect.
+    For example, you’ll often notice that a nested query runs slowly. You might also
+    find—or, at least, suspect—that MySQL isn’t doing what you hoped, because you
+    know an index exists but the query still seems slow. You can diagnose and solve
+    query optimization problems using the `EXPLAIN` statement.
+  id: totrans-355
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时您会发现，MySQL的查询速度不如您期望的快。例如，您经常会注意到嵌套查询运行缓慢。您可能也会发现——或者至少怀疑——MySQL并未如您希望的那样运行，因为您知道索引存在，但查询仍然显得很慢。您可以使用`EXPLAIN`语句来诊断和解决查询优化问题。
+- en: 'Analyzing query plans, understanding optimizer decisions, and tuning query
+    performance are advanced topics, and more art than science: there’s no one way
+    to do it. We are adding this section so that you know this capability exists,
+    but we won’t get too deep into this topic.'
+  id: totrans-356
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分析查询计划、理解优化器的决策以及调优查询性能都是高级主题，更多地是艺术而非科学：没有一种固定的方法。我们添加了这一部分，让你知道这种能力的存在，但我们不会深入探讨这个主题。
+- en: The `EXPLAIN` statement helps you learn about a `SELECT` or any other query.
+    Specifically, it tells you how MySQL is going to do the job in terms of the indexes,
+    keys, and steps it’ll take if you ask it to resolve a query. `EXPLAIN` does not
+    actually execute a query (unless you ask it to) and in general doesn’t take a
+    lot of time to run.
+  id: totrans-357
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`EXPLAIN`语句帮助您了解`SELECT`或任何其他查询。具体来说，它告诉您MySQL在索引、键和执行步骤方面将如何执行查询。`EXPLAIN`实际上不会执行查询（除非您要求执行），通常不需要花费很多时间来运行。'
+- en: 'Let’s try a simple example that illustrates the idea:'
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们尝试一个简单的例子来说明这个概念：
+- en: '[PRE179]'
+  id: totrans-359
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE179]'
+- en: '[PRE180]'
+  id: totrans-360
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE180]'
+- en: 'The statement gives you lots of information. It tells you that:'
+  id: totrans-361
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该语句提供了大量信息。它告诉您：
+- en: The `id` is 1, meaning this row in the output refers to the first (and only!)
+    `SELECT` statement in this query. If we utilize a subquery, each `SELECT` statement
+    will have a different `id` in the `EXPLAIN` output (although some subqueries will
+    not result in multiple `id`s being reported, as MySQL might rewrite the query).
+    We’ll show an example with a subquery and different `id` values later.
+  id: totrans-362
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`id`为1，意味着输出中的这行引用了查询中的第一个（也是唯一的）`SELECT`语句。如果使用子查询，`EXPLAIN`输出中的每个`SELECT`语句将具有不同的`id`值（尽管某些子查询不会导致报告多个`id`，因为MySQL可能会重写查询）。稍后我们将展示一个使用子查询和不同`id`值的示例。'
+- en: The `select_type` is `SIMPLE`, meaning it doesn’t use a `UNION` or subqueries.
+  id: totrans-363
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`select_type`是`SIMPLE`，表示它不使用`UNION`或子查询。'
+- en: The `table` that this row is referring to is `actor`.
+  id: totrans-364
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 这行正在引用的`table`是`actor`。
+- en: The `partitions` column is empty, because no tables are partitioned.
+  id: totrans-365
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`partitions`列是空的，因为没有表进行了分区。'
+- en: The `type` of join is `ALL`, meaning all rows in the table are processed by
+    this `SELECT` statement. This is often bad, but not in this case; we’ll explain
+    why later.
+  id: totrans-366
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 连接的`type`是`ALL`，表示这个`SELECT`语句将处理表中的所有行。通常情况下这是不好的，但在这种情况下不是；稍后我们会解释原因。
+- en: The `possible_keys` that could be used are listed. In this case, no index will
+    help find all rows in a table, so `NULL` is reported.
+  id: totrans-367
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 列出了可能被使用的`possible_keys`。在这种情况下，没有索引可以帮助查找表中的所有行，所以报告为`NULL`。
+- en: The `key` that is actually used is listed, taken from the list of `possible_keys`.
+    In this case, since no key is available, none is used.
+  id: totrans-368
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 列出了实际使用的`key`，取自`possible_keys`列表。在这种情况下，由于没有可用的键，因此未使用任何键。
+- en: The `key_len` (key length) of the key MySQL plans to use is listed. Again, no
+    key means a `NULL` `key_len` is reported.
+  id: totrans-369
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 列出了MySQL计划使用的`key_len`（键的长度）。同样地，没有键意味着报告一个`NULL`的`key_len`。
+- en: The `ref` (reference) columns or constants that are used with the key are listed.
+    Again, there are none in this example.
+  id: totrans-370
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 列出了与键一起使用的`ref`（引用）列或常量。同样，在此示例中没有使用任何引用列。
+- en: The `rows` that MySQL thinks it needs to process to get an answer are listed.
+  id: totrans-371
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL认为需要处理的`rows`列出了它认为需要处理以获取答案的行数。
+- en: 'The `filtered` column tells us the percentage of rows from the table that this
+    stage will return: 100 means all rows will be returned. This is expected as we’re
+    asking for all rows.'
+  id: totrans-372
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`filtered`列告诉我们该阶段将返回表中行的百分比：100表示将返回所有行。由于我们请求的是所有行，这是预期的结果。'
+- en: Any `Extra` information about the query resolution is listed. Here, there’s
+    none.
+  id: totrans-373
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 关于查询解析的任何`Extra`信息都将列出。在这里，没有额外信息。
+- en: In summary, the output of `EXPLAIN SELECT * FROM actor` tells you that all rows
+    from the `actor` table will be processed (there are 200 of them), and no indexes
+    will be used to resolve the query. This makes sense and is probably exactly what
+    you expected would happen.
+  id: totrans-374
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总结来说，`EXPLAIN SELECT * FROM actor`的输出告诉您将处理`actor`表中的所有行（共有200行），并且不会使用索引来解析查询。这是合理的，并且可能正是您预期会发生的事情。
+- en: 'Note that every `EXPLAIN` statement reports a warning. Each query we send to
+    MySQL gets rewritten before execution, and the warning message will contain the
+    rewritten query. For example, `*` may be expanded to an explicit list of columns,
+    or a subquery may be optimized implicitly into a `JOIN`. Here’s an example:'
+  id: totrans-375
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，每个`EXPLAIN`语句都会报告一个警告。我们发送到MySQL的每个查询在执行之前都会被重写，警告消息将包含重写后的查询。例如，`*`可能会扩展为列的显式列表，或者子查询可能会隐式地优化为`JOIN`。这里是一个例子：
+- en: '[PRE181]'
+  id: totrans-376
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE181]'
+- en: '[PRE182]'
+  id: totrans-377
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE182]'
+- en: '[PRE183]'
+  id: totrans-378
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE183]'
+- en: '[PRE184]'
+  id: totrans-379
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE184]'
+- en: '[PRE185]'
+  id: totrans-380
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE185]'
+- en: 'We mentioned that we would show an example with different `id` values and a
+    subquery. Here’s the query:'
+  id: totrans-381
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们提到将展示一个具有不同`id`值和子查询的示例。以下是查询：
+- en: '[PRE186]'
+  id: totrans-382
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE186]'
+- en: '[PRE187]'
+  id: totrans-383
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE187]'
+- en: '[PRE188]'
+  id: totrans-384
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE188]'
+- en: In this example, you can see that `id` 1 is used for the `actor` and `<subquery2>`
+    tables, and `id` 2 is used for `film` and `film_actor`. But what is `<subquery2>`?
+    That’s a virtual table name used here because the optimizer materialized the results
+    of the subquery, or in other words stored them in a temporary table in memory.
+    You can see that the query with an `id` of 2 has a `select_type` of `MATERIALIZED`.
+    The outside query (`id` 1) will look up the results of the inner query (`id` 2)
+    from this temporary table. This is just one of many optimizations that MySQL can
+    perform while executing complex queries.
+  id: totrans-385
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个示例中，您可以看到`id`为1用于`actor`和`<subquery2>`表，`id`为2用于`film`和`film_actor`。但`<subquery2>`是什么？这是一个虚拟表名，在此处使用，因为优化器将子查询的结果实体化，或者换句话说，在内存中存储它们的临时表。您可以看到具有`id`为2的查询具有`select_type`为`MATERIALIZED`。外部查询(`id`为1)将从此临时表中查找内部查询(`id`为2)的结果。这只是MySQL在执行复杂查询时可以执行的许多优化之一。
+- en: 'Next, we’ll give the `EXPLAIN` statement some real work to do. Let’s ask it
+    to explain an `INNER JOIN` between `actor`, `film_actor`, `film`, `film_category`,
+    and `category`:'
+  id: totrans-386
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们将让`EXPLAIN`语句实际发挥作用。让我们要求它解释`actor`、`film_actor`、`film`、`film_category`和`category`之间的`INNER
+    JOIN`：
+- en: '[PRE189]'
+  id: totrans-387
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE189]'
+- en: '[PRE190]'
+  id: totrans-388
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE190]'
+- en: '[PRE191]'
+  id: totrans-389
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE191]'
+- en: Before we discuss the output, think about how the query could be evaluated.
+    MySQL could go through each row in the `actor` table, then match that with `film_actor`,
+    then with `film`, `film_category`, and finally `category`. We have a filter on
+    the `category` table, so in this imaginary case MySQL would only be able to match
+    fewer rows once it gets to that table. That is a poor execution strategy. Can
+    you think of a better one?
+  id: totrans-390
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在讨论输出之前，请考虑查询如何评估。MySQL可以逐行检查`actor`表，然后将其与`film_actor`匹配，然后与`film`、`film_category`和最后是`category`匹配。我们在`category`表上有一个过滤器，所以在这种想象中，MySQL在到达该表时只能匹配较少的行。这是一个低效的执行策略。你能想到更好的策略吗？
+- en: 'Let’s now look at what MySQL actually decided to do. This time, there are five
+    rows because there are five tables in the join. Let’s run through this, focusing
+    on those things that are different from the previous examples:'
+  id: totrans-391
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们看看MySQL实际上决定做什么。这次有五行，因为有五个表在连接中。让我们重点关注与之前示例不同的部分：
+- en: The first row is similar to what we saw before. MySQL will read all 16 rows
+    from the `category` table. This time, the value in the `Extra` column is `Using
+    where`. That means a filter based on a `WHERE` clause is going to be applied.
+    In this example, the `filtered` column shows 10, meaning that roughly 10% of the
+    table rows will be produced by this stage for further operations. The MySQL optimizer
+    expects 16 rows in the table and expects that one to two rows will be returned
+    here.
+  id: totrans-392
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第一行与之前看到的类似。MySQL将从`category`表中读取所有16行。这次，在`Extra`列中的值是`Using where`。这意味着将应用基于`WHERE`子句的过滤器。在此示例中，`filtered`列显示10，意味着大约表中的10%行将被此阶段生成以进行进一步的操作。MySQL优化器预计表中有16行，并预计此处将返回1到2行。
+- en: Now let’s look at row 2\. The join `type` for the `film_category` table is `ref`,
+    meaning that all rows in the `film_category` table that match rows in the `category`
+    table will be read. In practice, this means one or more rows from the `film_category`
+    table will be read for each `category_id` from the `category` table. The `possible_keys`
+    column shows both `PRIMARY` and `fk_film_category_category`, and the latter is
+    chosen as the index. The primary key of the `film_category` table has two columns,
+    and the first one of them is `film_id`, making that index less optimal for filtering
+    on `category_id`. The key used to search `film_category` has a `key_len` of 1
+    and is searched using the `sakila.category.category_id` value from the `category`
+    table.
+  id: totrans-393
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 现在让我们看看第2行。`film_category`表的连接类型是`ref`，意味着`film_category`表中与`category`表中的行匹配的所有行将被读取。实际上，这意味着将为`category`表中的每个`category_id`读取一个或多个`film_category`表中的行。`possible_keys`列显示了`PRIMARY`和`fk_film_category_category`，而后者被选择为索引。`film_category`表的主键有两列，第一列是`film_id`，使得该索引在`category_id`上的过滤不太优化。用于搜索`film_category`的键具有`key_len`为1，并使用`category`表中的`sakila.category.category_id`值进行搜索。
+- en: Moving to the next row, we can see that the join `type` for the `film` table
+    is `eq_ref`. This means that for each row we got from the previous stage (scanning
+    `film_category`), we’ll read exactly one row in this stage. MySQL can guarantee
+    that because the index used to access the `film` table is `PRIMARY`. In general,
+    if a `UNIQUE NOT NULL` index is used, `eq_ref` is possible. This is one of the
+    best join strategies.
+  id: totrans-394
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 转向下一行，我们可以看到 `film` 表的连接 `type` 是 `eq_ref`。这意味着对于我们从前一阶段（扫描 `film_category`）获得的每一行，我们在这个阶段将读取一行。MySQL
+    可以保证这一点，因为用于访问 `film` 表的索引是 `PRIMARY`。一般来说，如果使用了 `UNIQUE NOT NULL` 索引，`eq_ref`
+    是可能的。这是最佳的连接策略之一。
+- en: The two nested rows in the output do not show us anything new. In the end, we
+    see that MySQL selected an optimal execution plan. Usually, the fewer rows that
+    are read during the first step of the execution, the faster the query will be.
+  id: totrans-395
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出中的两个嵌套行并未显示任何新内容。最终，我们看到 MySQL 选择了一个最佳的执行计划。通常情况下，在执行的第一步中读取的行数越少，查询速度越快。
+- en: 'MySQL 8.0 introduced a new format of `EXPLAIN PLAN` output, which is available
+    through the `EXPLAIN ANALYZE` statement. While it may be somewhat easier to read,
+    the caveat here is that the statement actually has to be executed, unlike with
+    the regular `EXPLAIN`. We won’t go into the details of this new format, but we’ll
+    show an example here:'
+  id: totrans-396
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 8.0 引入了一个新的 `EXPLAIN PLAN` 输出格式，可通过 `EXPLAIN ANALYZE` 语句获取。虽然这种格式可能更容易阅读，但需要注意的是，实际上必须执行该语句，这与常规的
+    `EXPLAIN` 不同。我们不会深入讨论这种新格式的细节，但在这里我们会展示一个例子：
+- en: '[PRE192]'
+  id: totrans-397
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE192]'
+- en: '[PRE193]'
+  id: totrans-398
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE193]'
+- en: This output is even more advanced than the regular `EXPLAIN` output, as it gives
+    more data. We’ll leave analyzing it as an exercise for the reader. You should
+    be able to figure it out based on our explanation for the regular `EXPLAIN` output.
+  id: totrans-399
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个输出比常规的 `EXPLAIN` 输出更加高级，因为它提供了更多的数据。我们将分析留给读者作为一个练习。基于我们对常规 `EXPLAIN` 输出的解释，您应该能够理解它。
+- en: Alternative Storage Engines
+  id: totrans-400
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 备选存储引擎
+- en: One of the features of MySQL that distinguishes it from many other RDBMSs is
+    its support for different storage engines. The mechanism of MySQL’s support of
+    multiple engines is complicated, and to explain it properly we’d need to go into
+    more depth on its architecture and implementation than we have space for here.
+    We can, however, try to give you a bird’s-eye overview of what engines are available,
+    why you might want to use a nondefault engine, and why having this choice is important.
+  id: totrans-401
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 的一个特性是支持不同的存储引擎，这将其区别于许多其他关系型数据库管理系统。MySQL 支持多引擎的机制较为复杂，要适当地解释这一点，我们需要深入探讨其架构和实现，超出了此处的篇幅。然而，我们可以试着从鸟瞰角度为您概述可用的引擎，为什么您可能希望使用非默认引擎，以及为什么有这种选择是重要的。
+- en: Instead of saying *storage engine*, which sounds complicated, we could say *table
+    type*. In very simplified terms, MySQL allows you to create tables of different
+    types, with each type giving those tables distinct properties. There’s no universally
+    good table type, as each storage engine has pros and cons.
+  id: totrans-402
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与其说 *存储引擎*，听起来复杂，我们可以说 *表类型*。简单来说，MySQL 允许您创建不同类型的表，每种类型给这些表赋予不同的特性。没有普适的好表类型，因为每种存储引擎都有其利弊。
+- en: 'In the book so far, we’ve used only the default InnoDB table type. The reason
+    is simple: almost everything you’re likely to want from a modern database can
+    be achieved using InnoDB. It’s generally fast, reliable, and a proven and well-supported
+    engine, and is widely considered (including by us) to provide the best balance
+    of pros and cons. We’ve seen this engine used successfully by applications requiring
+    very high throughput of short queries, and also by data warehouse applications
+    that run few but “large” queries.'
+  id: totrans-403
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们的书中仅使用了默认的 InnoDB 表类型。原因很简单：几乎您可能需要的现代数据库功能都可以通过 InnoDB 实现。它通常快速、可靠，是一种经过验证和良好支持的引擎，在广泛的评估中（包括我们自己的评估）被认为提供了最佳的利弊平衡。我们已经看到这个引擎被成功地应用于需要非常高吞吐量的短查询的应用程序，以及运行少量但“大型”查询的数据仓库应用程序。
+- en: At the time of writing, the official MySQL documentation documents 8 additional
+    storage engines, and 18 additional engines are documented for MariaDB. In reality,
+    there are even more storage engines available, but not all of them make it into
+    a major MySQL flavor’s documentation. Here we’ll only describe those engines we
+    find useful and that are at least somewhat commonly used. It may well be that
+    the storage engine that best fits your use case is not one we describe. Take no
+    offense; there are just too many of them to cover them all fairly.
+  id: totrans-404
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在撰写本文时，官方 MySQL 文档记录了8个额外的存储引擎，而 MariaDB 记录了18个额外的引擎。实际上，可用的存储引擎更多，但并非所有引擎都包含在主要
+    MySQL 版本的文档中。在这里，我们只描述那些我们认为有用并且至少有些常用的引擎。也许最适合您用例的存储引擎不在我们描述的范围内。请不要介意；因为引擎种类繁多，我们无法全面覆盖。
+- en: Before we dive into our overview of different engines, let’s briefly look at
+    why this matters. The pluggable nature of storage engines in MySQL and the ability
+    to create tables with different types is important because it allows you to unify
+    your database access layer. Instead of using multiple database products, each
+    with its own driver, query language, configuration, management, backups, and so
+    on, you can just use MySQL and achieve different behaviors by changing table types.
+    Your apps may not even need to know what types tables have. That said, it’s not
+    all that simple and rosy. You may not be able to use all of the backup solutions
+    we’ll explain in [Chapter 10](ch10.xhtml#CH10_BACKUP). You will also need to understand
+    the trade-offs each engine provides. However, we still think that it’s better
+    to have this ability to change table types than not.
+  id: totrans-405
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们深入了解不同引擎的概述之前，让我们简要地看一下为什么这很重要。MySQL 中存储引擎的可插拔性以及使用不同类型创建表的能力很重要，因为它允许您统一数据库访问层。您可以只使用
+    MySQL，通过更改表类型来实现不同的行为，而不是使用具有各自驱动程序、查询语言、配置、管理、备份等的多个数据库产品。您的应用程序甚至可能无需知道表具有哪些类型。然而，情况并非那么简单和美好。您可能无法使用我们将在[第10章](ch10.xhtml#CH10_BACKUP)中解释的所有备份解决方案。您还需要理解每种引擎提供的权衡。不过，我们仍认为能够更改表类型的能力比不能更改要好。
+- en: We’ll start our review by defining broad categories based on important properties
+    of the different storage engines. One of the most important divisions is the ability
+    of the engine to support transactions (you can read more about transactions, locking,
+    and why all of this is important in [Chapter 6](ch06.xhtml#CH6_TRANSACTION_LOCKING)).
+  id: totrans-406
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将根据不同存储引擎的重要属性定义广泛的分类开始我们的审查。其中最重要的一个分类是引擎支持事务的能力（您可以在[第6章](ch06.xhtml#CH6_TRANSACTION_LOCKING)中了解有关事务、锁定及其重要性的更多信息）。
+- en: Currently available transactional engines include the default InnoDB, the actively
+    developed MyRocks, and the deprecated TokuDB. All of the different engines available
+    across major MySQL flavors; only these three support transactions. Every other
+    engine is nontransactional.
+  id: totrans-407
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 目前可用的事务性引擎包括默认的 InnoDB、活跃开发中的 MyRocks 和已弃用的 TokuDB。在主要 MySQL 版本中提供的所有不同引擎中，只有这三种支持事务。其他每个引擎都是非事务性的。
+- en: The next broad division we can perform is based on crash safety, or the ability
+    of the engine to guarantee the durability property of the ACID set of properties.
+    If a table uses a crash-safe engine, then we can expect every bit of data a committed
+    transaction has written to be available after an unclean instance restart. Crash-safe
+    engines include the already mentioned InnoDB, MyRocks, and TokuDB, as well as
+    the Aria engine. None of the other available engines guarantees crash safety.
+  id: totrans-408
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以进行的下一个广泛划分是基于崩溃安全性，或者说引擎保证 ACID 特性集中耐用性属性的能力。如果表使用了崩溃安全引擎，那么我们可以预期在未经清洁的实例重启后，每个提交事务已写入的数据位将可用。崩溃安全引擎包括前面提到的
+    InnoDB、MyRocks 和 TokuDB，以及 Aria 引擎。其他可用的引擎均不保证崩溃安全性。
+- en: 'We could come up with more examples of how to group the table types, but let’s
+    get to actually describing some of the engines and their properties. First things
+    first, let’s see how to actually view the list of engines available. To achieve
+    that, we use the special `SHOW ENGINES` command. Here’s its output on a default
+    MySQL 8.0.23 Linux installation:'
+  id: totrans-409
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以举更多示例来说明如何对表类型进行分组，但让我们实际描述一些引擎及其属性。首先要做的事情是看看如何实际查看可用引擎列表。为了实现这一点，我们使用特殊的
+    `SHOW ENGINES` 命令。以下是它在默认 MySQL 8.0.23 Linux 安装上的输出：
+- en: '[PRE194]'
+  id: totrans-410
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE194]'
+- en: '[PRE195]'
+  id: totrans-411
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE195]'
+- en: You can see that MySQL conveniently tells us whether an engine supports transactions.
+    The `XA` column is for distributed transactions—we won’t be covering these in
+    this book. Savepoints are basically the ability to create mini-transactions within
+    transactions, another advanced topic. As an exercise, consider executing `SHOW
+    ENGINES;` in MariaDB and Percona Server installations.
+  id: totrans-412
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到MySQL方便地告诉我们一个引擎是否支持事务。`XA`列用于分布式事务，我们不会在本书中涉及这些内容。保存点基本上是在事务内创建小事务的能力，另一个高级主题。作为一个练习，考虑在MariaDB和Percona
+    Server安装中执行`SHOW ENGINES;`。
+- en: InnoDB
+  id: totrans-413
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: InnoDB
+- en: 'Before we move on to “alternative” storage engines, let’s discuss the default
+    one: InnoDB. InnoDB is reliable, performant, and full-featured. Pretty much everything
+    you’d expect from a modern RDBMS is achievable in some way with InnoDB. In this
+    book, we never change the engine of a table, so every example uses InnoDB. While
+    you are learning MySQL, we recommend that you stick with this engine. It’s important
+    to understand its downsides, but unless they become problematic for you, there’s
+    almost no reason not to use it all the time.'
+  id: totrans-414
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们讨论“备选”存储引擎之前，让我们讨论默认的引擎：InnoDB。 InnoDB是可靠的、高效的，并且功能齐全的。几乎所有你期望从现代关系数据库管理系统中获得的功能都可以通过InnoDB以某种方式实现。在本书中，我们从不更改表的引擎，因此每个示例都使用InnoDB。在学习MySQL时，我们建议你坚持使用这种引擎。了解其缺点很重要，但除非它们对你造成问题，否则几乎没有理由不始终使用它。
+- en: 'The InnoDB table type includes the following features:'
+  id: totrans-415
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB表类型包括以下功能：
+- en: Support for transactions
+  id: totrans-416
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务支持
+- en: This is discussed in detail in [Chapter 6](ch06.xhtml#CH6_TRANSACTION_LOCKING).
+  id: totrans-417
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这在[第6章](ch06.xhtml#CH6_TRANSACTION_LOCKING)中详细讨论。
+- en: Advanced crash recovery features
+  id: totrans-418
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 高级崩溃恢复功能
+- en: The InnoDB table type uses logs, which are files that contain a record of the
+    actions that MySQL has taken to change the database. Logs enable MySQL to recover
+    effectively from power losses, crashes, and other basic database failures. Of
+    course, nothing can help you recover from the loss of a machine, failure of a
+    disk drive, or other catastrophic failures. For these, you need offsite backups
+    and new hardware. Every backup tool we explore in [Chapter 10](ch10.xhtml#CH10_BACKUP)
+    works with InnoDB.
+  id: totrans-419
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB表类型使用日志文件，这些文件记录了MySQL为改变数据库所采取的操作。日志使得MySQL能够有效地从断电、崩溃和其他基本数据库故障中恢复。当然，没有什么能够帮助你从机器丢失、磁盘驱动器故障或其他灾难性故障中恢复。对于这些情况，你需要离线备份和新硬件。我们在[第10章](ch10.xhtml#CH10_BACKUP)探讨的每个备份工具都与InnoDB兼容。
+- en: Row-level locking
+  id: totrans-420
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 行级锁定
+- en: Unlike the previous default engine, MyISAM (which we’ll explore in the following
+    section), InnoDB provides fine-grained locking infrastructure. The lowest level
+    of locking is row-level, meaning that an individual row can be locked by a running
+    query or transaction. This is important for most write-heavy online transaction
+    processing (OLTP) applications; if you’re locking at a higher level, like the
+    table level, you can end up with too many concurrency issues.
+  id: totrans-421
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不同于以前的默认引擎MyISAM（我们将在下一节中探讨），InnoDB提供了精细级别的锁定基础设施。最低级别的锁定是行级别的，这意味着一个运行中的查询或事务可以锁定一个单独的行。这对于大多数写入密集型在线事务处理（OLTP）应用程序非常重要；如果你在更高的级别，比如表级别上进行锁定，可能会导致太多并发问题。
+- en: Foreign key support
+  id: totrans-422
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 外键支持
+- en: InnoDB is currently the only MySQL table type that supports foreign keys. If
+    you are building a system that requires a high level of data safety enforced by
+    referential constraints, InnoDB is your only choice.
+  id: totrans-423
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB目前是唯一支持外键的MySQL表类型。如果你正在构建一个需要通过引用约束实施高级数据安全性的系统，InnoDB是你唯一的选择。
+- en: Encryption support
+  id: totrans-424
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 加密支持
+- en: InnoDB tables can be encrypted transparently by MySQL.
+  id: totrans-425
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB表可以通过MySQL进行透明加密。
+- en: Partitioning support
+  id: totrans-426
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分区支持
+- en: InnoDB supports *partitioning*; that is, spreading of data physically between
+    multiple data files based on some rules. This allows InnoDB to work with tables
+    of tremendous size efficiently.
+  id: totrans-427
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB支持*分区*，即根据某些规则在多个数据文件之间物理分布数据。这使得InnoDB能够高效地处理巨大的表格。
+- en: 'That’s a lot of pros, but there are also a few cons:'
+  id: totrans-428
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这有很多优点，但也有一些缺点：
+- en: Complexity
+  id: totrans-429
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复杂性
+- en: InnoDB is relatively complex. This means that there’s a lot to configure and
+    understand. Out of almost a thousand server options in MySQL, more than two hundred
+    are specific to InnoDB. This downside is, however, far outweighed by the benefits
+    this engine provides.
+  id: totrans-430
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB相对复杂。这意味着有很多配置和理解的内容。在MySQL的近千个服务器选项中，有超过两百个是特定于InnoDB的。然而，这个缺点远远被该引擎提供的好处所抵消。
+- en: Data footprint
+  id: totrans-431
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据占用空间
+- en: InnoDB is a relatively disk-hungry storage engine, making it less appealing
+    for storing extremely large datasets.
+  id: totrans-432
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB 是一个相对于磁盘需求较高的存储引擎，因此不太适合存储极大的数据集。
+- en: Scaling with database size
+  id: totrans-433
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库大小的扩展
+- en: InnoDB shines when the so-called “hot” dataset, or frequently accessed data,
+    is present in its buffer pool. This limits its scalability.
+  id: totrans-434
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当所谓的“热”数据集或频繁访问的数据存在于其缓冲池中时，InnoDB 的性能会非常出色。这限制了其可伸缩性。
+- en: MyISAM and Aria
+  id: totrans-435
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: MyISAM 和 Aria
+- en: MyISAM was the default storage engine in MySQL for a long time, and a staple
+    of this database. It is simple in use and design, is quite performant, and has
+    low overhead. So why did it stop being the default? There are actually several
+    good reasons for this, as you’ll see when we discuss its limitations.
+  id: totrans-436
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyISAM 长期以来是 MySQL 的默认存储引擎，也是这个数据库的主要组成部分。它使用简单，设计简洁，性能相当不错，并且开销低。那么为什么它停止成为默认存储引擎呢？实际上有几个很好的理由，当我们讨论其局限性时，你将会看到。
+- en: Nowadays, we do not recommend using MyISAM unless it’s required for legacy reasons.
+    You may read on the internet that its performance is better than InnoDB’s. Unfortunately,
+    most of that information is very old and hasn’t aged well—today, that’s simply
+    not the case in the vast majority of cases. One reason for this is the changes
+    to the Linux kernel necessitated by the Spectre and Meltdown security vulnerabilities
+    in January 2018, which resulted in a performance decrease of up to 90% for MyISAM.
+  id: totrans-437
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我们不建议使用 MyISAM，除非出于遗留原因需要。您可能在互联网上读到它的性能比 InnoDB 更好的信息。不幸的是，大多数这样的信息都非常古老，并且已经不再适用——在绝大多数情况下，今天并非如此。其中一个原因是在
+    2018 年 1 月 Spectre 和 Meltdown 安全漏洞导致的 Linux 内核更改，这导致 MyISAM 的性能降低了多达 90%。
+- en: Until MySQL 8.0, MyISAM was used in MySQL for all data dictionary objects. Starting
+    with that version, the data dictionary is now fully InnoDB, to support advanced
+    features like atomic DDL.
+  id: totrans-438
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 直到 MySQL 8.0，MyISAM 在 MySQL 中用于所有数据字典对象。从该版本开始，数据字典现在完全采用 InnoDB，以支持原子 DDL 等高级功能。
+- en: Aria is a reworked MyISAM provided in MariaDB. Apart from promising better performance
+    and being improved and worked on continuously, the most important feature of Aria
+    is its crash safety. MyISAM, unlike InnoDB, does not guarantee data safety when
+    your write succeeds, which is a major drawback of this storage engine. Aria, on
+    the other hand, allows the creation of durable tables, supported by a global transaction
+    log. In the future Aria may also support full-fledged transactions, but this is
+    not the case at the time of writing.
+  id: totrans-439
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Aria 是 MariaDB 中提供的重制 MyISAM。除了承诺提供更好的性能并持续改进外，Aria 最重要的特性是其崩溃安全性。与 InnoDB 不同，MyISAM
+    在写入成功后不能保证数据安全，这是此存储引擎的一个重大缺点。另一方面，Aria 允许创建持久表，并支持全局事务日志。未来，Aria 可能还会支持完整的事务，但目前尚未实现。
+- en: 'The MyISAM table type includes the following features:'
+  id: totrans-440
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyISAM 表类型包括以下特性：
+- en: Table-level locking
+  id: totrans-441
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表级锁定
+- en: 'Unlike InnoDB, MyISAM only supports locks at the high level of whole tables.
+    This is much simpler and less nuanced than row-level locking and has lower overhead
+    and memory requirements. However, a major drawback becomes apparent with highly
+    concurrent, write-heavy workloads: even if each session would update or insert
+    a separate row, they will each execute in turn. Reads in MyISAM can coexist simultaneously,
+    but they will block concurrent writes. Writes also block reads.'
+  id: totrans-442
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与 InnoDB 不同，MyISAM 只支持在整个表的高级别上锁定。这比行级锁定简单得多，少有微妙之处，并且具有更低的开销和内存需求。然而，在高并发、写入密集的工作负载中，存在一个显著的缺点：即使每个会话更新或插入单独的行，它们也会依次执行。在
+    MyISAM 中，读取可以同时共存，但会阻塞并发的写入。写入也会阻塞读取。
+- en: Partitioning support
+  id: totrans-443
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 支持分区
+- en: Until MySQL 8.0, MyISAM supported partitioning. In MySQL 8.0 this is no longer
+    the case, and to achieve this one must resort to using different storage engines
+    (Merge or MRG_MyISAM).
+  id: totrans-444
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 直到 MySQL 8.0，MyISAM 支持分区。在 MySQL 8.0 中，情况已不再如此，为实现此目的，必须使用不同的存储引擎（Merge 或 MRG_MyISAM）。
+- en: Compression
+  id: totrans-445
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 压缩
+- en: It’s possible to create read-only compressed tables with the `myisampack` utility,
+    which are quite a bit smaller than the equivalent InnoDB tables without compression.
+    Since InnoDB supports compression, however, we recommend you first check whether
+    this option will give you better results.
+  id: totrans-446
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以使用 `myisampack` 实用工具创建只读压缩表，这些表比不使用压缩的等效 InnoDB 表要小得多。然而，由于 InnoDB 支持压缩，我们建议您首先检查该选项是否能够带来更好的结果。
+- en: 'The MyISAM type has the following limitations:'
+  id: totrans-447
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyISAM 类型有以下限制：
+- en: Crash safety and recovery
+  id: totrans-448
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 崩溃安全性和恢复
+- en: MyISAM tables are not crash-safe. MySQL does not guarantee that when a write
+    succeeds, the data actually reaches files on the disk. If MySQL doesn’t exit cleanly,
+    MyISAM tables may get corrupted, require repairs, and lose data.
+  id: totrans-449
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyISAM 表不具备崩溃安全性。MySQL 不保证写操作成功后数据实际上已经到达磁盘上的文件。如果 MySQL 没有正常退出，MyISAM 表可能会损坏，需要修复并可能会丢失数据。
+- en: Transactions
+  id: totrans-450
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务
+- en: MyISAM does not support transactions. Thus, MyISAM only provides atomicity for
+    each individual statement, which may not be enough in your case.
+  id: totrans-451
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyISAM 不支持事务。因此，MyISAM 仅为每个单独的语句提供原子性，这在您的情况下可能不足够。
+- en: Encryption
+  id: totrans-452
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 加密
+- en: MyISAM tables do not support encryption.
+  id: totrans-453
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyISAM 表不支持加密。
+- en: MyRocks and TokuDB
+  id: totrans-454
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: MyRocks 和 TokuDB
+- en: One of the most significant problems with InnoDB is its relative difficulty
+    in dealing with large datasets. We’ve mentioned that it is desirable to have your
+    frequently accessed data in memory, but that is not always possible to achieve.
+    Moreover, when data sizes go into multiterabyte territory, InnoDB’s on-disk performance
+    suffers, too. The objects in InnoDB also have quite a large overhead in terms
+    of size. In recent years, a few different projects have appeared that attempt
+    to fix issues inherent to InnoDB’s basic data structure the B-tree by basing the
+    storage engine on a different data structure. These include MyRocks, based on
+    the LSM-tree, and TokuDB, based on a proprietary fractal tree data structure.
+  id: totrans-455
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB 最显著的问题之一是处理大数据集的相对困难。我们已经提到，将经常访问的数据保存在内存中是理想的，但这并不总是可行。此外，当数据量达到多 TB
+    时，InnoDB 的磁盘性能也会受到影响。InnoDB 中的对象在大小方面的开销也相当大。近年来，出现了几个不同的项目，试图通过基于不同数据结构的存储引擎来修复
+    InnoDB 基本数据结构中固有的问题。这些项目包括基于 LSM 树的 MyRocks 和基于专有分形树数据结构的 TokuDB。
+- en: Note
+  id: totrans-456
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: We wanted to mention TokuDB in this section for completeness, but its developer,
+    Percona, has deprecated this storage engine, and its future is unclear. TokuDB
+    has similar properties to MyRocks, and in fact MyRocks is the preferable migration
+    path off of TokuDB.
+  id: totrans-457
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在这一部分提到了 TokuDB，以确保完整性，但其开发者 Percona 已经弃用了这个存储引擎，其未来不明确。TokuDB 具有与 MyRocks
+    类似的属性，实际上 MyRocks 是从 TokuDB 迁移的首选路径。
+- en: 'How data structures affect the properties of storage engines is a complex topic,
+    arguably falling outside the scope of database administration and operation. We
+    try to keep things reasonably simple in this book, so we won’t go into that particular
+    topic. You should also remember what we wrote earlier about InnoDB: that default
+    is not unreasonable, and more often than not, just using InnoDB is going to give
+    you the best set of trade-offs. It continues to be our recommendation that you
+    use InnoDB while learning MySQL, and beyond that, but we also feel that we should
+    cover the alternatives.'
+  id: totrans-458
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据结构如何影响存储引擎的属性是一个复杂的话题，可以说超出了数据库管理和运营的范围。在本书中，我们试图保持事情相对简单，因此不会深入探讨这个特定主题。您也应该记住我们之前关于
+    InnoDB 的内容：默认设置并不算不合理，并且更多时候使用 InnoDB 将为您提供最好的折衷选择。我们继续建议您在学习 MySQL 时使用 InnoDB，以及在此之后，但我们也认为我们应该涵盖其他选择。
+- en: 'The MyRocks table type includes the following features:'
+  id: totrans-459
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyRocks 表类型包括以下特性：
+- en: Support for transactions
+  id: totrans-460
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 支持事务
+- en: MyRocks is a transactional storage engine, supporting regular transactions and
+    distributed transactions. Savepoints are not fully supported.
+  id: totrans-461
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyRocks 是一个支持常规事务和分布式事务的事务性存储引擎。并不完全支持保存点。
+- en: Advanced crash recovery features
+  id: totrans-462
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 高级崩溃恢复功能
+- en: MyRocks relies on internal log files called WAL files (for “write-ahead log”)
+    to provide crash recovery guarantees. You can expect everything that was committed
+    to be present once the database is restarted after a crash.
+  id: totrans-463
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyRocks 依赖于称为 WAL 文件（“预写式日志”）的内部日志文件，以提供崩溃恢复保证。在数据库在崩溃后重新启动时，您可以期望所有已提交的内容都存在。
+- en: Encryption support
+  id: totrans-464
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 加密支持
+- en: MyRocks tables can be encrypted.
+  id: totrans-465
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyRocks 表可以加密。
+- en: Partitioning support
+  id: totrans-466
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分区支持
+- en: MyRocks tables can be partitioned.
+  id: totrans-467
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyRocks 表可以进行分区。
+- en: Data compression and compactness
+  id: totrans-468
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据压缩和紧凑性
+- en: 'The storage footprint of MyRocks tables is usually lower than that of InnoDB
+    tables. There are two properties leading to that: it uses a more compact storage
+    structure and data within that storage structure can be compressed. While compression
+    is not unique to MyRocks, and InnoDB in fact provides compression options, MyRocks
+    consistently shows better results.'
+  id: totrans-469
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyRocks表的存储占用通常低于InnoDB表的存储占用。这有两个原因：它使用更紧凑的存储结构，以及该存储结构中的数据可以进行压缩。虽然压缩不是MyRocks独有的功能，实际上InnoDB也提供了压缩选项，但MyRocks始终显示出更好的结果。
+- en: Consistent write performance at scale
+  id: totrans-470
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大规模一致的写入性能
+- en: This one is difficult to properly explain without going deep into the weeds.
+    However, the minimal version is that the write performance of MyRocks is almost
+    unaffected by the volume of the data. In the real world, this means that MyRocks
+    tables show worse performance than InnoDB tables until the size of the data becomes
+    much larger than memory. What happens then is that InnoDB’s performance decreases
+    faster than MyRocks’, eventually falling behind.
+  id: totrans-471
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个解释起来比较复杂，不过简要来说，MyRocks的写入性能几乎不受数据量影响。在现实世界中，这意味着直到数据大小远远超过内存，MyRocks表的性能才会比InnoDB表差。随后发生的是，InnoDB的性能下降速度比MyRocks快，最终落后。
+- en: 'The MyRocks table type has the following limitations:'
+  id: totrans-472
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyRocks表类型有以下限制：
+- en: Transactions and locking
+  id: totrans-473
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务和锁定
+- en: MyRocks doesn’t support the `SERIALIZABLE` isolation level or gap locking, described
+    in [Chapter 6](ch06.xhtml#CH6_TRANSACTION_LOCKING).
+  id: totrans-474
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyRocks不支持`SERIALIZABLE`隔离级别或在[第6章](ch06.xhtml#CH6_TRANSACTION_LOCKING)中描述的间隙锁定。
+- en: Foreign keys
+  id: totrans-475
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 外键
+- en: Only InnoDB supports foreign key constraints.
+  id: totrans-476
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 只有InnoDB支持外键约束。
+- en: Performance tradeoffs
+  id: totrans-477
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能权衡
+- en: MyRocks does not cope well with read-heavy and analytical workloads. InnoDB
+    provides better generalized performance.
+  id: totrans-478
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyRocks在处理读重和分析工作负载时表现不佳。InnoDB提供了更好的通用性能。
+- en: Complexity
+  id: totrans-479
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复杂性
+- en: We mentioned that InnoDB is more complex than MyISAM. However, in some respects
+    MyRocks is more complex than InnoDB. It is not well documented, is being actively
+    developed (so is less stable), and can be difficult to operate.
+  id: totrans-480
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们提到InnoDB比MyISAM更复杂。然而，在某些方面，MyRocks比InnoDB更复杂。它的文档不够完善，正在积极开发中（因此不够稳定），并且操作起来可能很困难。
+- en: General availability
+  id: totrans-481
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般可用性
+- en: MyRocks is not available in Community or Enterprise MySQL; to use it, you need
+    to use another version of MySQL, like MariaDB or Percona Server. That may result
+    in operational difficulties. Packaged versions lag behind development, and to
+    use all of the current features, a dedicated MySQL server has to be built with
+    MyRocks sources.
+  id: totrans-482
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyRocks不在Community或Enterprise MySQL中提供；要使用它，您需要使用另一个MySQL版本，如MariaDB或Percona
+    Server。这可能会导致操作困难。打包版本滞后于开发，并且要使用当前所有功能，必须使用MyRocks源码构建专用的MySQL服务器。
+- en: Other Table Types
+  id: totrans-483
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 其他表类型
+- en: We’ve covered all the major table types, but there are a few more that we will
+    summarize briefly. Some of these storage engines are rarely used, and they may
+    have documentation issues and bugs.
+  id: totrans-484
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们已经介绍了所有主要的表类型，但是还有一些我们会简要总结的表类型。其中一些存储引擎很少被使用，可能存在文档问题和错误。
+- en: Memory
+  id: totrans-485
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 内存
+- en: 'Tables of this type are stored entirely in memory and are never persisted on
+    disk. The obvious advantage is performance: memory is many times faster than disk
+    and will probably always be. The disadvantage is that the data is lost as soon
+    as MySQL is restarted or crashes. Memory tables are usually used as temporary
+    tables. Apart from that, memory tables can be used to hold small-sized, frequently
+    accessed hot data, such as a dictionary of sorts.'
+  id: totrans-486
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此类型的表完全存储在内存中，永远不会持久化到磁盘上。显而易见的优势是性能：内存比磁盘快得多，而且可能永远如此。缺点是数据在MySQL重新启动或崩溃时会丢失。内存表通常用作临时表。除此之外，内存表还可以用来存储小型、频繁访问的热数据，例如某种字典。
+- en: Archive
+  id: totrans-487
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存档
+- en: This type provides a way to store data in a highly compressed and append-only
+    manner. You cannot modify or delete data in tables using the Archive storage engine.
+    As its name suggests, it’s mostly useful for long-term storage of data. In reality,
+    it’s rarely used, and it has a few issues with primary key and auto-increment
+    handling. InnoDB with compressed tables and MyRocks may provide better alternatives.
+  id: totrans-488
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此类型提供了一种以高度压缩和仅追加方式存储数据的方法。您无法使用Archive存储引擎的表中修改或删除数据。顾名思义，它主要用于长期存储数据。实际上，它很少被使用，并且在主键和自增处理方面存在一些问题。使用压缩表的InnoDB和MyRocks可能提供更好的替代方案。
+- en: CSV
+  id: totrans-489
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CSV
+- en: This storage engine stores tables on disk in CSV format. That allows you to
+    view and manipulate such tables with spreadsheet applications or just text editors.
+    It’s not often used, but can be an alternative approach to what we explained in
+    [“Loading Data from Comma-Delimited Files”](#LOADCSV), and also can be used for
+    data export.
+  id: totrans-490
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种存储引擎将表格以CSV格式存储在磁盘上。这使得你可以使用电子表格应用程序或文本编辑器查看和操作这些表格。虽然它不常用，但可以作为我们在[“从逗号分隔文件加载数据”](#LOADCSV)中所解释的方法的替代方案，并且也可以用于数据导出。
+- en: Federated
+  id: totrans-491
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 联合存储引擎
+- en: This type provides a way to query data in remote MySQL systems. Federated tables
+    do not contain any data, only some metadata related to connection details. This
+    is an interesting way of getting or modifying remote data without setting up replication.
+    Compared to just connecting to remote MySQL, it has the benefit of simultaneously
+    providing access to local and remote tables.
+  id: totrans-492
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种类型提供了一种查询远程MySQL系统数据的方式。联合表格不包含任何数据，只包含与连接详细信息相关的元数据。这是一种有趣的获取或修改远程数据的方式，而无需设置复制。与仅连接到远程MySQL相比，它的好处在于同时提供对本地和远程表格的访问。
+- en: Blackhole
+  id: totrans-493
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 黑洞
+- en: 'This storage engine discards every bit of data that would be stored within
+    its tables. In other words, whatever is written into a Blackhole table is immediately
+    lost. That doesn’t sound terribly useful, but there are use cases for this engine.
+    Usually it’s used to filter replication through an intermediate server, where
+    unneeded tables are blackholed. Another potential use case is to get rid of a
+    table in a closed-source application: you can’t just drop the table, as that’ll
+    break the app, but by making it Blackhole you remove any processing and storage
+    overhead.'
+  id: totrans-494
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种存储引擎丢弃其表中本应存储的每一位数据。换句话说，写入黑洞表的任何内容都会立即丢失。听起来并不是特别有用，但对于这种引擎有其用例。通常用于通过中间服务器过滤复制，其中不需要的表被置为黑洞。另一个潜在的用例是在闭源应用程序中删除表：你不能简单地删除表，因为这会破坏应用程序，但通过将其设为黑洞，你可以消除任何处理和存储开销。
+- en: These storage engines are pretty exotic and are rarely seen in the wild. However,
+    you should know they exist, as you may never know when something might become
+    useful.
+  id: totrans-495
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些存储引擎相当特别，很少在实际应用中见到。然而，你应该知道它们的存在，因为你永远不知道什么时候会有用起来。

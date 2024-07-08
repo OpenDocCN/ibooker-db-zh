@@ -1,0 +1,1020 @@
+- en: Chapter 16\. Choosing a Shard Key
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第16章 选择一个分片键
+- en: 'The most important task when using sharding is choosing how your data will
+    be distributed. To make intelligent choices about this, you have to understand
+    how MongoDB distributes data. This chapter helps you make a good choice of shard
+    key by covering:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当使用分片时，最重要的任务是选择数据分布方式。为了对此做出明智的选择，你必须了解MongoDB如何分布数据。本章通过以下内容帮助你选择一个好的分片键：
+- en: How to decide among multiple possible shard keys
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何在多个可能的分片键之间做出决策
+- en: Shard keys for several use cases
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 几种用例的分片键
+- en: What you can’t use as a shard key
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不能作为分片键的内容
+- en: Some alternative strategies if you want to customize how data is distributed
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果你想要定制数据分布的一些替代策略
+- en: How to manually shard your data
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何手动分片数据
+- en: It assumes that you understand the basic components of sharding as covered in
+    the previous two chapters.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设你已经理解了前两章中涵盖的分片的基本组成部分。
+- en: Taking Stock of Your Usage
+  id: totrans-8
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 盘点你的使用情况
+- en: When you shard a collection you choose a field or two to use to split up the
+    data. This key (or keys) is called a *shard key*. Once you shard a collection
+    you cannot change your shard key, so it is important to choose correctly.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你对一个集合进行分片时，你需要选择一个或两个字段来拆分数据。这个键（或键）被称为*分片键*。一旦你对一个集合进行了分片，你就无法更改你的分片键，因此选择正确非常重要。
+- en: To choose a good shard key, you need to understand your workload and how your
+    shard key is going to distribute your application’s requests. This can be difficult
+    to picture, so try to work out some examples—or, even better, try it out on a
+    backup dataset with sample traffic. This section has lots of diagrams and explanations,
+    but there is no substitute for trying it on your own data.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要选择一个好的分片键，你需要了解你的工作负载以及你的分片键将如何分配你的应用程序请求。这可能很难理解，所以尝试一些示例或者更好的办法是在备份数据集上进行样本流量的尝试。本节包含大量图表和解释，但没有什么能代替在自己的数据上尝试。
+- en: 'For each collection that you’re planning to shard, start by answering the following
+    questions:'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于每个你计划分片的集合，首先回答以下问题：
+- en: How many shards are you planning to grow to? A three-shard cluster has a great
+    deal more flexibility than a thousand-shard cluster. As a cluster gets larger,
+    you should not plan to fire off queries that can hit all shards, so almost all
+    queries must include the shard key.
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你计划增长到多少片？一个三片集群比一个千片集群具有更大的灵活性。随着集群的扩大，你不应该计划发出可以击中所有分片的查询，因此几乎所有查询必须包含分片键。
+- en: Are you sharding to decrease read or write latency? (Latency refers to how long
+    something takes; e.g., a write takes 20 ms, but you need it to take 10 ms.) Decreasing
+    write latency usually involves sending requests to geographically closer or more
+    powerful machines.
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你是否在进行分片以减少读取或写入延迟？（延迟指某事物花费的时间；例如，写入需要20毫秒，但你希望它只需10毫秒。）减少写入延迟通常涉及将请求发送到地理位置更近或更强大的机器。
+- en: Are you sharding to increase read or write throughput? (Throughput refers to
+    how many requests the cluster can handle at the same time; e.g., the cluster can
+    do 1,000 writes in 20 ms, but you need it to do 5,000 writes in 20 ms.) Increasing
+    throughput usually involves adding more parallelization and making sure that requests
+    are distributed evenly across the cluster.
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你是否在进行分片以增加读取或写入吞吐量？（吞吐量指集群能同时处理多少请求；例如，集群可以在20毫秒内执行1,000次写入，但你需要它在20毫秒内执行5,000次写入。）增加吞吐量通常涉及增加更多的并行处理，并确保请求在集群中均匀分布。
+- en: Are you sharding to increase system resources (e.g., give MongoDB more RAM per
+    GB of data)? If so, you want to keep the working set size as small as possible.
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你是否正在进行分片以增加系统资源（例如，为MongoDB每GB数据增加更多RAM）？如果是这样，你希望尽可能保持工作集大小尽可能小。
+- en: Use these answers to evaluate the following shard key descriptions and decide
+    whether the shard key you’re considering would work well in your situation. Does
+    it give you the targeted queries that you need? Does it change the throughput
+    or latency of your system in the ways you need? If you need a compact working
+    set, does it provide that?
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用这些答案来评估以下分片键描述，并决定你正在考虑的分片键是否能在你的情况下很好地工作。它是否为你提供了所需的目标查询？它是否以你需要的方式改变了系统的吞吐量或延迟？如果你需要一个紧凑的工作集，它是否提供了这个？
+- en: Picturing Distributions
+  id: totrans-17
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 图解分布
+- en: The most common ways people choose to split their data are via ascending, random,
+    and location-based keys. There are other types of keys that could be used, but
+    most use cases fall into one of these categories. The different types of distributions
+    are discussed in the following sections.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 人们选择分割数据的最常见方式是通过升序、随机和基于位置的键。还有其他类型的键可以使用，但大多数用例都属于这些类别之一。不同类型的分布在接下来的章节中进行了讨论。
+- en: Ascending Shard Keys
+  id: totrans-19
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 升序分片键
+- en: Ascending shard keys are generally something like a `"date"` field or `ObjectId`—anything
+    that steadily increases over time. An autoincrementing primary key is another
+    example of an ascending field, albeit one that doesn’t show up in MongoDB much
+    (unless you’re importing from another database).
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 升序分片键通常是像`"date"`字段或`ObjectId`这样的东西——任何随着时间稳定增长的东西。自增主键是升序字段的另一个例子，尽管在MongoDB中并不常见（除非您从另一个数据库导入）。
+- en: Suppose that we shard on an ascending field, like `"_id"` on a collection using
+    `ObjectId`s. If we shard on `"_id"`, then the data will be split into chunks of
+    `"_id"` ranges, as in [Figure 16-1](#ascending-shard-key). These chunks will be
+    distributed across our sharded cluster of, let’s say, three shards, as shown in
+    [Figure 16-2](#ascending-shard-dist).
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们在一个升序字段上进行分片，比如在一个使用`ObjectId`的集合的`"_id"`上进行分片。如果我们在`"_id"`上进行分片，那么数据将根据`"_id"`范围被分割成块，如[图 16-1](#ascending-shard-key)所示。这些块将分布在我们的三个分片的分片集群中，如[图 16-2](#ascending-shard-dist)所示。
+- en: '![](Images/mdb3_1601.png)'
+  id: totrans-22
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1601.png)'
+- en: Figure 16-1\. The collection is split into ranges of ObjectIds; each range is
+    a chunk
+  id: totrans-23
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 16-1\. 集合被划分为ObjectId的范围；每个范围是一个块
+- en: Suppose we create a new document. Which chunk will it be in? The answer is the
+    chunk with the range `ObjectId("5112fae0b4a4b396ff9d0ee5")` through `$maxKey`.
+    This is called the *max chunk*, as it is the chunk containing `$maxKey`.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们创建一个新文档。它将在哪个块中？答案是包含范围为`ObjectId("5112fae0b4a4b396ff9d0ee5")`到`$maxKey`的块。这被称为*max
+    chunk*，因为它是包含`$maxKey`的块。
+- en: If we insert another document, it will also be in the max chunk. In fact, every
+    subsequent insert will be into the max chunk! Every insert’s `"_id"` field will
+    be closer to infinity than the previous one (because `ObjectId`s are always ascending),
+    so they will all go into the max chunk.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们插入另一个文档，它也将在最大块中。实际上，每个后续的插入都将在最大块中进行！每个插入的`"_id"`字段都将比前一个更接近无限（因为`ObjectId`总是增加的），所以它们都将进入最大块。
+- en: '![](Images/mdb3_1602.png)'
+  id: totrans-26
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1602.png)'
+- en: Figure 16-2\. Chunks are distributed across shards in a random order
+  id: totrans-27
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 16-2\. 块在随机顺序分布在分片之间
+- en: This has a couple of interesting (and often undesirable) properties. First,
+    all of your writes will be routed to one shard (*shard0002*, in this case). This
+    chunk will be the only one growing and splitting, as it is the only one that receives
+    inserts. As you insert data, new chunks will “fall off” of this chunk, as shown
+    in [Figure 16-3](#ascending-butt).
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这有几个有趣（通常是不可取的）的特性。首先，所有的写入将被路由到一个分片（*shard0002*，在本例中）。这个块将是唯一增长和分裂的块，因为它是唯一接收插入的块。当您插入数据时，新的块将从这个块“掉落”，如[图 16-3](#ascending-butt)所示。
+- en: '![](Images/mdb3_1603.png)'
+  id: totrans-29
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1603.png)'
+- en: Figure 16-3\. The max chunk continues growing and being split into multiple
+    chunks
+  id: totrans-30
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 16-3\. 最大块持续增长并分裂成多个块
+- en: This pattern often makes it more difficult for MongoDB to keep chunks evenly
+    balanced because all the chunks are being created by one shard. Therefore, MongoDB
+    must constantly move chunks to other shards instead of correcting the small imbalances
+    that might occur in more evenly distributed systems.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种模式经常使MongoDB更难以保持块的均衡，因为所有的块都是由一个分片创建的。因此，MongoDB必须不断地将块移动到其他分片，而不是纠正可能在更均匀分布的系统中出现的小不平衡。
+- en: Note
+  id: totrans-32
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注
+- en: In MongoDB 4.2, the move of the autosplit functionality to the shard primary
+    *mongod* added top chunk optimization to address the ascending shard key pattern.
+    The balancer will decide in which other shard to place the top chunk. This helps
+    avoid a situation in which all new chunks are created on just one shard.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在MongoDB 4.2中，将自动分割功能移动到分片主节点的*mongod*中，添加了顶部块优化以解决升序分片键模式。均衡器将决定将顶部块放置在哪个其他分片中。这有助于避免所有新块都在同一个分片上创建的情况。
+- en: Randomly Distributed Shard Keys
+  id: totrans-34
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 随机分布的分片键
+- en: At the other end of the spectrum are randomly distributed shard keys. Randomly
+    distributed keys could be usernames, email addresses, UUIDs, MD5 hashes, or any
+    other key that has no identifiable pattern in your dataset.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在另一端是随机分布的分片键。随机分布的键可以是用户名、电子邮件地址、UUID、MD5 哈希或数据集中没有可识别模式的任何其他键。
+- en: Suppose the shard key is a random number between 0 and 1\. We’ll end up with
+    a random distribution of chunks on the various shards, as shown in [Figure 16-4](#random-dist).
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设分片键是介于 0 和 1 之间的随机数。我们会在各个分片上得到不同的块的随机分布，如 [图 16-4](#random-dist) 所示。
+- en: '![](Images/mdb3_1604.png)'
+  id: totrans-37
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1604.png)'
+- en: Figure 16-4\. As in the previous section, chunks are distributed randomly around
+    the cluster
+  id: totrans-38
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 16-4\. 如前所述，块在集群中随机分布
+- en: 'As more data is inserted, the data’s random nature means that inserts should
+    hit every chunk fairly evenly. You can prove this to yourself by inserting 10,000
+    documents and seeing where they end up:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着插入更多数据，数据的随机性意味着插入应该相对均匀地命中每个块。你可以通过插入 10,000 个文档来证明这一点，看看它们最终分布在哪里：
+- en: '[PRE0]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: As writes are randomly distributed, the shards should grow at roughly the same
+    rate, limiting the number of migrates that need to occur.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于写入是随机分布的，分片应以大致相同的速度增长，从而限制需要发生的迁移数量。
+- en: The only downside to randomly distributed shard keys is that MongoDB isn’t efficient
+    at randomly accessing data beyond the size of RAM. However, if you have the capacity
+    or don’t mind the performance hit, random keys nicely distribute load across your
+    cluster.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随机分布的分片键唯一的缺点是 MongoDB 在超出 RAM 大小的随机访问数据方面效率不高。但是，如果您有能力或者不介意性能损失，随机键可以很好地分布负载在集群中。
+- en: Location-Based Shard Keys
+  id: totrans-43
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 基于位置的分片键
+- en: 'Location-based shard keys may be things like a user’s IP, latitude and longitude,
+    or address. They’re not necessarily related to a physical location field: the
+    “location” might be a more abstract way that data should be grouped together.
+    In any case, a location-based key is a key where documents with some similarity
+    fall into a range based on this field. This can be handy for both putting data
+    close to its users and keeping related data together on disk. It may also be a
+    legal requirement to remain compliant with GDPR or other similar data privacy
+    legislation. MongoDB uses Zoned Sharding to manage this.'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于位置的分片键可能是用户的 IP、纬度和经度或地址等。它们不一定与物理位置字段相关联：这个“位置”可能是数据应该以更抽象的方式分组在一起的方式。无论如何，基于位置的键是一种键，其中具有某种相似性的文档根据此字段的范围落入。这对于将数据放置在靠近其用户的位置并在磁盘上保持相关数据在一起可能会很有用。这也可能是为了符合
+    GDPR 或其他类似的数据隐私立法的法律要求。MongoDB 使用区域分片来管理这一点。
+- en: Note
+  id: totrans-45
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: In MongoDB 4.0.3+, you can define the zones and the zone ranges prior to sharding
+    a collection, which populates chunks for both the zone ranges and for the shard
+    key values as well as performing an initial chunk distribution of these. This
+    greatly reduces the complexity for sharded zone setup.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MongoDB 4.0.3+ 中，您可以在对集合进行分片之前定义区域和区域范围，这将为区域范围和分片键值的块填充以及执行这些的初始块分布。这极大地简化了分片区域设置的复杂性。
+- en: For example, suppose we have a collection of documents that are sharded on IP
+    address. Documents will be organized into chunks based on their IPs and randomly
+    spread across the cluster, as shown in [Figure 16-5](#shard-2-3-0).
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设我们有一个基于 IP 地址分片的文档集合。文档将根据它们的 IP 组织成块，并随机分布在集群中，如 [图 16-5](#shard-2-3-0)
+    所示。
+- en: '![](Images/mdb3_1605.png)'
+  id: totrans-48
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1605.png)'
+- en: Figure 16-5\. A sample distribution of chunks in the IP address collection
+  id: totrans-49
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 16-5\. IP 地址集合中块的示例分布
+- en: 'If we wanted certain chunk ranges to be attached to certain shards, we could
+    zone these shards and then assign chunk ranges to each zone. In this example,
+    suppose that we wanted to keep certain IP blocks on certain shards: say, 56.*.*.*
+    (the United States Postal Service’s IP block) on *shard0000* and 17.*.*.* (Apple’s
+    IP block) on either *shard0000* or *shard0002*. We do not care where the other
+    IPs live. We could request that the balancer do this by setting up zones:'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们希望某些块范围附加到特定的分片上，我们可以对这些分片进行区域划分，然后为每个区域分配块范围。例如，假设我们希望将某些 IP 区块保留在特定的分片上：例如，56.*.*.*（美国邮政服务的
+    IP 区块）在 *shard0000* 上，17.*.*.*（苹果的 IP 区块）在 *shard0000* 或 *shard0002* 上。我们不在乎其他
+    IP 位于何处。我们可以通过设置区域要求负载平衡器执行此操作：
+- en: '[PRE1]'
+  id: totrans-51
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Next, we create the rules:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，我们创建规则：
+- en: '[PRE2]'
+  id: totrans-53
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'This attaches all IPs greater than or equal to 56.0.0.0 and less than 57.0.0.0
+    to the shard zoned as `"USPS"`. Next, we add a rule for Apple:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将把所有大于或等于56.0.0.0且小于57.0.0.0的IP附加到标记为`"USPS"`的分片。接下来，我们为苹果添加一个规则：
+- en: '[PRE3]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: When the balancer moves chunks, it will attempt to move chunks with those ranges
+    to those shards. Note that this process is not immediate. Chunks that were not
+    covered by a zone key range will be moved around normally. The balancer will continue
+    attempting to distribute chunks evenly among shards.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当均衡器移动块时，它将尝试将具有这些范围的块移动到这些分片。请注意，此过程不是立即的。没有被区域键范围覆盖的块将按正常方式移动。均衡器将继续尝试在分片之间均匀分布块。
+- en: Shard Key Strategies
+  id: totrans-57
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 分片键策略
+- en: This section presents a number of shard key options for various types of applications.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节介绍了各种类型应用程序的一些分片键选项。
+- en: Hashed Shard Key
+  id: totrans-59
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 哈希分片键
+- en: For loading data as fast as possible, hashed shard keys are the best option.
+    A hashed shard key can make any field randomly distributed, so it is a good choice
+    if you’re going to be using an ascending key in a lot of queries but want writes
+    to be randomly distributed.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了尽可能快地加载数据，哈希分片键是最佳选择。哈希分片键可以使任何字段随机分布，因此如果你要在许多查询中使用升序键但希望写入是随机分布的，则哈希分片键是一个不错的选择。
+- en: The trade-off is that you can never do a targeted range query with a hashed
+    shard key. If you will not be doing range queries, though, hashed shard keys are
+    a good option.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种方式的权衡是你永远不能使用哈希分片键进行定向的范围查询。但如果你不打算进行范围查询，哈希分片键是一个不错的选择。
+- en: 'To create a hashed shard key, first create a hashed index:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要创建哈希分片键，首先创建一个哈希索引：
+- en: '[PRE4]'
+  id: totrans-63
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'Next, shard the collection with:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，使用以下方式对集合进行分片：
+- en: '[PRE5]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'If you create a hashed shard key on a nonexistent collection, `shardCollection`
+    behaves interestingly: it assumes that you want evenly distributed chunks, so
+    it immediately creates a bunch of empty chunks and distributes them around your
+    cluster. For example, suppose our cluster looked like this before creating the
+    hashed shard key:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你在不存在的集合上创建了一个哈希分片键，`shardCollection`的行为会变得很有趣：它会假设你希望均匀分布的块，因此它会立即创建一堆空块，并将它们分布在你的集群周围。例如，假设在创建哈希分片键之前我们的集群看起来是这样的：
+- en: '[PRE6]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'Immediately after `shardCollection` returns there are two chunks on each shard,
+    evenly distributing the key space across the cluster:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 立即在`shardCollection`返回后，每个分片上都有两个块，将键空间均匀分布在整个集群中：
+- en: '[PRE7]'
+  id: totrans-69
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Note that there are no documents in the collection yet, but when you start inserting
+    them, writes should be evenly distributed across the shards from the get-go. Ordinarily,
+    you would have to wait for chunks to grow, split, and move to start writing to
+    other shards. With this automatic priming, you’ll immediately have chunk ranges
+    on all shards.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，集合中目前没有文档，但当你开始插入它们时，写操作应该从一开始就均匀分布在所有分片上。通常情况下，你需要等待块增长、分割和移动到其他分片才能开始向其他分片写入。但通过这种自动启动，你将立即在所有分片上获得块范围。
+- en: Note
+  id: totrans-71
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: There are some limitations on what your shard key can be if you’re using a hashed
+    shard key. First, you cannot use the `unique` option. As with other shard keys,
+    you cannot use array fields. Finally, be aware that floating-point values will
+    be rounded to whole numbers before hashing, so 1 and 1.999999 will both be hashed
+    to the same value.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果使用哈希分片键，对于分片键的选择有一些限制。首先，你不能使用`unique`选项。与其他分片键一样，你不能使用数组字段。最后，请注意，在进行哈希之前，浮点数值会被四舍五入为整数，因此1和1.999999将被哈希为相同的值。
+- en: Hashed Shard Keys for GridFS
+  id: totrans-73
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 用于GridFS的哈希分片键
+- en: Before attempting to shard GridFS collections, make sure that you understand
+    how GridFS stores data (see [Chapter 6](ch06.xhtml#chapter-idx-types) for an explanation).
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在尝试对GridFS集合进行分片之前，请确保你理解了GridFS如何存储数据（参见[第6章](ch06.xhtml#chapter-idx-types)进行解释）。
+- en: In the following explanation, the term “chunks” is overloaded since GridFS splits
+    files into chunks and sharding splits collections into chunks. Thus, the two types
+    of chunks are referred to as “GridFS chunks” and “sharding chunks.”
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的解释中，“块”这个术语具有重载含义，因为GridFS将文件分割为块，而分片将集合分割为块。因此，这两种类型的块被称为“GridFS块”和“分片块”。
+- en: 'GridFS collections are generally excellent candidates for sharding, as they
+    contain massive amounts of file data. However, neither of the indexes that are
+    automatically created on *fs.chunks* are particularly good shard keys: `{"_id"
+    : 1}` is an ascending key and `{"files_id" : 1, "n" : 1}` picks up *fs.files*’s
+    `"_id"` field, so it is also an ascending key.'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'GridFS集合通常是分片的绝佳候选，因为它们包含大量的文件数据。然而，*fs.chunks*自动创建的索引中，`{"_id" : 1}`是一个升序键，`{"files_id"
+    : 1, "n" : 1}`选取了*fs.files*的`"_id"`字段，因此也是一个升序键。'
+- en: 'However, if you create a hashed index on the `"files_id"` field, each file
+    will be randomly distributed across the cluster, and a file will always be contained
+    in a single chunk. This is the best of both worlds: writes will go to all shards
+    evenly and reading a file’s data will only ever have to hit a single shard.'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，如果你在`"files_id"`字段上创建了哈希索引，每个文件将会随机分布在整个集群中，并且每个文件始终会包含在单个分片中。这是两全其美的最佳选择：写操作会均匀分布到所有的分片上，而读取文件数据只需要访问单个分片。
+- en: 'To set this up, you must create a new index on `{"files_id" : "hashed"}` (as
+    of this writing, *mongos* cannot use a subset of the compound index as a shard
+    key). Then shard the collection on this field:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '要设置这个，你必须在`{"files_id" : "hashed"}`上创建一个新的索引（截至目前为止，*mongos*不能使用复合索引的子集作为分片键）。然后在这个字段上对集合进行分片：'
+- en: '[PRE8]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: As a side note, the *fs.files* collection may or may not need to be sharded,
+    as it will be much smaller than *fs.chunks*. You can shard it if you would like,
+    but it is not likely to be necessary.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 顺便提一下，*fs.files*集合可能需要分片，也可能不需要，因为它的大小远小于*fs.chunks*。如果你愿意，你可以对其进行分片，但这可能并不是必要的。
+- en: The Firehose Strategy
+  id: totrans-81
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 消防栓策略
+- en: If you have some servers that are more powerful than others, you might want
+    to let them handle proportionally more load than your less-powerful servers. For
+    example, suppose you have one shard that can handle 10 times the load of your
+    other machines. Luckily, you have 10 other shards. You could force all inserts
+    to go to the more powerful shard, and then allow the balancer to move older chunks
+    to the other shards. This would give lower-latency writes.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你有一些服务器比其他服务器更强大，你可能希望让它们处理比较多的负载。例如，假设你有一个分片可以处理其他机器10倍的负载。幸运的是，你还有其他10个分片。你可以强制所有的插入操作都发送到更强大的分片，然后允许负载均衡器将旧的块移动到其他分片上。这将带来更低延迟的写入操作。
+- en: 'To use this strategy, we have to pin the highest chunk to the more powerful
+    shard. First, we zone this shard:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用这种策略，我们必须将最高的块固定在最强大的分片上。首先，我们对这个分片进行区域设置：
+- en: '[PRE9]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Then we pin the current value of the ascending key through infinity to that
+    shard, so all new writes go to it:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们将升序键的当前值固定到那个分片上，所以所有的新写入操作都会发送到这里：
+- en: '[PRE10]'
+  id: totrans-86
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: Now all inserts will be routed to this last chunk, which will always live on
+    the shard zoned `"10x"`.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在所有的插入操作将会路由到最后一个块，它将始终存在于分片区域`"10x"`上。
+- en: 'However, ranges from now through infinity will be trapped on this shard unless
+    we modify the zone key range. To get around this, we could set up a cron job to
+    update the key range once a day, like this:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，从现在开始直到无穷大的范围将会被困在这个分片上，除非我们修改区域键范围。为了避免这个问题，我们可以设置一个cron任务，每天更新一次键范围，例如：
+- en: '[PRE11]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: Then all of the previous day’s chunks would be able to move to other shards.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随后，前一天的所有块都将能够移动到其他分片上。
+- en: Another downside of this strategy is that it requires some changes to scale.
+    If your most powerful server can no longer handle the number of writes coming
+    in, there is no trivial way to split the load between this server and another.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种策略的另一个缺点是，它需要一些扩展的变动。如果你的最强大服务器不能再处理所有写入的数量，那么在这台服务器和另一台服务器之间没有简单的方法来分担负载。
+- en: If you do not have a high-performance server to firehose into or you are not
+    using zone sharding, do not use an ascending key as the shard key. If you do,
+    all writes will go to a single shard.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你没有高性能服务器用于输入流或者没有使用区域分片，不要将升序键作为分片键。如果这样做，所有的写操作都将集中在单个分片上。
+- en: Multi-Hotspot
+  id: totrans-93
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 多热点
+- en: Standalone *mongod* servers are most efficient when doing ascending writes.
+    This conflicts with sharding, in that sharding is most efficient when writes are
+    spread over the cluster. The technique described here basically creates multiple
+    hotspots—optimally several on each shard—so that writes are evenly balanced across
+    the cluster but, within a shard, ascending.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 独立的*mongod*服务器在进行升序写入时效率最高。这与分片冲突，因为分片在整个集群上均匀分布写入时效率最高。这里描述的技术基本上创建了多个热点——在每个分片上最好有几个——以便在集群中均匀分配写入，但在分片内部保持升序。
+- en: To accomplish this, we use a compound shard key. The first value in the compound
+    key is a rough, random value with low-ish cardinality. You can picture each value
+    in the first part of the shard key as a chunk, as shown in [Figure 16-6](#rough-key).
+    This will eventually work itself out as you insert more data, although it will
+    probably never be divided up this neatly (right on the `$minKey` lines). However,
+    if you insert enough data, you should eventually have approximately one chunk
+    per random value. As you continue to insert data, you’ll end up with multiple
+    chunks with the same random value, which brings us to the second part of the shard
+    key.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了实现这一点，我们使用复合分片键。复合键中的第一个值是一个粗略的、具有较低基数的随机值。你可以把分片键的第一部分中的每个值想象成一个块，就像[图 16-6](#rough-key)中展示的那样。随着插入更多数据，这将最终得到解决，尽管可能永远不会这么整齐地分割（恰好位于`$minKey`行上）。然而，如果插入足够的数据，最终每个随机值大约应该有一个块。随着继续插入数据，你最终会得到多个具有相同随机值的块，这将带我们来到分片键的第二部分。
+- en: '![](Images/mdb3_1606.png)'
+  id: totrans-96
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1606.png)'
+- en: 'Figure 16-6\. A subset of the chunks: each chunk contains a single state and
+    a range of “_id” values'
+  id: totrans-97
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 16-6\. 一些块的子集：每个块包含一个状态和一系列“_id”值的范围
+- en: 'The second part of the shard key is an ascending key. This means that within
+    a chunk, values are always increasing, as shown in the sample documents in [Figure 16-7](#figure15-7).
+    Thus, if you had one chunk per shard, you’d have the perfect setup: ascending
+    writes on every shard, as shown in [Figure 16-8](#cafeteria-dist). Of course,
+    having *n* chunks with *n* hotspots spread across *n* shards isn’t very extensible:
+    add a new shard and it won’t get any writes because there’s no hotspot chunk to
+    put on it. Thus, you want a few hotspot chunks per shard (to give you room to
+    grow), but not too many. Having a few hotspot chunks will keep the effectiveness
+    of ascending writes, but having, say, a thousand hotspots on a shard will end
+    up being equivalent to random writes.'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二部分的分片键是一个升序键。这意味着在一个块内，值始终是增加的，就像在[图 16-7](#figure15-7)的示例文档中所示。因此，如果每个分片只有一个块，你将拥有完美的设置：每个分片上都有升序写入，如[图 16-8](#cafeteria-dist)所示。当然，拥有*n*个分片，每个分片有*n*个热点散布在其中并不是很可扩展的：添加一个新分片，它将无法获得任何写入，因为没有热点块可以放置在上面。因此，你希望每个分片有几个热点块（以便为你提供增长的空间），但不要太多。拥有几个热点块将保持升序写入的效果，但是，例如在一个分片上有一千个热点块最终会导致等同于随机写入。
+- en: '![](Images/mdb3_1607.png)'
+  id: totrans-99
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1607.png)'
+- en: Figure 16-7\. A sample list of inserted documents (note that all “_id” values
+    are increasing)
+  id: totrans-100
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 16-7\. 插入文档的样本列表（注意所有“_id”值都是增加的）
+- en: '![](Images/mdb3_1608.png)'
+  id: totrans-101
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1608.png)'
+- en: Figure 16-8\. The inserted documents, split into chunks (note that, within each
+    chunk, the “_id” values are increasing)
+  id: totrans-102
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 16-8\. 插入的文档，分成块（注意，每个块内的“_id”值是增加的）
+- en: 'You can picture this setup as each chunk being a stack of ascending documents.
+    There are multiple stacks on each shard, each ascending until the chunk is split.
+    Once a chunk is split, only one of the new chunks will be a hotspot chunk: the
+    other chunk will essentially be “dead” and never grow again. If the stacks are
+    evenly distributed across the shards, writes will be evenly distributed.'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以把这个设置想象成每个块都是一堆升序文档。每个分片上有多个堆栈，每个堆栈都升序直至块被分割。一旦块被分割，新块中只有一个是热点块：另一个块本质上是“死”的，永远不会再增长。如果堆栈均匀分布在各个分片上，写入将均匀分布。
+- en: Shard Key Rules and Guidelines
+  id: totrans-104
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 分片键的规则和指南
+- en: There are several practical restrictions to be aware of before choosing a shard
+    key.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在选择分片键之前，需要注意几个实际限制。
+- en: Determining which key to shard on and creating shard keys should be reminiscent
+    of indexing because the two concepts are similar. In fact, often your shard key
+    may just be the index you use most often (or some variation on it).
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确定用于分片的键以及创建分片键应该与索引类似，因为这两个概念是相似的。事实上，通常你的分片键可能只是你最常使用的索引（或者它的某种变体）。
+- en: Shard Key Limitations
+  id: totrans-107
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 分片键限制
+- en: Shard keys cannot be arrays. `sh.shardCollection()` will fail if any key has
+    an array value, and inserting an array into that field is not allowed.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分片键不能是数组。如果任何键具有数组值，`sh.shardCollection()`将失败，并且不允许将数组插入该字段。
+- en: Once inserted, a document’s shard key value may be modified unless the shard
+    key field is an immutable `_id` field. In older versions of MongoDB prior to 4.2,
+    it was not possible to modify a document’s shard key value.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦插入，文档的分片键值可能会被修改，除非分片键字段是不可变的`_id`字段。在MongoDB 4.2之前的旧版本中，无法修改文档的分片键值。
+- en: Most special types of indexes cannot be used for shard keys. In particular,
+    you cannot shard on a geospatial index. Using a hashed index for a shard key is
+    allowed, as covered previously.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数特殊类型的索引不能用作分片键。特别是，您不能在地理空间索引上进行分片。使用哈希索引作为分片键是允许的，如前所述。
+- en: Shard Key Cardinality
+  id: totrans-111
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Shard键的基数
+- en: Whether your shard key jumps around or increases steadily, it is important to
+    choose a key with values that will vary. As with indexes, sharding performs better
+    on high-cardinality fields. If, for example, you had a `"logLevel"` key that had
+    only values `"DEBUG"`, `"WARN"`, or `"ERROR"`, MongoDB wouldn’t be able to break
+    up your data into more than three chunks (because there would be only three different
+    values for the shard key). If you have a key with little variation and want to
+    use it as a shard key anyway, you can do so by creating a compound shard key on
+    that key and a key that varies more, like `"logLevel"` and `"timestamp"`. It is
+    important that the combination of keys has high cardinality.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论你的分片键是跳跃还是稳步增加，选择一个值会变化的键是很重要的。与索引类似，高基数字段在分片时表现更好。例如，如果你有一个`"logLevel"`键，只有`"DEBUG"`、`"WARN"`或`"ERROR"`这三个值，MongoDB无法将你的数据分成超过三个块（因为分片键只有三个不同的值）。如果你有一个变化很少的键，并且仍然想将其用作分片键，你可以在该键上创建一个复合分片键，以及一个更有变化的键，比如`"logLevel"`和`"timestamp"`。重要的是这些键的组合具有高基数。
+- en: Controlling Data Distribution
+  id: totrans-113
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 控制数据分发
+- en: Sometimes, automatic data distribution will not fit your requirements. This
+    section gives you some options beyond choosing a shard key and allowing MongoDB
+    to do everything automatically.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时，自动数据分发无法满足您的要求。本节提供了一些选择，超出了选择分片键并允许MongoDB自动执行所有操作的范围。
+- en: As your cluster gets larger or busier, these solutions become less practical.
+    However, for small clusters, you may want more control.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您的集群变得更大或更繁忙时，这些解决方案变得不太实用。但是，对于小集群，您可能希望有更多的控制。
+- en: Using a Cluster for Multiple Databases and Collections
+  id: totrans-116
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用一个集群来处理多个数据库和集合
+- en: MongoDB evenly distributes collections across every shard in your cluster, which
+    works well if you’re storing homogeneous data. However, if you have a log collection
+    that is “lower value” than your other data, you might not want it taking up space
+    on your more expensive servers. Or, if you have one powerful shard, you might
+    want to use it for only a real-time collection and not allow other collections
+    to use it. You can create separate clusters, but you can also give MongoDB specific
+    directions about where you want it to put certain data.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB会在集群中的每个分片上均匀分布集合，这在存储同质数据时效果很好。但是，如果您有一个日志集合比其他数据“价值低”，您可能不希望它占用昂贵服务器的空间。或者，如果您有一个强大的分片，您可能只想用它来进行实时收集，而不允许其他集合使用它。您可以创建单独的集群，但您还可以向MongoDB指定您希望它将某些数据放置在哪里。
+- en: 'To set this up, use the `sh.addShardToZone()` helper in the shell:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要设置这个，请在shell中使用`sh.addShardToZone()`辅助程序：
+- en: '[PRE12]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Then you can assign different collections to different shards. For instance,
+    for your super-important real-time collection:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，您可以将不同的集合分配给不同的分片。例如，对于您的超级重要的实时集合：
+- en: '[PRE13]'
+  id: totrans-121
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'This says, “for negative infinity to infinity for this collection, store it
+    on shards tagged `"high"`.” This means that no data from the *super.important*
+    collection will be stored on any other server. Note that this does not affect
+    how other collections are distributed: they will still be evenly distributed between
+    this shard and the others.'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这句话说，“对于此集合的负无穷到正无穷，将其存储在标记为`"high"`的分片上。” 这意味着来自*super.important*集合的数据不会存储在其他服务器上。请注意，这不影响其他集合的分布方式：它们仍然会均匀分布在这个分片和其他分片之间。
+- en: 'You can perform a similar operation to keep the log collection on a low-quality
+    server:'
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以执行类似的操作，将日志集合保存在低质量服务器上：
+- en: '[PRE14]'
+  id: totrans-124
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: The log collection will now be split evenly between *shard0004* and *shard0005*.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 日志集合现在将在*shard0004*和*shard0005*之间均匀分割。
+- en: Assigning a zone key range to a collection does not affect it instantly. It
+    is an instruction to the balancer stating that, when it runs, these are the viable
+    targets to move the collection to. Thus, if the entire log collection is on *shard0002*
+    or evenly distributed among the shards, it will take a little while for all of
+    the chunks to be migrated to *shard0004* and *shard0005*.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将区域键范围分配给集合不会立即影响它。这是对平衡器的一项指示，即在其运行时，这些是移动集合的可行目标。因此，如果整个日志集合在*shard0002*上或在各个分片之间均匀分布，那么将所有块迁移到*shard0004*和*shard0005*将需要一些时间。
+- en: 'As another example, perhaps you have a collection that you don’t want on the
+    shard zoned `"high"`, but you don’t care which other shard it goes on. You can
+    zone all of the non-high-performance shards to create a new grouping. Shards can
+    have as many zones as you need:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 举个例子，也许你有一个不希望放在分区 `"high"` 的集合，但你不关心它放在哪个其他分片上。你可以将所有非高性能分片分区为一个新的组。分片可以有任意数量的分区：
+- en: '[PRE15]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Now you can specify that you want this collection (call it *normal.coll*) distributed
+    across these five shards:'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，你可以指定你希望这个集合（称为 *normal.coll*）分布在这五个分片上：
+- en: '[PRE16]'
+  id: totrans-130
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: Tip
+  id: totrans-131
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: You cannot assign collections dynamically—i.e., you can’t say, “when a collection
+    is created, randomly home it to a shard.” However, you could have a cron job that
+    went through and did this for you.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你不能动态分配集合，即你不能说：“当创建一个集合时，随机地将其分配到一个分片。” 但是，你可以编写一个 cron 作业来帮你完成这个工作。
+- en: 'If you make a mistake or change your mind, you can remove a shard from a zone
+    with `sh.removeShardFromZone()`:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你犯了一个错误或改变了主意，你可以使用 `sh.removeShardFromZone()` 从一个分区中移除一个分片：
+- en: '[PRE17]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: If you remove all shards from zones described by a zone key range (e.g., if
+    you remove *shard0000* from the zone `"high"`), the balancer won’t distribute
+    the data anywhere because there aren’t any valid locations listed. All the data
+    will still be readable and writable; it just won’t be able to migrate until you
+    modify your tags or tag ranges.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你从一个区域中移除了所有分片（例如，如果你从区域 `"high"` 中移除了 *shard0000*），那么均衡器将不会将数据分布到任何地方，因为没有任何有效的位置可用。所有数据仍然可以读写；只是在修改标签或标签范围之前，无法进行迁移。
+- en: 'To remove a key range from a zone, use `sh.removeRangeFromZone()`. The following
+    is an example. The range specified must be an exact match to a range previously
+    defined for the namespace *some.logs* and a given zone:'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要从一个区域中移除一个键范围，请使用 `sh.removeRangeFromZone()`。以下是一个示例。指定的范围必须与之前为命名空间 *some.logs*
+    和给定区域定义的范围完全匹配：
+- en: '[PRE18]'
+  id: totrans-137
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: Manual Sharding
+  id: totrans-138
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 手动分片
+- en: Sometimes, for complex requirements or special situations, you may prefer to
+    have complete control over which data is distributed where. You can turn off the
+    balancer if you don’t want data to be automatically distributed and use the `moveChunk`
+    command to manually distribute data.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时候，对于复杂的需求或特殊情况，你可能更喜欢完全控制数据的分布。如果你不希望数据自动分布，你可以关闭均衡器，并使用 `moveChunk` 命令手动分布数据。
+- en: 'To turn off the balancer, connect to a *mongos* (any *mongos* is fine) using
+    the *mongo* shell and disable the balancer using the shell helper `sh.stopBalancer()`:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要关闭均衡器，请连接到任何 *mongos*（任何一个 *mongos* 都可以）使用 *mongo* shell，并使用 shell 辅助函数 `sh.stopBalancer()`
+    来禁用均衡器：
+- en: '[PRE19]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'If there is currently a migrate in progress, this setting will not take effect
+    until the migrate has completed. However, once any in-flight migrations have finished,
+    the balancer will stop moving data around. To verify no migrations are in progress
+    after disabling, issue the following in the *mongo* shell:'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果当前正在进行迁移操作，这个设置将在迁移完成后生效。然而，一旦所有正在进行中的迁移完成，均衡器将停止数据迁移。要验证禁用后没有迁移正在进行，在 *mongo*
+    shell 中执行以下操作：
+- en: '[PRE20]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'Once the balancer is off, you can move data around manually (if necessary).
+    First, find out which chunks are where by looking at *config.chunks*:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦均衡器关闭，你可以手动移动数据（如果需要）。首先，通过查看 *config.chunks* 确定每个数据块的位置：
+- en: '[PRE21]'
+  id: totrans-145
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'Now, use the `moveChunk` command to migrate chunks to other shards. Specify
+    the lower bound of the chunk to be migrated and give the name of the shard that
+    you want to move the chunk to:'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，使用 `moveChunk` 命令将数据块迁移到其他分片。指定要迁移的数据块的下限，并给出你想要将数据块迁移到的分片的名称：
+- en: '[PRE22]'
+  id: totrans-147
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: However, unless you are in an exceptional situation, you should use MongoDB’s
+    automatic sharding instead of doing it manually. If you end up with a hotspot
+    on a shard that you weren’t expecting, you might end up with most of your data
+    on that shard.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不过，除非你处于特殊情况，你应该使用 MongoDB 的自动分片而不是手动操作。如果你在一个未预期的分片上出现热点，你可能会发现大部分数据都在那个分片上。
+- en: In particular, do not combine setting up unusual distributions manually with
+    running the balancer. If the balancer detects an uneven number of chunks it will
+    simply reshuffle all of your work to get the collection evenly balanced again.
+    If you want uneven distribution of chunks, use the zone sharding technique discussed
+    in [“Using a Cluster for Multiple Databases and Collections”](#shard-tags).
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 特别是，请不要将手动设置不寻常的分发与运行均衡器结合起来。如果均衡器检测到不均匀的块数，它将简单地重新洗牌所有工作以再次使集合均衡。如果您想要不均匀分布的块，请使用《使用集群进行多个数据库和集合》中讨论的区域分片技术（#shard-tags）。

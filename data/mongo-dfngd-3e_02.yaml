@@ -1,0 +1,220 @@
+- en: Chapter 1\. Introduction
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第1章 介绍
+- en: MongoDB is a powerful, flexible, and scalable general-purpose database. It combines
+    the ability to scale out with features such as secondary indexes, range queries,
+    sorting, aggregations, and geospatial indexes. This chapter covers the major design
+    decisions that made MongoDB what it is.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB是一款强大、灵活且可扩展的通用数据库。它结合了横向扩展的能力和诸如次要索引、范围查询、排序、聚合和地理空间索引等功能。本章介绍了使MongoDB成为现在的主要设计决策。
+- en: Ease of Use
+  id: totrans-2
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用便捷
+- en: MongoDB is a *document-oriented* database, not a relational one. The primary
+    reason for moving away from the relational model is to make scaling out easier,
+    but there are some other advantages as well.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB是一个*面向文档*的数据库，而不是关系型数据库。摆脱关系模型的主要原因是为了更容易地进行横向扩展，但也有其他一些优点。
+- en: A document-oriented database replaces the concept of a “row” with a more flexible
+    model, the “document.” By allowing embedded documents and arrays, the document-oriented
+    approach makes it possible to represent complex hierarchical relationships with
+    a single record. This fits naturally into the way developers in modern object-oriented
+    languages think about their data.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 面向文档的数据库用更灵活的“文档”模型替代了“行”的概念。通过允许嵌入式文档和数组，面向文档的方法可以用单个记录表示复杂的层次关系。这与现代面向对象语言中开发者的数据思维方式自然契合。
+- en: 'There are also no predefined schemas: a document’s keys and values are not
+    of fixed types or sizes. Without a fixed schema, adding or removing fields as
+    needed becomes easier. Generally, this makes development faster as developers
+    can quickly iterate. It is also easier to experiment. Developers can try dozens
+    of models for the data and then choose the best one to pursue.'
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同时也没有预定义的模式：文档的键和值不是固定类型或大小的。没有固定的模式，根据需要添加或删除字段变得更加容易。通常情况下，这使得开发速度更快，因为开发者可以快速迭代。这也更容易进行实验。开发者可以尝试数十种数据模型，然后选择最佳模型进行进一步开发。
+- en: Designed to Scale
+  id: totrans-6
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 设计用于扩展
+- en: Dataset sizes for applications are growing at an incredible pace. Increases
+    in available bandwidth and cheap storage have created an environment where even
+    small-scale applications need to store more data than many databases were meant
+    to handle. A terabyte of data, once an unheard-of amount of information, is now
+    commonplace.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 应用程序的数据集大小正在以惊人的速度增长。带宽的增加和廉价存储的出现创造了一个环境，即使是小规模应用程序也需要存储比许多数据库所能处理的数据量还要多的数据。一千兆字节的数据，曾经是一个难以置信的信息量，现在却很普遍。
+- en: 'As the amount of data that developers need to store grows, developers face
+    a difficult decision: how should they scale their databases? Scaling a database
+    comes down to the choice between scaling up (getting a bigger machine) or scaling
+    out (partitioning data across more machines). Scaling up is often the path of
+    least resistance, but it has drawbacks: large machines are often very expensive,
+    and eventually a physical limit is reached where a more powerful machine cannot
+    be purchased at any cost. The alternative is to scale out: to add storage space
+    or increase throughput for read and write operations, buy additional servers,
+    and add them to your cluster. This is both cheaper and more scalable; however,
+    it is more difficult to administer a thousand machines than it is to care for
+    one.'
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着开发者需要存储的数据量增加，他们面临一个困难的决定：他们应该如何扩展他们的数据库？扩展数据库涉及选择在扩展上（获取更大的机器）和横向扩展（在更多机器之间分区数据）之间的折衷。扩展上通常是最容易的路径，但有缺点：大型机器通常非常昂贵，并且最终会达到物理极限，即使有再多的资金也无法购买更强大的机器。另一种选择是横向扩展：增加存储空间或增加读写操作的吞吐量，购买额外的服务器，并将它们添加到集群中。这既便宜又可扩展；然而，管理一千台机器比照顾一台机器更困难。
+- en: MongoDB was designed to scale out. The document-oriented data model makes it
+    easier to split data across multiple servers. MongoDB automatically takes care
+    of balancing data and load across a cluster, redistributing documents automatically
+    and routing reads and writes to the correct machines, as shown in [Figure 1-1](#fig0101).
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB设计用于横向扩展。面向文档的数据模型使得更容易地将数据分割到多个服务器上。MongoDB会自动处理集群中数据和负载的平衡，自动重新分配文档，并将读写操作路由到正确的机器上，如图[1-1](#fig0101)所示。
+- en: '![](Images/mdb3_0101.png)'
+  id: totrans-10
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_0101.png)'
+- en: Figure 1-1\. Scaling out MongoDB using sharding across multiple servers
+  id: totrans-11
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图1-1 横向扩展MongoDB通过在多个服务器上进行分片
+- en: The topology of a MongoDB cluster, or whether there is in fact a cluster rather
+    than a single node at the other end of a database connection, is transparent to
+    the application. This allows developers to focus on programming the application,
+    not scaling it. Likewise, if the topology of an existing deployment needs to change
+    in order to, for example, scale to support greater load, the application logic
+    can remain the same.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB集群的拓扑结构，或者说是否存在集群而不是仅仅是数据库连接的另一端，对应用程序是透明的。这使开发人员可以专注于编程应用程序，而不是扩展它。同样，如果现有部署的拓扑结构需要更改，以支持更大的负载，应用程序逻辑可以保持不变。
+- en: Rich with Features…
+  id: totrans-13
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 功能丰富…
+- en: 'MongoDB is a general-purpose database, so aside from creating, reading, updating,
+    and deleting data, it provides most of the features you would expect from a database
+    management system and many others that set it apart. These include:'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB是一个通用数据库，因此除了创建、读取、更新和删除数据外，它还提供了大多数数据库管理系统所期望的功能，以及许多其他使其与众不同的功能。这些包括：
+- en: Indexing
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引
+- en: MongoDB supports generic secondary indexes and provides unique, compound, geospatial,
+    and full-text indexing capabilities as well. Secondary indexes on hierarchical
+    structures such as nested documents and arrays are also supported and enable developers
+    to take full advantage of the ability to model in ways that best suit their applications.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB支持通用的二级索引，并提供唯一、复合、地理空间和全文索引的能力。还支持嵌套文档和数组等层次结构上的二级索引，并使开发人员能够充分利用按其应用程序最合适的方式进行建模的能力。
+- en: Aggregation
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 聚合
+- en: MongoDB provides an aggregation framework based on the concept of data processing
+    pipelines. Aggregation pipelines allow you to build complex analytics engines
+    by processing data through a series of relatively simple stages on the server
+    side, taking full advantage of database optimizations.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB提供基于数据处理管道概念的聚合框架。聚合管道允许您通过一系列相对简单的阶段在服务器端处理数据，充分利用数据库优化，从而构建复杂的分析引擎。
+- en: Special collection and index types
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 特殊集合和索引类型
+- en: MongoDB supports time-to-live (TTL) collections for data that should expire
+    at a certain time, such as sessions and fixed-size (capped) collections, for holding
+    recent data, such as logs. MongoDB also supports partial indexes limited to only
+    those documents matching a criteria filter in order to increase efficiency and
+    reduce the amount of storage space required.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB支持生存时间（TTL）集合，用于应在某个特定时间过期的数据，例如会话，以及固定大小（capped）集合，用于保存最近的数据，例如日志。MongoDB还支持仅限于匹配特定条件筛选器的部分索引，以增加效率并减少所需的存储空间。
+- en: File storage
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文件存储
+- en: MongoDB supports an easy-to-use protocol for storing large files and file metadata.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB支持用于存储大文件和文件元数据的易于使用的协议。
+- en: Some features common to relational databases are not present in MongoDB, notably
+    complex joins. MongoDB supports joins in a very limited way through use of the
+    `$lookup` aggregation operator introduced in the 3.2 release. In the 3.6 release,
+    more complex joins are possible using multiple join conditions as well as unrelated
+    subqueries. MongoDB’s treatment of joins were architectural decisions to allow
+    for greater scalability, because both of those features are difficult to provide
+    efficiently in a distributed system.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB中没有出现在关系数据库中常见的某些功能，特别是复杂的连接。MongoDB通过在3.2版本中引入的`$lookup`聚合操作符有非常有限的方式支持连接。在3.6版本中，通过多个连接条件以及无关子查询，可以实现更复杂的连接。MongoDB对连接的处理是为了允许更大的可伸缩性而进行的架构决策，因为在分布式系统中提供这两个功能都很难有效地实现。
+- en: …Without Sacrificing Speed
+  id: totrans-24
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: …而不损害速度
+- en: Performance is a driving objective for MongoDB, and has shaped much of its design.
+    It uses opportunistic locking in its WiredTiger storage engine to maximize concurrency
+    and throughput. It uses as much RAM as it can as its cache and attempts to automatically
+    choose the correct indexes for queries. In short, almost every aspect of MongoDB
+    was designed to maintain high performance.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能是MongoDB的主要目标，也塑造了其设计的很大部分。它在其WiredTiger存储引擎中使用机会锁定以最大化并发性和吞吐量。它尽可能多地使用RAM作为其缓存，并尝试自动选择适合查询的正确索引。简而言之，MongoDB的几乎每个方面都是为了保持高性能而设计的。
+- en: Although MongoDB is powerful, incorporating many features from relational systems,
+    it is not intended to do everything that a relational database does. For some
+    functionality, the database server offloads processing and logic to the client
+    side (handled either by the drivers or by a user’s application code). Its maintenance
+    of this streamlined design is one of the reasons MongoDB can achieve such high
+    performance.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管 MongoDB 强大，集成了许多关系系统的特性，但并不意味着它要完成关系数据库所能做的一切。在某些功能上，数据库服务器将处理和逻辑卸载到客户端（由驱动程序或用户的应用程序代码处理）。它保持这种简化设计的维护是
+    MongoDB 能够实现如此高性能的原因之一。
+- en: The Philosophy
+  id: totrans-27
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 哲学
+- en: Throughout this book, we will take the time to note the reasoning or motivation
+    behind particular decisions made in the development of MongoDB. Through those
+    notes we hope to share the philosophy behind MongoDB. The best way to summarize
+    the MongoDB project, however, is by referencing its main focus—to create a full-featured
+    data store that is scalable, flexible, and fast.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书中，我们将花时间记录 MongoDB 开发过程中做出的特定决策背后的推理或动机。通过这些注释，我们希望分享 MongoDB 背后的哲学。然而，总结
+    MongoDB 项目的最佳方式是引用其主要关注点——创建一个可扩展、灵活且快速的全功能数据存储。

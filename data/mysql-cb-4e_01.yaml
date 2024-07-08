@@ -1,0 +1,2421 @@
+- en: Chapter 1\. Using the mysql Client Program
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第1章 使用mysql客户端程序
+- en: 1.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 1.0 介绍
+- en: The MySQL database system uses a client-server architecture. The server, *mysqld*,
+    is the program that actually manipulates databases. To tell the server what to
+    do, use a client program that communicates your intent by means of statements
+    written in Structured Query Language (SQL). Client programs are written for diverse
+    purposes, but each interacts with the server by connecting to it, sending SQL
+    statements to have database operations performed, and receiving the results.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL数据库系统使用客户端-服务器架构。服务器*mysqld*是实际操作数据库的程序。要告诉服务器要做什么，请使用一个客户端程序，该程序通过使用结构化查询语言（SQL）编写的语句来传达您的意图。客户端程序用于各种不同的目的，但每个客户端通过连接到服务器、发送SQL语句以执行数据库操作并接收结果来与服务器交互。
+- en: Clients are installed locally on the machine from which you want to access MySQL,
+    but the server can be installed anywhere, as long as clients can connect to it.
+    Because MySQL is an inherently networked database system, clients can communicate
+    with a server running locally on your own machine or somewhere on the other side
+    of the planet.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 客户端程序安装在要访问MySQL的机器上，但服务器可以安装在任何地方，只要客户端能够连接到它。由于MySQL是一个固有的网络数据库系统，客户端可以与在您自己的机器上本地运行的服务器或者地球另一侧的某处运行的服务器进行通信。
+- en: The *mysql* program is one of the clients included in MySQL distributions. When
+    used interactively, *mysql* prompts you for a statement, sends it to the MySQL
+    server for execution, and displays the results. *mysql* also can be used noninteractively
+    in batch mode to read statements stored in files or produced by programs. This
+    enables use of *mysql* from within scripts or *cron* jobs, or in conjunction with
+    other applications.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysql*程序是MySQL发行版中包含的客户端之一。在交互模式下使用时，*mysql*提示您输入语句，将其发送到MySQL服务器执行，并显示结果。*mysql*也可以在非交互模式下使用批处理模式，从文件中读取语句或由程序生成的语句。这使得可以在脚本或*cron*作业中使用*mysql*，或者与其他应用程序配合使用。'
+- en: 'This chapter describes *mysql*’s capabilities so that you can use it more effectively:'
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章描述了*mysql*的功能，以便您可以更有效地使用它：
+- en: Setting up a MySQL account for using the `cookbook` database
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 设置一个用于使用`cookbook`数据库的MySQL账户
+- en: Specifying connection parameters and using option files
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 指定连接参数和使用选项文件
+- en: Executing SQL statements interactively and in batch mode
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 以交互和批处理模式执行SQL语句
+- en: Controlling *mysql* output format
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 控制*mysql*输出格式
+- en: Using user-defined variables to save information
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用用户定义变量保存信息
+- en: 'To try for yourself the examples shown in this book, you need a MySQL user
+    account and a database. The first two recipes in this chapter describe how to
+    use *mysql* to set those up, based on these assumptions:'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要尝试本书中展示的示例，您需要一个MySQL用户账户和一个数据库。本章的前两个示例描述了如何使用*mysql*设置这些内容，基于以下假设：
+- en: The MySQL server is running locally on your own system
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL服务器在您自己的系统上本地运行
+- en: Your MySQL username and password are `cbuser` and `cbpass`
+  id: totrans-13
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您的MySQL用户名和密码分别是`cbuser`和`cbpass`
+- en: Your database is named `cookbook`
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您的数据库名为`cookbook`
+- en: If you like, you can violate any of the assumptions. Your server need not be
+    running locally, and you need not use the username, password, or database name
+    that are used in this book. Naturally, in such cases, you must modify the examples
+    accordingly.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您愿意，可以违反任何假设。您的服务器不必在本地运行，也不必使用本书中使用的用户名、密码或数据库名。当然，在这种情况下，您必须相应地修改示例。
+- en: Even if you choose not to use `cookbook` as your database name, we recommend
+    that you use a database dedicated to the examples shown here, not one that you
+    also use for other purposes. Otherwise, the names of existing tables may conflict
+    with those used in the examples, and you’ll have to make modifications that would
+    be unnecessary with a dedicated database.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 即使您选择不使用`cookbook`作为您的数据库名称，我们建议您使用一个专门用于此处示例的数据库，而不是您还用于其他目的的数据库。否则，现有表的名称可能会与示例中使用的名称冲突，您将不得不进行不必要的修改。
+- en: Scripts that create the tables used in this chapter are located in the *tables*
+    directory of the `recipes` distribution that accompanies *MySQL Cookbook*. Other
+    scripts are located in the *mysql* directory. To get the `recipes` distribution,
+    see the [Preface](preface01.xhtml#nch-preface).
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中创建表的脚本位于伴随*MySQL Cookbook*的`recipes`发行版的*tables*目录中。其他脚本位于*mysql*目录中。要获取`recipes`发行版，请参阅[前言](preface01.xhtml#nch-preface)。
+- en: 1.1 Setting Up a MySQL User Account
+  id: totrans-18
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 1.1 设置MySQL用户账户
+- en: Problem
+  id: totrans-19
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You need an account for connecting to your MySQL server.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你需要一个账户来连接到你的 MySQL 服务器。
+- en: Solution
+  id: totrans-21
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use `CREATE` `USER` and `GRANT` statements to set up the account. Then use the
+    account name and password to make connections to the server.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `CREATE` `USER` 和 `GRANT` 语句设置账户。然后使用账户名和密码连接服务器。
+- en: Discussion
+  id: totrans-23
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Connecting to a MySQL server requires a username and password. You may also
+    need to specify the name of the host on which the server is running. If you don’t
+    specify connection parameters explicitly, *mysql* assumes default values. For
+    example, given no explicit hostname, *mysql* assumes that the server is running
+    on the local host.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 连接到 MySQL 服务器需要用户名和密码。你可能还需要指定运行服务器的主机名。如果不显式指定连接参数，*mysql* 将假定默认值。例如，如果未指定主机名，*mysql*
+    将假定服务器运行在本地主机上。
+- en: 'If someone else has already set up an account for you and granted privileges,
+    alloying to create and modify `cookbook` database, just use that account. Otherwise,
+    the following example shows how to use the *mysql* program to connect to the server
+    and issue the statements that set up a user account with privileges for accessing
+    a database named `cookbook`. The arguments to *mysql* include `-h` `localhost`
+    to connect to the MySQL server running on the local host, `-u` `root` to connect
+    as the MySQL `root` user, and `-p` to tell *mysql* to prompt for a password:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果其他人已经为你设置了账户并授予了权限，允许你创建和修改 `cookbook` 数据库，只需使用该账户。否则，下面的示例展示了如何使用 *mysql*
+    程序连接服务器并执行设置具有访问名为 `cookbook` 数据库权限的用户账户的语句。*mysql* 的参数包括 `-h` `localhost` 以连接到运行在本地主机上的
+    MySQL 服务器，`-u` `root` 以 MySQL `root` 用户身份连接，以及 `-p` 以提示 *mysql* 输入密码：
+- en: '[PRE0]'
+  id: totrans-26
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Tip
+  id: totrans-27
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: '`PROCESS` privilege is required if you need to generate a dump file of your
+    MySQL data. See also [Recipe 1.4](#nch-mysql-mysql-options)'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你需要生成 MySQL 数据的转储文件，则需要 `PROCESS` 权限。另见 [Recipe 1.4](#nch-mysql-mysql-options)。
+- en: If when you attempt to invoke *mysql* the result is an error message that it
+    cannot be found or is an invalid command, that means your command interpreter
+    doesn’t know where *mysql* is installed. See [Recipe 1.3](#nch-mysql-mysql-notfound)
+    for information about setting the `PATH` environment variable that the interpreter
+    uses to find commands.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果尝试调用 *mysql* 时出现无法找到或无效命令的错误消息，这意味着你的命令解释器不知道 *mysql* 安装在哪里。参见 [Recipe 1.3](#nch-mysql-mysql-notfound)
+    了解设置解释器用于查找命令的 `PATH` 环境变量的信息。
+- en: In the commands shown, the `$` represents the prompt displayed by your shell
+    or command interpreter, and `mysql>` is the prompt displayed by *mysql*. Text
+    that you type is shown in bold. Nonbold text (including the prompts) is program
+    output; don’t type any of that.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在显示的命令中，`$` 表示你的 shell 或命令解释器显示的提示符，`mysql>` 是 *mysql* 显示的提示符。加粗显示的文本是你要输入的内容。非加粗文本（包括提示符）是程序的输出；不要输入这些内容。
+- en: When *mysql* prints the password prompt, enter the MySQL `root` password where
+    you see the `******`; if the MySQL `root` user has no password, just press the
+    Enter (or Return) key at the password prompt. You will see MySQL welcome prompt
+    that could be slightly different for the MySQL version you use. Then enter the
+    `CREATE` `USER` and `GRANT` statements as shown.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当 *mysql* 打印密码提示时，在看到 `******` 处输入 MySQL `root` 密码；如果 MySQL `root` 用户没有密码，只需在密码提示处按
+    Enter（或 Return）键。你会看到 MySQL 欢迎提示，这可能因你使用的 MySQL 版本而略有不同。接着按照示例输入 `CREATE` `USER`
+    和 `GRANT` 语句。
+- en: The `quit` command terminates your *mysql* session. You can also terminate a
+    session by using an `exit` command or (under Unix) by typing Ctrl-D.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`quit` 命令终止你的 *mysql* 会话。你也可以使用 `exit` 命令或（在 Unix 下）输入 Ctrl-D 来终止会话。'
+- en: To grant the `cbuser` account access to a database other than `cookbook`, substitute
+    the database name where you see `cookbook` in the `GRANT` statement. To grant
+    access for the `cookbook` database to an existing account, omit the `CREATE` `USER`
+    statement and substitute that account for `'cbuser'@'localhost'` in the `GRANT`
+    statement.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要授予 `cbuser` 账户对除 `cookbook` 之外的数据库的访问权限，在 `GRANT` 语句中，替换掉 `cookbook` 的数据库名称。要为现有账户授予
+    `cookbook` 数据库的访问权限，省略 `CREATE` `USER` 语句，并在 `GRANT` 语句中用 `'cbuser'@'localhost'`
+    替换该账户。
+- en: Note
+  id: totrans-34
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'MySQL user account record contains of two parts: username and the host. Username
+    is an identified or the user who is accessing MySQL server. You can specify anything
+    for this part. Hostname is IP address or name of the host from which this user
+    will connect to MySQL server to. We discuss MySQL security model and user accounts
+    in [Recipe 24.0](ch24.xhtml#nch-security-security-intro).'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 用户账户记录由两部分组成：用户名和主机。用户名是访问 MySQL 服务器的标识或用户。对于此部分，你可以指定任何内容。主机名是 IP 地址或访问
+    MySQL 服务器的主机名称。我们在 [Recipe 24.0](ch24.xhtml#nch-security-security-intro) 中讨论 MySQL
+    安全模型和用户账户。
+- en: 'The hostname part of `''cbuser''@''localhost''` indicates the host *from which*
+    you’ll connect to the MySQL server. To set up an account that will connect to
+    a server running on the local host, use `localhost`, as shown. If you plan to
+    connect to the server from another host, substitute that host in the `CREATE`
+    `USER` and `GRANT` statements. For example, if you’ll connect to the server from
+    a host named *myhost.example.com*, the statements look like this:'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`''cbuser''@''localhost''` 中的主机名部分指示了*从哪里*你将连接到 MySQL 服务器。要设置一个连接到本地主机上运行的服务器的账户，请使用
+    `localhost`，如所示。如果你计划从另一台主机连接到服务器，请在 `CREATE` `USER` 和 `GRANT` 语句中替换该主机。例如，如果你将从名为
+    *myhost.example.com* 的主机连接到服务器，则语句如下：'
+- en: '[PRE1]'
+  id: totrans-37
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'It may have occurred to you that there’s a paradox in the procedure just described:
+    to set up a `cbuser` account that can connect to the MySQL server, you must first
+    connect to the server so that you can execute the `CREATE` `USER` and `GRANT`
+    statements. I’m assuming that you can already connect as the MySQL `root` user
+    because `CREATE` `USER` and `GRANT` can be used only by a user such as `root`
+    that has the administrative privileges needed to set up other user accounts. If
+    you can’t connect to the server as `root`, ask your MySQL administrator to create
+    the `cbuser` account for you.'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可能你已经意识到这个过程中存在一个悖论：要设置一个可以连接到 MySQL 服务器的 `cbuser` 账户，你必须先连接到服务器，以便执行 `CREATE`
+    `USER` 和 `GRANT` 语句。我假设你已经能够以 MySQL 的 `root` 用户连接，因为只有像 `root` 这样具有设置其他用户账户所需的管理特权的用户，才能使用
+    `CREATE` `USER` 和 `GRANT`。如果你无法作为 `root` 用户连接到服务器，请向你的 MySQL 管理员请求创建 `cbuser`
+    账户。
+- en: 'After creating the `cbuser` account, verify that you can use it to connect
+    to the MySQL server. From the host that was named in the `CREATE` `USER` statement,
+    run the following command to do this (the host named after `-h` should be the
+    host where the MySQL server is running):'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建完 `cbuser` 账户后，请验证你能够使用它连接到 MySQL 服务器。从 `CREATE` `USER` 语句中命名的主机运行以下命令来执行此操作（`-h`
+    后命名的主机应为 MySQL 服务器运行的主机）：
+- en: '[PRE2]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Now you can proceed to create the `cookbook` database and tables within it,
+    as described in [Recipe 1.2](#nch-mysql-mysql-db). To make it easier to invoke
+    *mysql* without specifying connection parameters each time, put them in an option
+    file (see [Recipe 1.4](#nch-mysql-mysql-options)).
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，你可以继续创建 `cookbook` 数据库并在其中创建表，如 [Recipe 1.2](#nch-mysql-mysql-db) 所述。为了方便每次调用
+    *mysql* 时无需指定连接参数，可以将它们放入选项文件中（参见 [Recipe 1.4](#nch-mysql-mysql-options)）。
+- en: See Also
+  id: totrans-42
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: For additional information about administering MySQL accounts, see [Chapter 24](ch24.xhtml#nch-security).
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于管理 MySQL 账户的更多信息，请参阅 [Chapter 24](ch24.xhtml#nch-security)。
+- en: 1.2 Creating a Database and a Sample Table
+  id: totrans-44
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 1.2 创建数据库和样例表
+- en: Problem
+  id: totrans-45
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to create a database and set up tables within it.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你想创建一个数据库并在其中设置表。
+- en: Solution
+  id: totrans-47
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a `CREATE` `DATABASE` statement to create the database, a `CREATE` `TABLE`
+    statement for each table, and `INSERT` statements to add rows to the tables.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `CREATE` `DATABASE` 语句创建数据库，为每个表使用 `CREATE` `TABLE` 语句，并使用 `INSERT` 语句向表中添加行。
+- en: Discussion
+  id: totrans-49
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: The `GRANT` statement shown in [Recipe 1.1](#nch-mysql-mysql-account) sets up
+    privileges for accessing the `cookbook` database but does not create the database.
+    This section shows how to do that, and also how to create a table and load it
+    with the sample data used for examples in the following sections. Similar instructions
+    apply for creating other tables used elsewhere in this book.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 [Recipe 1.1](#nch-mysql-mysql-account) 中显示的 `GRANT` 语句设置了访问 `cookbook` 数据库的权限，但没有创建数据库。本节展示如何创建数据库，以及如何创建表并将用于本书其他部分示例的示例数据加载到其中。在本书的其他地方使用类似的指令来创建其他表。
+- en: 'Connect to the MySQL server as shown at the end of [Recipe 1.1](#nch-mysql-mysql-account),
+    then create the database like this:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如 [Recipe 1.1](#nch-mysql-mysql-account) 结尾所示连接到 MySQL 服务器，然后像这样创建数据库：
+- en: '[PRE3]'
+  id: totrans-52
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Now that you have a database, you can create tables in it. First, select `cookbook`
+    as the default database:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在你已经有了一个数据库，可以在其中创建表格。首先，选择`cookbook`作为默认数据库：
+- en: '[PRE4]'
+  id: totrans-54
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'Then create a simple table:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建一个简单的表格：
+- en: '[PRE5]'
+  id: totrans-56
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'And populate it with a few rows:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后用几行填充它：
+- en: '[PRE6]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Tip
+  id: totrans-59
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: 'For entering the `INSERT` statements more easily: after entering the first
+    one, press the up arrow to recall it, press Backspace (or Delete) a few times
+    to erase characters back to the last open parenthesis, then type the data values
+    for the next statement. Or, to avoid typing the `INSERT` statements altogether,
+    skip ahead to [Recipe 1.6](#nch-mysql-mysql-batch).'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了更轻松地输入`INSERT`语句：在输入第一个语句后，按上箭头以回忆起它，按退格键（或删除键）几次以擦除字符，直到回到最后一个开括号，然后输入下一个语句的数据值。或者，为了完全避免输入`INSERT`语句，可以直接跳到[配方1.6](#nch-mysql-mysql-batch)。
+- en: The table you just created is named `limbs` and contains three columns to record
+    the number of legs and arms possessed by various life forms and objects. The physiology
+    of the alien in the last row is such that the proper values for the `arms` and
+    `legs` columns cannot be determined; `NULL` indicates <q>unknown value.</q>
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 刚刚创建的表格名为`limbs`，包含三列，用于记录各种生物和物体的腿和手臂数量。最后一行的外星人生理结构使得`arms`和`legs`列的合适值无法确定；`NULL`表示<q>未知值</q>。
+- en: The `PRIMARY KEY` clause defines primary key that uniquely identifies table
+    row. This prevents inserting ambigious data into the table and also helps MySQL
+    to perform queriesfaster. We discuss ambigious data in [Chapter 18](ch18.xhtml#nch-dups)
+    and performance issues in [Chapter 21](ch21.xhtml#nch-queryperf).
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`PRIMARY KEY`子句定义了唯一标识表行的主键。这可以防止将不明确的数据插入表中，还有助于MySQL更快地执行查询。我们在[第18章](ch18.xhtml#nch-dups)讨论不明确的数据和[第21章](ch21.xhtml#nch-queryperf)中的性能问题。'
+- en: 'Verify that the rows were added to the `limbs` table by executing a `SELECT`
+    statement:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过执行`SELECT`语句验证是否将行添加到`limbs`表中：
+- en: '[PRE7]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: At this point, you’re all set up with a database and a table. For additional
+    information about executing SQL statements, see [Recipe 1.5](#nch-mysql-mysql-interactive)
+    and [Recipe 1.6](#nch-mysql-mysql-batch).
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到此为止，你已经设置了一个数据库和一个表格。关于执行SQL语句的更多信息，请参阅[配方1.5](#nch-mysql-mysql-interactive)和[配方1.6](#nch-mysql-mysql-batch)。
+- en: Note
+  id: totrans-66
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: In this book, statements show SQL keywords such as `SELECT` or `INSERT` in uppercase
+    for distinctiveness. That’s only a typographical convention; keywords can be any
+    lettercase.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书中，语句中的SQL关键字（如`SELECT`或`INSERT`）以大写字母显示以突出显示。这只是一种排版约定；关键字可以是任何大小写。
+- en: 1.3 Finding mysql Client
+  id: totrans-68
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 1.3 查找mysql客户端
+- en: Problem
+  id: totrans-69
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: When you invoke *mysql* client from the command line, your command interpreter
+    can’t find it.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你从命令行调用*mysql*客户端时，你的命令解释器找不到它。
+- en: Solution
+  id: totrans-71
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Add the directory where *mysql* is installed to your `PATH` setting. Then you
+    can run *mysql* from any directory easily.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将安装*mysql*的目录添加到你的`PATH`设置中。然后，你可以轻松地从任何目录运行*mysql*。
+- en: Discussion
+  id: totrans-73
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'If your shell or command interpreter can’t find *mysql* when you invoke it,
+    you’ll see some sort of error message. It might look like this under Unix:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果在调用时，你的shell或命令解释器找不到*mysql*，你会看到某种错误消息。在Unix下可能看起来像这样：
+- en: '[PRE8]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Or like this under Windows:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者在Windows下可以这样：
+- en: '[PRE9]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'One way to tell your command interpreter where to find *mysql* is to type its
+    full pathname each time you run it. The command might look like this under Unix:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 告诉你的命令解释器在哪里找到*mysql*的一种方法是每次运行时键入其完整路径名。在Unix下，该命令可能看起来像这样：
+- en: '[PRE10]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Or like this under Windows:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者在Windows下可以这样：
+- en: '[PRE11]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: Typing long pathnames gets tiresome pretty quickly. You can avoid doing so by
+    changing location into the directory where *mysql* is installed before you run
+    it. But if you do that, you may be tempted to put all your datafiles and SQL batch
+    files in the same directory as *mysql*, thus unnecessarily cluttering up a location
+    intended only for programs.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 快速输入长路径名会很快让人感到厌倦。你可以通过在运行之前将位置更改为安装*mysql*的目录来避免这样做。但是如果这样做，你可能会诱惑把所有数据文件和SQL批处理文件放在与*mysql*相同的目录中，从而在本应仅用于程序的位置上产生不必要的混乱。
+- en: A better solution is to modify your `PATH` search-path environment variable,
+    which specifies directories where the command interpreter looks for commands.
+    Add to the `PATH` value the directory where *mysql* is installed. Then you can
+    invoke *mysql* from any location by entering only its name, which eliminates pathname
+    typing. For instructions on setting your `PATH` variable, read <q>Executing Programs
+    from the Command Line</q> on the companion website (see the [Preface](preface01.xhtml#nch-preface)).
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更好的解决方案是修改你的 `PATH` 搜索路径环境变量，该变量指定命令解释器查找命令的目录。将 *mysql* 安装目录添加到 `PATH` 值中。然后，只需输入其名称，就可以从任何位置调用
+    *mysql*，从而省去输入路径名的麻烦。有关设置 `PATH` 变量的说明，请阅读伴随网站上的<q>在命令行中执行程序</q>（参见[前言](preface01.xhtml#nch-preface)）。
+- en: On Windows, another way to avoid typing the pathname or changing into the *mysql*
+    directory is to create a shortcut and place it in a more convenient location such
+    as the desktop. This makes it easy to start *mysql* simply by opening the shortcut.
+    To specify command options or the startup directory, edit the shortcut’s properties.
+    If you don’t always invoke *mysql* with the same options, it might be useful to
+    create one shortcut for each set of options you need. For example, create one
+    shortcut to connect as an ordinary user for general work and another to connect
+    as the MySQL `root` user for administrative purposes.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Windows 上，另一种避免输入路径名或切换到 *mysql* 目录的方法是创建一个快捷方式，并将其放置在更方便的位置，如桌面。这样一来，只需打开快捷方式即可简单地启动
+    *mysql*。要指定命令选项或启动目录，请编辑快捷方式的属性。如果不总是使用相同的选项调用 *mysql*，则创建多个快捷方式可能会很有用。例如，创建一个用于普通用户一般工作连接的快捷方式，另一个用于作为
+    MySQL `root` 用户进行管理目的的连接。
+- en: 1.4 Specifying mysql Command Options
+  id: totrans-85
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 1.4 指定 mysql 命令选项
+- en: Problem
+  id: totrans-86
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: When you invoke the *mysql* program without command options, it exits immediately
+    with an error message.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你在没有命令选项的情况下调用 *mysql* 程序时，它会立即退出，并显示错误消息。
+- en: Solution
+  id: totrans-88
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: You must specify connection parameters. Do this on the command line, in an option
+    file, or using a mix of the two.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 必须指定连接参数。可以在命令行、选项文件或两者混合使用来执行此操作。
+- en: Discussion
+  id: totrans-90
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'If you invoke *mysql* with no command options, the result may be an <q>access
+    denied</q> error. To avoid that, connect to the MySQL server as shown in [Recipe
+    1.1](#nch-mysql-mysql-account), using *mysql* like this:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你在没有命令选项的情况下调用 *mysql*，可能会导致<q>拒绝访问</q>错误。为了避免这种情况，可以按照 [Recipe 1.1](#nch-mysql-mysql-account)
+    中所示连接到 MySQL 服务器，像这样使用 *mysql*：
+- en: '[PRE12]'
+  id: totrans-92
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Each option is the single-dash <q>short</q> form: `-h` and `-u` to specify
+    the hostname and username, and `-p` to be prompted for the password. There are
+    also corresponding double-dash <q>long</q> forms: `--host`, `--user`, and `--password`.
+    Use them like this:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个选项都有单破折号<q>短</q>形式：`-h` 和 `-u` 用于指定主机名和用户名，`-p` 用于提示输入密码。还有对应的双破折号<q>长</q>形式：`--host`、`--user`
+    和 `--password`。使用方法如下：
+- en: '[PRE13]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'To see all options that *mysql* supports, use this command:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看 *mysql* 支持的所有选项，请使用以下命令：
+- en: '[PRE14]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'The way you specify command options for *mysql* also applies to other MySQL
+    programs such as *mysqldump* and *mysqladmin*. For example, to generate a dump
+    file named *cookbook.sql* that contains a backup of the tables in the `cookbook`
+    database, execute *mysqldump* like this:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 指定 *mysql* 的命令选项的方式也适用于其他 MySQL 程序，如 *mysqldump* 和 *mysqladmin*。例如，要生成名为 *cookbook.sql*
+    的转储文件，其中包含 `cookbook` 数据库中表的备份，可以像这样执行 *mysqldump*：
+- en: '[PRE15]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Some operations require an administrative MySQL account. The *mysqladmin* program
+    can perform operations that are available only to the MySQL `root` account. For
+    example, to stop the server, invoke *mysqladmin* as follows:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些操作需要具有管理员权限的 MySQL 帐户。*mysqladmin* 程序可以执行仅限于 MySQL `root` 帐户的操作。例如，要停止服务器，请按以下方式调用
+    *mysqladmin*：
+- en: '[PRE16]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: If the value that you use for an option is the same as its default value, you
+    can omit the option. However, there is no default password. If you like, you can
+    specify the password directly on the command line by using `-p`*`password`* (with
+    *no space* between the option and the password) or `--password``=`*`password`*.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果选项的值与其默认值相同，则可以省略该选项。但是，没有默认密码。如果愿意，可以直接在命令行上使用 `-p`*`password`*（选项和密码之间*无空格*）或
+    `--password``=`*`password`* 指定密码。
+- en: Warning
+  id: totrans-102
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: We don’t recommend this because the password is visible to onlookers and, on
+    multiple-user systems, may be discoverable to other users who run tools such as
+    *ps* that report process information or can read content of your shell history
+    file.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们不建议这样做，因为密码对旁观者可见，并且在多用户系统上，可能会被运行诸如*ps*报告进程信息或可以读取您的shell历史文件内容的其他用户发现。
+- en: 'Because the default host is `localhost`, the same value we’ve been specifying
+    explicitly, you can omit the `-h` (or `--host`) option from the command line:'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为默认主机是`localhost`，与我们明确指定的相同值，您可以在命令行中省略`-h`（或`--host`）选项：
+- en: '[PRE17]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'But suppose that you’d really rather not specify *any* options. How can you
+    get *mysql* to <q>just know</q> what values to use? That’s easy because MySQL
+    programs support option files:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您真的不想指定*任何*选项。如何让*mysql*“仅知道”要使用哪些值？这很容易，因为MySQL程序支持选项文件：
+- en: If you put an option in an option file, you need not specify it on the command
+    line each time you invoke a given program.
+  id: totrans-107
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果将选项放入选项文件中，则无需在每次调用特定程序时在命令行上指定它。
+- en: You can mix command-line and option-file options. This enables you to store
+    the most commonly used option values in a file but override them as desired on
+    the command line.
+  id: totrans-108
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以混合使用命令行和选项文件选项。这使您可以将最常用的选项值存储在文件中，并根据需要在命令行上覆盖它们。
+- en: The rest of this section describes these capabilities.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这一节的其余部分描述了这些功能。
+- en: Specifying connection parameters using option files
+  id: totrans-110
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用选项文件指定连接参数
+- en: 'To avoid entering options on the command line each time you invoke *mysql*,
+    put them in an option file for *mysql* to read automatically. Option files are
+    plain-text files:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了避免每次调用*mysql*时在命令行中输入选项，将它们放入一个选项文件中，*mysql*会自动读取。选项文件是纯文本文件：
+- en: Under Unix, your personal option file is named *.my.cnf* in your home directory.
+    There are also site-wide option files that administrators can use to specify parameters
+    that apply globally to all users. You can use the *my.cnf* file in the */etc*
+    or */etc/mysql* directory, or in the *etc* directory under the MySQL installation
+    directory.
+  id: totrans-112
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在Unix下，您的个人选项文件位于家目录中的*.my.cnf*文件中。管理员还可以使用站点范围的选项文件指定适用于所有用户的参数。您可以使用MySQL安装目录下的*/etc*或*/etc/mysql*目录中的*my.cnf*文件，或者在*etc*目录下的*etc*目录中。
+- en: Under Windows, files you can use include the *my.ini* or *my.cnf* file in your
+    MySQL installation directory (for example, *C:\Program Files\MySQL\MySQL Server
+    8.0*), your Windows directory (likely *C:\WINDOWS*), or the *C:\* directory.
+  id: totrans-113
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在Windows下，您可以使用的文件包括MySQL安装目录中的*my.ini*或*my.cnf*文件（例如*C:\Program Files\MySQL\MySQL
+    Server 8.0*），您的Windows目录（可能是*C:\WINDOWS*），或*C:\*目录。
+- en: To see the exact list of permitted option-file locations, invoke *mysql* `--help`.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看允许的选项文件位置的确切列表，请调用*mysql* `--help`。
+- en: 'The following example illustrates the format used in MySQL option files:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面的示例说明了MySQL选项文件中使用的格式：
+- en: '[PRE18]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'With connection parameters listed in the `[client]` group as just shown, you
+    can connect as `cbuser` by invoking *mysql* with no options on the command line:'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用刚刚显示的`[client]`组中列出的连接参数，您可以通过在命令行上没有任何选项的情况下调用*mysql*来连接为`cbuser`。
+- en: '[PRE19]'
+  id: totrans-118
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: The same holds for other MySQL client programs, such as *mysqldump*.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于其他MySQL客户端程序（例如*mysqldump*）也是如此。
+- en: Warning
+  id: totrans-120
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: The option `password` is stored in the configuraiton file in plain text format
+    and any user, who has access to this file, can read it. If you want to secure
+    the connection credentials you should use *mysql_config_editor* to store them
+    securely.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选项`password`以明文格式存储在配置文件中，任何有权访问此文件的用户都可以读取它。如果您想要安全存储连接凭据，应使用*mysql_config_editor*。
+- en: '*mysql_config_editor* stores connection credentials in a file, named *.mylogin.cnf*,
+    located in your home directory under Unix and in the *%APPDATA%\MySQL* directory
+    under Windows. It only supports connection parameters `host`, `user`, `password`
+    and `socket`. Option `--login-path` specifies a group under which credentials
+    are stored. Default is `[client]`'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysql_config_editor*将连接凭据存储在位于Unix家目录下的*.mylogin.cnf*文件或Windows下的*%APPDATA%\MySQL*目录中。它仅支持连接参数`host`、`user`、`password`和`socket`。选项`--login-path`指定存储凭据的组。默认为`[client]`。'
+- en: Here is an example on how to use *mysql_config_editor* to create encrypted login
+    file.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个示例，演示如何使用*mysql_config_editor*创建加密的登录文件。
+- en: '[PRE20]'
+  id: totrans-124
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'MySQL option files have these characteristics:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL选项文件具有以下特点：
+- en: Lines are written in groups (or sections). The first line of a group specifies
+    the group name within square brackets, and the remaining lines specify options
+    associated with the group. The example file just shown has a `[client]` group
+    and a `[mysql]` group. To specify options for the server, *mysqld*, put them in
+    a `[mysqld]` group.
+  id: totrans-126
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Lines are written in groups (or sections). The first line of a group specifies
+    the group name within square brackets, and the remaining lines specify options
+    associated with the group. The example file just shown has a `[client]` group
+    and a `[mysql]` group. To specify options for the server, *mysqld*, put them in
+    a `[mysqld]` group.
+- en: The usual option group for specifying client connection parameters is `[client]`.
+    This group actually is used by all the standard MySQL clients. By listing an option
+    in this group, you make it easier to invoke not only *mysql*, but also other programs
+    such as *mysqldump* and *mysqladmin*. Just make sure that any option you put in
+    this group is understood by *all* client programs. Otherwise, invoking any client
+    that does not understand it results in an <q>unknown option</q> error.
+  id: totrans-127
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 用于指定客户端连接参数的通常选项组是`[client]`。这个组实际上被所有标准的MySQL客户端使用。通过在这个组中列出选项，您不仅可以更容易地调用*mysql*，还可以调用其他程序，如*mysqldump*和*mysqladmin*。只需确保您放入该组的任何选项被所有客户端程序理解。否则，调用任何不理解它的客户端将导致“未知选项”错误。
+- en: You can define multiple groups in an option file. By convention, MySQL clients
+    look for parameters in the `[client]` group and in the group named for the program
+    itself. This provides a convenient way to list general client parameters that
+    you want all client programs to use, but you can still specify options that apply
+    only to a particular program. The preceding sample option file illustrates this
+    convention for the *mysql* program, which gets general connection parameters from
+    the `[client]` group and also picks up the `skip-auto-rehash` and `pager` options
+    from the `[mysql]` group.
+  id: totrans-128
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以在选项文件中定义多个组。按照惯例，MySQL客户端会查找`[client]`组中的参数以及以程序本身命名的组。这为列出您希望所有客户端程序使用的一般客户端参数提供了方便的方法，但您仍然可以指定仅适用于特定程序的选项。上述示例选项文件说明了此约定，对于*mysql*程序来说，它从`[client]`组获取一般连接参数，并从`[mysql]`组中获取`skip-auto-rehash`和`pager`选项。
+- en: Within a group, write option lines in *`name=value`* format, where *`name`*
+    corresponds to an option name (without leading dashes) and *`value`* is the option’s
+    value. If an option takes no value (such as `skip-auto-rehash`), list the name
+    by itself with no trailing *`=value`* part.
+  id: totrans-129
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在一个组内，以*`name=value`*的格式编写选项行，其中*`name`*对应于选项名称（不带前导破折号），而*`value`*是选项的值。如果选项不需要值（例如
+    `skip-auto-rehash`），则仅列出名称，不需要尾随的*`=value`*部分。
+- en: In option files, only the long form of an option is permitted, not the short
+    form. For example, on the command line, the hostname can be given using either
+    `-h` *`host_name`* or `--host``=`*`host_name`*. In an option file, only `host=`*`host_name`*
+    is permitted.
+  id: totrans-130
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在选项文件中，只允许使用选项的长形式，而不是短形式。例如，在命令行上，可以使用 `-h` *`host_name`* 或 `--host``=`*`host_name`*
+    来指定主机名。在选项文件中，只允许使用 `host=`*`host_name`*。
+- en: Many programs, *mysql* and *mysqld* included, have program variables in addition
+    to command options. (For the server, these are called *system variables*; see
+    [Recipe 22.1](ch22.xhtml#nch-admin-server-config).) Program variables can be specified
+    in option files, just like options. Internally, program variable names use underscores,
+    but in option files, you can write options and variables using dashes or underscores
+    interchangeably. For example, `skip-auto-rehash` and `skip_auto_rehash` are equivalent.
+    To set the server’s `sql_mode` system variable in a `[mysqld]` option group, `sql_mode=`*`value`*
+    and `sql-mode=`*`value`* are equivalent. (Interchangeability of dash and underscore
+    also applies for options or variables specified on the command line.)
+  id: totrans-131
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 许多程序，包括*mysql*和*mysqld*，除了命令选项外，还有程序变量。对于服务器来说，这些称为*系统变量*；参见[第22.1节](ch22.xhtml#nch-admin-server-config)。程序变量可以像选项一样在选项文件中指定。在内部，程序变量名称使用下划线，但在选项文件中，可以互换使用破折号或下划线。例如，`skip-auto-rehash`和`skip_auto_rehash`是等效的。要在`[mysqld]`选项组中设置服务器的`sql_mode`系统变量，`sql_mode=`*`value`*
+    和 `sql-mode=`*`value`* 是等效的。（破折号和下划线的互换性也适用于命令行上指定的选项或变量。）
+- en: In option files, spaces are permitted around the `=` that separates an option
+    name and value. This contrasts with command lines, where no spaces around `=`
+    are permitted. If an option value contains spaces or other special characters,
+    you can quote it using single or double quotes. The `pager` option illustrates
+    this.
+  id: totrans-132
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在选项文件中，`=` 分隔选项名称和值时允许空格。这与命令行不同，命令行中 `=` 两侧不允许有空格。如果选项值包含空格或其他特殊字符，可以使用单引号或双引号进行引用。`pager`
+    选项说明了这一点。
+- en: It’s common to use an option file to specify options for connection parameters
+    (such as `host`, `user`, and `password`). However, the file can list options that
+    have other purposes. The `pager` option shown for the `[mysql]` group specifies
+    the paging program that *mysql* should use for displaying output in interactive
+    mode. It has nothing to do with how the program connects to the server. We do
+    not recommend to put `password` into the option file, because it is stored as
+    plain text and could be discovered by users who have filesystem access to the
+    configuration file while not necessary has access to the MySQL installation.
+  id: totrans-133
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用选项文件来指定连接参数（比如 `host`、`user` 和 `password`）是很常见的。然而，这个文件可以列出其他用途的选项。在 `[mysql]`
+    组中显示的 `pager` 选项指定了*mysql*在交互模式下显示输出时应该使用的分页程序。这与程序如何连接服务器无关。我们不建议将 `password`
+    放入选项文件，因为它以明文形式存储，可能会被有文件系统访问权限但不一定有 MySQL 安装访问权限的用户发现。
+- en: If a parameter appears multiple times in an option file, the last value found
+    takes precedence. Normally, you should list any program-specific groups following
+    the `[client]` group so that if there is any overlap in the options set by the
+    two groups, the more general options are overridden by the program-specific values.
+  id: totrans-134
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果选项文件中的参数出现多次，则以找到的最后一个值为准。通常，您应该按照 `[client]` 组后跟随任何特定于程序的组，以便如果这两组设置的选项有重叠，程序特定的值将覆盖更一般的选项。
+- en: Lines beginning with `#` or `;` characters are ignored as comments. Blank lines
+    are ignored, too. `#` can be used to write comments at the end of option lines,
+    as shown for the `pager` option.
+  id: totrans-135
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 以 `#` 或 `;` 字符开头的行被视为注释而被忽略。空行也被忽略。`#` 可以用来在选项行末尾写注释，就像 `pager` 选项所示。
+- en: Options that specify file or directory pathnames should be written using `/`
+    as the pathname separator character, even under Windows, which uses `\` as the
+    pathname separator. Alternatively, write `\` by doubling it as `\\` (this is necessary
+    because `\` is the MySQL escape character in strings).
+  id: totrans-136
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 指定文件或目录路径的选项应使用 `/` 作为路径分隔符，即使在使用 `\` 作为路径分隔符的 Windows 系统下也是如此。或者，使用 `\\` 来表示
+    `\`（这是必要的，因为 `\` 在字符串中是 MySQL 的转义字符）。
+- en: 'To find out which options the *mysql* program will read from option files,
+    use this command:'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查找 *mysql* 程序将从选项文件中读取哪些选项，请使用此命令：
+- en: '[PRE21]'
+  id: totrans-138
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'You can also use the *my_print_defaults* utility, which takes as arguments
+    the names of the option-file groups that it should read. For example, *mysqldump*
+    looks in both the `[client]` and `[mysqldump]` groups for options. To check which
+    option-file settings are in those groups, use this command:'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以使用 *my_print_defaults* 实用程序，该实用程序以选项文件组的名称作为参数。例如，*mysqldump* 在 `[client]`
+    和 `[mysqldump]` 组中查找选项。要检查这些组中的选项文件设置，使用此命令：
+- en: '[PRE22]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: Mixing command-line and option-file parameters
+  id: totrans-141
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 混合命令行和选项文件参数
+- en: 'It’s possible to mix command-line options and options in option files. Perhaps
+    you want to list your username and server host in an option file, but would rather
+    not store your password there. That’s okay; MySQL programs first read your option
+    file to see what connection parameters are listed there, then check the command
+    line for additional parameters. This means you can specify some options one way,
+    and some the other way. For example, you can list your username and hostname in
+    an option file, but use a password option on the command line:'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以混合命令行选项和选项文件中的选项。也许您想在选项文件中列出用户名和服务器主机，但宁愿不要在那里存储密码。这没问题；MySQL 程序首先读取您的选项文件以查看那里列出了哪些连接参数，然后检查命令行以获取额外的参数。这意味着您可以以一种方式指定一些选项，以另一种方式指定另一些选项。例如，您可以在选项文件中列出用户名和主机名，但在命令行上使用密码选项：
+- en: '[PRE23]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'Command-line parameters take precedence over parameters found in your option
+    file, so to override an option file parameter, just specify it on the command
+    line. For example, you can list your regular MySQL username and password in the
+    option-file for general-purpose use. Then, if you must connect on occasion as
+    the MySQL `root` user, specify the user and password options on the command line
+    to override the option-file values:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 命令行参数优先于选项文件中找到的参数，因此要覆盖选项文件参数，只需在命令行上指定它。例如，您可以在选项文件中列出常规MySQL用户名和密码以供通用使用。然后，如果必须偶尔作为MySQL
+    `root`用户连接，则在命令行上指定用户和密码选项以覆盖选项文件中的值：
+- en: '[PRE24]'
+  id: totrans-145
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'To explicitly specify <q>no password</q> when there is a nonempty password
+    in the option file, use `--skip-password` on the command line:'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当选项文件中存在非空密码时，要明确指定<q>无密码</q>，请在命令行上使用`--skip-password`：
+- en: '[PRE25]'
+  id: totrans-147
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: Note
+  id: totrans-148
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: From this point on, I’ll usually show commands for MySQL programs with no connection-parameter
+    options. I assume that you’ll supply any parameters that you need, either on the
+    command line or in an option file.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从这一点开始，通常我会展示MySQL程序的命令而不带连接参数选项。我假设您会提供任何需要的参数，无论是在命令行上还是在选项文件中。
+- en: Protecting option files from other users
+  id: totrans-150
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 保护选项文件免受其他用户的影响
+- en: 'On a multiple-user operating system such as Unix, protect the option file located
+    in your home directory to prevent other users from reading it and finding out
+    how to connect to MySQL using your account. Use *chmod* to make the file private
+    by setting its mode to enable access only by yourself. Either of the following
+    commands do this:'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在像Unix这样的多用户操作系统上，保护位于您的主目录中的选项文件，以防其他用户阅读它并查找如何使用您的帐户连接到MySQL。使用*chmod*通过设置其模式使文件私有，仅允许您访问。以下任何一个命令均可实现此目的：
+- en: '[PRE26]'
+  id: totrans-152
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: On Windows, you can use Windows Explorer to set file permissions.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Windows上，您可以使用Windows Explorer设置文件权限。
+- en: 1.5 Executing SQL Statements Interactively
+  id: totrans-154
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 1.5 交互式执行SQL语句
+- en: Problem
+  id: totrans-155
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You’ve started *mysql*. Now you want to send SQL statements to the MySQL server
+    to be executed.
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您已经启动*mysql*。现在您想将SQL语句发送到MySQL服务器以执行。
+- en: Solution
+  id: totrans-157
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Just type them in, letting *mysql* know where each one ends. Alternatively,
+    specify <q>one-liners</q> directly on the command line.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 只需输入它们，让*mysql*知道每个语句的结束位置。或者，直接在命令行上指定<q>单行语句</q>。
+- en: Discussion
+  id: totrans-159
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'When you invoke *mysql*, by default, it displays a `mysql>` prompt to tell
+    you that it’s ready for input. To execute an SQL statement at the `mysql>` prompt,
+    type it in, add a semicolon (`;`) at the end to signify the end of the statement,
+    and press Enter. An explicit statement terminator is necessary; *mysql* doesn’t
+    interpret Enter as a terminator because you can enter a statement using multiple
+    input lines. The semicolon is the most common terminator, but you can also use
+    `\g` (<q>go</q>) as a synonym for the semicolon. Thus, the following examples
+    are equivalent ways of issuing the same statement, even though they are entered
+    differently and terminated differently:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您调用*mysql*时，默认情况下会显示一个`mysql>`提示，告诉您它已准备好接收输入。要在`mysql>`提示处执行SQL语句，请输入语句，末尾加上分号（`;`）表示语句结束，然后按Enter键。必须使用显式语句终止符；*mysql*不会将Enter解释为终止符，因为您可以使用多行输入输入语句。分号是最常见的终止符，但您也可以使用`\g`（<q>go</q>）作为分号的同义词。因此，即使这些示例以不同的方式输入和终止，它们发出相同的语句，是等效的：
+- en: '[PRE27]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: For the second statement, *mysql* changes the prompt from `mysql>` to `->` to
+    let you know that it’s still waiting to see the statement terminator.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于第二条语句，*mysql*会将提示从`mysql>`更改为`->`，以示仍在等待语句终止符。
+- en: The `;` and `\g` statement terminators are not part of the statement itself.
+    They’re conventions used by the *mysql* program, which recognizes these terminators
+    and strips them from the input before sending the statement to the MySQL server.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 语句终止符`;`和`\g`不是语句本身的一部分。它们是*mysql*程序使用的约定，该程序识别这些终止符并在发送语句到MySQL服务器之前将其剥离。
+- en: 'Some statements generate output lines that are so long they take up more than
+    one line on your terminal, which can make query results difficult to read. To
+    avoid this problem, generate <q>vertical</q> output by terminating the statement
+    with `\G` rather than with `;` or `\g`. The output shows column values on separate
+    lines:'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有些语句生成的输出行非常长，在终端上占据多行，这可能使查询结果难以阅读。为避免这个问题，通过使用`\G`而不是`；`或`\g`来终止语句，生成<q>竖直</q>输出。输出将在不同行显示列值：
+- en: '[PRE28]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: To produce vertical output for all statements executed within a session, invoke
+    *mysql* with the `-E` (or `--vertical`) option. To produce vertical output only
+    for those results that exceed your terminal width, use `--auto-vertical-output`.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要为会话中执行的所有语句生成垂直输出，请使用 `-E`（或 `--vertical`）选项调用 *mysql*。仅为超出终端宽度的结果生成垂直输出，请使用
+    `--auto-vertical-output`。
+- en: 'To execute a statement directly from the command line, specify it using the
+    `-e` (or `--execute`) option. This is useful for <q>one-liners.</q> For example,
+    to count the rows in the `limbs` table, use this command:'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要直接从命令行执行语句，请使用 `-e`（或 `--execute`）选项指定它。这对于 <q>一行命令</q> 非常有用。例如，要计算 `limbs`
+    表中的行数，请使用以下命令：
+- en: '[PRE29]'
+  id: totrans-168
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'To execute multiple statements, separate them with semicolons:'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要执行多个语句，请用分号分隔它们：
+- en: '[PRE30]'
+  id: totrans-170
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: '*mysql* can also read statements from a file or from another program (see [Recipe
+    1.6](#nch-mysql-mysql-batch)).'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysql* 还可以从文件或另一个程序中读取语句（参见 [Recipe 1.6](#nch-mysql-mysql-batch)）。'
+- en: 1.6 Executing SQL Statements Read from a File or Program
+  id: totrans-172
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 1.6 从文件或程序中执行 SQL 语句
+- en: Problem
+  id: totrans-173
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want *mysql* to read statements stored in a file so that you need not enter
+    them manually. Or you want *mysql* to read the output from another program.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望 *mysql* 读取存储在文件中的语句，而不必手动输入它们。或者您希望 *mysql* 读取来自另一个程序的输出。
+- en: Solution
+  id: totrans-175
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: To read a file, redirect *mysql*’s input, or use the `source` command. To read
+    from a program, use a pipe.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要读取文件，请重定向 *mysql* 的输入，或使用 `source` 命令。要从程序中读取，请使用管道。
+- en: Discussion
+  id: totrans-177
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: By default, the *mysql* program reads input interactively from the terminal,
+    but you can feed it statements using other input sources such as a file or program.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，*mysql* 程序从终端交互式读取输入，但您可以通过其他输入源（如文件或程序）提供语句。
+- en: For this purpose MySQL supports batch mode that is convenient for executing
+    a set of statements on repeated occasions without entering them manually each
+    time. Batch mode makes it easy to set up *cron* jobs that run with no user intervention.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于这一目的，MySQL 支持方便地执行一组语句的批处理模式，无需每次手动输入。批处理模式使得可以轻松设置无需用户干预的 *cron* 作业。
+- en: 'To create an SQL script for *mysql* to execute in batch mode, put your statements
+    in a text file. Then invoke *mysql* and redirect its input to read from that file:'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要创建一个供 *mysql* 批量执行的 SQL 脚本，请将您的语句放入一个文本文件中。然后调用 *mysql* 并重定向其输入以从该文件中读取：
+- en: '[PRE31]'
+  id: totrans-181
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: Statements read from an input file substitute for what you’d normally enter
+    interactively by hand, so they must be terminated with `;`, `\g`, or `\G`, just
+    as if you were entering them manually. Interactive and batch modes do differ in
+    default output format. For interactive mode, the default is tabular (boxed) format.
+    For batch mode, the default is tab-delimited format. To override the default,
+    use the appropriate command option (see [Recipe 1.7](#nch-mysql-mysql-output)).
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从输入文件读取的语句会替代您通常手动输入的内容，因此它们必须以 `;`、`\g` 或 `\G` 结束，就像您手动输入它们一样。交互式和批处理模式在默认输出格式上有所不同。对于交互模式，默认格式为表格（带框线）格式。对于批处理模式，默认格式为制表符分隔格式。要覆盖默认设置，请使用适当的命令选项（参见
+    [Recipe 1.7](#nch-mysql-mysql-output)）。
+- en: 'SQL scripts also are useful for distributing sets of SQL statements to other
+    people. That is, in fact, how we distribute SQL examples for this book. Many of
+    the examples shown here can be run using script files available in the accompanying
+    `recipes` distribution (see the [Preface](preface01.xhtml#nch-preface)). Feed
+    these files to *mysql* in batch mode to avoid typing statements yourself. For
+    example, when a recipe shows a `CREATE` `TABLE` statement that defines a table,
+    you’ll usually find an SQL batch file in the `recipes` distribution that you can
+    use to create (and perhaps load data into) the table. Recall that [Recipe 1.2](#nch-mysql-mysql-db)
+    shows the statements for creating and populating the `limbs` table. Those statements
+    were shown as you would enter them manually, but the *tables* directory of the
+    `recipes` distribution includes a *limbs.sql* file that contains statements to
+    do the same thing. The file looks like this:'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQL 脚本也非常有用，可用于将一组 SQL 语句分发给其他人。实际上，这就是我们为本书分发 SQL 示例的方式。本书中显示的许多示例可以使用附带的 `recipes`
+    分发中的脚本文件运行（参见 [前言](preface01.xhtml#nch-preface)）。将这些文件以批处理模式提供给 *mysql*，避免手动输入语句。例如，当一个配方展示了一个
+    `CREATE` `TABLE` 语句来定义一个表时，您通常会在 `recipes` 分发的 *tables* 目录中找到一个 SQL 批处理文件，可以用来创建（并可能加载数据到）该表。回顾
+    [Recipe 1.2](#nch-mysql-mysql-db) 显示了用于手动输入的创建和填充 `limbs` 表的语句。该分发的 *recipes*
+    目录中包含一个 *limbs.sql* 文件，其中包含执行相同操作的语句。文件如下：
+- en: '[PRE32]'
+  id: totrans-184
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'To execute the statements in this SQL script file, change location into the
+    *tables* directory of the `recipes` distribution and run this command:'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要执行此SQL脚本文件中的语句，请切换到`recipes`分发的*tables*目录并运行此命令：
+- en: '[PRE33]'
+  id: totrans-186
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: You’ll note that the script contains a statement to drop the table if it exists
+    before creating the table anew and loading it with data. That enables you to experiment
+    with the table, perhaps making changes to it, confident that you can easily restore
+    it to its baseline state any time by running the script again.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您会注意到脚本中包含一个语句，如果存在则删除表，然后重新创建该表并加载数据。这使您可以随时通过再次运行脚本来轻松将其恢复到基线状态，而不必担心对表进行更改。
+- en: 'The command just shown illustrates how to specify an input file for *mysql*
+    on the command line. Alternatively, to read a file of SQL statements from within
+    a *mysql* session, use a `source` *`filename`* command (or `\.` *`filename`*,
+    which is synonymous):'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 刚刚显示的命令说明了如何在命令行上为*mysql*指定输入文件。或者，要从*mysql*会话内部的文件中读取一组SQL语句，请使用`source` *`filename`*命令（或`\.`
+    *`filename`*，这是同义词）：
+- en: '[PRE34]'
+  id: totrans-189
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: SQL scripts can themselves include `source` or `\.` commands to include other
+    scripts. This gives you additional flexibility, but take care to avoid loops.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQL脚本本身可以包含`source`或`\.`命令来包含其他脚本。这为您提供了额外的灵活性，但要注意避免循环。
+- en: 'A file to be read by *mysql* need not be written by hand; it could be program
+    generated. For example, the *mysqldump* utility generates database backups by
+    writing a set of SQL statements that re-create the database. To reload *mysqldump*
+    output, feed it to *mysql*. For example, you can copy a database over the network
+    to another MySQL server like this:'
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysql*需要读取的文件不一定要手动编写；它可以是程序生成的。例如，*mysqldump*实用程序通过编写一组重新创建数据库的SQL语句来生成数据库备份。要重新加载*mysqldump*的输出，请将其输入到*mysql*。例如，您可以通过网络将数据库复制到另一个MySQL服务器：'
+- en: '[PRE35]'
+  id: totrans-192
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: '*mysql* can also read a pipe, so it can take output from other programs as
+    its input. *Any* command that produces output consisting of properly terminated
+    SQL statements can be used as an input source for *mysql*. The dump-and-reload
+    example can be rewritten to connect the two programs directly with a pipe, avoiding
+    the need for an intermediary file:'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysql*还可以读取管道，因此它可以将其他程序的输出作为其输入。任何生成正确终止的SQL语句的输出命令都可以用作*mysql*的输入源。可以重新编写转储和重新加载示例，直接使用管道将两个程序连接起来，避免需要中介文件：'
+- en: '[PRE36]'
+  id: totrans-194
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'Program-generated SQL also can be useful for populating a table with test data
+    without writing the `INSERT` statements by hand. Create a program that generates
+    the statements, then send its output to *mysql* using a pipe:'
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 程序生成的SQL还可以用于向表中填充测试数据，而无需手动编写`INSERT`语句。创建一个生成这些语句的程序，然后使用管道将其输出发送到*mysql*：
+- en: '[PRE37]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: '[Recipe 6.6](ch06.xhtml#nch-tblmgmt-tblmgmt-copy-mysqldump) discusses *mysqldump*
+    further.'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[Recipe 6.6](ch06.xhtml#nch-tblmgmt-tblmgmt-copy-mysqldump)进一步讨论了*mysqldump*。'
+- en: 1.7 Controlling mysql Output Destination and Format
+  id: totrans-198
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 1.7 控制mysql输出的目标和格式
+- en: Problem
+  id: totrans-199
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want *mysql* output to go somewhere other than your screen. And you don’t
+    necessarily want the default output format.
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你希望将*mysql*的输出发送到除了屏幕之外的其他地方。并且你并不一定想要默认的输出格式。
+- en: Solution
+  id: totrans-201
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Redirect the output to a file, or use a pipe to send the output to a program.
+    You can also control other aspects of *mysql* output to produce tabular, tab-delimited,
+    HTML, or XML output; suppress column headers; or make *mysql* more or less verbose.
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将输出重定向到文件，或使用管道将输出发送到程序。您还可以控制*mysql*输出的其他方面，以生成表格、制表符分隔、HTML或XML输出；抑制列标题；或使*mysql*更或少冗长。
+- en: Discussion
+  id: totrans-203
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Unless you send *mysql* output elsewhere, it goes to your screen. To save output
+    from *mysql* in a file, use your shell’s redirection capability:'
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除非将*mysql*输出发送到其他地方，否则它将显示在屏幕上。要将*mysql*的输出保存到文件中，请使用您的shell的重定向功能：
+- en: '[PRE38]'
+  id: totrans-205
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'If you run *mysql* interactively with the output redirected, you can’t see
+    what you type, so in this case you usually also read the input from a file (or
+    another program):'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你以重定向输出的方式交互运行*mysql*，你看不到你输入的内容，因此在这种情况下，通常也要从文件（或其他程序）中读取输入：
+- en: '[PRE39]'
+  id: totrans-207
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'To send the output to another program (for example, parse the output of the
+    query, use a pipe:'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将输出发送到另一个程序（例如，解析查询的输出），请使用管道：
+- en: '[PRE40]'
+  id: totrans-209
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: The rest of this section shows how to control *mysql* output format.
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节的其余部分展示了如何控制*mysql*的输出格式。
+- en: Producing tabular or tab-delimited output
+  id: totrans-211
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 生成表格或制表符分隔的输出
+- en: '*mysql* chooses its default output format by whether it runs interactively
+    or noninteractively. For interactive use, *mysql* writes output to the terminal
+    using tabular (boxed) format:'
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysql* 根据其运行是否交互式选择默认输出格式。对于交互使用，*mysql* 使用表格（带框线）格式将输出写入终端：'
+- en: '[PRE41]'
+  id: totrans-213
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'For noninteractive use (when the input or output is redirected), *mysql* writes
+    tab-delimited output:'
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于非交互使用（当输入或输出被重定向时），*mysql* 写入制表符分隔的输出：
+- en: '[PRE42]'
+  id: totrans-215
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: 'To override the default output format, use the appropriate command option.
+    Consider a *sed* command shown earlier and change its parameters to obfuscate
+    the output:'
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要覆盖默认输出格式，请使用适当的命令选项。考虑一个早期显示的 *sed* 命令，并更改其参数以混淆输出：
+- en: '[PRE43]'
+  id: totrans-217
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: '[PRE44]'
+  id: totrans-218
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: 'Because *mysql* runs noninteractively in that context, it produces tab-delimited
+    output, which could be difficult to read than tabular output. Use the `-t` (or
+    `--table`) option to produce more readable tabular output:'
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为 *mysql* 在非交互上下文中运行，它会生成制表符分隔的输出，这可能比表格输出难以阅读。使用 `-t`（或 `--table`）选项生成更易读的表格输出：
+- en: '[PRE45]'
+  id: totrans-220
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: The inverse operation is to produce batch (tab-delimited) output in interactive
+    mode. To do this, use `-B` or `--batch`.
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 反向操作是在交互模式中生成批量（制表符分隔的）输出。要执行此操作，请使用 `-B` 或 `--batch`。
+- en: Producing HTML or XML output
+  id: totrans-222
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 生成 HTML 或 XML 输出
+- en: '*mysql* generates an HTML table from each query result set if you use the `-H`
+    (or `--html`) option. This enables you to easily produce output for inclusion
+    in a web page that shows a query result. Here’s an example (with line breaks added
+    to make the output easier to read):'
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysql* 使用 `-H`（或 `--html`）选项从每个查询结果集生成 HTML 表格。这使您可以轻松地生成包含查询结果的网页输出。以下是一个示例（为了更容易阅读，已添加了换行符）：'
+- en: '[PRE46]'
+  id: totrans-224
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: The first row of the table contains column headings. If you don’t want a header
+    row, see the next section for instructions.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表格的第一行包含列标题。如果不需要标题行，请参阅下一节的说明。
+- en: 'You can save the output in a file, then view it with a web browser. For example,
+    on Mac OS X, do this:'
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以将输出保存到文件，然后使用 Web 浏览器查看。例如，在 Mac OS X 上执行以下操作：
+- en: '[PRE47]'
+  id: totrans-227
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: 'To generate an XML document instead of HTML, use the `-X` (or `--xml`) option:'
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要生成一个 XML 文档而不是 HTML，请使用 `-X`（或 `--xml`）选项：
+- en: '[PRE48]'
+  id: totrans-229
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: You can reformat XML to suit a variety of purposes by running it through XSLT
+    transforms. This enables you to use the same input to produce many output formats.
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过运行 XSLT 转换来重新格式化 XML 以适应各种用途。这使您可以使用相同的输入生成多种输出格式。
+- en: The `-H`, `--html` `-X`, and `--xml` options produce output only for statements
+    that generate a result set, not for statements such as `INSERT` or `UPDATE`.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`-H`, `--html` `-X`, 和 `--xml` 选项仅为生成结果集的语句生成输出，不包括 `INSERT` 或 `UPDATE` 等语句。'
+- en: To write your own programs that generate XML from query results, see [Recipe
+    13.15](ch13.xhtml#nch-xfer-xfer-xml-export).
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要编写自己的程序以从查询结果生成 XML，请参阅 [Recipe 13.15](ch13.xhtml#nch-xfer-xfer-xml-export)。
+- en: Suppressing column headings in query output
+  id: totrans-233
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 抑制查询输出中的列标题
+- en: 'Tab-delimited format is convenient for generating datafiles for import into
+    other programs. However, the first row of output for each query lists the column
+    headings by default, which may not always be what you want. Suppose that a program
+    named *summarize* produces descriptive statistics for a column of numbers. If
+    you produce output from *mysql* to be used with this program, a column header
+    row would throw off the results because *summarize* would treat it as data. To
+    create output that contains only data values, suppress the header row with the
+    `--skip-column-names` option:'
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 制表符分隔的格式便于生成用于导入其他程序的数据文件。然而，默认情况下，每个查询的输出的第一行默认列出列标题，这可能并不总是您想要的。假设一个名为 *summarize*
+    的程序为一列数字生成描述性统计信息。如果您从 *mysql* 生成输出以与此程序一起使用，则列标题行会干扰结果，因为 *summarize* 会将其视为数据。要创建仅包含数据值的输出，请使用
+    `--skip-column-names` 选项抑制标题行：
+- en: '[PRE49]'
+  id: totrans-235
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'Specifying the <q>silent</q> option (`-s` or `--silent`) twice achieves the
+    same effect:'
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 指定 <q>silent</q> 选项（`-s` 或 `--silent`）两次可以实现相同效果：
+- en: '[PRE50]'
+  id: totrans-237
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: Specifying the output column delimiter
+  id: totrans-238
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 指定输出列分隔符
+- en: 'In noninteractive mode, *mysql* separates output columns by tabs and there
+    is no option for specifying the output delimiter. To produce output that uses
+    a different delimiter, postprocess *mysql* output. Suppose that you want to create
+    an output file for use by a program that expects values to be separated by colon
+    characters (`:`) rather than tabs. Under Unix, you can convert tabs to arbitrary
+    delimiters by using a utility such as *tr* or *sed*. Any of the following commands
+    change tabs to colons (*`TAB`* indicates where you type a tab character):'
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在非交互模式下，*mysql* 通过制表符分隔输出列，并且没有选项来指定输出分隔符。为了生成使用不同分隔符的输出，需要对 *mysql* 输出进行后处理。假设你想创建一个输出文件，以供期望值用冒号字符（`:`）而不是制表符分隔的程序使用。在
+    Unix 下，可以使用 *tr* 或 *sed* 这样的实用工具将制表符转换为任意分隔符。以下任何一个命令都可以将制表符更改为冒号（*`TAB`* 表示输入制表符的位置）：
+- en: '[PRE51]'
+  id: totrans-240
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: The syntax differs among versions of *tr*; consult your local documentation.
+    Also, some shells use the tab character for special purposes such as filename
+    completion. For such shells, type a literal tab into the command by preceding
+    it with Ctrl-V.
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*tr* 的语法在不同版本之间有所不同；请查阅本地文档。此外，一些 shell 使用制表符字符用于特殊目的，如文件名补全。对于这些 shell，可以通过使用
+    Ctrl-V 转义字符输入制表符。'
+- en: '*sed* is more powerful than *tr* because it understands regular expressions
+    and permits multiple substitutions. This is useful for producing output in something
+    like comma-separated values (CSV) format, which requires three substitutions:'
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*sed* 比 *tr* 更强大，因为它理解正则表达式并允许多个替换。这对于生成像逗号分隔值（CSV）格式的输出非常有用，需要三个替换操作：'
+- en: Escape any quote characters that appear in the data by doubling them, so that
+    when you use the resulting CSV file, they won’t be interpreted as column delimiters.
+  id: totrans-243
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果数据中出现任何引号字符，请通过双引号转义它们，以便在使用生成的 CSV 文件时，它们不会被解释为列分隔符。
+- en: Change the tabs to commas.
+  id: totrans-244
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将制表符更改为逗号。
+- en: Surround column values with quotes.
+  id: totrans-245
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 用引号括起列值。
+- en: '*sed* permits all three substitutions to be performed in a single command line:'
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*sed* 允许在单个命令行中执行所有三个替换操作：'
+- en: '[PRE52]'
+  id: totrans-247
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: 'That’s cryptic, to say the least. You can achieve the same result with other
+    languages that may be easier to read. Here’s a short Perl script that does the
+    same thing as the *sed* command (it converts tab-delimited input to CSV output),
+    and includes comments to document how it works:'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 至少可以说那太神秘了。你可以用其他更易读的语言达到相同的效果。这里有一个简短的 Perl 脚本，与 *sed* 命令执行相同的操作（将制表符分隔的输入转换为
+    CSV 输出），并包含注释以记录其工作原理：
+- en: '[PRE53]'
+  id: totrans-249
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 'If you name the script *csv.pl*, use it like this:'
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果将脚本命名为 *csv.pl*，可以像这样使用它：
+- en: '[PRE54]'
+  id: totrans-251
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: '*tr* and *sed* normally are unavailable under Windows. Perl may be more suitable
+    as a cross-platform solution because it runs under both Unix and Windows. (On
+    Unix systems, Perl is usually preinstalled. On Windows, it is freely available
+    for you to install.)'
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*tr* 和 *sed* 在 Windows 下通常不可用。Perl 可能更适合作为跨平台解决方案，因为它可以在 Unix 和 Windows 下运行（在
+    Unix 系统上，Perl 通常预安装。在 Windows 上，可以自由安装）。'
+- en: Another way to produce CSV output is to use the Perl Text::CSV_XS module, which
+    was designed for that purpose. Utility *cvt_file.pl*, available in the recipes
+    distribution, uses this module to construct a general-purpose file reformatter.
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种生成 CSV 输出的方法是使用专为此目的设计的 Perl Text::CSV_XS 模块。实用程序 *cvt_file.pl*，在配方发布中可用，使用此模块构建通用文件重新格式化器。
+- en: Controlling mysql’s verbosity level
+  id: totrans-254
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 控制 mysql 的详细级别
+- en: 'When you run *mysql* noninteractively, not only does the default output format
+    change, but it becomes more terse. For example, *mysql* doesn’t print row counts
+    or indicate how long statements took to execute. To tell *mysql* to be more verbose,
+    use `-v` or `--verbose`, specifying the option multiple times for increasing verbosity.
+    Try the following commands to see how the output differs:'
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你以非交互方式运行 *mysql* 时，不仅默认的输出格式会改变，而且变得更加简洁。例如，*mysql* 不会打印行数或指示语句执行所需的时间。要告诉
+    *mysql* 更加详细，请使用 `-v` 或 `--verbose`，并多次指定该选项以增加详细程度。尝试以下命令，看看输出如何不同：
+- en: '[PRE55]'
+  id: totrans-256
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: The counterparts of `-v` and `--verbose` are `-s` and `--silent`, which also
+    can be used multiple times for increased effect.
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`-v` 和 `--verbose` 的对应项是 `-s` 和 `--silent`，这些选项也可以多次使用以增加效果。'
+- en: 1.8 Using User-Defined Variables in SQL Statements
+  id: totrans-258
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 1.8 在 SQL 语句中使用用户定义变量
+- en: Problem
+  id: totrans-259
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to use a value in one statement that is produced by an earlier statement.
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你想在一个语句中使用由之前的语句产生的值。
+- en: Solution
+  id: totrans-261
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Save the value in a user-defined variable to store it for later use.
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将值保存在用户定义的变量中以便以后使用。
+- en: Discussion
+  id: totrans-263
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: To save a value returned by a `SELECT` statement, assign it to a user-defined
+    variable. This enables you to refer to it in other statements later in the same
+    session (but not *across* sessions). User variables are a MySQL-specific extension
+    to standard SQL. They will not work with other database engines.
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要保存由 `SELECT` 语句返回的值，请将其赋给用户定义的变量。这使您能够在同一会话中的其他语句中引用它（但不能*跨*会话）。用户变量是标准 SQL
+    的 MySQL 特定扩展。它们在其他数据库引擎中无法工作。
+- en: To assign a value to a user variable within a `SELECT` statement, use `@`*`var_name`*
+    `:=` *`value`* syntax. The variable can be used in subsequent statements wherever
+    an expression is permitted, such as in a `WHERE` clause or in an `INSERT` statement.
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在 `SELECT` 语句中给用户变量赋值，使用 `@`*`var_name`* `:=` *`value`* 语法。该变量可以在后续语句中的任何允许表达式的地方使用，例如在
+    `WHERE` 子句或 `INSERT` 语句中。
+- en: 'Here is an example that assigns a value to a user variable, then refers to
+    that variable later. This is a simple way to determine a value that characterizes
+    some row in a table, then select that particular row:'
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面是一个示例，将值赋给一个用户变量，然后稍后引用该变量。这是确定表中某一行特征值的简单方法，然后选择该特定行的一种方式：
+- en: '[PRE56]'
+  id: totrans-267
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: 'Another use for a variable is to save the result from `LAST_INSERT_ID()` after
+    creating a new row in a table that has an `AUTO_INCREMENT` column:'
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个变量的用途是在创建具有 `AUTO_INCREMENT` 列的表中的新行之后，保存来自 `LAST_INSERT_ID()` 的结果：
+- en: '[PRE57]'
+  id: totrans-269
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: '`LAST_INSERT_ID()` returns the most recent `AUTO_INCREMENT` value. By saving
+    it in a variable, you can refer to the value several times in subsequent statements,
+    even if you issue other statements that create their own `AUTO_INCREMENT` values
+    and thus change the value returned by `LAST_INSERT_ID()`. [Recipe 15.10](ch15.xhtml#nch-sequences-seq-simultaneous)
+    discusses this technique further.'
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LAST_INSERT_ID()` 返回最近的 `AUTO_INCREMENT` 值。通过将其保存在变量中，您可以在后续语句中多次引用该值，即使您发出其他创建自己的
+    `AUTO_INCREMENT` 值并因此更改 `LAST_INSERT_ID()` 返回值的语句。[Recipe 15.10](ch15.xhtml#nch-sequences-seq-simultaneous)
+    进一步讨论了这一技术。'
+- en: 'User variables hold single values. If a statement returns multiple rows, the
+    statement will fail with an error but the value from the first row is assigned:'
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用户变量只保存单个值。如果语句返回多行，则语句将失败并显示错误，但将分配第一行的值：
+- en: '[PRE58]'
+  id: totrans-272
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: 'If the statement returns no rows, no assignment takes place, and the variable
+    retains its previous value. If the variable has not been used previously, its
+    value is `NULL`:'
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果语句未返回行，则不会进行任何赋值，变量将保留其先前的值。如果之前未使用过该变量，则其值为 `NULL`：
+- en: '[PRE59]'
+  id: totrans-274
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: Tip
+  id: totrans-275
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: SQL command `SHOW WARNINGS` returns informational messages about recoverable
+    errors, such as assigning empty result to a variable or use of a deprecated feature.
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQL 命令 `SHOW WARNINGS` 返回关于可恢复错误的信息消息，例如将空结果分配给变量或使用不推荐的功能。
+- en: 'To set a variable explicitly to a particular value, use a `SET` statement.
+    `SET` syntax can use either `:=` or `=` as the assignment operator:'
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将变量显式设置为特定值，请使用 `SET` 语句。`SET` 语法可以使用 `:=` 或 `=` 作为赋值运算符：
+- en: '[PRE60]'
+  id: totrans-278
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: 'You can assign a `SELECT` result to a variable, provided that you write it
+    as a scalar subquery (a query within parentheses that returns a single value):'
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以将 `SELECT` 结果赋给一个变量，只要将其写成标量子查询（在括号内返回单个值的查询）：
+- en: '[PRE61]'
+  id: totrans-280
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: 'User variable names are not case sensitive:'
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用户变量名称对大小写不敏感：
+- en: '[PRE62]'
+  id: totrans-282
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: 'User variables can appear only where expressions are permitted, not where constants
+    or literal identifiers must be provided. It’s tempting to attempt to use variables
+    for such things as table names, but it doesn’t work. For example, if you try to
+    generate a temporary table name using a variable as follows, it fails:'
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用户变量只能出现在允许表达式的地方，不能出现在必须提供常量或文字标识符的地方。试图将变量用于诸如表名之类的东西是很诱人的，但这是行不通的。例如，如果尝试使用变量生成临时表名，如下所示，将会失败：
+- en: '[PRE63]'
+  id: totrans-284
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: However, you *can* generate a prepared SQL statement that incorporates `@tbl_name`,
+    then execute the result. [Recipe 6.4](ch06.xhtml#nch-tblmgmt-tblmgmt-unique-name)
+    shows how.
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，你*可以*生成一个包含`@tbl_name`的准备好的 SQL 语句，然后执行结果。[Recipe 6.4](ch06.xhtml#nch-tblmgmt-tblmgmt-unique-name)
+    演示了如何实现。
+- en: '`SET` is also used to assign values to stored program parameters and local
+    variables, and to system variables. For examples, see [Chapter 11](ch11.xhtml#nch-routines)
+    and [Recipe 22.1](ch22.xhtml#nch-admin-server-config).'
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SET` 也用于将值分配给存储过程参数和局部变量，以及系统变量。有关示例，请参见 [Chapter 11](ch11.xhtml#nch-routines)
+    和 [Recipe 22.1](ch22.xhtml#nch-admin-server-config)。'
+- en: 1.9 Customizing mysql Prompt
+  id: totrans-287
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 1.9 自定义 mysql 提示符
+- en: Problem
+  id: totrans-288
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You opened several connections in different terminal windows and want to visually
+    distinguish them.
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你在不同的终端窗口打开了几个连接，并希望能够在视觉上区分它们。
+- en: Solution
+  id: totrans-290
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Set *mysql* prompt to custom value
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 设置 *mysql* 提示符为自定义值
+- en: Discussion
+  id: totrans-292
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'You can customize *mysql* prompt by providing option `--prompt` on start:'
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过在启动时提供选项 `--prompt` 来自定义 *mysql* 提示符：
+- en: '[PRE64]'
+  id: totrans-294
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: 'If the client already has been started you can use command *prompt* to change
+    it interactively:'
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果客户端已经启动，您可以使用命令 *prompt* 以交互方式进行更改：
+- en: '[PRE65]'
+  id: totrans-296
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: 'Command *prompt*, like other *mysql* commands, supports short version: *\R*.'
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 命令 *prompt*，像其他 *mysql* 命令一样，支持缩写版本：*\R*。
+- en: '[PRE66]'
+  id: totrans-298
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: 'To specify prompt value in the configuration file put option *prompt* under
+    `[mysql]` section:'
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在配置文件中指定提示值，请将选项 *prompt* 放在 `[mysql]` 部分下：
+- en: '[PRE67]'
+  id: totrans-300
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: Quotes are optional and required only when you want to have special characters,
+    such as a space in the end of the prompt string.
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 引号是可选的，只在需要特殊字符时才需要，例如提示字符串末尾的空格。
+- en: 'Finally, you can specify prompt using environment variable `MYSQL_PS1`:'
+  id: totrans-302
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，您可以使用环境变量 `MYSQL_PS1` 指定提示符：
+- en: '[PRE68]'
+  id: totrans-303
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: 'To reset prompt to its default value run command *prompt* without arguments:'
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将提示符重置为默认值，请运行不带参数的命令 *prompt*：
+- en: '[PRE69]'
+  id: totrans-305
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: Tip
+  id: totrans-306
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: If you used `MYSQL_PS1` environment variable the prompt default will be value
+    of the `MYSQL_PS1` variable instead of `mysql`.
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果使用了 `MYSQL_PS1` 环境变量，则提示符的默认值将是 `MYSQL_PS1` 变量的值，而不是 `mysql`。
+- en: '*mysql* prompt is highly customizable. You can set it to show current date,
+    time, user account, default database, server host and other information about
+    your database connection. You will find the full list of supported options in
+    the [MySQL User Reference Manual](https://dev.mysql.com/doc/refman/8.0/en/mysql-commands.html)'
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysql* 提示符是高度可定制的。您可以设置它显示当前日期、时间、用户账号、默认数据库、服务器主机以及关于数据库连接的其他信息。您可以在 [MySQL
+    用户参考手册](https://dev.mysql.com/doc/refman/8.0/en/mysql-commands.html) 中找到支持选项的完整列表。'
+- en: 'To have a user account in the prompt use either special sequence `\u` to display
+    just a user name or `\U` to show the full user account:'
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在提示符中显示用户账号，请使用特殊序列 `\u` 显示用户名或 `\U` 显示完整用户账号：
+- en: '[PRE70]'
+  id: totrans-310
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: 'If you connect to MySQL servers on different machines you may want to see the
+    MySQL server host name in the prompt. A special sequence `\h` exists just for
+    this:'
+  id: totrans-311
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果连接到不同机器上的 MySQL 服务器，您可能希望在提示中看到 MySQL 服务器主机名。有一个特殊序列 `\h` 就是为此而设计的：
+- en: '[PRE71]'
+  id: totrans-312
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: 'To have the current default database in the prompt use the special sequence
+    `\d`:'
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在提示符中显示当前默认数据库，请使用特殊序列 `\d`：
+- en: '[PRE72]'
+  id: totrans-314
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: '*mysql* supports multiple options to include time into the prompt. You can
+    have full date and time information or just part of it.'
+  id: totrans-315
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysql* 支持多种选项将时间包含在提示中。您可以包含完整的日期和时间信息，或者只包含部分信息。'
+- en: '[PRE73]'
+  id: totrans-316
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: Warning
+  id: totrans-317
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: 'You cannot specify current day of month unless you use full current date. This
+    was reported at [MySQL Bug #72071](https://bugs.mysql.com/bug.php?id=72071) and
+    still is not fixed.'
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '除非使用完整的当前日期，否则无法指定每月的当前日期。这在 [MySQL Bug #72071](https://bugs.mysql.com/bug.php?id=72071)
+    中有报告，但仍未修复。'
+- en: 'Special sequences can be combined together and with any other text. *mysql*
+    uses UTF-8 character set and, if your terminal supports UTF-8 too, you can use
+    smiley characters to make your prompt more impressive. For example, to have on
+    hand information about connected user account, MySQL host, default database and
+    current time you can set prompt to `\u@\h [ߓᜤ] (ߕᜒ:\m:\s)>` :'
+  id: totrans-319
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 特殊序列可以组合在一起，也可以与任何其他文本一起使用。*mysql* 使用 UTF-8 字符集，如果您的终端也支持 UTF-8，您可以使用笑脸字符使提示更加引人注目。例如，要获取有关连接的用户账号、MySQL
+    主机、默认数据库和当前时间的信息，您可以将提示设置为 `\u@\h [ߓᜤ] (ߕᜒ:\m:\s)>`：
+- en: '[PRE74]'
+  id: totrans-320
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: 1.10 Using External Programs
+  id: totrans-321
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 1.10 使用外部程序
+- en: Problem
+  id: totrans-322
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to use external program without leaving *mysql* client command prompt.
+  id: totrans-323
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望在不离开 *mysql* 客户端命令提示符的情况下使用外部程序。
+- en: Solution
+  id: totrans-324
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use command *system* to call a program.
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 *system* 命令调用程序。
+- en: Discussion
+  id: totrans-326
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'While MySQL allows to generate random passwords for itw own internal user accountes,
+    it still does does not have an internal function which could be used to generate
+    a safe user password for all other cases. Run command *system* to use one of the
+    Operating System tools:'
+  id: totrans-327
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然 MySQL 允许为其内部用户账号生成随机密码，但仍然没有内部函数可用于生成所有其他情况下安全用户密码。运行 *system* 命令使用操作系统工具之一：
+- en: '[PRE75]'
+  id: totrans-328
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: '*\!* is a short version of the *system* command:'
+  id: totrans-329
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*\!* 是 *system* 命令的简短版本：'
+- en: '[PRE76]'
+  id: totrans-330
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: '*pwgen* maybe not installed on your operating system. You need to install `pwgen`
+    package before running this example.'
+  id: totrans-331
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*pwgen* 可能未安装在您的操作系统上。在运行此示例之前，您需要安装 `pwgen` 软件包。'
+- en: '*system* is a command of the *mysql* client and executed locally, using permissions
+    belonging to the client. By default MySQL Server is running as user `mysql` though
+    you can connect using any user account. In this case you will be able to access
+    only those programs and files which are permitted for your operating system account.
+    Thus regular user cannot access data directory, that belongs to the special user
+    *mysqld* process is running as.'
+  id: totrans-332
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*system* 是*mysql*客户端的命令，本地执行，使用客户端所属的权限。默认情况下，MySQL服务器以`mysql`用户身份运行，尽管您可以使用任何用户账户连接。在这种情况下，您只能访问操作系统账户允许的程序和文件。因此，普通用户无法访问属于特殊用户*mysqld*进程运行的数据目录。'
+- en: '[PRE77]'
+  id: totrans-333
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: For the same reason *system* does not execute any command on the remote server.
+  id: totrans-334
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 出于同样的原因，*system*不会在远程服务器上执行任何命令。
+- en: You may use any program, specify options, redirect output and pipe it to other
+    commands. One useful insight which you can get from the operating system is how
+    much physical resources are occupied by the *mysqld* process and compare it with
+    data collected internally by the MySQL Server itself.
+  id: totrans-335
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用任何程序，指定选项，重定向输出并将其管道传输到其他命令。您可以从操作系统获得的一个有用的洞察是，*mysqld*进程占用的物理资源量与MySQL服务器内部收集的数据进行比较。
+- en: MySQL stores information about memory usage in [`Performance Schema`](https://dev.mysql.com/doc/refman/8.0/en/performance-schema-memory-summary-tables.html).
+    Its companion [`sys` schema](https://dev.mysql.com/doc/refman/8.0/en/performance-schema-memory-summary-tables.html)
+    contains views, allowing you to access this information easily. Particularly,
+    you can find the total amount of allocated memory in human-readable format by
+    querying view `sys.memory_global_total`.
+  id: totrans-336
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL在[`性能模式`](https://dev.mysql.com/doc/refman/8.0/en/performance-schema-memory-summary-tables.html)中存储关于内存使用情况的信息。它的伴侣[`sys`模式](https://dev.mysql.com/doc/refman/8.0/en/performance-schema-memory-summary-tables.html)包含视图，使您可以轻松访问此信息。特别是，您可以通过查询视图`sys.memory_global_total`找到以人类可读格式显示的分配内存总量。
+- en: '[PRE78]'
+  id: totrans-337
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: The chain of the operating system commands requests statistics about physical
+    memory usage from the operating system and converts it into human-readable format.
+    This example shows that not all allocated memory is instrumented inside MySQL
+    Server.
+  id: totrans-338
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 操作系统命令链请求关于操作系统中物理内存使用情况的统计信息，并将其转换为人类可读格式。此示例显示，并非所有分配的内存都在MySQL服务器内部仪表化。
+- en: Note, that you need to run *mysql* client on the same machine with your MySQL
+    server for this to work.
+  id: totrans-339
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，您需要在与MySQL服务器相同的计算机上运行*mysql*客户端才能使此功能正常工作。
+- en: 1.11 Filtering and Processing Output
+  id: totrans-340
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 1.11 过滤和处理输出
+- en: Warning
+  id: totrans-341
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: This recipe works only on UNIX platforms!
+  id: totrans-342
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此方案仅适用于UNIX平台！
+- en: Problem
+  id: totrans-343
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to change output format of the MySQL client beyond its built-in capabilities.
+  id: totrans-344
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望改变MySQL客户端的输出格式，超出其内建能力。
+- en: Solution
+  id: totrans-345
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Set *pager* to a chain of commands, filtering output in a way you wish.
+  id: totrans-346
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将*pager*设置为一系列命令，以您希望的方式过滤输出。
+- en: Discussion
+  id: totrans-347
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Sometimes formatting capabilities of the *mysql* client do not allow you to
+    work with the result set easily. For example, the number of returned rows could
+    be too big to fit the screen. Or the number of columns makes the result too wide
+    to comfortably read it on the screen. Standard operating system pagers, such as
+    *less* or *more*, allow you to work with long wide texts more comfortably.
+  id: totrans-348
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时，*mysql*客户端的格式化能力不允许您轻松处理结果集。例如，返回的行数可能过多，无法适应屏幕。或者列数使结果过宽，不便于在屏幕上舒适地阅读。标准操作系统分页程序，如*less*或*more*，使您能够更舒适地处理长宽文本。
+- en: You can specify which pager to use either by providing option `--pager` when
+    you start *mysql* client or interactively, by using *pager* command and its shorter
+    version *\P*. You can specify any argument for the pager.
+  id: totrans-349
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在启动*mysql*客户端时，您可以通过提供`--pager`选项或交互式使用*pager*命令及其缩写版本*\P*来指定要使用的分页程序。您可以为分页程序指定任何参数。
+- en: To tell *mysql* to use *less* as a pager specify option `--pager=less` or assign
+    this value interactively. Provide configuration parameters for the command similarly
+    as when you are working in your favorite shell. In the example below I specified
+    options `-F` and `-X` so *less* exits if result set is small enough to fit the
+    screen and works normally when needed.
+  id: totrans-350
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要告诉*mysql*使用*less*作为分页程序，请指定`--pager=less`选项或交互式分配此值。像在您喜欢的shell中工作时一样提供命令的配置参数。在下面的示例中，我指定了选项`-F`和`-X`，因此当结果集小到可以适应屏幕时，*less*退出并在需要时正常工作。
+- en: '[PRE79]'
+  id: totrans-351
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: You can use `pager` not only to beautify output, but to run any command which
+    can process text. One common use is to search for a pattern in the data, printed
+    by the diagnostic statement, using *grep*. For example, to watch only `History
+    list length` in the long `SHOW ENGINE INNODB STATUS` output, use *\P grep “History
+    list length”*. Once you are done with the search, reset pager with empty *pager*
+    command or instruct *mysql* to disable `pager` and print to `STDOUT` using *nopager*
+    or *\n*.
+  id: totrans-352
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您不仅可以使用 `pager` 美化输出，还可以运行任何能够处理文本的命令。一个常见的用途是在由诊断语句打印的数据中搜索模式，使用 *grep*。例如，要在长长的
+    `SHOW ENGINE INNODB STATUS` 输出中只查看 `History list length`，使用 *\P grep "History
+    list length"*。完成搜索后，使用空的 *pager* 命令重置 pager，或者指示 *mysql* 禁用 `pager` 并将输出打印到 `STDOUT`，使用
+    *nopager* 或 *\n*。
+- en: '[PRE80]'
+  id: totrans-353
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: Another useful option during diagnostic is sending output nowhere. For example,
+    to measure effectiveness of a query you may want to examine session status variables
+    `Handler_*`. In this case you are not interested in the result of the query, but
+    only in the output of the following diagnostic command. Even more, you may want
+    to send diagnostic data to professional database consultants, but do not want
+    them to see actual query output due to security considerations. In this case instruct
+    `pager` to use a hashing function or to send output to nowhere.
+  id: totrans-354
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在诊断过程中，另一个有用的选项是将输出发送到无处。例如，为了衡量查询的效果，您可能想要检查会话状态变量 `Handler_*`。在这种情况下，您对查询结果不感兴趣，只关注后续诊断命令的输出。甚至更进一步，您可能希望将诊断数据发送给专业的数据库顾问，但又不希望他们看到实际的查询输出，出于安全考虑。在这种情况下，指示
+    `pager` 使用哈希函数或将输出发送到无处。
+- en: '[PRE81]'
+  id: totrans-355
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: Tip
+  id: totrans-356
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: To redirect output of a query, information messages, and all commands you type
+    into a file use *pager cat > FILENAME*. To redirect to a file and still see the
+    output use redirect to *tee* or *mysql* own command *tee* and its short version
+    *\T*. Built-in command *tee* works on both UNIX and Windows platforms.
+  id: totrans-357
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将查询的输出、信息消息和所有键入的命令重定向到文件，请使用 *pager cat > FILENAME*。要将输出重定向到文件并仍然看到输出，请使用重定向到
+    *tee* 或 *mysql* 自带的 *tee* 命令及其简写 *\T*。内置命令 *tee* 在 UNIX 和 Windows 平台上都可以使用。
+- en: 'You can chain together *pager* commands using pipes. For example, to print
+    content of the `limbs` table in different font styles set *pager* to chain of
+    calls:'
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以使用管道（pipes）将 *pager* 命令串联在一起。例如，将 `limbs` 表的内容以不同的字体样式打印出来，设置 *pager* 为一系列调用：
+- en: '*tr -d '' ''* to remove extra spaces'
+  id: totrans-359
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*tr -d '' ''* 用于去除额外的空格'
+- en: '*awk -F''|'' ''{print “+"$2"+\033[3m"$3"\033[0m+\033[1m"$4"\033[0m"$5"+"}''*
+    to add styles to the text'
+  id: totrans-360
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*awk -F''|'' ''{print "+"$2"+\033[3m"$3"\033[0m+\033[1m"$4"\033[0m"$5"+"}''*
+    用于给文本添加样式'
+- en: '*column -s ''+'' -t’* for nicely formatted output'
+  id: totrans-361
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*column -s ''+'' -t* 用于得到格式良好的输出'
+- en: '[PRE82]'
+  id: totrans-362
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'

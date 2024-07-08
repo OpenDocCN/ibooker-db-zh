@@ -1,0 +1,1875 @@
+- en: Chapter 7\. Replication Lag
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第7章\. 复制延迟
+- en: '*Replication lag* is the delay between the time when a write occurs on a source
+    MySQL instance and the time when that write is applied on a replica MySQL instance.
+    Replication lag is inherent to all database servers because replication across
+    a network incurs network latency.'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*复制延迟* 是源MySQL实例上发生写入的时间与该写入在副本MySQL实例上应用的时间之间的延迟。复制延迟是所有数据库服务器固有的问题，因为跨网络的复制会产生网络延迟。'
+- en: 'I’m glad that, as an engineer using MySQL, you don’t have to set up, configure,
+    and maintain a MySQL replication topology because MySQL replication has become
+    complex. Instead, this chapter investigates replication lag with respect to performance:
+    what it is, why it happens, what risk it poses, and what you can do about it.'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为一个使用MySQL的工程师，我很高兴你不必设置、配置和维护MySQL复制拓扑，因为MySQL复制变得复杂了。相反，本章节关注性能相关的复制延迟问题：是什么、为什么会发生、带来了哪些风险，以及你可以采取什么措施。
+- en: Technically, yes, replication decreases performance, but you don’t want to run
+    MySQL without it. It’s not hyperbole to say that replication prevents businesses
+    from failing—from data loss so catastrophic that, if replication did not prevent
+    it, the company would go out of business. MySQL runs everywhere from hospitals
+    to banks, and replication keeps invaluable data safe despite inevitable failures.
+    Although replication decreases performance and lag is a risk, these costs are
+    cancelled by the overwhelming benefits of replication.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从技术上讲，是的，复制会降低性能，但你不希望在没有它的情况下运行MySQL。毫不夸张地说，复制阻止了企业因数据丢失而破产的可能性。MySQL无处不在，从医院到银行，复制让宝贵的数据在不可避免的故障中保持安全。尽管复制会降低性能并存在延迟风险，但这些成本被复制带来的巨大好处抵消了。
+- en: 'This chapter investigates replication lag. There are six major sections. The
+    first introduces basic MySQL replication terminology and traces the technical
+    origins of replication lag—why it happens despite fast databases and networks.
+    The second discusses the main causes of replication lag. The third explains the
+    risk of replication lag: data loss. The fourth provides a conservative configuration
+    for enabling a multithreaded replica, which dramatically reduces lag. The fifth
+    looks at monitoring replication lag with high precision. The sixth explains why
+    replication lag is slow to recover.'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章节探讨了复制延迟。包括六个主要部分。第一部分介绍了基本的MySQL复制术语，并追溯了复制延迟的技术起源——即使在快速数据库和网络的背景下，为什么它会发生。第二部分讨论了复制延迟的主要原因。第三部分解释了复制延迟的风险：数据丢失。第四部分提供了一个启用多线程副本的保守配置，显著减少延迟。第五部分介绍了如何使用高精度监控复制延迟。第六部分解释了为什么复制延迟恢复缓慢。
+- en: Foundation
+  id: totrans-5
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 基础
+- en: 'MySQL has two types of replication:'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL有两种复制类型：
+- en: Source to replica
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 源到副本
+- en: '*Source to replica replication* is the fundamental type of replication that
+    MySQL has used for more than 20 years. Its venerable status means that [*MySQL
+    replication*](https://oreil.ly/A8fTn) implies source to replica replication. MySQL
+    replication is old, but make no mistake: it’s fast, reliable, and still widely
+    used today.'
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*源到副本复制* 是MySQL已经使用了20多年的基本复制类型。它的古老地位意味着 [*MySQL复制*](https://oreil.ly/A8fTn)
+    就是指源到副本的复制。MySQL复制虽然年代久远，但毫无疑问：它快速、可靠，今天仍被广泛使用。'
+- en: Group Replication
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 集群复制
+- en: '[*Group Replication*](https://oreil.ly/TASM9) is the new type of replication
+    that MySQL has supported as of MySQL 5.7.17 (released December 12, 2016). Group
+    Replication creates a MySQL cluster of primary and secondary instances that use
+    a group consensus protocol to synchronize (replicate) data changes and manage
+    group membership. That’s a long way of saying that Group Replication is MySQL
+    clustering, and it is the future of MySQL replication and high availability.'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[*集群复制*](https://oreil.ly/TASM9) 是MySQL自MySQL 5.7.17版本（2016年12月12日发布）开始支持的新型复制。集群复制创建了一个由主副本实例组成的MySQL集群，使用组共识协议同步（复制）数据变更并管理组成员资格。简而言之，集群复制就是MySQL集群，它是MySQL复制和高可用性的未来。'
+- en: 'This chapter covers only traditional MySQL replication: source to replica.
+    Group Replication is the future, but I defer coverage to the future because, at
+    the time of this writing, neither I nor any DBAs that I know have significant
+    experience operating Group Replication at scale. Moreover, another innovation
+    built on top of Group Replication is becoming the standard: [InnoDB Cluster](https://oreil.ly/BFqu9).'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章仅涵盖传统的MySQL复制：源到副本。Group Replication是未来的趋势，但由于在撰写本文时，我和我认识的任何数据库管理员都没有大规模操作Group
+    Replication的经验，所以我将推迟对其进行详细讨论。此外，建立在Group Replication之上的另一项创新正在成为标准：[InnoDB集群](https://oreil.ly/BFqu9)。
+- en: Additionally, [Percona XtraDB Cluster](https://oreil.ly/fWNfb) and [MariaDB
+    Galera Cluster](https://oreil.ly/LMhEC) are database cluster solutions similar
+    to MySQL Group Replication in purpose but different in implementation. I defer
+    coverage of these solutions, too, but keep them in mind if you’re running a Percona
+    or MariaDB distribution of MySQL and looking for a database cluster solution.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，[Percona XtraDB Cluster](https://oreil.ly/fWNfb)和[MariaDB Galera Cluster](https://oreil.ly/LMhEC)是类似于MySQL
+    Group Replication的数据库集群解决方案，但实现方式不同。我推迟对这些解决方案的详细介绍，但如果您正在运行Percona或MariaDB版本的MySQL并寻找数据库集群解决方案，可以考虑这些选项。
+- en: MySQL source to replica replication is ubiquitous. Although the inner workings
+    of replication are beyond the scope of this book, understanding the foundation
+    illuminates the causes of replication lag, the risk that it poses, and how to
+    reduce both.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL源到副本复制是无处不在的。虽然本书不涉及复制的内部工作原理，但了解其基础可以阐明复制滞后的原因、它带来的风险以及如何减少这些风险。
+- en: Note
+  id: totrans-14
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Replication terminology changed as of MySQL 8.0.22 and 8.0.26–released in 2020
+    and 2021, respectively. For a summary of the changes, see [“MySQL Terminology
+    Updates”](https://oreil.ly/wrzfU). I use the current terminology, metrics, variables,
+    and commands in this book.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 8.0.22和8.0.26（分别于2020年和2021年发布）发布后，复制术语发生了变化。有关变更的摘要，请参阅[“MySQL术语更新”](https://oreil.ly/wrzfU)。本书中使用当前的术语、度量标准、变量和命令。
+- en: Source to Replica
+  id: totrans-16
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 源到副本
+- en: '[Figure 7-1](#repl-foundation-img) illustrates the foundation of MySQL source
+    to replica replication.'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 7-1](#repl-foundation-img)展示了MySQL源到副本复制的基础。'
+- en: '![emsp 0701](assets/emsp_0701.png)'
+  id: totrans-18
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0701](assets/emsp_0701.png)'
+- en: Figure 7-1\. Foundation of MySQL source to replica replication
+  id: totrans-19
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-1\. MySQL源到副本复制的基础
+- en: A *source MySQL instance* (or *source* for short) is any MySQL server to which
+    clients (the application) write data. MySQL replication supports multiple writable
+    sources, but this is rare due to the difficulty of handling write conflicts. Consequently,
+    a single writable source is the norm.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*源MySQL实例*（简称*源*）是应用程序向其写入数据的任何MySQL服务器。 MySQL复制支持多个可写源，但由于处理写冲突的难度，这种情况很少见。因此，单个可写源是正常情况。'
+- en: A *replica MySQL instance* (or *replica* for short) is any MySQL server that
+    replicates data changes from a source. *Data changes* are modifications to rows,
+    indexes, schemas, and so forth. Replicas should always be read-only to avoid split-brain
+    (see [“Split-Brain Is the Greatest Risk”](ch09.html#split-brain)). Usually, a
+    replica replicates from a single source, but [multisource replication](https://oreil.ly/GeaVQ)
+    is an option.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*副本MySQL实例*（简称*副本*）是从源复制数据更改的任何MySQL服务器。 *数据更改*包括对行、索引、模式等的修改。为避免脑裂（参见[“脑裂是最大的风险”](ch09.html#split-brain)），副本应始终保持只读。通常，一个副本从单个源复制，但[多源复制](https://oreil.ly/GeaVQ)也是一种选择。'
+- en: 'Arrows in [Figure 7-1](#repl-foundation-img) represent the flow of data changes
+    from the source to a replica:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 图 7-1中的箭头表示数据更改从源流向副本的过程：
+- en: 'During transaction commit, data changes are written to *binary logs* (or *binlogs*
+    for short) on the source: on-disk files that record data changes in *binary log
+    events* (see [“Binary Log Events”](#repl-binlog-events)).'
+  id: totrans-23
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在事务提交期间，数据更改会写入源上的*二进制日志*（或简称*binlogs*）：这些是记录*二进制日志事件*的磁盘文件（参见[“二进制日志事件”](#repl-binlog-events)）。
+- en: An *I/O thread* on the replica dumps (reads) binary log events from the source
+    binary logs. (A *binlog dump thread* on the source is dedicated to this purpose.)
+  id: totrans-24
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在副本上，*I/O线程*从源的二进制日志中转储（读取）二进制日志事件。（源上的*binlog dump线程*专门用于此目的。）
+- en: 'The I/O thread on the replica writes the binary log events to *relay logs*
+    on the replica: on-disk files that are a local copy of the source binary logs.'
+  id: totrans-25
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在副本上，I/O线程将二进制日志事件写入副本上的*中继日志*：这些是源二进制日志的本地副本的磁盘文件。
+- en: A *SQL thread* (or *applier thread*) reads binary log events from the relay
+    log.
+  id: totrans-26
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '*SQL 线程*（或 *应用程序线程*）从中继日志中读取二进制日志事件。'
+- en: The SQL thread applies the binary log events to the replica data.
+  id: totrans-27
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: SQL 线程将二进制日志事件应用于复制品数据。
+- en: The replica writes the data changes (applied by the SQL thread) to its binary
+    logs.
+  id: totrans-28
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 复制品将数据更改（由 SQL 线程应用）写入其二进制日志。
+- en: 'By default, MySQL replication is asynchronous: on the source, the transaction
+    completes after step 1 and the remaining steps happen asynchronously. MySQL supports
+    semisynchronous replication: on the source, the transaction completes after step
+    3. That is not a typo: MySQL semisynchronous replication commits after step 3;
+    it does *not* wait for step 4 or 5. [“Semisynchronous Replication”](#repl-semi-sync)
+    goes into more detail.'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，MySQL 复制是异步的：在源端，事务在步骤 1 完成后，其余步骤是异步发生的。MySQL 支持半同步复制：在源端，事务在步骤 3 完成后才提交。这不是打字错误：MySQL
+    半同步复制在步骤 3 后提交；它*不*等待步骤 4 或 5。[“半同步复制”](#repl-semi-sync)提供了更详细的信息。
+- en: 'Replicas are not required to write binary logs (step 6), but it’s standard
+    practice for high availability because it allows a replica to become the source.
+    This is how a database *failover* works: when the source dies or is taken down
+    for maintenance, a replica is promoted to become the new source. Let’s call the
+    instances *old source* and *new source*. Eventually, a DBA will restore the old
+    source (or clone a new instance to replace it) and make it replicate from the
+    new source. In the old source, the previously idle I/O thread, relay logs, and
+    SQL threads (shaded darkly in [Figure 7-1](#repl-foundation-img)) start working.
+    (The I/O thread in the old source will connect to the new source, which activates
+    its previously idle binlog dump thread.) From the new source binary logs, the
+    old source replicates writes that it missed while it was offline. While doing
+    so, the old source reports replication lag, but this is a special case addressed
+    in [“Post-Failure Rebuild”](#repl-failures). That’s failover in a nutshell; but
+    of course, it’s more complex in practice.'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制品不需要写入二进制日志（步骤 6），但这是高可用性的标准做法，因为它允许复制品成为源。这是数据库*故障转移*的工作方式：当源数据库死机或因维护而关闭时，复制品被提升为新的源。让我们称这些实例为*旧源*和*新源*。最终，DBA
+    将恢复旧源（或克隆一个新实例来替换它），并使其从新源复制。在旧源中，以前处于空闲状态的 I/O 线程、中继日志和 SQL 线程（在[图 7-1](#repl-foundation-img)中深色阴影部分）开始工作。（旧源中的
+    I/O 线程将连接到新源，这将激活其以前处于空闲状态的 binlog dump 线程。）从新源的二进制日志中，旧源复制它在离线期间错过的写入。在这样做的同时，旧源报告复制延迟，但这是一个在[“故障后重建”](#repl-failures)中解决的特殊情况。这就是故障转移的核心内容；当然，在实践中它更为复杂。
+- en: Binary Log Events
+  id: totrans-31
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 二进制日志事件
+- en: Binary log events are a low-level detail that you probably won’t encounter (even
+    DBAs don’t often mess around in binary logs), but they are a direct result of
+    transactions executed by the application. Therefore, it’s important to understand
+    what the application is trying to flush through the plumbing of replication.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二进制日志事件是一个低级别的细节，你可能不会遇到（即使是数据库管理员也不经常在二进制日志中操作），但它们是应用程序执行的事务的直接结果。因此，理解应用程序试图通过复制的管道刷新的内容是非常重要的。
+- en: Note
+  id: totrans-33
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The following presumes row-based replication (RBR), which is the default [`binlog_format`](https://oreil.ly/rtKm0)
+    as of MySQL 5.7.7.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下假设使用基于行的复制（RBR），这是 MySQL 5.7.7 版本以来的默认[`binlog_format`](https://oreil.ly/rtKm0)。
+- en: 'Replication focuses on transactions and binary log events, not individual writes,
+    because data changes are committed to binary logs during transaction commit, at
+    which point writes have already completed. At a high level, the focus is transactions
+    because they are meaningful to the application. At a low level, the focus is binary
+    log events because they are meaningful to replication. Transactions are logically
+    represented and delineated in binary logs as events, which is how multithread
+    replicas can apply them in parallel—more on this in [“Reducing Lag: Multithreaded
+    Replication”](#repl-mtr). To illustrate, let’s use a simple transaction:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制侧重于事务和二进制日志事件，而不是单个写入操作，因为数据更改在事务提交时提交到二进制日志，此时写入操作已经完成。从高层次来看，侧重于事务是因为它们对应用程序是有意义的。从低层次来看，侧重于二进制日志事件是因为它们对复制是有意义的。事务在二进制日志中逻辑上表示和界定为事件，这是多线程复制可以并行应用它们的方式——更多细节请参见[“减少延迟：多线程复制”](#repl-mtr)。为了说明，让我们使用一个简单的事务：
+- en: '[PRE0]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: The table schemas and data do not matter. What’s important is that the `UPDATE`
+    changes one row in table `t1`, and the `DELETE` deletes three rows from table
+    `t2`. [Figure 7-2](#repl-binlog-events-img) illustrates how that transaction is
+    committed in a binary log.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表模式和数据并不重要。重要的是`UPDATE`在表`t1`中更改一行，而`DELETE`从表`t2`中删除了三行。[图 7-2](#repl-binlog-events-img)说明了该事务如何在二进制日志中提交。
+- en: 'Four contiguous events constitute the transaction:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 四个连续的事件构成了该事务：
+- en: An event for `BEGIN`
+  id: totrans-39
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个`BEGIN`事件
+- en: An event for the `UPDATE` statement with one row image
+  id: totrans-40
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个带有一个行图像的`UPDATE`语句事件
+- en: An event for the `DELETE` statement with three row images
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个带有三行图像的`DELETE`语句事件
+- en: An event for `COMMIT`
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个`COMMIT`事件
+- en: At this low level, SQL statements essentially disappear and replication is a
+    stream of events and row images (for events that modify rows). A *row image* is
+    a binary snapshot of a row before and after modification. This is an important
+    detail because a single SQL statement can generate countless row images, which
+    yields a large transaction that might cause lag as it flows through replication.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个低级别上，SQL语句基本上消失了，复制是一系列事件和行图像（对于修改行的事件）。*行图像*是修改前后行的二进制快照。这是一个重要的细节，因为单个SQL语句可以生成无数行图像，从而产生一个大事务，可能在复制过程中引起延迟。
+- en: '![emsp 0702](assets/emsp_0702.png)'
+  id: totrans-44
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0702](assets/emsp_0702.png)'
+- en: Figure 7-2\. Binary log events for a transaction
+  id: totrans-45
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-2\. 一个事务的二进制日志事件
+- en: Let’s stop here because we’re a little deeper into MySQL internals than we should
+    be for this book. Although brief, this introduction to binary log events makes
+    the following sections more intelligible because now you know what’s flowing through
+    the plumbing of replication and why the foci are transactions and binary log events.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们在这里停下，因为对于这本书来说我们深入到MySQL内部的内容已经足够。虽然简短，但是对二进制日志事件的介绍使得接下来的章节更易理解，因为现在你知道复制管道中流动的内容以及事务和二进制日志事件的重点是什么。
+- en: Replication Lag
+  id: totrans-47
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 复制延迟
+- en: Referring back to [Figure 7-1](#repl-foundation-img), replication lag occurs
+    when applying changes on a replica (step 5) is slower than committing changes
+    on the source (step 1). The steps in between are rarely a problem (when the network
+    is working properly) because MySQL binary logs, the MySQL network protocol, and
+    typical networks are very fast and efficient.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 参考[图 7-1](#repl-foundation-img)，当在副本上应用变更（步骤5）比源上提交变更（步骤1）的速度慢时，复制延迟就会发生。中间的步骤很少会成为问题（当网络正常工作时），因为MySQL二进制日志、MySQL网络协议和典型网络非常快速和高效。
+- en: Note
+  id: totrans-49
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: '*Apply changes* is short for *apply transactions* or *apply events*, depending
+    on the context.'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*应用变更*简称为*应用事务*或*应用事件*，取决于上下文。'
+- en: 'The I/O thread on a replica can write binary log events to its relay logs at
+    a high rate because this is a relatively easy process: read from network, write
+    sequentially to disk. But a SQL thread has a much more difficult and time-consuming
+    process: applying the changes. Consequently, the I/O thread outpaces the SQL thread,
+    and replication lag looks like [Figure 7-3](#repl-lag-img).'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在副本上的I/O线程可以以很高的速率将二进制日志事件写入其中继日志，因为这是一个相对简单的过程：从网络读取，顺序写入磁盘。但是，SQL线程有一个更加困难且耗时的过程：应用这些变更。因此，I/O线程超过了SQL线程，复制延迟看起来像[图 7-3](#repl-lag-img)。
+- en: '![emsp 0703](assets/emsp_0703.png)'
+  id: totrans-52
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0703](assets/emsp_0703.png)'
+- en: Figure 7-3\. MySQL replication lag
+  id: totrans-53
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-3\. MySQL复制延迟
+- en: 'Strictly speaking, a single SQL thread does not cause replication lag, it’s
+    only the limiting factor. The cause, in this case, is high transaction throughput
+    on the source, which is a good problem if the application is busy, but a problem
+    nonetheless. More on causes in the next section. The solution is more SQL threads,
+    which is covered later in [“Reducing Lag: Multithreaded Replication”](#repl-mtr).'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 严格来说，单个SQL线程并不会导致复制延迟，它只是一个限制因素。在本例中，问题的根本原因是源头上的高事务吞吐量，这对于忙碌的应用程序来说是一个好问题，但也是一个问题。关于原因的更多信息请参见下一节。解决方案是增加更多的SQL线程，这将在["减少延迟：多线程复制"](#repl-mtr)一节中讨论。
+- en: Semisynchronous replication does not solve or preclude replication lag. When
+    semisynchronous replication is enabled, for each transaction, MySQL waits for
+    a replica to acknowledge that it has written the binary log events for the transaction
+    to its relay logs—step 3 in [Figure 7-1](#repl-foundation-img). On a local network,
+    replication lag as depicted in [Figure 7-3](#repl-lag-img) can still occur. If
+    semisynchronous reduces replication lag, it’s only a side-effect of network latency
+    throttling transaction throughput on the source. [“Semisynchronous Replication”](#repl-semi-sync)
+    goes into more detail.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 半同步复制既不能解决也不能预防复制延迟。启用半同步复制时，对于每个事务，MySQL 等待副本确认已将事务的二进制日志事件写入其中继日志——见图 7-1
+    的第 3 步（#repl-foundation-img）。在本地网络上，如图 7-3 所示（#repl-lag-img），仍可能发生复制延迟。如果半同步减少复制延迟，那只是网络延迟的副作用，会限制源端的事务吞吐量。详细内容请参见“半同步复制”（#repl-semi-sync）。
+- en: 'Lag is inherent to replication, but make no mistake: MySQL replication is very
+    fast. A single SQL thread can easily handle thousands of transactions per second.
+    The first reason is simple: replicas do not execute the full workload that the
+    source executes. Notably, replicas do not execute reads (presuming replicas aren’t
+    used to serve reads). The second reason requires a few lines to explain. As noted
+    in [“Binary Log Events”](#repl-binlog-events), this chapter presumes row-based
+    replication (RBR). Consequently, replicas do not execute SQL statements: they
+    apply binary log events. That saves replicas a lot of time because they’re given
+    the end result—data changes—and told where to apply them. That can be significantly
+    faster than finding the matching rows to update, which is what the source had
+    to do. As a result of these two reasons, replicas can be nearly idle even while
+    the source is very busy. Nevertheless, three causes can overwhelm replication.'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 延迟是复制过程中固有的，但不要误解：MySQL 复制速度非常快。单个 SQL 线程可以轻松处理成千上万个事务每秒。第一个原因很简单：副本不执行与源相同的全部工作负载。特别是，副本不执行读操作（假设副本不用于提供读取服务）。第二个原因需要几行来解释。如“二进制日志事件”中所述，本章假定使用基于行的复制（RBR）。因此，副本不执行
+    SQL 语句：它们应用二进制日志事件。这节省了副本大量时间，因为它们只需处理最终结果——数据变更——并告知如何应用这些变更。这比查找匹配的行以进行更新要快得多，而这是源必须做的事情。由于这两个原因，即使源非常忙碌，副本也几乎可以处于空闲状态。尽管如此，复制也可能受到三个原因的影响。
+- en: Causes
+  id: totrans-57
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 原因
+- en: 'Replication lag has three main causes: transaction throughput, post-failure
+    rebuilds, and network issues. A section for each follows.'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制延迟有三个主要原因：事务吞吐量、故障后的重建以及网络问题。接下来分别介绍每一个原因。
+- en: Transaction Throughput
+  id: totrans-59
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 事务吞吐量
+- en: 'Transaction throughput causes replication lag when the rate on the source is
+    greater than the rate at which SQL (applier) threads on the replica can apply
+    changes. When this happens because the application is legitimately busy, it’s
+    usually not feasible to reduce the rate on the source. Instead, the solution is
+    to increase the rate on the replica by running more SQL (applier) threads. Focus
+    on improving replica performance by tuning multithreaded replication, as outlined
+    in [“Reducing Lag: Multithreaded Replication”](#repl-mtr).'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当源端速率高于副本 SQL（应用程序）线程应用更改的速率时，事务吞吐量会导致复制延迟。当应用程序因合理繁忙而出现这种情况时，通常不可能减少源端的速率。解决方法是通过运行更多
+    SQL（应用程序）线程来增加副本的速率。专注于通过调整多线程复制来提高副本性能，详见“减少延迟：多线程复制”（#repl-mtr）。
+- en: Large transactions—ones that modify an inordinate number of rows—have a greater
+    impact on replicas than the source. On the source, a large transaction that takes
+    two seconds to execute, for example, most likely does not block other transactions
+    because it runs (and commits) in parallel. But on a single-threaded replica, that
+    large transactions blocks all other transactions for two seconds (or however long
+    it takes to execute on the replica—it might be less due to less contention). On
+    a multithreaded replica, other transactions continue to execute, but that large
+    transaction still blocks one thread for two seconds. The solution is smaller transactions.
+    More on this in [“Large Transactions (Transaction Size)”](ch08.html#trx-size).
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大型事务 —— 修改大量行数的事务 —— 对副本的影响比源端更大。在源端，例如执行需要两秒的大型事务，通常不会阻塞其他事务，因为它可以并行运行（并提交）。但是在单线程副本上，这种大型事务会阻塞所有其他事务两秒钟（或在副本上执行所需的时间，可能因争用较少而较短）。在多线程副本上，其他事务可以继续执行，但是这种大型事务仍然会阻塞一个线程两秒钟。解决方案是减少事务的大小。更多信息请参见[“大型事务（事务大小）”](ch08.html#trx-size)。
+- en: 'Transaction throughput is not always driven by the application: backfilling,
+    deleting, and archiving data are common operations that can cause massive replication
+    lag if they don’t control the batch size, as forewarned in [“Batch Size”](ch03.html#batch-size).
+    In addition to proper batch size, these operations should monitor replication
+    lag and slow down when replicas begin to lag. It’s better for an operation to
+    take one day than to lag a replica by one second. [“Risk: Data Loss”](#repl-risk)
+    explains why.'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务吞吐量并非总是由应用程序驱动：回填、删除和归档数据是常见操作，如果不控制批处理大小，则可能导致大规模复制延迟，如[“批处理大小”](ch03.html#batch-size)中预警的那样。除了适当的批处理大小，这些操作应监控复制延迟，并在副本开始落后时减速。操作花费一天的时间总比使副本落后一秒钟更好。[“风险：数据丢失”](#repl-risk)解释了其中的原因。
+- en: At some point, transaction throughput will exceed the capacity of a single MySQL
+    instance—source or replica. To increase transaction throughput, you must scale
+    out by sharding the database (see [Chapter 5](ch05.html#ch05)).
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某个时刻，事务吞吐量将超过单个 MySQL 实例的容量 —— 无论是源端还是副本。要增加事务吞吐量，必须通过分片数据库来进行扩展（参见[第 5 章](ch05.html#ch05)）。
+- en: Post-Failure Rebuild
+  id: totrans-64
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 故障后重建
+- en: When MySQL or hardware fails, the instance is fixed and put back into the replication
+    topology. Or a new instance is cloned from an existing instance and takes the
+    place of the failed instance. Either way, the replication topology is rebuilt
+    to restore high availability.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当 MySQL 或硬件发生故障时，将修复实例并将其放回复制拓扑中。或者从现有实例克隆一个新实例，并取代失败的实例。无论哪种方式，都会重建复制拓扑以恢复高可用性。
+- en: Note
+  id: totrans-66
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Replicas are used for several purposes, but this chapter discusses only replicas
+    used for high availability.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 副本用于多种目的，但本章仅讨论用于高可用性的副本。
+- en: 'The fixed (or new) instance will take minutes, hours, or days to *catch up*:
+    to replicate all the binary log events that it missed while it was offline. Technically,
+    this is replication lag, but in practice you can ignore it until the fixed instance
+    has caught up. Once caught up, any lag is legitimate.'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 固定（或新）实例将花费几分钟、几小时或几天来*追赶*：复制它离线时错过的所有二进制日志事件。从技术上讲，这就是复制延迟，但在实践中，您可以忽略它，直到修复的实例追赶上来。一旦追赶上，任何延迟都是合理的。
+- en: Since failure is inevitable and catching up takes time, the only solution is
+    to be aware that the replication lag is due to a post-failure rebuild and wait.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于故障不可避免且追赶需要时间，唯一的解决方案是意识到复制延迟是由于故障后的重建而等待。
+- en: Network Issues
+  id: totrans-70
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 网络问题
+- en: '*Network issues* cause replication lag by delaying the transfer of binary log
+    events from source to replica—step 2 in [Figure 7-1](#repl-foundation-img). Technically,
+    the network—not replication—is lagging, but quibbling about semantics doesn’t
+    change the end result: the replica is *behind the source*—a long way of saying
+    *lagged*. In this case, you must enlist network engineers to fix the root cause:
+    the network.'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*网络问题* 通过延迟源端到副本的二进制日志事件传输 —— 图 7-1 中的第 2 步 —— 导致复制延迟。从技术上讲，是网络而不是复制在滞后，但对语义上的纠缠不会改变最终结果：副本落后于源端
+    —— 一种长时间说 *落后* 的方式。在这种情况下，您必须征求网络工程师来修复根本原因：网络。'
+- en: 'The risk caused by a network issue is mitigated by communication and teamwork:
+    talk with the network engineers to ensure that they know what’s at stake for the
+    database when there’s a network issue—it’s quite possible they don’t know because
+    they’re not DBAs or engineers using MySQL.'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网络问题带来的风险通过沟通和团队合作得以缓解：与网络工程师交流，确保他们了解数据库在网络问题时可能面临的风险——他们可能并不清楚，因为他们不是DBA或使用MySQL的工程师。
+- en: 'Risk: Data Loss'
+  id: totrans-73
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 风险：数据丢失
+- en: '*Replication lag is data loss*.'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*复制滞后即数据丢失*。'
+- en: This is true by default for MySQL because the default is asynchronous replication.
+    Fortunately, semisynchronous replication is an option that will not lose any committed
+    transactions. Let’s first examine the risk with asynchronous replication, then
+    it will be clear how semisynchronous replication mitigates the risk.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这对MySQL来说是默认情况，因为默认是异步复制。幸运的是，半同步复制是一个选项，它不会丢失任何已提交的事务。让我们首先分析一下异步复制的风险，然后清楚地了解半同步复制是如何缓解风险的。
+- en: Note
+  id: totrans-76
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: As noted in [“Foundation”](#repl-foundation), I defer Group Replication to the
+    future. Moreover, the synchronicity of Group Replication requires careful explanation.^([1](ch07.html#idm45829103536576))
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如在[“基础”](#repl-foundation)中所述，我将组复制推迟到未来。此外，组复制的同步性需要仔细解释。^([1](ch07.html#idm45829103536576))
+- en: Asynchronous Replication
+  id: totrans-78
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 异步复制
+- en: '[Figure 7-4](#repl-crash) shows the point in time at which the source crashed.'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 7-4](#repl-crash)显示了源崩溃的时间点。'
+- en: '![emsp 0704](assets/emsp_0704.png)'
+  id: totrans-80
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0704](assets/emsp_0704.png)'
+- en: Figure 7-4\. Crash on MySQL source with asynchronous replication
+  id: totrans-81
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图7-4\. MySQL源在异步复制中的崩溃
+- en: 'Before crashing, the source committed five transactions to its binary logs.
+    But when it crashed, the replica I/O thread had only fetched the first three transactions.
+    Whether or not the last two transactions are lost depends on two factors: the
+    cause of the crash, and whether a DBA must failover.'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在崩溃之前，源已经将五个事务提交到其二进制日志中。但是当它崩溃时，复制的I/O线程仅获取了前三个事务。最后两个事务是否丢失取决于两个因素：崩溃的原因以及是否需要DBA进行故障切换。
+- en: 'If MySQL is the cause of the crash (most likely due to a bug), then it will
+    automatically restart, perform crash recovery, and resume normal operations. (By
+    default, replicas automatically reconnect and resume replication, too.) And since
+    MySQL is truly durable when properly configured, the committed transactions 4
+    and 5 are not lost. There’s just one problem: crash recovery can take several
+    minutes *or hours* to complete—it depends on several factors outside the scope
+    of this book. If you can wait, crash recovery is the ideal solution because no
+    committed transactions are lost.'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果MySQL导致崩溃（最有可能是由于错误引起），那么它将自动重启，执行崩溃恢复，并恢复正常操作。（默认情况下，副本会自动重新连接并恢复复制。）而且，只要MySQL在正确配置时是真正持久的，已提交的事务4和5将不会丢失。只有一个问题：崩溃恢复可能需要数分钟甚至数小时才能完成——这取决于本书范围之外的多个因素。如果可以等待，崩溃恢复是理想的解决方案，因为不会丢失任何已提交的事务。
+- en: 'If hardware or operating system is the cause of the crash, or if the crashed
+    MySQL instance cannot be recovered quickly enough for any reason, then a DBA will
+    failover—promote a replica to the source—and transactions 4 and 5 are lost. This
+    is not an ideal solution, but it’s standard practice because the alternative is
+    worse: a long outage (downtime) while recovering the crashed MySQL instance, which
+    requires exacting data forensics that could take hours or days.'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果硬件或操作系统导致崩溃，或者因为任何原因无法快速恢复崩溃的MySQL实例，那么DBA将进行故障切换——提升一个副本为源——事务4和5将会丢失。这不是一个理想的解决方案，但这是标准做法，因为另一种选择更糟糕：在恢复崩溃的MySQL实例时出现长时间的停机时间，这需要精确的数据取证，可能需要数小时甚至数天。
+- en: Note
+  id: totrans-85
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: No data is lost when DBAs failover for maintenance (operations). And since nothing
+    has failed, some DBAs call this *successover*.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 维护（运维）时如果DBA进行故障切换，则不会丢失数据。而且由于没有发生故障，一些DBA称之为*成功切换*。
+- en: This example is not contrived to prove the point that *replication lag is data
+    loss*; it’s inevitable with asynchronous replication because all hardware and
+    software (including MySQL) fails eventually.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个示例并非刻意证明*复制滞后即数据丢失*的观点；由于所有硬件和软件（包括MySQL）最终都会失败，异步复制是不可避免的。
+- en: The only mitigation is a strict adherence to minimizing replication lag. Do
+    not, for example, disregard 10 seconds of replication as “not too far behind.”
+    Instead, treat it as “we’re at risk of losing the last 10 seconds of customer
+    data.” The odds are in your favor that MySQL or the hardware won’t fail at the
+    worst possible moment—when the replica is lagging—but let me relate a cautionary
+    tale about hardware failure.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 唯一的缓解方法是严格遵守最小化复制延迟。例如，不要忽视 10 秒的复制延迟为“没有太大差距”。而应该将其视为“我们面临着丢失最后 10 秒客户数据的风险”。MySQL
+    或硬件在最坏的时刻——复制延迟时——不会失败，但我要讲一个关于硬件故障的警示故事。
+- en: 'One week when I was on-call, I received an alert around 9 a.m. That’s not too
+    early; I was already done with my first cup of coffee. One alert quickly turned
+    into thousands. Database servers everywhere—in multiple, geographically distributed
+    data centers—were failing. It was so bad that I immediately knew: the problem
+    was not hardware or MySQL, because the odds of that many simultaneous but unrelated
+    failures was infinitesimal. Long story short, one of the most experienced engineers
+    in the company had not had his coffee that morning. He had written and run a custom
+    script that went terribly awry. The script didn’t simply reboot servers at random,
+    it turned them off. (In data centers, server power is programmatically controlled
+    through a backplane called Intelligent Platform Management Interface.) Killing
+    power is akin to hardware failure.'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有一周，当我值班时，我在早上 9 点左右收到了警报。那不算太早；我已经喝完了第一杯咖啡。一个警报迅速变成了数千个。数据库服务器到处都在失败——分布在多个地理位置的数据中心——情况非常糟糕，以至于我立刻意识到：问题不是硬件或
+    MySQL，因为同时发生这么多但不相关的故障的概率是微乎其微的。长话短说，公司最有经验的工程师之一那天早上没有喝咖啡。他编写并运行的自定义脚本出了大问题。该脚本不仅随机重启了服务器，而是将它们关掉了。（在数据中心，服务器的电源是通过称为智能平台管理接口的背板进行程序控制的。）切断电源就相当于硬件故障。
+- en: 'The moral of that story is: failure can be caused by human error. Be prepared.'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个故事的寓意是：失败可能是由人为错误造成的。做好准备。
+- en: 'Asynchronous replication is not a best practice because virtually unmitigated
+    data loss is antithetical to the purpose of a persistent data store. Countless
+    companies around the world have been successful with asynchronous replication
+    for more than 20 years. (But “common practice” doesn’t necessarily mean “best
+    practice.”) If you run asynchronous replication, MySQL DBAs and experts will not
+    scoff as long as the following three conditions are true:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 异步复制不是最佳实践，因为几乎无法减少的数据丢失与持久数据存储的目的背道而驰。全球无数公司在 20 多年来都成功使用异步复制。 （但“常规做法”并不一定意味着“最佳实践”。）如果您使用异步复制，只要满足以下三个条件，MySQL
+    DBA 和专家就不会嗤之以鼻：
+- en: You monitor replication lag with a heartbeat (see [“Monitoring”](#repl-monitoring)).
+  id: totrans-92
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以通过心跳监控复制延迟（参见 [“监控”](#repl-monitoring)）。
+- en: You are alerted any time (not just during business hours) when replication lag
+    is too high.
+  id: totrans-93
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当复制延迟过高时，您将在任何时间（不仅仅是工作时间）收到警报。
+- en: You treat replication lag as data loss and fix it immediately.
+  id: totrans-94
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您将复制延迟视为数据丢失，并立即修复它。
+- en: 'Many successful companies use asynchronous MySQL replication, but there’s a
+    higher standard to strive for: semisynchronous replication.'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多成功的公司使用异步 MySQL 复制，但还有更高的标准可以追求：半同步复制。
+- en: Semisynchronous Replication
+  id: totrans-96
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 半同步复制
+- en: When semisynchronous (or *semisync*) replication is enabled, the source waits
+    for at least one replica to acknowledge each transaction. *Acknowledge* means
+    that the replica has written the binary log events for the transaction to its
+    relay logs. Therefore, the transaction is safely on disk on the replica, but the
+    replica hasn’t applied it yet. (Consequently, replication lag still occurs with
+    semisync replication, as mentioned in [“Replication Lag”](#repl-lag).) Acknowledgment
+    when received, not when applied, is why it’s called *semi*synchronous, not fully
+    synchronous.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当启用半同步（或 *semisync*）复制时，源头等待至少一个复制副本确认每个事务。*确认* 意味着复制副本已将事务的二进制日志事件写入其中继日志。因此，事务已经安全地写入副本的磁盘，但尚未应用。
+    （因此，如在 [“复制延迟”](#repl-lag) 中提到的，半同步复制仍会出现复制延迟。）接收到确认时，而非应用时，才称为 *半* 同步，而非完全同步。
+- en: Let’s replay the source crash from [“Asynchronous Replication”](#repl-async),
+    but now with semisynchronous replication enabled. [Figure 7-5](#repl-crash-semi)
+    shows the point in time at which the source crashed.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们重现 [“异步复制”](#repl-async) 中的源头崩溃，但现在启用了半同步复制。[图 7-5](#repl-crash-semi) 显示源头崩溃的时间点。
+- en: '![emsp 0705](assets/emsp_0705.png)'
+  id: totrans-99
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0705](assets/emsp_0705.png)'
+- en: Figure 7-5\. Crash on MySQL source with semisynchronous replication
+  id: totrans-100
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图7-5\. 使用半同步复制的MySQL源端崩溃
+- en: 'With semisynchronous replication, every committed transaction is guaranteed
+    to have replicated to at least one replica. *Committed transaction* in this context
+    means that the `COMMIT` statement executed by the client has returned—the transaction
+    is complete from the client’s point of view. That’s the usual, high-level understanding
+    of a committed transaction, but down in the plumbing of replication, the technical
+    details differ. The following four steps are an extreme simplification of how
+    a transaction commits when binary logging and semisynchronous replication are
+    enabled:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用半同步复制，每个已提交的事务都保证至少复制到一个副本。在这里，“已提交的事务”指的是客户端执行的`COMMIT`语句已返回——从客户端的角度看，事务已完成。这是已提交事务的通常高层次理解，但在复制的内部实现中，技术细节有所不同。启用二进制日志和半同步复制时，事务提交的极简化步骤如下：
+- en: Prepare transaction commit
+  id: totrans-102
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 准备事务提交
+- en: Flush data changes to binary log
+  id: totrans-103
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 刷新数据更改到二进制日志
+- en: Wait for acknowledgment from at least one replica
+  id: totrans-104
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 等待至少一个副本的确认
+- en: Commit transaction
+  id: totrans-105
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 提交事务
+- en: An InnoDB transaction commit is a two-phase commit. In between the two phases
+    (steps 1 and 4), data changes are written and flushed to the binary logs, and
+    MySQL waits for at least one replica to acknowledge the transaction.^([2](ch07.html#idm45829103496928))
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB事务提交是一个两阶段提交。在两个阶段之间（步骤1和步骤4之间），数据更改被写入并刷新到二进制日志，并且MySQL等待至少一个副本确认事务。^([2](ch07.html#idm45829103496928))
+- en: In [Figure 7-5](#repl-crash-semi), the dashed outline of the fourth transaction
+    indicates that at least one replica has *not* acknowledged it. The source crashed
+    after step 2, so the transaction is in the binary logs, but the commit did not
+    complete. The client `COMMIT` statement will return an error (not from MySQL because
+    it has crashed; it will probably receive a network error).
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[图7-5](#repl-crash-semi)中，第四个事务的虚线轮廓表明至少有一个副本*未*确认。在第2步后源端崩溃，因此事务在二进制日志中，但提交未完成。客户端的`COMMIT`语句将返回一个错误（不是来自MySQL，因为MySQL已经崩溃；它可能会收到一个网络错误）。
+- en: 'Whether or not the fourth transaction is lost depends on the same two factors
+    as before ([“Asynchronous Replication”](#repl-async)): the cause of the crash,
+    and whether a DBA must failover. The important difference is that only one uncommitted
+    transaction per connection can be lost when semisynchronous replication is enabled.
+    Since the transaction did not complete and the client received an error, the potential
+    loss of the uncommitted transaction is less worrisome. The keyword is *less* worrisome:
+    there are edge cases that mean you cannot simply disregard the lost transaction.
+    For example, what if a replica acknowledges the transaction but the source crashes
+    before it receives the acknowledgment? The answer would descend further into replication
+    plumbing than we need to go. The point is: semisynchronous replication guarantees
+    that all committed transactions have replicated to at least one replica, and only
+    one uncommitted transaction per connection can be lost on failure.'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 是否丢失第四个事务取决于与之前相同的两个因素（[“异步复制”](#repl-async)）：崩溃的原因，以及是否需要进行故障切换。重要的区别在于，在启用半同步复制时，每个连接仅能丢失一个未提交的事务。由于事务未完成且客户端收到错误，未提交事务的潜在丢失不那么令人担忧。关键词是*不那么*令人担忧：有一些边缘情况意味着你不能简单地忽略丢失的事务。例如，如果一个副本在事务被确认后，源端在接收确认之前崩溃了会怎么样？答案将会更深入地涉及到复制的细节，但我们并不需要那么深入。关键在于：半同步复制确保所有已提交的事务至少复制到一个副本，每个连接只能在失败时丢失一个未提交的事务。
+- en: The fundamental purpose of a persistent data store is to persist data, not lose
+    it. So why isn’t semisynchronous the default for MySQL? It’s complicated.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 持久数据存储的基本目的是持久化数据，而不是丢失数据。那么为什么半同步不是MySQL的默认设置呢？这很复杂。
+- en: 'There are successful companies that operate MySQL at scale using semisynchronous
+    replication. One notable company is GitHub, the former employer of renowned MySQL
+    expert Shlomi Noach who wrote a blog post about their use of semisynchronous replication:
+    [“MySQL High Availability at GitHub”](https://oreil.ly/6mLug).'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有些成功的公司使用半同步复制来运行规模较大的MySQL。一个著名的公司是GitHub，这家公司是著名的MySQL专家Shlomi Noach的前雇主，他写了一篇关于他们使用半同步复制的博客文章：[“GitHub上的MySQL高可用性”](https://oreil.ly/6mLug)。
+- en: Semisynchronous replication *reduces* availability—that’s not a typo. Although
+    it safeguards transactions, that safeguard means that the current transaction
+    for every connection might stall, timeout, or fail on `COMMIT`. By contrast, `COMMIT`
+    with asynchronous replication is essentially instant and guaranteed as long as
+    the storage on the source is working.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 半同步复制 *降低* 可用性—这不是打字错误。虽然它保护事务，但这种保护意味着每个连接的当前事务可能会在 `COMMIT` 上陷入停顿、超时或失败。相比之下，异步复制的
+    `COMMIT` 本质上是瞬时的，并且只要源端的存储工作正常就是有保证的。
+- en: 'By default, semisynchronous replication reverts to asynchronous when there
+    are not enough replicas or the source times out waiting for an acknowledgment.
+    This can be effectively disabled by configuration, but the best practice is to
+    allow it because the alternative is worse: a complete outage (the application
+    cannot write to the source).'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，当没有足够的副本或源端等待确认时超时时，半同步复制会有效地退回到异步模式。这可以通过配置有效地禁用，但最佳实践是允许它，因为另一种选择更糟糕：完全的故障（应用无法写入源端）。
+- en: Performance with semisynchronous replication requires that the source and replicas
+    are on a fast, local network because network latency implicitly throttles transaction
+    throughput on the source. Whether or not this is an issue depends on the local
+    network where you run MySQL. A local network should have submillisecond latency,
+    but that must be verified and monitored, else transaction throughput will suffer
+    the whims of network latency.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用半同步复制的性能要求源端和副本位于快速的本地网络上，因为网络延迟隐式地限制了源端的事务吞吐量。这是否成为问题取决于运行 MySQL 的本地网络。本地网络应具有亚毫秒的延迟，但必须进行验证和监控，否则事务吞吐量将受网络延迟的影响。
+- en: Whereas asynchronous replication works without any special configuration, semisynchronous
+    requires specific configuration and tuning. Neither is burdensome for a DBA, but
+    they are careful work nevertheless.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 异步复制可以在没有任何特殊配置的情况下运行，而半同步复制则需要特定的配置和调优。对于数据库管理员来说，这两者都不是负担，但它们仍需小心地进行工作。
+- en: Tip
+  id: totrans-115
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: 'I think semisynchronous replication is the best practice because data loss
+    is never acceptable—full stop. I advise you to learn more about semisync replication,
+    test and verify it on your network, and use it if possible. Start by reading [“Semisynchronous
+    Replication”](https://oreil.ly/JnxUJ) in the MySQL manual. Or, if you want to
+    be truly prepared for the future, look into [Group Replication](https://oreil.ly/5ZWHQ)
+    and [InnoDB Cluster](https://oreil.ly/JrrYd): the future of MySQL replication
+    and high availability. Although semisynchronous replication and Group Replication
+    elicit debate among MySQL experts, one point garners universal agreement: preventing
+    data loss is a virtue.'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我认为半同步复制是最佳实践，因为数据丢失是不可接受的—没有争议。我建议你了解更多关于半同步复制的信息，在你的网络上进行测试和验证，并在可能的情况下使用它。首先阅读
+    MySQL 手册中的 [“Semisynchronous Replication”](https://oreil.ly/JnxUJ)。或者，如果你想为未来做好准备，可以了解
+    [Group Replication](https://oreil.ly/5ZWHQ) 和 [InnoDB Cluster](https://oreil.ly/JrrYd)：它们是
+    MySQL 复制和高可用性的未来。尽管半同步复制和 Group Replication 在 MySQL 专家中引发争议，但有一点是普遍认同的：预防数据丢失是一种美德。
+- en: 'Reducing Lag: Multithreaded Replication'
+  id: totrans-117
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 减少滞后：多线程复制
+- en: 'By default, MySQL replication is asynchronous *and* single-threaded: one SQL
+    thread on the replica. Even semisynchronous replication is single-threaded by
+    default. The single SQL thread does not cause replication lag—[“Causes”](#repl-causes)
+    are the three main causes—but it is the limiting factor. The solution is *multithreaded
+    replication* (or *parallel replication*): multiple SQL threads applying transactions
+    in parallel. On a multithreaded replica, the SQL threads are called *applier threads*.^([3](ch07.html#idm45829103468976))
+    You can still call them SQL threads if you want—the terms are synonymous—but the
+    MySQL manual uses *applier* in the context of multithreaded replication.'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，MySQL 复制是异步 *且* 单线程的：副本上有一个 SQL 线程。即使是半同步复制，默认情况下也是单线程的。单个 SQL 线程不会导致复制滞后—[“Causes”](#repl-causes)
+    是三个主要的原因—但它是限制因素。解决方案是 *多线程复制*（或 *并行复制*）：多个 SQL 线程并行应用事务。在多线程副本上，SQL 线程被称为 *应用者线程*。^([3](ch07.html#idm45829103468976))
+    如果你愿意，仍然可以称它们为 SQL 线程—这些术语是同义的—但 MySQL 手册在多线程复制的上下文中使用 *应用者*。
+- en: 'The solution is simple for us as engineers using MySQL, but it’s not simple
+    for MySQL. As you can imagine, transactions cannot be applied in random order:
+    there might be dependencies among transactions. For example, if one transaction
+    inserts a new row, and second transaction updates that row, obviously the second
+    transaction must run after the first. *Transaction dependency tracking* is the
+    art and science (and magic) of determining which transactions—from a serialized
+    record (the binary logs)⁠—can be applied in parallel. It’s both fascinating and
+    impressive, but it’s beyond the scope of this book, so I encourage you to watch
+    the video [“MySQL Parallel Replication (LOGICAL_CLOCK): all the 5.7 (and some
+    of the 8.0) details”](https://oreil.ly/Q8aJv) by renowned MySQL expert Jean-François
+    Gagné.'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于我们作为使用 MySQL 的工程师来说，解决方案很简单，但对于 MySQL 来说并不简单。正如你所想象的，事务不能以随机顺序应用：事务之间可能存在依赖关系。例如，如果一个事务插入了一行新记录，第二个事务更新了该行，显然第二个事务必须在第一个事务之后运行。*事务依赖跟踪*是确定哪些事务（从序列化记录（二进制日志）中）可以并行应用的艺术和科学（以及魔法）。这既迷人又令人印象深刻，但超出了本书的范围，因此我鼓励你观看著名
+    MySQL 专家 Jean-François Gagné 的视频[“MySQL 并行复制（LOGICAL_CLOCK）：所有 5.7 版本（以及部分 8.0
+    版本）的细节”](https://oreil.ly/Q8aJv)。
+- en: 'Strictly speaking, one system variable enables multithreaded replication, but
+    I suspect that you are not going to be surprised when I tell you: it’s more complicated
+    in practice. Configuring MySQL replication is beyond the scope of this book, but
+    multithreaded replication is too important not to give you a *conservative starting
+    point*. A conservative starting point means that the following configuration might
+    not yield the full performance of multithreaded replication. Consequently, you
+    (or DBAs) must tune multithreaded replication—as in [“MySQL Tuning”](ch02.html#mysql-tuning)—to
+    maximize its potential while at the same time taking into account the various
+    ramifications of parallel replication.'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 严格来说，有一个系统变量可以启用多线程复制，但我怀疑当我告诉你时你不会感到惊讶：实际操作中更为复杂。配置 MySQL 复制超出了本书的范围，但多线程复制太重要了，不给你一个*保守的起点*是不行的。保守的起点意味着以下配置可能无法发挥多线程复制的全部性能。因此，你（或
+    DBA）必须调整多线程复制，以最大化其潜力，同时考虑并行复制的各种影响。
+- en: Warning
+  id: totrans-121
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: 'The rest of this section is nontrivial MySQL configuration that should only
+    be done by an engineer with experience configuring MySQL in high performance,
+    high availability environments. The system variables in [Table 7-1](#mtr-sysvars)
+    will *not* affect data integrity or durability in any way, but they will affect
+    performance on source and replica instances. Be aware that:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节的其余部分是非常复杂的 MySQL 配置，只能由有经验在高性能、高可用性环境中配置 MySQL 的工程师完成。[表 7-1](#mtr-sysvars)
+    中的系统变量*不会*以任何方式影响数据完整性或持久性，但它们会影响源实例和副本实例的性能。请注意：
+- en: Replication affects high availability.
+  id: totrans-123
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 复制会影响高可用性。
+- en: '[Global transaction identifiers](https://oreil.ly/xYtq3) and [`log-replica-updates`](https://oreil.ly/wAOMO)
+    must be enabled.'
+  id: totrans-124
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 必须启用[全局事务标识符](https://oreil.ly/xYtq3)和[`log-replica-updates`](https://oreil.ly/wAOMO)。
+- en: Configuring MySQL requires elevated MySQL privileges.
+  id: totrans-125
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 配置 MySQL 需要提升的 MySQL 权限。
+- en: System variables change between MySQL versions and distributions.
+  id: totrans-126
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 系统变量在 MySQL 版本和发行版之间会发生变化。
+- en: 'MariaDB uses different system variables: see [“Parallel Replication”](https://oreil.ly/F5n6J)
+    in the MariaDB documentation.'
+  id: totrans-127
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MariaDB 使用不同的系统变量：请参阅 MariaDB 文档中的[“并行复制”](https://oreil.ly/F5n6J)。
+- en: Be very careful when configuring MySQL, and thoroughly read the relevant sections
+    of the manual for your version and distribution of MySQL.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在配置 MySQL 时要非常小心，并仔细阅读您所使用的 MySQL 版本和发行版的手册中相关部分。
+- en: '[Table 7-1](#mtr-sysvars) lists three system variables as a conservative starting
+    point for enabling and configuring multithreaded replication. Variable names changed
+    as of MySQL 8.0.26, so the table lists old and new variable names, followed by
+    a recommended value. I do not recommend using multithreaded replication in MySQL
+    older than 5.7.22 because certain replication features from 8.0 were backported
+    into this version.'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[表 7-1](#mtr-sysvars) 列出了三个系统变量作为启用和配置多线程复制的保守起点。随着 MySQL 8.0.26 的变化，变量名称也发生了变化，因此该表列出了旧变量名称和新变量名称，然后是推荐值。我不建议在早于
+    5.7.22 的 MySQL 版本中使用多线程复制，因为某些来自 8.0 版本的复制功能已被回溯到这个版本中。'
+- en: Table 7-1\. System variables to enable multithreaded replication
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 7-1\. 启用多线程复制的系统变量
+- en: '| MySQL 5.7.22 through 8.0.25 | MySQL 8.0.26 and newer | Value |'
+  id: totrans-131
+  prefs: []
+  type: TYPE_TB
+  zh: '| MySQL 5.7.22 到 8.0.25 | MySQL 8.0.26 及更新版本 | 值 |'
+- en: '| --- | --- | --- |'
+  id: totrans-132
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- | --- |'
+- en: '| [`slave_parallel_workers`](https://oreil.ly/82SBV) | [`replica_parallel_workers`](https://oreil.ly/kFqAz)
+    | `4` |'
+  id: totrans-133
+  prefs: []
+  type: TYPE_TB
+  zh: '| [`slave_parallel_workers`](https://oreil.ly/82SBV) | [`replica_parallel_workers`](https://oreil.ly/kFqAz)
+    | `4` |'
+- en: '| [`slave_parallel_type`](https://oreil.ly/s5NOE) | [`replica_parallel_type`](https://oreil.ly/mIft5)
+    | `LOGI⁠CAL_CLOCK` |'
+  id: totrans-134
+  prefs: []
+  type: TYPE_TB
+  zh: '| [`slave_parallel_type`](https://oreil.ly/s5NOE) | [`replica_parallel_type`](https://oreil.ly/mIft5)
+    | `LOGI⁠CAL_CLOCK` |'
+- en: '| [`slave_preserve_com⁠mit_order`](https://oreil.ly/oKRSy) | [`replica_preserve_commit_order`](https://oreil.ly/QGBB1)
+    | `1` |'
+  id: totrans-135
+  prefs: []
+  type: TYPE_TB
+  zh: '| [`slave_preserve_com⁠mit_order`](https://oreil.ly/oKRSy) | [`replica_preserve_commit_order`](https://oreil.ly/QGBB1)
+    | `1` |'
+- en: Set all three variables on all MySQL instances in the replication topology that
+    are used for high availability (that can be promoted to source).
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在用于高可用性（可以晋升为源的）复制拓扑中的所有 MySQL 实例上设置这三个变量。
+- en: 'Setting `replica_parallel_workers` greater than zero is the one system variable
+    that enables multithreaded replication. Four applier threads is a good start;
+    you must tune to find the optimized number of applier threads for your workload
+    and hardware. But, like a magic spell, it must be invoked with `replica_parallel_type`
+    to conjure the full performance of multithreaded replication. Even as of MySQL
+    8.0.26, the default for `replica_parallel_type` is `DATABASE`, which only applies
+    transactions in parallel for different databases—effectively, only one applier
+    thread per database. This is historical: it was the first type of parallelization.
+    But today, the best practice is `rep⁠lica_parallel_type = LOGICAL_CLOCK` because
+    it has no drawbacks when `rep⁠lica_preserve_commit_order` is enabled, and it provides
+    better parallelization because it applies transactions in parallel regardless
+    of database.'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将 `replica_parallel_workers` 设置为大于零是唯一启用多线程复制的系统变量。四个应用线程是一个很好的起点；您必须进行调整，以找到适合您的工作负载和硬件的优化应用线程数。但是，就像施展魔法咒语一样，必须使用
+    `replica_parallel_type` 并发起多线程复制的全部性能。即使在 MySQL 8.0.26 中，`replica_parallel_type`
+    的默认值仍然是 `DATABASE`，这仅适用于并行应用不同数据库的事务——实际上每个数据库只有一个应用线程。这是历史遗留问题：这是第一种类型的并行化。但是今天，最佳实践是将
+    `rep⁠lica_parallel_type = LOGICAL_CLOCK`，因为当启用 `rep⁠lica_preserve_commit_order`
+    时，它没有任何缺点，并且提供更好的并行化，因为它无论数据库如何都可以并行应用事务。
+- en: '`replica_preserve_commit_order` is disabled by default, but I do not think
+    that is a best practice because it allows a multithreaded replica to *commit out
+    of order*: commit transactions in a different order than they were committed on
+    the source. For example, transactions 1, 2, 3 committed in that order on the source
+    might commit in order 3, 1, 2 on the replica. Multithreaded replication only commits
+    out of order when safe (when there are no ordered dependencies among transactions),
+    and table data is (eventually) the same, but committing out of order has consequences
+    that you and especially the DBAs managing MySQL must understand and handle. [“Replication
+    and Transaction Inconsistencies”](https://oreil.ly/Bf04z) in the MySQL manual
+    documents the consequences. When `replica_preserve_commit_order` is enabled, transactions
+    are still applied in parallel, but some transactions might wait for earlier transactions
+    to commit first—this is how commit order is preserved. Although `replica_preserve_commit_order`
+    reduces the effectiveness of parallelization, it’s the best practice until you
+    and the DBAs verify that its consequences are acceptable and handled.'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`replica_preserve_commit_order` 默认情况下是禁用的，但我认为这不是最佳实践，因为它允许多线程复制*无序提交*：在副本上按不同于源上提交顺序提交事务。例如，在源上按顺序提交的事务
+    1、2、3 在副本上可能按顺序 3、1、2 提交。只有当安全时（即没有事务之间的有序依赖关系时），多线程复制才会无序提交，并且表数据（最终）是相同的，但无序提交具有后果，您和特别是管理
+    MySQL 的数据库管理员必须理解和处理。 MySQL 手册中的 [“复制和事务不一致性”](https://oreil.ly/Bf04z) 记录了这些后果。当启用
+    `replica_preserve_commit_order` 时，事务仍然是并行应用的，但某些事务可能需要等待较早的事务先提交——这就是保留提交顺序的方式。尽管
+    `replica_preserve_commit_order` 降低了并行化的效率，但直到您和数据库管理员验证其后果是可以接受和处理的，这仍然是最佳实践。'
+- en: Note
+  id: totrans-139
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Multithreaded replication works the same for Group Replication.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于组复制，多线程复制的工作方式相同。
+- en: 'Since [Table 7-1](#mtr-sysvars) is a conservative starting point for enabling
+    multithreaded replication, it does not enable the latest transaction dependency
+    tracking: `WRITESET`. MySQL transaction dependency tracking is determined by the
+    system variable [`binlog_transaction_dependency_tracking`](https://oreil.ly/5SMUG).
+    The default is `COMMIT_ORDER`, but the latest is `WRITESET`. Benchmarks show that
+    `WRITESET` achieves greater parallelization than `COMMIT_ORDER`. At the time of
+    this writing, `WRITESET` is less than four years old: it was introduced in MySQL
+    8.0 which became GA on April 19, 2018. As a matter of technology, you should use
+    `WRITESET` because it achieves better performance on multithread replicas. But
+    as a matter of policy, it’s up to you (or your DBA) to decide when a feature has
+    matured enough to be used in production. To use `WRITESET` on MySQL 5.7, you must
+    enable system variable [`trans​ac⁠tion_write_set_extraction`](https://oreil.ly/3lKGX).
+    On MySQL 8.0 this system variable is enabled by default but deprecated as of MySQL
+    8.0.26.'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于[表 7-1](#mtr-sysvars)是启用多线程复制的保守起点，因此它不启用最新的事务依赖跟踪：`WRITESET`。MySQL事务依赖跟踪由系统变量[`binlog_transaction_dependency_tracking`](https://oreil.ly/5SMUG)确定。默认是`COMMIT_ORDER`，但最新的是`WRITESET`。基准测试显示，`WRITESET`比`COMMIT_ORDER`实现了更大的并行化。在撰写本文时，`WRITESET`还不到四年：它是在2018年4月19日正式推出的MySQL
+    8.0中引入的。从技术角度来看，你应该使用`WRITESET`，因为它在多线程副本上实现了更好的性能。但作为政策问题，是否成熟足以在生产中使用一个功能，这是你（或你的DBA）决定的。要在MySQL
+    5.7上使用`WRITESET`，必须启用系统变量[`trans​ac⁠tion_write_set_extraction`](https://oreil.ly/3lKGX)。在MySQL
+    8.0上，此系统变量默认启用，但自MySQL 8.0.26起已弃用。
+- en: Tip
+  id: totrans-142
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Create a new replica to test and tune multithreaded replica. A new replica poses
+    little to no risk since it does not serve the application or high availability.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建一个新的副本来测试和调整多线程副本。新副本几乎没有风险，因为它不提供应用程序或高可用性服务。
+- en: 'There’s one more system variable that you should experiment with: [`bin⁠log_​group_commit_sync_delay`](https://oreil.ly/YMXoI).
+    By default, this variable is disabled (zero) because, as its name suggests, it
+    adds an artificial delay to group commit. Delays are usually bad for performance,
+    but group commit delay is a rare exception—sometimes. On the source, transactions
+    are committed to a binary log in groups, which is an internal optimization aptly
+    named *group commit*. Adding a delay to group commit creates larger groups: more
+    transactions committed per group. Multithreaded replication does not depend on
+    group commit, but it can benefit from larger group commits because more transactions
+    at once helps transaction dependency tracking find more opportunities for parallelization.
+    To experiment with `binlog_group_commit_sync_delay`, start with a value of `10000`:
+    the unit is microseconds, so that’s 10 milliseconds. This will increase transaction
+    commit response time by 10 milliseconds on the source, but it should also increase
+    transaction throughput on the replica. Tuning group commit size with respect to
+    multithreaded replica applier transaction throughput is not easy due to a lack
+    of MySQL metrics. If you go this route, read [“A Metric for Tuning Parallel Replication
+    in MySQL 5.7”](https://oreil.ly/QG4E1) by renowned MySQL expert Jean-François
+    Gagné.'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还有一个系统变量你应该尝试一下：[`bin⁠log_​group_commit_sync_delay`](https://oreil.ly/YMXoI)。默认情况下，这个变量是禁用的（零），因为顾名思义，它会给组提交增加人为延迟。延迟通常对性能有害，但组提交延迟是个例外——有时。在源端，事务以组的形式提交到二进制日志中，这是一种内部优化，被称为*组提交*。为组提交增加延迟会创建更大的组：每组提交更多的事务。多线程复制不依赖于组提交，但可以从更大的组提交中受益，因为一次提交更多的事务有助于事务依赖跟踪找到更多并行化的机会。要尝试调整`binlog_group_commit_sync_delay`，可以从`10000`开始：单位是微秒，所以是10毫秒。这会使源端的事务提交响应时间增加10毫秒，但也应该会提高副本的事务吞吐量。由于缺乏MySQL指标，调整组提交大小以配合多线程副本应用程序的事务吞吐量并不容易。如果选择这条路，请阅读由著名的MySQL专家Jean-François
+    Gagné撰写的[“用于调整MySQL 5.7并行复制的指标”](https://oreil.ly/QG4E1)。
+- en: 'Multithreaded replication is a best practice, but it requires nontrivial MySQL
+    configuration and possibly tuning to achieve maximum performance. Benchmarks and
+    real-world results vary, but multithreaded replication can more than double transaction
+    throughput on replicas. For performance gains like that, it’s well worth the effort.
+    But most importantly: multithreaded replication significantly reduces replication
+    lag, which is critical when using asynchronous replication.'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 多线程复制是最佳实践，但需要复杂的 MySQL 配置和可能的调优来达到最大性能。基准测试和实际结果各不相同，但多线程复制可以使副本的事务吞吐量增加一倍以上。对于这样的性能增益，付出的努力是非常值得的。但最重要的是：多线程复制显著减少了复制延迟，在使用异步复制时至关重要。
+- en: Monitoring
+  id: totrans-146
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 监控
+- en: 'The best practice for monitoring replication lag is to use a purpose-built
+    tool. But first, let’s examine the infamous MySQL metric for replication lag:
+    `Sec​onds_​Behind_Source`, as reported by `SHOW REPLICA STATUS`.'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 监控复制延迟的最佳实践是使用专门设计的工具。但首先，让我们来看看 MySQL 中臭名昭著的复制延迟度量标准：`Sec​onds_​Behind_Source`，如
+    `SHOW REPLICA STATUS` 所报告的。
+- en: Note
+  id: totrans-148
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注
+- en: Before MySQL 8.0.22, the replica lag metric and command were `Sec​onds_​Behind_Master`
+    and `SHOW SLAVE STATUS`, respectively. As of MySQL 8.0.22, the metric and command
+    are `Sec​onds_​Behind_Source` and `SHOW REPLICA STATUS`. I use the current metric
+    and command in this book.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 8.0.22 之前，复制延迟度量和命令分别是 `Sec​onds_​Behind_Master` 和 `SHOW SLAVE STATUS`。从
+    MySQL 8.0.22 开始，度量和命令是 `Sec​onds_​Behind_Source` 和 `SHOW REPLICA STATUS`。本书中使用当前的度量和命令。
+- en: '`Seconds_Behind_Source` equals the current time on the replica minus the timestamp
+    of the binary log event that the SQL thread is executing.^([4](ch07.html#idm45829103397152))
+    If the current time on the replica is `T = 100` and the SQL thread is executing
+    a binary log event with timestamp `T = 80`, then `Seconds_Behind_Source = 20`.
+    When everything is working (replication lag notwithstanding), `Seconds_Behind_Source`
+    is relatively accurate, but it’s notorious for three problems:'
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`Seconds_Behind_Source` 等于副本上的当前时间减去 SQL 线程正在执行的二进制日志事件的时间戳。[^4] 如果副本上的当前时间是
+    `T = 100`，而 SQL 线程正在执行时间戳为 `T = 80` 的二进制日志事件，则 `Seconds_Behind_Source = 20`。当一切正常工作时（尽管存在复制延迟），`Seconds_Behind_Source`
+    相对准确，但它以三个问题而臭名昭著：'
+- en: 'The first problem occurs when everything is not working. Since `Seconds_​Behind_Source`
+    relies solely on binary log event timestamps, it does not figuratively see (or
+    care about) any issues before the binary log events arrive. If the source or network
+    has a problem that causes binary log events not to arrive, or to arrive slowly,
+    then the SQL thread applies all binary log events and `Seconds_Behind_Source`
+    reports zero lag because, from the SQL thread point of view, that is technically
+    correct: zero events, zero lag. But from our point of view, we know that’s wrong:
+    not only is there replication lag, there’s an issue before the replica, too.'
+  id: totrans-151
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第一个问题发生在一切都不工作的情况下。由于 `Seconds_​Behind_Source` 仅依赖于二进制日志事件的时间戳，它在字面上看不到（或不关心）二进制日志事件到达之前的任何问题。如果源或网络出现问题导致二进制日志事件无法到达或到达缓慢，那么
+    SQL 线程会应用所有二进制日志事件，`Seconds_Behind_Source` 报告零延迟，因为从 SQL 线程的角度来看，这在技术上是正确的：零事件，零延迟。但从我们的角度来看，我们知道这是错误的：不仅存在复制延迟，还存在副本之前的问题。
+- en: 'The second problem is that `Seconds_Behind_Source` is notorious for flapping
+    between zero and a nonzero value. For example, one moment `Seconds_Behind_Source`
+    reports 500 seconds of lag, the next moment it reports zero lag, and a moment
+    later it reports 500 seconds of lag again. This problem is related to the first
+    problem: when events trickle into the relay logs because of an issue before the
+    replica, the SQL thread oscillates noticeably between working (applying the latest
+    event) and waiting (for the next event). That causes `Seconds_Behind_Source` to
+    flap between a value (SQL thread is working) and zero (SQL thread is waiting).'
+  id: totrans-152
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第二个问题是，`Seconds_Behind_Source` 经常在零和非零值之间波动。例如，一会儿 `Seconds_Behind_Source` 报告说落后
+    500 秒，下一刻报告说没有落后，再过一会儿又报告说落后 500 秒。这个问题与第一个问题相关：由于在副本之前出现问题导致事件缓慢进入中继日志，SQL 线程明显地在工作（应用最新事件）和等待（等待下一个事件）之间摆动。这导致
+    `Seconds_Behind_Source` 在数值（SQL 线程正在工作）和零（SQL 线程正在等待）之间波动。
+- en: 'The third problem is that `Seconds_Behind_Source` does not precisely answer
+    the question that engineers really want to know: *when will the replica catch
+    up?* When will replica lag be effectively zero because it’s applying the latest
+    transactions from the source? Presuming everything is working (replication lag
+    notwithstanding), the value of `Seconds_Behind_Source` only indicates how long
+    ago the current event being applied was executed on the source; it does *not*
+    precisely indicate how long until the replica catches up to the source. The reason
+    is that replicas apply transactions at a different rate than the source.'
+  id: totrans-153
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第三个问题是，`Seconds_Behind_Source`并没有准确回答工程师们真正想知道的问题：*副本何时会追上？*副本何时的滞后会有效地降为零，因为它正在应用来自源端的最新事务？假设一切正常（尽管存在复制延迟），`Seconds_Behind_Source`的值只表示当前正在应用的事件在源端执行多久之前；它*不*精确表示副本追上源端还需要多长时间。原因在于副本的事务应用速率与源端不同。
+- en: 'For example, suppose that 10 transactions execute concurrently on the source,
+    and each transaction takes 1 second. The total execution time is 1 second and
+    the rate is 10 TPS because the transactions executed concurrently on the source.
+    On a single-threaded replica, which applies each transaction serially, the worst-case
+    total execution time and rate *could be* 10 seconds and 1 TPS, respectively. I
+    emphasize *could be* because it’s also possible that the replica applies all 10
+    transactions significantly faster because the replica isn’t burdened with the
+    full workload and it doesn’t execute SQL statements (it applies binary log events).
+    This could happen if the 1 second execution time per transaction on the source
+    was due to a terrible `WHERE` clause that accessed a million rows but only matched
+    and updated a single row. The lucky replica updates that single row in almost
+    no time. On a multithreaded replica (see [“Reducing Lag: Multithreaded Replication”](#repl-mtr)),
+    the total execution time and rate vary based on at least two factors: the number
+    of applier threads and whether the transactions can be applied in parallel. Either
+    way, the point is: replicas apply transactions at a different rate than the source,
+    and since there’s no way to know the difference, `Seconds_Behind_Source` cannot—and
+    does not—precisely indicate when a replica will catch up.'
+  id: totrans-154
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 例如，假设源端并发执行了10个事务，每个事务需要1秒钟。总执行时间为1秒钟，速率为10 TPS，因为这些事务在源端并发执行。在单线程副本上，每个事务都按顺序应用，最坏情况下的总执行时间和速率*可能是*10秒和1
+    TPS，分别。我强调*可能是*，因为副本也可能会更快地应用所有10个事务，原因是副本没有承担完整的工作负载，并且不执行SQL语句（它应用二进制日志事件）。如果源端每个事务的1秒执行时间是由于一个糟糕的`WHERE`子句，访问了百万行但只匹配并更新了一行，那么幸运的副本几乎没有时间更新那一行。在多线程副本（参见[“减少延迟：多线程复制”](#repl-mtr)）上，总执行时间和速率根据至少两个因素变化：应用线程的数量以及事务是否可以并行应用。无论如何，关键在于：副本的事务应用速率与源端不同，而且由于无法知道差异，`Seconds_Behind_Source`不能——也不会——精确地指示副本何时会追上。
+- en: 'Despite these problems, `Seconds_Behind_Source` provides value: it’s a ballpark
+    estimate of how long until the replica catches up to the source: seconds, minutes,
+    hours, days? More on recovery time in the next section.'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管存在这些问题，`Seconds_Behind_Source`还是有价值的：它提供了一个大概估计，即副本追上源端还需要多长时间：几秒钟、几分钟、几小时、几天？更多关于恢复时间的内容将在下一节讨论。
+- en: 'MySQL 8.0 introduced significantly better visibility into MySQL replication,
+    including replication lag. There’s just one catch: it provides primitives, not
+    ready-to-use metrics like `Seconds_Behind_Source`. If you’re using MySQL 8.0,
+    talk with your DBA about [Performance Schema replication tables](https://oreil.ly/xDKOd)
+    that expose a new wealth of information about MySQL replication. Otherwise, the
+    best practice for monitoring replication lag is to use a purpose-built tool. Instead
+    of relying on binary log event timestamps, tools use their own timestamps. A tool
+    writes timestamps at regular intervals to a table, then reports replication lag
+    as the difference of the current time on a replica minus the latest timestamp
+    in the table. Fundamentally, the approach is similar to how MySQL calculates `Seconds_Behind_Source`,
+    but there are three important differences when using a tool:'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 8.0引入了显著改进的MySQL复制可见性，包括复制延迟。只有一个小问题：它提供了原始构件，而不是像`Seconds_Behind_Source`这样的即用型度量指标。如果你在使用MySQL
+    8.0，请与你的DBA讨论[Performance Schema复制表](https://oreil.ly/xDKOd)，它会提供关于MySQL复制的新信息。否则，监控复制延迟的最佳实践是使用专门的工具。工具不依赖于二进制日志事件的时间戳，而是使用自己的时间戳。工具会定期向表写入时间戳，然后报告复制延迟，即从副本当前时间减去表中最新时间戳的差值。从根本上讲，这种方法与MySQL计算`Seconds_Behind_Source`的方式类似，但使用工具时有三个重要的不同点：
+- en: A tool writes timestamps at regular intervals, which means that it’s not susceptible
+    to the first problem of `Seconds_Behind_Source`. If there’s any issue before the
+    binary log events arrive, replication lag from a tool will immediately begin to
+    increase because its timestamp (written to a table) stops incrementing.
+  id: totrans-157
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 工具会定期写入时间戳，这意味着它不容易受到`Seconds_Behind_Source`的第一个问题的影响。如果在二进制日志事件到达之前存在任何问题，从工具中的复制延迟将立即开始增加，因为其时间戳（写入表中）停止递增。
+- en: 'A tool precludes the second problem of `Seconds_Behind_Source`: replication
+    lag from a tool does not flap; it can only be (effectively) zero if its timestamp
+    is (effectively) equal to the current time.'
+  id: totrans-158
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 工具消除了`Seconds_Behind_Source`的第二个问题：工具的复制延迟不会波动；如果其时间戳等于当前时间（实际上）时，复制延迟只能为零。
+- en: A tool can measure replication lag and write timestamps at subsecond intervals
+    (every 200 milliseconds, for example). A single second of replication lag is too
+    much for high performance applications—or any application when using asynchronous
+    replication.
+  id: totrans-159
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 工具可以测量复制延迟，并以次秒级间隔（例如每200毫秒）写入时间戳。对于高性能应用程序或使用异步复制的任何应用程序，单个秒的复制延迟都太多了。
+- en: Tip
+  id: totrans-160
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: The de facto tool for monitoring MySQL replication is [`pt-heartbeat`](https://oreil.ly/sTvro).
+    (Timestamps written by replication lag monitoring tools are called *heartbeats*.)
+    This venerable tool has seen more than a decade of use and success because it’s
+    simple and effective. Use it to start monitoring replication lag, or use it to
+    learn how to write your own tool.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 监控MySQL复制的事实上的工具是[`pt-heartbeat`](https://oreil.ly/sTvro)。（由复制延迟监控工具写入的时间戳称为*心跳*。）这个老牌工具已经使用和成功了十多年，因为它简单而有效。使用它开始监控复制延迟，或者使用它来学习如何编写自己的工具。
+- en: Recovery Time
+  id: totrans-162
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 恢复时间
+- en: When a replica has a significant amount of lag, the most pressing question is
+    often “When will it recover?” When will the replica catch up to the source so
+    that it’s executing (applying) the latest transactions? There’s no precise answer.
+    But replication lag always recovers after the cause is fixed. I return to this
+    notion at the end of the section. Until then, there’s one more characteristic
+    of replication lag to understand.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当副本有显著的延迟时，最紧迫的问题通常是“它何时会恢复？”副本何时才能赶上源，以便执行（应用）最新的事务？没有确切的答案。但是复制延迟总是在原因修复后恢复。我将在本节末尾回到这个概念。在那之前，还有一个复制延迟的特征需要了解。
+- en: Another common and important characteristic of replication lag is the inflection
+    point between increasing lag and when the replica begins to recover (decreasing
+    lag). In [Figure 7-6](#repl-lag-graph), the inflection point is marked by the
+    dotted line at time 75.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制延迟的另一个常见且重要的特征是增加延迟与副本开始恢复（减少延迟）之间的拐点。在[图7-6](#repl-lag-graph)中，拐点由时间75处的虚线标记。
+- en: 'When replication lag begins, the situation looks increasingly dire as lag increases.
+    But this is normal. Presuming the replica isn’t broken, the SQL threads are working
+    hard, but the cause has not been fixed yet, so the backlog of binary log events
+    continues to increase. As long as the cause persists, replication lag will increase.
+    But again: this is normal. Very soon after the cause is fixed, the proverbial
+    tide will turn, creating an inflection point in the graph of replication lag,
+    as shown in [Figure 7-6](#repl-lag-graph) at time 75. The replica is still lagged,
+    but it’s applying binary log events faster than the I/O thread is dumping them
+    into the relay logs. Post–inflection point, replica lag usually decreases with
+    noticeable and satisfying haste.'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当复制延迟开始时，随着延迟的增加，情况看起来越来越严重。但这是正常的。假设副本没有损坏，SQL线程正在努力工作，但原因尚未修复，因此二进制日志事件的积压继续增加。只要原因持续存在，复制延迟将增加。但同样：这是正常的。原因一旦修复，谚语般的潮水将很快转向，在复制延迟图表中创建一个拐点，如图[7-6](#repl-lag-graph)所示，在第75时刻。副本仍然滞后，但它正在比I/O线程将其倒入中继日志更快地应用二进制日志事件。拐点后，副本延迟通常会以显著且令人满意的速度减少。
+- en: '![emsp 0706](assets/emsp_0706.png)'
+  id: totrans-166
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0706](assets/emsp_0706.png)'
+- en: Figure 7-6\. Inflection point in graph of replication lag
+  id: totrans-167
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图7-6\. 复制延迟图中的拐点
+- en: Recovery time is not very meaningful before the inflection point because, in
+    theory, if the cause is never fixed, then the replica will never recover. When
+    replication lag is increasing steadily (pre–inflection point), don’t be distracted
+    by the value; instead, focus on fixing the cause. Lag will increase until the
+    cause is fixed.
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在拐点之前，恢复时间并不是很有意义，因为理论上，如果原因从未修复，那么副本永远不会恢复。当复制延迟稳步增加（前-拐点），不要被值所分散注意力；而是专注于修复原因。延迟将一直增加，直到原因修复为止。
+- en: Recovery time is more meaningful after the inflection point and it’s usually
+    faster than `Seconds_Behind_Source` or the value reported by tools. As explained
+    in [“Monitoring”](#repl-monitoring), despite replication lag, a single SQL thread
+    is very fast because the replica doesn’t have to execute the full workload that
+    besets the source. As a result, replicas often apply transactions faster than
+    the source, which is how replicas eventually catch up.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在拐点之后，恢复时间比`Seconds_Behind_Source`或工具报告的值更有意义，并且通常更快。如在[“监控”](#repl-monitoring)中解释的那样，尽管有复制延迟，单个SQL线程非常快，因为副本不必执行源的全部工作负载。因此，副本通常比源更快地应用事务，这也是副本最终能够追上的原因。
+- en: In my experience, if replication lag is measured in days, it often recovers
+    in hours (post–inflection point)—perhaps many hours, but hours nevertheless. Likewise,
+    several hours of lag often recovers in a few hours, and several minutes of lag
+    often recovers before you can finish a cup of coffee.
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据我的经验，如果复制延迟以天计算，通常在几小时内就会恢复（后-拐点）—也许是很多小时，但无论如何都是几个小时。同样，几个小时的延迟通常在几个小时内恢复，几分钟的延迟通常在你喝完一杯咖啡之前就能恢复。
+- en: 'Returning to the notions that there’s no precise answer and lag always recovers,
+    the end result is that a precise recovery time is not as useful or meaningful
+    as it first seems. Even if you could know the exact time that a replica will recover,
+    you cannot do anything but wait. MySQL replication is remarkably dogged. As long
+    as the replica doesn’t break, MySQL *will* recover—it always does. Fix the cause
+    as quickly as possible, wait for the inflection point, then replication lag indicates
+    a worst case recovery time: MySQL usually recovers more quickly because SQL threads
+    are fast.'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 回到没有确切答案和延迟总是会恢复的观念，最终结果是确切的恢复时间并不像看起来那么有用或有意义。即使你能知道副本恢复的确切时间，你也只能等待。MySQL复制非常坚韧。只要副本没有崩溃，MySQL
+    *一定会* 恢复。尽快修复原因，等待拐点，那么复制延迟指示的最坏情况恢复时间：MySQL通常会因为SQL线程快而恢复得更快。
+- en: Summary
+  id: totrans-172
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: 'This chapter investigated MySQL replication lag. Replication is the foundation
+    of MySQL high availability, and replication lag is data loss. The main takeaways
+    are:'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章调查了MySQL复制延迟。复制是MySQL高可用性的基础，而复制延迟意味着数据丢失。主要要点如下：
+- en: 'MySQL has three types of replication: asynchronous, semisynchronous, and Group
+    Replication.'
+  id: totrans-174
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL有三种类型的复制：异步、半同步和群组复制。
+- en: Asynchronous (async) replication is the default.
+  id: totrans-175
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 异步（async）复制是默认设置。
+- en: Asynchronous replication can lose numerous transactions on failure.
+  id: totrans-176
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 异步复制在失败时可能会丢失大量事务。
+- en: Semisynchronous (semisync) replication does not lose any committed transactions
+    on failure, only one uncommitted transaction per client connection.
+  id: totrans-177
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 半同步复制在失败时不会丢失任何已提交的事务，只会丢失每个客户端连接的一个未提交的事务。
+- en: 'Group Replication is the future of MySQL replication and high availability
+    (but not covered in this chapter or book): it turns MySQL instances into a cluster.'
+  id: totrans-178
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 组复制是MySQL复制和高可用性的未来（但不包括在本章或书籍中）：它将MySQL实例转变为一个集群。
+- en: The foundation of MySQL async and semisync replication is sending transactions,
+    encoded as binary log events, from a source to a replica.
+  id: totrans-179
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL异步和半同步复制的基础是将事务以二进制日志事件的形式从源端发送到复制副本。
+- en: Semisync replication makes a transaction commit on the source wait for at least
+    one replica to acknowledge receiving and saving (not applying) the transaction.
+  id: totrans-180
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 半同步复制使得源端的事务提交等待至少一个复制副本确认接收并保存（而非应用）该事务。
+- en: A replica has an I/O thread that fetches binary log events from the source and
+    stores them in local relay logs.
+  id: totrans-181
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个复制副本有一个I/O线程，用于从源端获取二进制日志事件，并将其存储在本地中继日志中。
+- en: A replica has, by default, one SQL thread that executes binary log events from
+    the local relay logs.
+  id: totrans-182
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 默认情况下，一个复制副本有一个SQL线程，用于执行来自本地中继日志的二进制日志事件。
+- en: Multithreaded replication can be enabled to run multiple SQL threads (applier
+    threads).
+  id: totrans-183
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 可以启用多线程复制以运行多个SQL线程（应用程序线程）。
+- en: 'Replication lag has three main causes: (high) transaction throughput on the
+    source, a MySQL instance catching up after failure and rebuild, or network issues.'
+  id: totrans-184
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 复制延迟有三个主要原因：源端的（高）事务吞吐量、MySQL实例在故障后的赶上和重建，或者网络问题。
+- en: 'SQL (applier) threads are the limiting factor in replication lag: more SQL
+    threads reduce lag by applying transaction in parallel.'
+  id: totrans-185
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: SQL（应用程序）线程是复制延迟的限制因素：更多的SQL线程通过并行应用事务来减少延迟。
+- en: Semisync replication can incur replication lag.
+  id: totrans-186
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 半同步复制可能会产生复制延迟。
+- en: Replication lag is data loss, especially with asynchronous replication.
+  id: totrans-187
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 复制延迟是数据丢失的表现，尤其是在异步复制中。
+- en: Enabling multithreaded replication is the best way to reduce replication lag.
+  id: totrans-188
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 启用多线程复制是减少复制延迟的最佳方法。
+- en: The MySQL metric for replication lag, `Seconds_Behind_Source`, can be misleading;
+    avoid relying on it.
+  id: totrans-189
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL 的复制延迟度量指标`Seconds_Behind_Source`可能具有误导性；避免依赖它。
+- en: Use a purpose-built tool to measure and report MySQL replication lag at subsecond
+    intervals.
+  id: totrans-190
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用专门的工具以亚秒间隔测量和报告MySQL复制延迟。
+- en: Recovery time from replication lag is imprecise and difficult to calculate.
+  id: totrans-191
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从复制延迟中恢复的时间是不精确且难以计算的。
+- en: MySQL will recover, eventually—it always does once the cause is fixed.
+  id: totrans-192
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL最终会恢复，一旦问题解决，它总是会恢复。
+- en: The next chapter examines MySQL transactions.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一章将详细讨论MySQL事务。
+- en: 'Practice: Monitor Subsecond Lag'
+  id: totrans-194
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实践：监控亚秒延迟
+- en: 'The goal of this practice is to monitor subsecond replication lag and determine:
+    is your replica lagging beyond the 1-second resolution that `Seconds_Behind_Source`
+    can report? For example, is your replica lagging by 800 milliseconds (which is
+    far greater than network latency)? A tool is needed to monitor subsecond lag:
+    [`pt⁠-⁠heart⁠beat`](https://oreil.ly/sTvro).'
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种做法的目标是监控亚秒级的复制延迟，并确定：你的复制副本是否超过了`Seconds_Behind_Source`可以报告的1秒分辨率？例如，你的复制副本是否滞后了800毫秒（远远大于网络延迟）？需要工具来监控亚秒级的延迟：[`pt⁠-⁠heart⁠beat`](https://oreil.ly/sTvro)。
+- en: 'To complete this practice, you need:'
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要完成这个实践，你需要：
+- en: A compute instance to run `pt-heartbeat` that can connect to the source and
+    a replica
+  id: totrans-197
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 需要一个计算实例来运行`pt-heartbeat`，该实例可以连接到源端和一个复制副本。
+- en: MySQL `SUPER` or `GRANT OPTION` privileges to create a user; or ask your DBA
+    to create the user
+  id: totrans-198
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL具有`SUPER`或`GRANT OPTION`权限来创建用户；或者请你的数据库管理员创建该用户。
+- en: MySQL `CREATE` privileges to create a database; or ask your DBA to create the
+    database
+  id: totrans-199
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL `CREATE` 权限来创建数据库；或者请你的数据库管理员创建该数据库。
+- en: Every MySQL configuration and environment is different, so adapt the following
+    example as needed.
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个MySQL配置和环境都是不同的，因此根据需要调整以下示例。
+- en: 'Create a database for `pt-heartbeat` to use:'
+  id: totrans-201
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为`pt-heartbeat`创建一个要使用的数据库：
+- en: '[PRE1]'
+  id: totrans-202
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: You can use a different database name; I just chose `percona` as an example.
+    If you change the database name, be sure to change it in the following commands.
+  id: totrans-203
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 你可以使用不同的数据库名称；我只是选择了`percona`作为示例。如果更改数据库名称，请确保在以下命令中也进行更改。
+- en: 'Create a MySQL user for `pt-heartbeat` and grant it the privileges that it
+    needs:'
+  id: totrans-204
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 为`pt-heartbeat`创建一个MySQL用户，并授予它所需的权限：
+- en: '[PRE2]'
+  id: totrans-205
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: You can use a different MySQL username and password; I just chose `pt-heartbeat`
+    and `percona` (respectively) as an example. You should definitely change the password
+    if running this in production. (The password is set by the `IDENTIFIED BY` clause.)
+  id: totrans-206
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 您可以使用不同的 MySQL 用户名和密码；我只是选择了`pt-heartbeat`和`percona`（分别）作为示例。如果在生产环境中运行此命令，则绝对应该更改密码。（密码由`IDENTIFIED
+    BY`子句设置。）
+- en: 'Run `pt-heartbeat` in update-mode to write heartbeats to a table in the `percona`
+    database:'
+  id: totrans-207
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 以更新模式运行`pt-heartbeat`，将心跳写入`percona`数据库中的表：
+- en: '[PRE3]'
+  id: totrans-208
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'A quick breakdown of those command-line arguments:'
+  id: totrans-209
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 对这些命令行参数的快速解释：
+- en: '`--create-table`'
+  id: totrans-210
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`--create-table`'
+- en: Automatically create the `heartbeat` table in the specified database, if needed.
+    The first `GRANT` statement allows the `pt-heartbeat` user to `CREATE` the table.
+    If not using this option, read the `pt-heartbeat` documentation to learn how to
+    create the `heartbeat` table manually.
+  id: totrans-211
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如果需要，在指定的数据库中自动创建`heartbeat`表。第一个`GRANT`语句允许`pt-heartbeat`用户`CREATE`表。如果不使用此选项，请阅读`pt-heartbeat`文档以了解如何手动创建`heartbeat`表。
+- en: '`--database`'
+  id: totrans-212
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`--database`'
+- en: Specify the database to use. `pt-heartbeat` requires this option.
+  id: totrans-213
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 指定要使用的数据库。`pt-heartbeat`需要此选项。
+- en: '`--interval`'
+  id: totrans-214
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`--interval`'
+- en: Write heartbeats every 200 milliseconds. This option determines the maximum
+    resolution of `pt-heartbeat`, which is the smallest amount of lag that it can
+    detect. The default is 1.0 second, which is not subsecond. The maximum resolution
+    is 0.01 seconds (10 milliseconds). Therefore, 0.2 seconds is a little conservative,
+    so experiment with lower values (high resolution).
+  id: totrans-215
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 每200毫秒写入一个心跳。此选项确定`pt-heartbeat`的最大分辨率，即它能够检测到的最小延迟量。默认值为1.0秒，不是亚秒。最大分辨率为0.01秒（10毫秒）。因此，0.2秒有点保守，因此可以尝试更低的值（更高的分辨率）。
+- en: '`--update`'
+  id: totrans-216
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`--update`'
+- en: Write heartbeats to `heartbeat` table in `--database` every `--interval` seconds.
+  id: totrans-217
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 每隔`--interval`秒将心跳写入`--database`中的`heartbeat`表。
+- en: '`h=SOURCE_ADDR,u=pt-heartbeat,p=percona`'
+  id: totrans-218
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`h=SOURCE_ADDR,u=pt-heartbeat,p=percona`'
+- en: The data source name (DSN) to connect to MySQL. The `h` specifies the hostname.
+    Change `SOURCE_ADDR` to the hostname of the source instance. The `u` specifies
+    the username. The `p` specifies the password.
+  id: totrans-219
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 用于连接到 MySQL 的数据源名称（DSN）。`h`指定主机名。将`SOURCE_ADDR`更改为源实例的主机名。`u`指定用户名。`p`指定密码。
+- en: Read the [`pt-heartbeat` documentation](https://oreil.ly/sTvro) for further
+    details on command-line options and the DSN.
+  id: totrans-220
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 阅读[`pt-heartbeat`文档](https://oreil.ly/sTvro)以获取有关命令行选项和 DSN 的更多详细信息。
+- en: If the command is successful when run, it prints nothing and runs silently.
+    Else, it prints an error and exits.
+  id: totrans-221
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如果成功运行该命令，则不打印任何内容并且静默运行。否则，它会打印错误并退出。
+- en: 'Run `pt-heartbeat` again but in monitor mode to print replication lag:'
+  id: totrans-222
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 运行`pt-heartbeat`以监视模式再次运行以打印复制延迟：
+- en: '[PRE4]'
+  id: totrans-223
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: Change `REPLICA_ADDR` in the DSN to the hostname of a replica instance.
+  id: totrans-224
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 将 DSN 中的`REPLICA_ADDR`更改为副本实例的主机名。
+- en: In monitor mode, `--interval` is how often to check and print replication lag.
+    The update mode instance of `pt-heartbeat` is writing heartbeats every 0.2 seconds
+    (200 milliseconds), but the monitor mode instance of `pt-heartbeat` checks and
+    prints replication lag a little more slowly (every 0.5 seconds) for easy reading.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在监视模式下，`--interval` 是检查和打印复制延迟的频率。 `pt-heartbeat` 的更新模式实例每0.2秒（200毫秒）写入一个心跳，但监视模式实例以稍慢一些的速度（每0.5秒）检查和打印复制延迟，以便于阅读。
+- en: 'If the command in step four is successful when run, it prints lines like:'
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果第四步中的命令成功运行，则打印如下行：
+- en: '[PRE5]'
+  id: totrans-227
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: The first field is the current replication lag. The three fields between the
+    brackets are moving averages for the last 1, 5, and 15 minutes of replication
+    lag.
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一个字段是当前的复制延迟。括号之间的三个字段是复制延迟的最后1、5和15分钟的移动平均值。
+- en: In this example, the first line shows zero lag. Then I intentionally lagged
+    my replica for 1.1 seconds. Consequently, the second line shows 200 milliseconds
+    of replication lag, which is the maximum resolution because the update-mode instance
+    of `pt-heartbeat` is running with `--interval 0.2`. Half a second later (due to
+    the monitor-mode instance of `pt-heartbeat` running with `--interval 0.5`), the
+    tool reports 0.7 seconds (700 milliseconds) of replication lag on the third line.
+    But then my fake 1.1 seconds of lag ends, so the last (fourth) line correctly
+    reports zero lag.
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个例子中，第一行显示零延迟。然后我故意将我的复制品延迟了1.1秒。因此，第二行显示了200毫秒的复制延迟，这是因为`pt-heartbeat`的更新模式实例运行时设定了`--interval
+    0.2`，这是最大分辨率。半秒钟后（因为监控模式实例的`pt-heartbeat`运行时设定了`--interval 0.5`），该工具报告了第三行的0.7秒（700毫秒）的复制延迟。但是随后我假的1.1秒的延迟结束了，所以最后（第四行）正确地报告了零延迟。
+- en: This example is contrived, but it demonstrates how `pt-heartbeat` can monitor
+    and report subsecond replication lag. Try it on your network—the tool is safe
+    to use.
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个例子是人为构造的，但它展示了`pt-heartbeat`如何监控和报告亚秒级的复制延迟。在你的网络上试试吧，这个工具是安全的。
+- en: ^([1](ch07.html#idm45829103536576-marker)) [“MySQL Group Replication…Synchronous
+    or Asynchronous Replication?”](https://oreil.ly/Gv6GR) by renowned MySQL expert
+    Frédéric Descamps explains the synchronicity of Group Replication.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch07.html#idm45829103536576-marker)) [“MySQL Group Replication…同步或异步复制？”](https://oreil.ly/Gv6GR)
+    是由著名的MySQL专家Frédéric Descamps撰写，解释了组复制的同步性。
+- en: ^([2](ch07.html#idm45829103496928-marker)) I presume [`sync_binlog` = 1](https://oreil.ly/lbfwm).
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch07.html#idm45829103496928-marker)) 我推测[`sync_binlog` = 1](https://oreil.ly/lbfwm)。
+- en: ^([3](ch07.html#idm45829103468976-marker)) In the MySQL manual, the full term
+    is *applier worker thread*, but I think *worker* is redundant since every thread
+    is a worker of some type.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([3](ch07.html#idm45829103468976-marker)) 在MySQL手册中，完整术语是*applier worker thread*，但我认为*worker*是多余的，因为每个线程都是某种类型的工作线程。
+- en: ^([4](ch07.html#idm45829103397152-marker)) Technically, it’s the event timestamp
+    plus its execution time. Also, the clock skew between source and replica is subtracted
+    from `Seconds_Behind_Source` when it’s reported by `SHOW REPLICA STATUS`.
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([4](ch07.html#idm45829103397152-marker)) 严格来说，它是事件时间戳加上其执行时间。此外，当`SHOW REPLICA
+    STATUS`报告时，源和副本之间的时钟偏移被减去了`Seconds_Behind_Source`。

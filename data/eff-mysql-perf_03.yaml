@@ -1,0 +1,2369 @@
+- en: Chapter 3\. Data
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第 3 章 数据
+- en: 'This chapter begins the second part of the journey: *indirect query optimization*.
+    As mentioned in [“Improving Query Response Time”](ch01.html#query-optimization),
+    direct query optimization solves a lot of problems, but not all. Even when you
+    surpass the knowledge and skills in [Chapter 2](ch02.html#ch02), which focuses
+    on direct query optimization, you will encounter queries that are simple and properly
+    indexed but still slow. That’s when you begin to optimize *around* the query,
+    starting with the data that it accesses. To understand why, let’s think about
+    rocks.'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章开始了第二部分旅程：*间接查询优化*。如 [“优化查询响应时间”](ch01.html#query-optimization) 中所述，直接查询优化解决了许多问题，但并非所有问题。即使你已经超越了第
+    2 章中关于直接查询优化的知识和技能，你仍然会遇到简单且适当索引但仍然缓慢的查询。这时你开始优化*环绕*查询，从它访问的数据开始。为了理解原因，让我们想想岩石。
+- en: 'Imagine that your job is to move rocks, and you have three piles of different
+    sized rocks. The first pile contains pebbles: very light, no larger than your
+    thumbnail. The second pile contains cobbles: heavy but light enough to pick up,
+    no larger than your head. The third pile contains boulders: too large and heavy
+    to pick up; you need leverage or a machine to move them. Your job is to move one
+    pile from the bottom of a hill to the top (no matter why; but if it helps, imagine
+    that you’re Sisyphus). Which pile do you choose?'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 想象一下，你的工作是搬运岩石，你有三堆不同大小的岩石。第一堆是小石子：非常轻，不大于你的拇指。第二堆是鹅卵石：重但足够轻便拾起，不大于你的头。第三堆是巨石：太大太重，无法抬起；你需要杠杆或机器来移动它们。你的任务是将一堆从山脚移到山顶（无论为何；但如果有帮助的话，可以想象你是西西弗斯）。你会选择哪一堆？
+- en: 'I presume that you choose the pebbles because they’re light and easy to move.
+    But there’s a critical detail that might change your decision: weight. The pile
+    of pebbles weighs two metric tons (the weight of a mid-size SUV). The pile of
+    cobbles weighs one metric ton (the weight of a very small car). And there’s only
+    one boulder that weighs half a metric ton (the weight of ten adult humans). Now
+    which pile do you choose?'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我假设你会选择小石子，因为它们轻而容易搬动。但有一个关键的细节可能会改变你的决定：重量。小石子堆重两公吨（相当于中型 SUV 的重量）。鹅卵石堆重一公吨（相当于一个非常小的汽车的重量）。而只有一个巨石，重半公吨（相当于十个成年人的重量）。现在你会选择哪一堆？
+- en: On the one hand, the pebbles are still a lot easier to move. You can shovel
+    them into a wheelbarrow and roll it up the hill. There’s just a lot of them (pebbles,
+    not wheelbarrows). The boulder is a fraction of the weight, but its singular size
+    makes it unwieldy. Special equipment is need to move it up the hill, but it’s
+    a one-time task. Tough decision. [Chapter 5](ch05.html#ch05) provides an answer
+    and an explanation, but we have much more to cover before that chapter.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一方面，小石子要移动起来简单得多。你可以用铲子铲进推车里，然后推上山。只是小石子多（不是推车多）。大石头重量比较小，但是由于其独特的大小使其难以控制。需要特殊设备将其搬上山，但这只需完成一次任务。决定很难。[第
+    5 章](ch05.html#ch05) 提供了答案和解释，但在那章之前我们还有很多内容要覆盖。
+- en: Data is analogous to a pile of rocks, and executing queries is analogous to
+    moving the rocks uphill. When data size is small, direct query optimization is
+    usually sufficient because the data is trivial to handle—like walking (or running)
+    up a hill with a handful of pebbles. But as data size increases, indirect query
+    optimization becomes increasingly important—like lugging a heavy cobble up a hill
+    and stopping midway to ask, “Can we do something about these rocks?”
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据类似于一堆岩石，执行查询类似于将岩石推上山。当数据量较小时，通常直接查询优化就足够了，因为数据很容易处理——就像手里拿着一把小石子走（或跑）上山。但随着数据量的增加，间接查询优化变得越来越重要——就像拖着一块重的鹅卵石爬山，并在半路上停下来问：“我们能做点什么处理这些岩石吗？”
+- en: '[Chapter 1](ch01.html#ch01) provided a “proof” that data size affects performance:
+    `TRUNCATE TABLE` dramatically increases performance—but don’t use this “optimization.”
+    That’s a joke, but it also proves a point that is not frequently followed through
+    to its logical consequence: *less data is more performance*. That’s the tagline;
+    the full statement is: you can improve performance by reducing data because less
+    data requires fewer system resources (CPU, memory, storage, and so on).'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[第 1 章](ch01.html#ch01) 提供了一个“证明”，即数据大小影响性能：`TRUNCATE TABLE` 显著提高性能，但不要使用这种“优化”。这是一个玩笑，但也证明了一个经常被忽视的观点：*数据越少性能越好*。这是一个口号；完整的陈述是：你可以通过减少数据来提高性能，因为较少的数据需要更少的系统资源（CPU、内存、存储等等）。'
+- en: You can tell by now that this chapter is going to argue for *less* data. But
+    isn’t *more* data the reality and reason that drives engineers to learn about
+    performance optimization? Yes, and [Chapter 5](ch05.html#ch05) addresses MySQL
+    at scale, but first it’s imperative to learn to reduce and optimize data when
+    it’s relatively small and problems are tractable. The most stressful time to learn
+    is when you’ve ignored data size until it’s crushing the application.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，您可能已经发现本章将主张减少数据量。但是，*更多*数据不是驱使工程师学习性能优化的现实和理由吗？是的，[第5章](ch05.html#ch05)讨论了规模化的MySQL，但首先必须学会在数据相对较小且问题可解时减少和优化数据。最紧张的学习时机是当您忽视数据大小直到它压垮应用程序时。
+- en: This chapter examines data with respect to performance and argues that reducing
+    data access and storage is a technique—an indirect query optimization—for improving
+    performance. There are three major sections. The first reveals three secrets about
+    MySQL performance. The second introduces what I call the *principle of least data*
+    and its numerous implications. The third covers how to quickly *and safely* delete
+    or archive data.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章讨论数据与性能的关系，并主张减少数据访问和存储是一种技术——间接查询优化——以提高性能。有三个主要部分。第一部分揭示了MySQL性能的三个秘密。第二部分介绍了我所称的*最少数据原则*及其众多含义。第三部分介绍了如何快速且*安全*地删除或归档数据。
+- en: Three Secrets
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 三个秘密
+- en: To keep a secret is to conceal a truth. The following truths are not always
+    revealed in books about MySQL performance for two reasons. First, they complicate
+    matters. It’s a lot easier to write about and explain performance without mentioning
+    the caveats and gotchas. Second, they’re counterintuitive. That doesn’t make them
+    false, but it does make them difficult to clarify. Nevertheless, the following
+    truths are important for MySQL performance, so let’s dig into the details with
+    an open mind.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 保守秘密是隐藏真相。以下真相在关于MySQL性能的书籍中并不总是透露出来，有两个原因。首先，它们使事情变得复杂。在不提及警告和注意事项的情况下写作和解释性能要容易得多。其次，它们是反直觉的。这并不意味着它们是错误的，但确实使它们难以澄清。尽管如此，以下真相对于MySQL性能至关重要，所以让我们以开放的心态深入探讨细节。
+- en: Indexes May Not Help
+  id: totrans-11
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 索引可能无法帮助
+- en: Ironically, you can expect the majority of slow queries to use an index lookup.
+    That’s ironic for two reasons. First, indexes are the key to performance, but
+    a query can be slow even with a good index. Second, after learning about indexes
+    and indexing (as discussed in [Chapter 2](ch02.html#ch02)), engineers become so
+    good at avoiding index scans and table scans that only index lookups remain, which
+    is a good problem but ironic nonetheless.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 具有讽刺意味的是，您可以预期大多数慢查询使用索引查找。这有两个原因是讽刺的。首先，索引是性能的关键，但即使有很好的索引，查询也可能很慢。其次，在学习索引和索引技术之后（如[第2章](ch02.html#ch02)所讨论的），工程师变得擅长避免索引扫描和表扫描，只剩下索引查找，这是一个好问题，但仍然具有讽刺意味。
+- en: Performance cannot be achieved without indexes, but that doesn’t mean that indexes
+    provide infinite leverage for infinite data size. Don’t lose faith in indexes,
+    but be aware of the following cases in which indexes may not help. For each case,
+    presuming the query and its indexes cannot be optimized any further, the next
+    step is indirect query optimization.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能不可达到无索引，但这并不意味着索引为无限数据大小提供无限杠杆。不要对索引失去信心，但要注意以下情况，索引可能无法帮助。对于每种情况，假设查询及其索引无法进一步优化，则下一步是间接查询优化。
+- en: Index scan
+  id: totrans-14
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 索引扫描
+- en: 'An index scan provides diminishing leverage as a table grows because the index
+    also grows: more table rows, more index values.^([1](ch03.html#idm45829112705168))
+    (By contrast, the leverage that an index lookup provides almost never diminishes
+    as long as the index fits in memory.) Even an index-only scan tends not to scale
+    because it almost certainly reads a large number of values—a safe presumption
+    because MySQL would have done an index lookup to read fewer rows if possible.
+    An index scan only delays the inevitable: as the number of rows in the table increases,
+    response time for queries that use an index scan also increases.'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着表的增长，索引扫描提供的杠杆减少，因为索引也增长：表行数越多，索引值也越多。^([1](ch03.html#idm45829112705168))（相比之下，只要索引适合内存，索引查找提供的杠杆几乎永远不会减少。）即使仅索引扫描通常也不会扩展，因为它几乎肯定会读取大量值——这是一个安全的假设，因为如果可能的话，MySQL会进行索引查找以读取较少行。索引扫描只会推迟必然发生的事情：随着表中行数的增加，使用索引扫描的查询的响应时间也会增加。
+- en: Finding rows
+  id: totrans-16
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 查找行
+- en: When I optimize a slow query that uses an index lookup, the first query metric
+    I check is rows examined (see [“Rows examined”](ch01.html#Rows-examined)). Finding
+    matching rows is the fundamental purpose of a query, but even with a good index,
+    a query can examine too many rows. *Too many* is the point at which response time
+    becomes unacceptable (and the root cause is not something else, like insufficient
+    memory or disk IOPS). This happens because several index lookup access types can
+    match many rows. Only the access types listed in [Table 3-1](#one-row-idx) match
+    *at most* one row.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我优化使用索引查找的慢查询时，我首先检查的是行数（查看[“行数检查”](ch01.html#Rows-examined)）。查找匹配行是查询的基本目的，但即使使用了良好的索引，查询也可能检查过多行。*太多*是响应时间变得不可接受的点（而根本原因不是其他因素，比如内存不足或磁盘IOPS不足）。这是因为几种索引查找访问类型可以匹配许多行。只有[表 3-1](#one-row-idx)中列出的访问类型匹配*最多*一行。
+- en: Table 3-1\. Index lookup access types that match at most one row
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 3-1\. 匹配最多一行的索引查找访问类型
+- en: '| ☐ | `system` |'
+  id: totrans-19
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ | `system` |'
+- en: '| ☐ | `const` |'
+  id: totrans-20
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ | `const` |'
+- en: '| ☐ | `eq_ref` |'
+  id: totrans-21
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ | `eq_ref` |'
+- en: '| ☐ | `unique_subquery` |'
+  id: totrans-22
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ | `unique_subquery` |'
+- en: If the `type` field in an EXPLAIN plan is not one of the access types listed
+    in [Table 3-1](#one-row-idx), then pay close attention to the `rows` field and
+    the query metric rows examined (see [“Rows examined”](ch01.html#Rows-examined)).
+    Examining a very large number of rows is slow regardless of the index lookup.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果EXPLAIN计划中的`type`字段不是[表 3-1](#one-row-idx)中列出的访问类型之一，则要密切关注`rows`字段和查询指标行数检查（查看[“行数检查”](ch01.html#Rows-examined)）。检查非常多的行无论索引查找如何都很慢。
+- en: Note
+  id: totrans-24
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: '[“EXPLAIN Output Format”](https://oreil.ly/8dkRy) in the MySQL manual enumerates
+    access types, which it calls *join types* because MySQL treats every query as
+    a join. In this book, for precision and consistency I use only two terms: *access
+    method* and *access type*, as written throughout [Chapter 2](ch02.html#ch02).'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[“EXPLAIN输出格式”](https://oreil.ly/8dkRy)在MySQL手册中列出了访问类型，它称之为*连接类型*，因为MySQL将每个查询视为连接。在本书中，为了精确性和一致性，我只使用两个术语：*访问方法*和*访问类型*，如[第 2 章](ch02.html#ch02)中所述。'
+- en: 'Very low index selectivity is a likely accomplice. Recall [“Extreme Selectivity”](ch02.html#extreme-selectivity):
+    index selectivity is cardinality divided by the number of rows in the table. MySQL
+    is unlikely to chose an index with very low selectivity because it can match too
+    many rows. Since secondary indexes require a second lookup in the primary key
+    to read rows, it can be faster to eschew an index with extremely low selectivity
+    and do a full table scan instead—presuming there’s no better index. You can detect
+    this in an EXPLAIN plan when the access method is a table scan (`type: ALL`) but
+    there are indexes that MySQL could use (`possible_keys`). To see the execution
+    plan that MySQL is not choosing, `EXPLAIN` the query with [`FORCE INDEX`](https://oreil.ly/nv1uy)
+    to use an index listed in the `possible_keys` field. Most likely, the resulting
+    execution plan will be an index scan (`type: index`) with a large number of `rows`,
+    which is why MySQL chooses a table scan instead.'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '非常低的索引选择性很可能是一个罪魁祸首。回想一下[“极端选择性”](ch02.html#extreme-selectivity)：索引选择性是基数除以表中的行数。MySQL不太可能选择具有非常低选择性的索引，因为它可以匹配太多行。由于次要索引需要在主键中进行第二次查找以读取行，所以放弃具有极低选择性的索引并进行全表扫描可能更快——假设没有更好的索引。在EXPLAIN计划中，如果访问方法是表扫描（`type:
+    ALL`），但存在MySQL可以使用的索引（`possible_keys`），则可以检测到这一点。要查看MySQL未选择的执行计划，请使用[`FORCE INDEX`](https://oreil.ly/nv1uy)强制使用`possible_keys`字段中列出的索引。最有可能的执行计划将是索引扫描（`type:
+    index`），其中有大量的`rows`，这就是MySQL选择表扫描的原因。'
+- en: Tip
+  id: totrans-27
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: 'Recall [“It’s a Trap! (When MySQL Chooses Another Index)”](ch02.html#its-a-trap):
+    in very rare cases, MySQL chooses the wrong index. If a query examines too many
+    rows but you’re certain there’s a better index that MySQL should use, there’s
+    a small chance that the index statistics are wrong, which causes MySQL to not
+    choose the better index. Run `ANALYZE TABLE` to update index statistics.'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 回想一下[“陷阱！（当MySQL选择其他索引时）”](ch02.html#its-a-trap)：在非常罕见的情况下，MySQL会选择错误的索引。如果查询检查了太多行，但您确信有一个更好的索引MySQL应该使用，那么索引统计可能有误的可能性很小，这导致MySQL不选择更好的索引。运行`ANALYZE
+    TABLE`来更新索引统计信息。
+- en: Remember that index selectivity is a function of cardinality and the number
+    of rows in the table. If cardinality remains constant but the number of rows increases,
+    then selectivity decreases. Consequently, an index that helped when the table
+    was small may not help when the table is huge.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记住，索引选择性是基于基数和表中行数的函数。如果基数保持不变但行数增加，则选择性会降低。因此，在表很小时有帮助的索引，在表很大时可能无济于事。
+- en: Joining tables
+  id: totrans-30
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 连接表
+- en: 'When joining tables, a few rows in each table quickly obliterate performance.
+    If you recall from [“Table Join Algorithms”](ch02.html#table-join-algos), the
+    nested-loop join (NLJ) algorithm ([Example 2-22](ch02.html#NLJ)) entails that
+    the total number of rows accessed for a join is the product of rows accessed for
+    each table. In other words, multiply the values for `rows` in an EXPLAIN plan.
+    A three-table join with only one hundred rows per table can access one *million*
+    rows: 100 × 100 × 100 = 1,000,000. To avoid this, the index lookup on each table
+    joined should match only one row—one of the access types listed in [Table 3-1](#one-row-idx)
+    is best.'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当连接表时，每个表中的少数几行很快就会影响性能。如果您回忆起 [“表连接算法”](ch02.html#table-join-algos)，嵌套循环连接（NLJ）算法（[示例
+    2-22](ch02.html#NLJ)）意味着连接访问的总行数是每个表访问的行数的乘积。换句话说，在EXPLAIN计划中将`rows`的值相乘。一个每个表只有一百行的三表连接可以访问一百万行：100
+    × 100 × 100 = 1,000,000。为了避免这种情况，每个表连接的索引查找应该只匹配一行——在 [表 3-1](#one-row-idx) 中列出的访问类型之一是最佳选择。
+- en: 'MySQL can join tables in almost any order. Use this to your advantage: sometimes
+    the solution to a poor join is a better index on another table that allows MySQL
+    to change the join order.'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL几乎可以按任何顺序连接表。利用这一点：有时解决不良连接的方案是在另一张表上创建更好的索引，以便MySQL改变连接顺序。
+- en: Without an index lookup, a table join is doomed. The result is a full join,
+    as forewarned in [“Select full join”](ch01.html#Select-full-join). But even with
+    an index, a table join will struggle if the index does not match a single row.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 没有索引查找，表连接注定失败。结果是全连接，如 [“选择全连接”](ch01.html#Select-full-join) 中预示的那样。但即使有索引，如果索引与单行不匹配，表连接也会遇到困难。
+- en: Working set size
+  id: totrans-34
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 工作集大小
+- en: Indexes are only useful when they’re in memory. If the index values that a query
+    looks up are not in memory, then MySQL reads them from disk. (More accurately,
+    the B-tree nodes that constitute the index are stored in 16 KB pages, and MySQL
+    swaps pages between memory and disk as needed.) Reading from disk is orders of
+    magnitude slower than reading from memory, which is one problem, but the main
+    problem is that indexes compete for memory.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 只有当索引在内存中时才有用。如果查询查找的索引值不在内存中，则MySQL会从磁盘读取它们。（更准确地说，构成索引的B树节点存储在16KB页中，MySQL根据需要在内存和磁盘之间交换页面。）从磁盘读取比从内存读取慢几个数量级，这是一个问题，但主要问题是索引竞争内存。
+- en: If memory is limited but indexes are numerous and frequently used to look up
+    a large percentage of values (relative to the table size), then index usage can
+    increase storage I/O as MySQL attempts to keep frequently used index values in
+    memory. This is possible but rare for two reasons. First, MySQL is exceptionally
+    good at keeping frequently used index values in memory. Second, frequently used
+    index values and the primary key rows to which they refer are called the *working
+    set*, and it’s usually a small percentage of the table size. For example, a database
+    can be 500 GB large, but the application frequently accesses only 1 GB of data.
+    In light of this fact, MySQL DBAs commonly allocate memory for only 10% of total
+    data size, usually rounded to standard memory values (64 GB, 128 GB, and so forth).
+    10% of 500 GB is 50 GB, so a DBA would probably err on the side of caution and
+    round up to 64 GB of memory. This works surpassingly well and is a good starting
+    point.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果内存有限但索引数众多且频繁用于查找大比例的值（相对于表大小），则索引使用可能会增加存储I/O，因为MySQL试图保持频繁使用的索引值在内存中。这种情况可能发生，但很少，有两个原因。首先，MySQL非常擅长保持频繁使用的索引值在内存中。其次，频繁使用的索引值及其引用的主键行被称为*工作集*，通常只占表大小的一小部分。例如，数据库可能有500GB大小，但应用程序经常只访问1GB的数据。考虑到这一事实，MySQL
+    DBA通常仅为总数据大小的10%分配内存，通常舍入到标准内存值（64GB、128GB等）。500GB的10%为50GB，因此DBA可能会谨慎地舍入到64GB的内存。这种方法效果非常好，是一个很好的起点。
+- en: Tip
+  id: totrans-37
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: As a starting point, allocate memory for 10% of total data size. The working
+    set size is usually a small percentage of total data size.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为起点，为总数据大小分配10%的内存。工作集大小通常只占总数据大小的一小部分。
+- en: 'When the working set size becomes significantly larger than available memory,
+    indexes may not help. Instead, like a fire that burns so hot that water fuels
+    it rather than extinguishing it, index usage puts pressure on storage I/O and
+    everything slows down. More memory is a quick fix, but remember [“Better, Faster
+    Hardware!”](ch02.html#better-faster-hardware): scaling up is not a sustainable
+    approach. The best solution is to address the data size and access patterns responsible
+    for the large working set. If the application truly needs to store and access
+    so much data that the working set size cannot fit within a reasonable amount of
+    memory on a single MySQL instance, then the solution is sharding, which is covered
+    in [Chapter 5](ch05.html#ch05).'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当工作集大小显著大于可用内存时，索引可能没有帮助。相反，就像一团炽热的火焰，水不是灭火剂，索引使用会对存储 I/O 施加压力，使一切变慢。更多内存是一个快速解决方案，但请记住
+    [“更好、更快的硬件！”](ch02.html#better-faster-hardware)：扩展不是一种可持续的方法。最佳解决方案是解决导致大工作集的数据大小和访问模式。如果应用程序确实需要存储和访问如此多的数据，以至于工作集大小无法在单个
+    MySQL 实例的合理内存量内容纳，那么解决方案是分片，详见[第五章](ch05.html#ch05)。
+- en: Less Data Is Better
+  id: totrans-40
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 数据越少越好
+- en: 'Experienced engineers don’t celebrate a huge database, they cope with it. They
+    celebrate when data size is dramatically reduced because less data is better.
+    Better for what? Everything: performance, management, cost, and so on. It’s simply
+    a lot faster, easier, and cheaper to deal with 100 GB of data than 100 *TB* on
+    a single MySQL instance. The former is so small that a smartphone can handle it.
+    The latter requires specialized handling: optimizing performance is more challenging,
+    managing the data can be risky (what’s the backup and restore time?), and good
+    luck finding affordable hardware for 100 TB. It’s easier to keep data size reasonable
+    than to cope with a huge database.'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 经验丰富的工程师不会为一个巨大的数据库而欢呼，他们应对它。当数据大小显著减少时，他们会庆祝，因为数据越少越好。对什么好？一切：性能、管理、成本等等。处理
+    100 GB 的数据比在单个 MySQL 实例上处理 100 *TB* 要快得多、更容易、更便宜。前者如此之小，以至于智能手机都能处理。后者则需要专门处理：优化性能更具挑战性，管理数据可能存在风险（备份和恢复时间是多少？），找到价格合理的硬件为
+    100 TB 数据难度很大。保持数据大小合理比应对一个巨大的数据库更容易。
+- en: 'Any amount of data that’s legitimately required is worth the time and effort
+    to optimize and manage. The problem is less about data size and more about unbridled
+    data growth. It’s not uncommon for engineers to hoard data: storing any and all
+    data. If you’re thinking, “Not me. I don’t hoard data,” then wonderful. But your
+    colleagues may not share your laudable sense of data asceticism. If not, raise
+    the issue of unbridled data growth before data size becomes a problem.'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 任何真正需要的数据都值得优化和管理。问题不在于数据大小，而在于无节制的数据增长。工程师们经常囤积数据：存储所有可能的数据。如果你在想，“不是我。我不会囤积数据”，那太好了。但你的同事可能不具备你令人称赞的数据苦行僧精神。如果是这样，在数据大小成为问题之前，提出无节制的数据增长的问题。
+- en: Tip
+  id: totrans-43
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Don’t let an unwieldy database catch you by surprise. Monitor data size (see
+    [“Data Size”](ch06.html#metrics-data-size)) and, based on the current rate of
+    growth, estimate data size for the next four years. If future data size is not
+    feasible with the current hardware and application design, then address the issue
+    now before it becomes a problem.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不要让一个难以管理的数据库令你措手不及。监控数据大小（参见 [“数据大小”](ch06.html#metrics-data-size)），并根据当前的增长率，估计未来四年的数据大小。如果未来的数据大小在当前硬件和应用设计下不可行，则在问题变成问题之前解决这个问题。
+- en: Less QPS Is Better
+  id: totrans-45
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: QPS 越少越好
+- en: You may never find another book or engineer that says *less* QPS is better.
+    Cherish the moment.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 也许你永远找不到另一本书或者工程师会说*更低的* QPS 更好。珍惜这一刻。
+- en: 'I realize that this secret is counterintuitive, perhaps even unpopular. To
+    see its truth and wisdom, consider three less objectionable points about QPS:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我意识到这个秘密是反直觉的，甚至可能不受欢迎。要看到它的真理和智慧，考虑三个关于 QPS 较少争议的观点：
+- en: '*QPS is only a number—a measurement of raw throughput*'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*QPS 只是一个数字——原始吞吐量的测量*。'
+- en: It reveals nothing qualitative about the queries or performance in general.
+    One application can be effectively idle at 10,000 QPS, while another is overloaded
+    and having an outage at half that throughput. Even at the same QPS, there are
+    numerous qualitative differences. Executing `SELECT 1` at 1,000 QPS requires almost
+    zero system resources, but a complex query at the same QPS could be very taxing
+    on all system resources. And high QPS—no matter how high—is only as good as query
+    response time.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它并未揭示任何关于查询或总体性能的定性内容。一个应用程序在10,000 QPS时可以有效处于空闲状态，而另一个在半数吞吐量时可能过载并处于宕机状态。即使在相同的QPS下，也存在许多定性差异。在1,000
+    QPS下执行`SELECT 1`几乎不需要系统资源，但在同样的QPS下执行复杂查询可能会对所有系统资源造成很大压力。而且无论QPS有多高，其也只有查询响应时间那么好。
+- en: '*QPS values have no objective meaning*'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*QPS值没有客观意义*'
+- en: 'They’re neither good nor bad, high nor low, typical nor atypical. QPS values
+    are only meaningful relative to an application. If one application averages 2,000
+    QPS, then 100 QPS could be a precipitous drop that indicates a outage. But if
+    another application averages 300 QPS, then 100 QPS could be a normal fluctuation.
+    QPS can also be relative to external events: time of day, day of week, seasons,
+    holidays, and so on.'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 它们既不好也不坏，既不高也不低，既不典型也不非典型。QPS值只有与一个应用程序相关时才有意义。如果一个应用程序平均每秒2,000次请求，则100次请求可能意味着宕机。但是，如果另一个应用程序平均每秒300次请求，则100次请求可能是正常波动。QPS还可以与外部事件相关：一天中的时间、一周中的日期、季节、假期等等。
+- en: '*It is difficult to increase QPS*'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*增加QPS是困难的*'
+- en: By contrast, data size can increase with relative ease from 1 GB to 100 GB—a
+    100x increase. But it’s incredibly difficult to increase QPS by 100x (except for
+    extremely low values, like 1 QPS to 100 QPS). Even a 2x increase in QPS can be
+    very challenging to achieve. Maximum QPS—relative to an application—is even more
+    challenging to increase because you cannot purchase more QPS, unlike storage and
+    memory.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相比之下，数据大小可以相对容易地从1 GB增加到100 GB——增加了100倍。但是，增加QPS 100倍（除了极低的值，如从1 QPS到100 QPS）却非常困难。即使是QPS的2倍增加也可能非常具有挑战性。相对于应用程序的最大QPS增加更具挑战性，因为您无法购买更多的QPS，而存储和内存则不同。
+- en: 'In summary of these points: QPS is not qualitative, only relative to an application,
+    and difficult to increase. To put a point on it: *QPS does not help you*. It’s
+    more of a liability than an asset. Therefore, less QPS is better.'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总结这些观点：QPS不是定性的，只是相对于一个应用程序，而且难以增加。具体说来：*QPS对你没有帮助*。它更像是一种负担而非资产。因此，更少的QPS才更好。
+- en: Experienced engineers celebrate when QPS is reduced (intentionally) because
+    less QPS is more capacity for growth.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 经验丰富的工程师们在QPS减少（有意）时庆祝，因为较少的QPS意味着更多的增长空间。
+- en: Principle of Least Data
+  id: totrans-56
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 最少数据原则
+- en: 'I define the principle of least data as: *store and access only needed data*.
+    That sounds obvious in theory, but it’s far from the norm in practice. It’s also
+    deceptively simple, which is why the next two sections have many fine details.'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我将最少数据原则定义为：*仅存储和访问所需的数据*。这在理论上听起来显而易见，但在实践中远非常态。这也是为何接下来的两个部分有许多细节之处的原因。
+- en: Common sense is not so common.
+  id: totrans-58
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: 常识并不常见。
+- en: ''
+  id: totrans-59
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: Voltaire
+  id: totrans-60
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: 伏尔泰
+- en: Data Access
+  id: totrans-61
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 数据访问
+- en: 'Do not access more data than needed. *Access* refers to all the work that MySQL
+    does to execute a query: find matching rows, process matching rows, and return
+    the result set—for both reads (`SELECT`) and writes. Efficient data access is
+    especially important for writes because it’s more difficult to scale writes.'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不要访问比所需更多的数据。*访问*指的是MySQL执行查询时的所有工作：查找匹配行、处理匹配行，并返回结果集，无论是读取（`SELECT`）还是写入。高效的数据访问尤为重要，因为增加写入的规模更为困难。
+- en: '[Table 3-2](#data-access-checklist) is a checklist that you can apply to a
+    query—hopefully every query—to verify its data access efficiency.'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[表 3-2](#data-access-checklist) 是一个清单，你可以应用于每一个查询——希望是每一个查询——以验证其数据访问效率。'
+- en: Table 3-2\. Efficient data access checklist
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表3-2\. 高效数据访问检查清单
+- en: '| ☐ | Return only needed columns |'
+  id: totrans-65
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ | 仅返回必要的列 |'
+- en: '| ☐ | Reduce query complexity |'
+  id: totrans-66
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ | 减少查询复杂性 |'
+- en: '| ☐ | Limit row access |'
+  id: totrans-67
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ | 限制行访问 |'
+- en: '| ☐ | Limit the result set |'
+  id: totrans-68
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ | 限制结果集 |'
+- en: '| ☐ | Avoid sorting rows |'
+  id: totrans-69
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ | 避免对行进行排序 |'
+- en: To be fair and balanced, ignoring a single checklist item is unlikely to affect
+    performance. For example, the fifth item—avoid sorting rows—is commonly ignored
+    without affecting performance. These items are best practices. If you practice
+    them until they become habit, you will have greater success and performance with
+    MySQL than engineers who ignore them completely.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 公平和平衡地说，忽略单个检查项不太可能影响性能。例如，第五条项目——避免对行进行排序——通常会被忽略，而不会影响性能。这些项目是最佳实践。如果你实践它们直到变成习惯，你将比完全忽略它们的工程师取得更大的成功和
+    MySQL 的性能。
+- en: Before I explain each item in [Table 3-2](#data-access-checklist), let’s take
+    one paragraph to revisit an example in [Chapter 1](ch01.html#ch01) that I deferred
+    to this chapter.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我解释[表 3-2](#data-access-checklist)中的每一项之前，让我们花一段时间来重新讨论一个在[第 1 章](ch01.html#ch01)中推迟到这一章的例子。
+- en: 'Perhaps you recall this example from [“Query profile”](ch01.html#query-profile):
+    “As I write this, I’m looking at a query with load 5,962\. How is that possible?”
+    That query load is possible thanks to *incredibly* efficient data access and an
+    extremely busy application. The query is like `SELECT col1, col2 WHERE pk_col
+    = 5`: a primary key look up that returns only two columns from a single row. When
+    data access is that efficient, MySQL functions *almost* like an in-memory cache,
+    and it executes the query at incredible QPS and query load. *Almost*, but not
+    entirely, because every query is a transaction that entails overhead. ([Chapter 8](ch08.html#ch08)
+    focuses on transactions.) To optimize a query like this, you must change access
+    patterns because the query cannot be optimized any further and the data size cannot
+    be reduced. I revisit this query one more time in [Chapter 4](ch04.html#ch04).'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或许你还记得[“查询概要”](ch01.html#query-profile)中的这个例子：“在我写这篇文章的时候，我正在查看一个查询负载为 5,962
+    的查询。这是怎么可能的？”这种查询负载之所以可能，归功于*极其*高效的数据访问和一个非常忙碌的应用程序。这个查询类似于`SELECT col1, col2
+    WHERE pk_col = 5`：一个主键查找，只返回单行的两列。当数据访问如此高效时，MySQL 函数*几乎*像是一个内存缓存，并以令人难以置信的 QPS
+    和查询负载执行查询。*几乎*，但不完全是，因为每个查询都是一个包含开销的事务。（[第 8 章](ch08.html#ch08)专注于事务。）要优化这样的查询，你必须改变访问模式，因为查询不能进一步优化，数据大小也不能减少。我在[第
+    4 章](ch04.html#ch04)中再次讨论这个查询。
+- en: Return only needed columns
+  id: totrans-73
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 只返回所需列
+- en: Queries should return only needed columns.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询应该只返回所需的列。
+- en: Do not `SELECT *`. This is especially important if the table has any `BLOB`,
+    `TEXT`, or `JSON` columns.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不要使用`SELECT *`。如果表中有任何`BLOB`、`TEXT`或`JSON`列，这一点尤为重要。
+- en: You’ve probably heard this best practice before because the database industry
+    (not just MySQL) has been harping on it for decades. I can’t recall the last time
+    I saw `SELECT *` in production, but it’s important enough to keep repeating.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能之前听过这个最佳实践，因为数据库行业（不仅仅是 MySQL）已经在强调这一点数十年了。我想不起最后一次在生产环境中看到`SELECT *`了，但这一点非常重要，所以不断重复是必要的。
+- en: Reduce query complexity
+  id: totrans-77
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 减少查询复杂性
+- en: Queries should be as simple as possible.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询应尽可能简单。
+- en: '*Query complexity* refers to all tables, conditions, and SQL clauses that constitute
+    a query. In this context, complexity is relative only to a query, not to engineers.
+    Query `SELECT col FROM tbl WHERE id = 1` is less complex than a query that joins
+    five tables with many `WHERE` conditions.'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*查询复杂性*指的是构成查询的所有表、条件和 SQL 子句。在这个上下文中，复杂性只相对于一个查询而言，而不是工程师。查询`SELECT col FROM
+    tbl WHERE id = 1`比一个涉及五个表和许多`WHERE`条件的查询更简单。'
+- en: Complex queries are a problem for engineers, not MySQL. The more complex a query,
+    the more difficult it is to analyze and optimize. If you’re lucky, a complex query
+    works well and never shows up as a slow query (see [“Query profile”](ch01.html#query-profile)).
+    But luck is not a best practice. Keep queries simple from the start (when first
+    written), and reduce query complexity when possible.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复杂的查询是工程师的问题，而不是 MySQL 的问题。查询越复杂，分析和优化就越困难。如果你幸运的话，一个复杂的查询可能运行良好，从不出现作为慢查询的情况（参见[“查询概要”](ch01.html#query-profile)）。但幸运不是最佳实践。从一开始（首次编写时）保持查询简单，并在可能时减少查询复杂性。
+- en: 'With respect to data access, simple queries tend to access less data because
+    they have fewer tables, conditions, and SQL clauses—less work for MySQL. But be
+    careful: the wrong simplification can yield a worse EXPLAIN plan. For example,
+    [Figure 2-21](ch02.html#idx-order-by-pk-not) in [Chapter 2](ch02.html#ch02) demonstrates
+    how removing a condition negates an `ORDER BY` optimization, resulting in a (slightly)
+    worse EXPLAIN plan. Always confirm that a simpler query has an equivalent or better
+    EXPLAIN plan—and the same result set.'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于数据访问，简单查询倾向于访问较少的数据，因为它们有较少的表、条件和 SQL 子句——MySQL 的工作量更少。但要小心：错误的简化可能会产生更糟的
+    EXPLAIN 计划。例如，[第 2 章](ch02.html#ch02) 中的 [图 2-21](ch02.html#idx-order-by-pk-not)
+    展示了删除条件如何取消 `ORDER BY` 优化，导致（稍微）更差的 EXPLAIN 计划。始终确认简化的查询是否具有等效或更好的 EXPLAIN 计划，以及相同的结果集。
+- en: Limit row access
+  id: totrans-82
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 限制行访问
+- en: Queries should access as few rows as possible.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询应尽可能访问尽少的行。
+- en: 'Accessing too many rows usually comes as a surprise; it’s not something engineers
+    do intentionally. Data growth over time is a common cause: a fast query starts
+    by accessing a few rows, but years and gigabytes later, it becomes a slow query
+    because it accesses too many rows. Simple mistakes are another cause: an engineer
+    writes a query that they think will access a few rows, but they’re wrong. At the
+    intersection of data growth and simple mistakes is the most important cause: *not
+    limiting ranges and lists*. An open-ended range like `col > 75` can access countless
+    rows if MySQL does a range scan on `col`. Even if this is intended because the
+    table is presumed to be small, be aware that row access is virtually unbounded
+    as the table grows, especially if the index on `col` is nonunique.'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 访问太多行通常会令人惊讶；这不是工程师有意为之的事情。随着时间的推移，数据的增长是一个常见的原因：一个快速查询开始时只访问几行，但几年后和几千兆字节后，它变成了一个慢查询，因为它访问了太多行。简单的错误是另一个原因：工程师编写了一个他们认为会访问少数行的查询，但他们错了。在数据增长和简单错误的交汇处是最重要的原因：*不限制范围和列表*。像
+    `col > 75` 这样的无限范围如果 MySQL 在 `col` 上进行范围扫描，可以访问无数行。即使这是有意为之的，因为假定表很小，请注意随着表的增长，行访问几乎没有界限，特别是如果
+    `col` 上的索引是非唯一的。
+- en: 'A `LIMIT` clause does not limit row access because `LIMIT` applies to the result
+    set *after* matching rows. The exception is the `ORDER BY`…`LIMIT` optimization:
+    if MySQL can access rows in index order, then it stops reading rows when the `LIMIT`
+    number of matching rows are found. But here’s the fun part: `EXPLAIN` does not
+    report when this optimization is used. You must infer the optimization from what
+    an EXPLAIN does and does not report. Let’s take a moment to see this optimization
+    in action and prove that it limits row access.'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LIMIT` 子句并不限制行访问，因为 `LIMIT` 适用于匹配行后的结果集。唯一的例外是 `ORDER BY`…`LIMIT` 优化：如果 MySQL
+    可以按索引顺序访问行，则当找到 `LIMIT` 数量的匹配行时，它会停止读取行。但有趣的是：`EXPLAIN` 不会报告是否使用了此优化。您必须从 `EXPLAIN`
+    报告的内容和未报告的内容推断出是否使用了该优化。让我们花点时间看看这个优化是如何起作用的，并证明它限制了行访问。'
+- en: Using table `elem` ([Example 2-1](ch02.html#elem)) from [Chapter 2](ch02.html#ch02),
+    let’s first execute a query that does not have a `LIMIT` clause. [Example 3-1](#order-by-limit-all-rows)
+    shows that the query returns eight rows.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用表 `elem`（[示例 2-1](ch02.html#elem)）来自[第 2 章](ch02.html#ch02)，让我们首先执行一个没有 `LIMIT`
+    子句的查询。[示例 3-1](#order-by-limit-all-rows) 显示该查询返回了八行。
+- en: Example 3-1\. Rows for query without `LIMIT`
+  id: totrans-87
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 3-1\. 没有 `LIMIT` 的查询行
+- en: '[PRE0]'
+  id: totrans-88
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Without a `LIMIT` clause, the query accesses (and returns) eight rows. Accordingly,
+    `EXPLAIN` reports `rows: 8` even with a `LIMIT 2` clause—as shown in [Example 3-2](#order-by-limit-explain)—because
+    MySQL cannot know how many rows in the range will *not* match until it executes
+    the query. Worst case: MySQL reads all rows because none match. But for this simple
+    example, we can see that the first two rows (`id` values 8 and 9) will match the
+    only table condition. If we’re right, query metrics will report two rows examined,
+    not eight. But first, let’s see how to infer the optimization from the EXPLAIN
+    plan in [Example 3-2](#order-by-limit-explain).'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '没有 `LIMIT` 子句，该查询访问（并返回）了八行。因此，即使有 `LIMIT 2` 子句，`EXPLAIN` 报告的是 `rows: 8`，正如
+    [示例 3-2](#order-by-limit-explain) 中所示，因为 MySQL 无法知道在执行查询之前有多少行在范围内*不*匹配。最糟糕的情况是
+    MySQL 读取所有行，因为没有一行匹配。但对于这个简单的示例，我们可以看到前两行（`id` 值为 8 和 9）将匹配唯一的表条件。如果我们是正确的，查询指标将报告检查了两行，而不是八行。但首先，让我们看看如何从
+    [示例 3-2](#order-by-limit-explain) 的 EXPLAIN 计划中推断出这种优化。'
+- en: Example 3-2\. EXPLAIN plan for `ORDER BY`…`LIMIT` optimization
+  id: totrans-90
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 3-2\. `ORDER BY`…`LIMIT` 优化的 EXPLAIN 计划
+- en: '[PRE1]'
+  id: totrans-91
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'You can infer that MySQL uses the `ORDER BY`…`LIMIT` optimization to access
+    only two rows (`LIMIT 2`) because:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以推断 MySQL 使用了`ORDER BY`…`LIMIT`优化来访问仅两行（`LIMIT 2`），因为：
+- en: 'The query uses an index (`type: range`)'
+  id: totrans-93
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '查询使用了一个索引（`type: range`）'
+- en: 'The `ORDER BY` column is a leftmost prefix of that index (`key: a`)'
+  id: totrans-94
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ORDER BY`列是该索引的最左前缀（`key: a`）'
+- en: The `Extra` field does *not* report “Using filesort”
+  id: totrans-95
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`Extra`字段并*不*报告“使用文件排序”。'
+- en: 'The proof is shown in [Example 3-3](#order-by-limit-slowlog): a snippet of
+    the slow query log after MySQL executed the query.'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 证据显示在[示例 3-3](#order-by-limit-slowlog)中：MySQL 执行查询后的慢查询日志片段。
+- en: Example 3-3\. Query metrics for `ORDER BY`…`LIMIT` optimization
+  id: totrans-97
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 3-3。`ORDER BY`…`LIMIT`优化的查询指标
+- en: '[PRE2]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: '`Rows_examined: 2` at the end of the first line in [Example 3-3](#order-by-limit-slowlog)
+    proves that MySQL used the `ORDER BY`…`LIMIT` optimization to access only two
+    rows instead of all eight rows. To learn more about this query optimization, read
+    [“LIMIT Query Optimization”](https://oreil.ly/AnurD) in the MySQL manual.'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '在第一行末尾的`Rows_examined: 2`证明了 MySQL 使用了`ORDER BY`…`LIMIT`优化，仅访问了两行而不是所有八行。要了解更多关于这种查询优化的信息，请阅读
+    MySQL 手册中的[“LIMIT查询优化”](https://oreil.ly/AnurD)。'
+- en: 'With respect to limiting ranges and lists, there’s an important factor to verify:
+    *does the application limit the input used in a query?* Way back in [“Average,
+    Percentile, and Maximum”](ch01.html#avg-p-max-distro), I related a story: “Long
+    story short, the query was used to look up data for fraud detection, and occasionally
+    a big case would look up several thousand rows at once, which caused MySQL to
+    switch query execution plans.” In that case, the solution was simple: limit application
+    input to one thousand values per request. That case also highlights the fact that
+    a human can input a flood of values. Normally, engineers are careful to limit
+    input when the user is another computer, but their caution relaxes when the user
+    is another human because they think a human wouldn’t or couldn’t input too many
+    values. But they’re wrong: with copy-paste and a looming deadline, the average
+    human can overload any computer.'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于限制范围和列表，有一个重要因素需要验证：*应用程序是否限制了查询中使用的输入？* 早在[“平均值、百分位数和最大值”](ch01.html#avg-p-max-distro)中，我讲述了一个故事：“长话短说，这个查询用于查找欺诈检测数据，有时一个大案例会一次查找几千行，这导致
+    MySQL 切换查询执行计划。” 在那种情况下，解决方案很简单：每个请求限制应用程序输入至一千个值。该案例还突显了一个事实：人类可以输入大量值。通常情况下，工程师在用户是另一个计算机时会小心限制输入，但当用户是另一个人类时，他们的警惕性会放松，因为他们认为人类不会或不能输入太多值。但他们错了：通过复制粘贴和迫在眉睫的截止日期，普通人可以使任何计算机超负荷运行。
+- en: For writes, limiting row access is critical because, generally speaking, InnoDB
+    locks every row that it accesses before it updates matching rows. Consequently,
+    InnoDB can lock more rows than you might expect. [“Row Locking”](ch08.html#row-locking)
+    goes into detail.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于写入操作，限制行访问至关重要，因为通常情况下，InnoDB 在更新匹配行之前会锁定它访问的每一行。因此，InnoDB 可能会锁定比您预期更多的行。[“行锁定”](ch08.html#row-locking)对此进行了详细说明。
+- en: 'For table joins, limiting row access is also critical: recall from [“Joining
+    tables”](#less-data-join) that, on join, a few rows in each table quickly obliterates
+    performance. In that section, I was pointing out that a table join is doomed without
+    an index lookup. In this section, I’m pointing out that a table join is double-doomed
+    unless it also accesses *very* few rows. Remember: an index lookup on a nonunique
+    index can access any number of duplicate rows.'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于表连接，限制行访问同样至关重要：回想一下从[“连接表”](#less-data-join)中得知，对每个表进行连接时，少量行很快就会导致性能严重下降。在那一节中，我指出如果没有索引查找，表连接注定会失败。在这一节中，我要指出，除非也访问了非常少的行，否则表连接也注定会失败。记住：在非唯一索引上的索引查找可以访问任意数量的重复行。
+- en: 'Know your access patterns: for each query, what limits row access? Use `EXPLAIN`
+    to see estimated row access (the `rows` field), and monitor rows examined (see
+    [“Rows examined”](ch01.html#Rows-examined)) to avoid the surprise of accessing
+    too many rows.'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 了解您的访问模式：对于每个查询，限制行访问是什么？使用`EXPLAIN`查看预估行访问（`rows`字段），并监视检查的行数（参见[“检查的行数”](ch01.html#Rows-examined)），以避免访问过多行的意外情况。
+- en: Limit the result set
+  id: totrans-104
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 限制结果集
+- en: Queries should return as few rows as possible.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询应尽可能返回尽少的行。
+- en: 'This is more involved than putting a `LIMIT` clause on a query, although that
+    certainly helps. It refers to the application not using the entire *result set*:
+    the rows returned by a query. This problem has three variations.'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这比在查询上放置`LIMIT`子句更为复杂，尽管这确实有帮助。它指的是应用程序不使用整个*结果集*：查询返回的行。这个问题有三种变化。
+- en: The first variation occurs when the application uses some rows, but not all.
+    This can be done intentionally or unintentionally. Unintentionally, it indicates
+    that the `WHERE` clause needs better (or more) conditions to match only needed
+    rows. You can spot this in application code that filters rows instead of using
+    `WHERE` conditions. If you spot this, talk with your team to make sure it’s not
+    intentional. Intentionally, an application might select more rows to avoid a complex
+    query by shifting row matching from MySQL to the application. This technique is
+    useful only when it reduces response time—akin to MySQL choosing a table scan
+    in rare cases.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一种变体发生在应用程序使用了一些行，但并非全部。这可能是有意或无意的。无意中，它表明`WHERE`子句需要更好（或更多）的条件才能匹配仅需要的行。您可以在过滤行而不是使用`WHERE`条件的应用程序代码中发现这一点。如果发现了这种情况，请与您的团队讨论以确保这不是有意的。有意地，应用程序可能选择更多的行以避免通过将行匹配从
+    MySQL 转移到应用程序来复杂化查询。这种技术仅在减少响应时间时才有用，类似于 MySQL 在少数情况下选择表扫描。
+- en: The second variation occurs when a query has an `ORDER BY` clause and the application
+    uses an ordered subset of rows. Row order doesn’t matter for the first variation,
+    but it’s the defining characteristic of the second variation. For example, a query
+    returns 1,000 rows but the application only uses the first 20 rows in order. In
+    this case, the solution might be as simple as adding a `LIMIT 20` clause to the
+    query.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二种变体发生在查询具有`ORDER BY`子句且应用程序使用有序的行子集时。行的顺序对第一种变体并不重要，但对第二种变体却是定义性特征。例如，一个查询返回
+    1000 行，但应用程序只按顺序使用前 20 行。在这种情况下，解决方案可能很简单，只需在查询中添加`LIMIT 20`子句。
+- en: 'What does the application do with the remaining 980 rows? If those rows are
+    never used, then definitely the query should not return them—add the `LIMIT 20`
+    clause. But if those rows are used, then the application is most likely paginating:
+    using 20 rows at a time (for example, showing 20 results per page). In that case,
+    it might be faster and more efficient to use `LIMIT 20 OFFSET N` to fetch pages
+    on demand—where N = 20 × (page number – 1)—only if the `ORDER BY`…`LIMIT` optimization
+    can be used (see the previous section, [“Limit row access”](#data-access-check-3)).
+    The optimization is required because, without it, MySQL must find and sort all
+    matching rows before it can apply the `OFFSET` part of the `LIMIT` clause—a lot
+    of wasted work to return only 20 rows. But even without the optimization, there’s
+    another solution: a large but reasonable `LIMIT` clause. If, for example, you
+    measure application usage and find that most requests only use the first five
+    pages, then use a `LIMIT 100` clause to fetch the first five pages and reduce
+    the result set size by 90% for most requests.'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 应用程序对剩余的 980 行做了什么？如果这些行从未被使用过，那么查询肯定不应该返回它们——请添加`LIMIT 20`子句。但是如果这些行被使用了，那么应用程序很可能在进行分页：每次使用
+    20 行（例如，每页显示 20 个结果）。在这种情况下，使用`LIMIT 20 OFFSET N`按需获取页面可能更快、更高效——其中 N = 20 ×（页码
+    - 1）——前提是可以使用`ORDER BY`...`LIMIT`优化（请参见前一节，“[限制行访问](#data-access-check-3)”）。这种优化是必需的，因为如果没有它，MySQL
+    必须在应用`LIMIT`子句的`OFFSET`部分之前找到并排序所有匹配行——这会浪费大量工作，只为返回 20 行。但即使没有这种优化，也有另一个解决方案：一个大但合理的`LIMIT`子句。例如，如果您测量应用程序的使用情况并发现大多数请求只使用前五页，则使用`LIMIT
+    100`子句获取前五页并为大多数请求减少结果集大小 90%。
+- en: The third variation occurs when the application *only* aggregates the result
+    set. If the application aggregates the result set *and* uses the individual rows,
+    that’s acceptable. The antipattern is *only* aggregating the result set instead
+    of using a SQL aggregate function, which limits the result set. [Table 3-3](#result-set-anti-patterns)
+    lists four antipatterns and corresponding SQL solutions.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第三种变体发生在应用程序*仅*聚合结果集时。如果应用程序聚合结果集*并*使用单独的行，则是可以接受的。反模式是*仅*聚合结果集而不使用 SQL 聚合函数，这会限制结果集。[表 3-3](#result-set-anti-patterns)
+    列出了四种反模式及其相应的 SQL 解决方案。
+- en: Table 3-3\. Four result set antipatterns in an application
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 3-3\. 应用程序中的四种结果集反模式
+- en: '| Antipattern in Application | Solution in SQL |'
+  id: totrans-112
+  prefs: []
+  type: TYPE_TB
+  zh: '| 应用程序中的反模式 | SQL 中的解决方案 |'
+- en: '| --- | --- |'
+  id: totrans-113
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| Adding a column value | `SUM(column)` |'
+  id: totrans-114
+  prefs: []
+  type: TYPE_TB
+  zh: '| 添加列值 | `SUM(column)` |'
+- en: '| Counting the number of rows | `COUNT(*)` |'
+  id: totrans-115
+  prefs: []
+  type: TYPE_TB
+  zh: '| 计算行数 | `COUNT(*)` |'
+- en: '| Counting the number of values | `COUNT(column)`…`GROUP BY column` |'
+  id: totrans-116
+  prefs: []
+  type: TYPE_TB
+  zh: '| 计算值的数量 | `COUNT(column)`…`GROUP BY column` |'
+- en: '| Counting the number of distinct values | `COUNT(DISTINCT column)` |'
+  id: totrans-117
+  prefs: []
+  type: TYPE_TB
+  zh: '| 计算不同值的数量 | `COUNT(DISTINCT column)` |'
+- en: '| Extracting distinct values | `DISTINCT` |'
+  id: totrans-118
+  prefs: []
+  type: TYPE_TB
+  zh: '| 提取不同的值 | `DISTINCT` |'
+- en: 'Adding a column value applies to other statistical functions: `AVG()`, `MAX()`,
+    `MIN()`, and so on. Let MySQL do the calculation rather than returning the rows.'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 添加列值适用于其他统计函数：`AVG()`、`MAX()`、`MIN()`等等。让MySQL进行计算，而不是返回行。
+- en: Counting the number of rows is an extreme antipattern, but I’ve seen it, so
+    I’m sure there are other applications quietly wasting network bandwidth on needless
+    rows. Never use the application only to count rows; use `COUNT(*)` in the query.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 计算行数是一个极端的反模式，但我见过这种情况，所以我确信还有其他应用程序在不必要的行上悄悄浪费网络带宽。永远不要仅仅用于计数行数的应用程序；在查询中使用`COUNT(*)`。
+- en: Note
+  id: totrans-121
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: As of MySQL 8.0.14, `SELECT COUNT(*) FROM table` (without a `WHERE` clause)
+    uses multiple threads to read the primary key in parallel. This is not parallel
+    query execution; the MySQL manual calls it “parallel clustered index reads.”
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 截至MySQL 8.0.14版本，`SELECT COUNT(*) FROM table`（没有`WHERE`子句）使用多个线程并行读取主键。这不是并行查询执行；MySQL手册称其为“并行聚簇索引读取”。
+- en: Counting the number of values is, perhaps, easier for programmers to express
+    in code than a SQL `GROUP BY` clause, but the latter should be used to limit the
+    result set. Using table `elem` ([Example 2-1](ch02.html#elem)) again, [Example 3-4](#count-distinct-values)
+    demonstrates how to count the number of values for a column using `COUNT(column)`…`GROUP
+    BY column`.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 计算值的数量对程序员来说可能比在SQL `GROUP BY`子句中表达更容易，但应该使用后者来限制结果集。再次使用表`elem`（[示例 2-1](ch02.html#elem)），[示例 3-4](#count-distinct-values)演示了如何使用`COUNT(column)`…`GROUP
+    BY column`来计算列的值的数量。
+- en: Example 3-4\. Counting the number of values
+  id: totrans-124
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 3-4\. 计算值的数量
+- en: '[PRE3]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'For column `a` in table `elem`, two rows have value “Ag,” three rows have value
+    “Al,” and so forth. The SQL solution returns five rows, whereas the antipattern
+    would return all ten rows. These aren’t dramatic numbers—five versus ten rows—but
+    they make the point: a query can limit its result set by aggregating in SQL, not
+    application code.'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于表`elem`中的列`a`，有两行的值为“Ag”，三行的值为“Al”，依此类推。SQL解决方案返回五行，而反模式将返回所有十行。这些数字并不激增——五行与十行——但它们说明了一个观点：查询可以通过SQL聚合来限制其结果集，而不是通过应用程序代码。
+- en: 'Extracting distinct values—deduplicating column values—is trivial in the application
+    with an associative array; but MySQL can do it, too, with `DISTINCT`, which limits
+    the result set. (`DISTINCT` qualifies as an aggregate function because it’s a
+    special case of `GROUP BY`.) `DISTINCT` is especially clear and useful with a
+    single column. For example, `SELECT DISTINCT a FROM elem` returns a list of unique
+    values from column `a`. (If you’re curious, column `a` has five unique values:
+    “Ag,” “Al,” “Ar,” “At,” and “Au.”) The gotcha with `DISTINCT` is that it applies
+    to all columns. `SELECT DISTINCT a, b FROM elem` returns a list of unique *rows*
+    with values from columns `a` and `b`. To learn more, check out [“DISTINCT Optimization”](https://oreil.ly/j3IjK)
+    in the MySQL manual.'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提取不同的值——在应用程序中使用关联数组去重复列值很简单；但MySQL也可以通过`DISTINCT`来实现，这限制了结果集（`DISTINCT`因为是`GROUP
+    BY`的特例而被视为聚合函数）。`DISTINCT`在处理单列时尤为清晰和有用。例如，`SELECT DISTINCT a FROM elem`返回列`a`的唯一值列表。（如果你好奇，列`a`有五个唯一值：“Ag”，“Al”，“Ar”，“At”和“Au”。）使用`DISTINCT`的一个注意事项是它适用于所有列。`SELECT
+    DISTINCT a, b FROM elem`返回具有列`a`和`b`值的唯一*行*列表。想了解更多，请参阅MySQL手册中的[“DISTINCT 优化”](https://oreil.ly/j3IjK)。
+- en: Avoid sorting rows
+  id: totrans-128
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 避免对行进行排序。
+- en: Queries should avoid sorting rows.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询应避免对行进行排序。
+- en: Sorting rows in the application instead of MySQL reduces query complexity by
+    removing the `ORDER BY` clause, and it scales better by distributing work to application
+    instances, which are much easier to scale out than MySQL.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在应用程序中排序行而不是在MySQL中排序可以通过去除`ORDER BY`子句来减少查询复杂性，并通过将工作分配给应用程序实例来更好地扩展，后者比MySQL更容易扩展。
+- en: An `ORDER BY` clause without a `LIMIT` clause is a telltale sign that the `ORDER
+    BY` clause can be dropped and the application can sort the rows. (It might also
+    be the second variation of the problem discussed in the preceding section.) Look
+    for queries with an `ORDER BY` clause but no `LIMIT` clause, then determine whether
+    the application can sort the rows instead of MySQL—the answer should be yes.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 没有`LIMIT`子句的`ORDER BY`子句是可以去除的明显迹象，应用程序可以对行进行排序。（它可能也是前一节讨论的问题的第二个变体。）查找具有`ORDER
+    BY`子句但没有`LIMIT`子句的查询，然后确定应用程序是否可以代替MySQL对行进行排序——答案应该是肯定的。
+- en: Data Storage
+  id: totrans-132
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 数据存储
+- en: Do not store more data than needed.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不要存储比所需更多的数据。
+- en: Although data is valuable to you, it’s dead weight to MySQL. [Table 3-4](#data-storage-checklist)
+    is a checklist for efficient data storage.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管数据对你很有价值，但对MySQL来说是无用的。[表格 3-4](#data-storage-checklist) 是一个高效数据存储的检查清单。
+- en: 'I highly encourage you to audit your data storage because surprises are easy
+    to discover. I mentioned one such surprise at the beginning of [Chapter 2](ch02.html#ch02):
+    the application I created that accidentally stored one *billion* rows.'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我强烈建议您审查一下您的数据存储，因为惊喜很容易发现。我在[第二章](ch02.html#ch02)开头提到了一个这样的惊喜：我创建的应用程序意外地存储了一
+    *十亿* 行数据。
+- en: Table 3-4\. Efficient data storage checklist
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表格 3-4\. 高效数据存储检查清单
+- en: '| ☐ | Only needed rows are stored |'
+  id: totrans-137
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ | 仅存储所需的行 |'
+- en: '| ☐ | Every column is used |'
+  id: totrans-138
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ | 每一列都被使用 |'
+- en: '| ☐ | Every column is compact and practical |'
+  id: totrans-139
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ | 每一列都是紧凑和实用的 |'
+- en: '| ☐ | Every value is compact and practical |'
+  id: totrans-140
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ | 每个值都是紧凑和实用的 |'
+- en: '| ☐ | Every secondary index is used and not a duplicate |'
+  id: totrans-141
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ | 每个次要索引都被使用且不重复 |'
+- en: '| ☐ | Only needed rows are kept |'
+  id: totrans-142
+  prefs: []
+  type: TYPE_TB
+  zh: '| ☐ | 仅保留所需的行 |'
+- en: 'If you can check off all six items, then you will be very well positioned to
+    scale data to any size. But it’s not easy: some items are easier to ignore than
+    to implement, especially when the database is small. But don’t delay: the very
+    best time to find and correct storage inefficiencies is when the database is small.
+    At scale, a byte or two can make a big difference when multiplied by high throughput
+    and all 86,400 seconds in a typical Earth day. Design for scale and plan for success.'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您能勾选所有六个项目，那么您将非常适合将数据扩展到任何规模。但这并不容易：有些项目比实施更容易被忽略，特别是当数据库很小时。但不要拖延：发现和纠正存储效率低下的最佳时机是在数据库很小的时候。在规模化时，每秒钟和地球一天中的所有
+    86,400 秒乘以高吞吐量时，一个字节或两个字节可能会产生很大的差异。为规模设计，为成功计划。
+- en: Only needed rows are stored
+  id: totrans-144
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 仅存储所需的行
+- en: As an application changes and grows, engineers can lose track of what it stores.
+    And when data storage is not an issue, engineers have no reason to look at or
+    ask about what it stores. If it’s been a long time since you or anyone else reviewed
+    what the application is storing, or if you’re new to the team or application,
+    then take a look. I have seen, for example, forgotten services writing data (for
+    years, no less) that no one was using.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当应用程序发生变化和增长时，工程师可能会忘记它存储了什么。如果数据存储不是问题，工程师就没有理由查看或询问存储了什么。如果很长时间以来你或其他人都没有审查过应用程序存储的内容，或者你是团队或应用程序的新成员，那就来看看吧。例如，我曾见过，已经忘记的服务写入了（至少几年来）没有人在使用的数据。
+- en: Every column is used
+  id: totrans-146
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 每一列都被使用
+- en: One level deeper than storing only needed rows is having only needed columns.
+    Again, as the application changes and grows, engineers can lose track of columns,
+    especially when using object-relational mapping (ORM).
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 比仅存储所需行更深入的是仅保留所需列。同样，随着应用程序的变化和增长，工程师可能会忘记列，特别是在使用对象关系映射（ORM）时。
+- en: 'Unfortunately, there’s no tool or automated way to find unused columns in MySQL.
+    MySQL tracks which databases, tables, and indexes are used, but it does not track
+    column usage. Nothing is more furtive than an unused column. The only solution
+    is a manual review: compare columns used by application queries to columns that
+    exist in the tables.'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，MySQL 中没有工具或自动化方法来找出未使用的列。MySQL 跟踪哪些数据库、表和索引被使用，但它不跟踪列的使用情况。没有比未使用的列更隐秘的东西了。唯一的解决方案是手动审查：将应用程序查询使用的列与表中存在的列进行比较。
+- en: Every column is compact and practical
+  id: totrans-149
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 每一列都是紧凑和实用的
+- en: Two levels deeper than storing only needed rows is having every column be compact
+    and practical. *Compact* means using the smallest data type to store values. *Practical*
+    means not using a data type so small that it’s onerous or error-prone for you
+    or the application. For example, using an unsigned `INT` as a bit field is compact
+    (nothing smaller than a bit) but usually not practical.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了仅存储所需行之外，再深一层次的是使每一列都紧凑而实用。*紧凑* 意味着使用最小的数据类型来存储值。*实用* 意味着不要使用太小的数据类型，以至于对你或应用程序来说是繁琐或容易出错。例如，使用无符号的
+    `INT` 作为位域是紧凑的（没有比位更小的东西），但通常不实用。
+- en: Tip
+  id: totrans-151
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Familiarize yourself with all the [MySQL data types](https://oreil.ly/x7fTF).
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 熟悉所有[MySQL数据类型](https://oreil.ly/x7fTF)。
+- en: The classic antipattern is data type `VARCHAR(255)`. This specific data type
+    and size are a common but inefficient default for many programs and engineers,
+    who likely copied the practice from another program or engineer. You will see
+    it used to store anything and everything, which is why it’s inefficient.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 经典反模式是数据类型`VARCHAR(255)`。这种特定的数据类型和大小是许多程序和工程师的常见但低效的默认选择，他们很可能是从另一个程序或工程师那里复制了这种做法。你会看到它被用来存储任何东西，这就是为什么它是低效的。
+- en: 'For example, let’s reuse table `elem` ([Example 2-1](ch02.html#elem)). Atomic
+    symbols are one or two characters. Column definition `atomic_symbol VARCHAR(255)`
+    is technically compact—a `VARCHAR` is variable length, so it would use only one
+    or two characters—but it allows *garbage in, garbage out*: invalid values like
+    “Carbon” instead of “C,” which could have unknown consequences for the application.
+    A better column definition is `atomic_symbol CHAR(2)`, which is compact and practical.'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，让我们重用`elem`表（[Example 2-1](ch02.html#elem)）。原子符号是一个或两个字符。列定义`atomic_symbol
+    VARCHAR(255)`在技术上是紧凑的——`VARCHAR`是可变长度的，所以它只会使用一个或两个字符——但它允许*垃圾进、垃圾出*：无效值，比如“Carbon”而不是“C”，这可能对应用程序产生未知的后果。一个更好的列定义是`atomic_symbol
+    CHAR(2)`，既紧凑又实用。
+- en: Is column definition `atomic_symbol ENUM(`…`)` even better for table `elem`?
+    `ENUM` is more compact than `CHAR(2)`, but is it more practical with over one
+    hundred atomic symbols? That’s a trade-off you could decide; either choice is
+    patently better than `VAR⁠CHAR(255)`.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 列定义`atomic_symbol ENUM(`…`)`在`elem`表中更好吗？`ENUM`比`CHAR(2)`更紧凑，但在超过一百个原子符号的情况下更实用吗？这是一个你可以决定的权衡；任何选择都显然比`VAR⁠CHAR(255)`更好。
+- en: Tip
+  id: totrans-156
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: '[`ENUM`](https://oreil.ly/WMXfA) is one of the great unsung heroes of efficient
+    data storage.'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[`ENUM`](https://oreil.ly/WMXfA)是高效数据存储中的一位默默无闻的英雄之一。'
+- en: 'Beware the column character set. If not explicitly defined, it defaults to
+    the table character set which, if also not explicitly defined, defaults to the
+    server character set. As of MySQL 8.0, the default server character set is `utf8mb4`.
+    For MySQL 5.7 and older, the default server character set is `latin1`. Depending
+    on the character set, a single character like *é* might be stored as multiple
+    bytes. For example, using the `latin1` character set, MySQL stores *é* as a single
+    byte: 0xE9. But using the `utf8mb4` character set, MySQL stores *é* as two bytes:
+    0xC3A9. (Emoji use four bytes per character.) Character sets are a special and
+    erudite world beyond the scope of most books. For now, all you need to know is
+    this: *one character* can require *several bytes* of storage, depending on the
+    character and character set. Bytes add up quickly in large tables.'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 警惕列字符集。如果没有明确定义，它默认为表字符集，如果表字符集也没有明确定义，则默认为服务器字符集。截至MySQL 8.0，默认服务器字符集为`utf8mb4`。对于MySQL
+    5.7及更早版本，默认服务器字符集为`latin1`。根据字符集，像*é*这样的单个字符可能存储为多个字节。例如，使用`latin1`字符集，MySQL将*é*存储为一个字节：0xE9。但是使用`utf8mb4`字符集，MySQL将*é*存储为两个字节：0xC3A9。（表情符号每个字符使用四个字节。）字符集是一个特殊且博学的领域，超出了大多数书籍的范围。现在，你需要知道的是：*一个字符*可能需要*多个字节*的存储空间，这取决于字符和字符集。在大表中，字节很快累积起来。
+- en: Be very conservative with `BLOB`, `TEXT`, and `JSON` data types. Do not use
+    them as a dumping ground, a catch-all, or generic buckets. For example, do not
+    store images in a `BLOB`—you can, it works, but don’t. There are far better solutions,
+    like [Amazon S3](https://aws.amazon.com/s3).
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于`BLOB`、`TEXT`和`JSON`数据类型要非常保守。不要将它们用作倾倒场所、万能容器或通用桶。例如，不要将图像存储在`BLOB`中——你可以这样做，它能工作，但最好不要。有远比这更好的解决方案，比如[Amazon
+    S3](https://aws.amazon.com/s3)。
+- en: 'Compact and practical extend all the way down to the bit level. Another surprisingly
+    common yet easily avoidable column storage inefficiency is wasting the high-order
+    bit of [integer data types](https://oreil.ly/6CdwC). For example, using `INT`
+    instead of `INT UNSIGNED`: the maximum value is roughly two billion versus four
+    billion, respectively. If the value cannot be negative, then use an unsigned data
+    type.'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 紧凑且实用一直延伸到位级别。另一个令人惊讶的常见但易于避免的列存储效率低下是浪费[整数数据类型](https://oreil.ly/6CdwC)的高阶位。例如，使用`INT`而不是`INT
+    UNSIGNED`：最大值分别约为20亿和40亿。如果值不能为负数，则使用无符号数据类型。
+- en: Note
+  id: totrans-161
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: As of MySQL 8.0.17, `UNSIGNED` is deprecated for data types `FLOAT`, `DOUBLE`,
+    and `DECIMAL`.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 截至MySQL 8.0.17，`UNSIGNED`对于`FLOAT`、`DOUBLE`和`DECIMAL`数据类型已经不推荐使用。
+- en: In the world of software engineering, details like these might be considered
+    micro-optimizations or premature optimization, which are frowned upon, but in
+    the world of schema design and database performance, they’re best practices.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在软件工程的世界中，像这样的细节可能被视为微优化或过早优化，这是不被赞同的，但在架构设计和数据库性能的世界中，它们是最佳实践。
+- en: Every value is compact and practical
+  id: totrans-164
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 每个值都是紧凑和实用的
+- en: 'Three levels deeper than storing only needed rows is having every value be
+    compact and practical. *Practical* has the same meaning as defined in the previous
+    section, but *compact* means the smallest representation of the value. Compact
+    values are highly dependent on how the application uses them. For example, consider
+    a string with one leading and one trailing space: `“ and ”`. [Table 3-5](#compact-string)
+    lists six ways that an application could compact this string.'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 比仅存储所需行更深一层次的是使每个值都紧凑和实用。*实用*的含义与前一节中定义的相同，但*紧凑*意味着值的最小表示。紧凑的值在应用程序如何使用它们方面具有很高的依赖性。例如，考虑一个具有一个前导空格和一个尾随空格的字符串：`“
+    and ”`。[Table 3-5](#compact-string)列出了一个应用程序可以压缩此字符串的六种方式。
+- en: Table 3-5\. Six ways to compact the string `“ and ”`
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表3-5。六种压缩字符串`“ and ”`的方式
+- en: '| Compact value | Possible use |'
+  id: totrans-167
+  prefs: []
+  type: TYPE_TB
+  zh: '| 紧凑值 | 可能的用途 |'
+- en: '| --- | --- |'
+  id: totrans-168
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `“and”` | Strip all whitespace. This is common for strings. |'
+  id: totrans-169
+  prefs: []
+  type: TYPE_TB
+  zh: '| `“and”` | 去除所有空白。这在字符串中很常见。'
+- en: '| `“ and”` | Strip trailing whitespace. In many syntaxes (like YAML and Markdown),
+    leading whitespace is syntactically significant. |'
+  id: totrans-170
+  prefs: []
+  type: TYPE_TB
+  zh: '| `“ and”` | 去除尾随空白。在许多语法中（如YAML和Markdown），前导空格在语法上是重要的。'
+- en: '| `“and ”` | Strip leading whitespace. Perhaps less common but still possible.
+    Sometimes used by programs to join space-separated arguments (like command-line
+    arguments). |'
+  id: totrans-171
+  prefs: []
+  type: TYPE_TB
+  zh: '| `“and ”` | 去除前导空白。虽然较少见，但仍有可能。有时程序用于连接空格分隔的参数（如命令行参数）。'
+- en: '| `“”` | Delete the value (empty string). Maybe the value is optional, like
+    *AS* in `FROM table AS table_alias`, which can be written as `FROM table table_alias`.
+    |'
+  id: totrans-172
+  prefs: []
+  type: TYPE_TB
+  zh: '| `“”` | 删除该值（空字符串）。也许该值是可选的，如`FROM table AS table_alias`中的*AS*，可以写作`FROM table
+    table_alias`。'
+- en: '| `“&”` | Replace string with equivalent symbol. In written language, the ampersand
+    character is semantically equivalent to the word “and”. |'
+  id: totrans-173
+  prefs: []
+  type: TYPE_TB
+  zh: '| `“&”` | 用等效符号替换字符串。在书面语言中，和符号字符在语义上等同于单词“and”。'
+- en: '| `NULL` | No value. Maybe the value is completely superfluous and can be removed,
+    resulting in no value (not even an empty string, which is still technically a
+    value). |'
+  id: totrans-174
+  prefs: []
+  type: TYPE_TB
+  zh: '| `NULL` | 无值。也许该值完全是多余的，可以删除，结果是没有值（甚至不是空字符串，技术上也是一个值）。'
+- en: 'The transformations in [Table 3-5](#compact-string) represent three ways to
+    compact a value: minimize, encode, and deduplicate.'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[Table 3-5](#compact-string)中的转换代表了压缩值的三种方式：最小化、编码和去重。'
+- en: Minimize
+  id: totrans-176
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 最小化
+- en: 'To minimize a value, remove superfluous and extraneous data: white space, comments,
+    headers, and so on. Let’s consider a more difficult yet familiar value in [Example 3-5](#sample-sql).'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要最小化一个值，需要删除多余和无用的数据：空白、注释、头部等等。让我们考虑在[Example 3-5](#sample-sql)中更为复杂而又熟悉的值。
+- en: Example 3-5\. Formatted SQL statement (not minimized)
+  id: totrans-178
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: Example 3-5。格式化的SQL语句（未经最小化处理）
+- en: '[PRE4]'
+  id: totrans-179
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: If an application stores only the the functional parts of the SQL statement
+    in [Example 3-5](#sample-sql), then it can minimize the value by collapsing white
+    space between keywords (not within values) and removing the last two comments
+    (not the first). [Example 3-6](#sample-sql-mini) is the minimized (compact) value.
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果一个应用程序仅存储[Example 3-5](#sample-sql)中SQL语句的功能部分，那么它可以通过折叠关键字之间的空白（而不是值内部的空白）并删除最后两个注释（而不是第一个）来最小化值。[Example 3-6](#sample-sql-mini)是最小化（紧凑）值。
+- en: Example 3-6\. Minimized SQL statement
+  id: totrans-181
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: Example 3-6。最小化的SQL语句
+- en: '[PRE5]'
+  id: totrans-182
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Examples [3-5](#sample-sql) and [3-6](#sample-sql-mini) are functionally equivalent
+    (same EXPLAIN plan), but the data size of the minimized value is almost *50% smaller*
+    (48.9%): 137 bytes to 70 bytes, respectively. For long-term data growth, a 50%
+    reduction—or even just 25%—is significant and impactful.'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 示例[3-5](#sample-sql)和[3-6](#sample-sql-mini)在功能上是等效的（相同的EXPLAIN计划），但最小化值的数据大小几乎减少了*50%*（48.9%）：分别从137字节减少到70字节。对于长期数据增长来说，50%的减少——甚至只有25%——都是显著且有影响力的。
+- en: 'Minimizing a SQL statement illustrates an important point: minimizing a value
+    is not always trivial. A SQL statement isn’t a meaningless string: it’s a syntax
+    that requires syntactical awareness to minimize correctly. The first comment cannot
+    be removed because it’s functional. (See [“Comments”](https://oreil.ly/3l8zy)
+    in the MySQL manual.) Likewise, the white space in the quoted value `'' bar ''`
+    is functional: `'' bar ''` is not equal to `''bar''`. And you might have noticed
+    a tiny detail: the trailing semicolon was removed because it’s not functional
+    in this context, but it is functional in other contexts.'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQL 语句的最小化说明了一个重要观点：最小化一个值并不总是简单的。SQL 语句不是毫无意义的字符串：它是一种需要语法意识正确最小化的语法。第一个注释不能删除，因为它是功能性的（参见
+    MySQL 手册中的 [“Comments”](https://oreil.ly/3l8zy)）。同样，引号值 `' bar '` 中的空格是有功能性的：`'
+    bar '` 不等于 `'bar'`。而且你可能已经注意到一个细节：末尾的分号被移除了，因为在这个上下文中它没有功能性，但在其他上下文中它是有功能性的。
+- en: When considering how to minimize a value, begin with its data format. The syntax
+    and semantics of the data format dictate which data is superfluous and extraneous.
+    In YAML, for example, comments `# like this` are pure comments (unlike certain
+    SQL comments) and can be removed if the application doesn’t need them. Even if
+    your data format is custom-built, it must have some syntax and semantics, else
+    the application could not programmatically read and write it. It’s necessary to
+    know the data format to minimize a value correctly.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在考虑如何最小化一个值时，首先要考虑其数据格式。数据格式的语法和语义决定了哪些数据是多余和不必要的。例如，在 YAML 中，像 `# like this`
+    的注释是纯粹的注释（不像某些 SQL 注释），如果应用程序不需要它们，可以删除它们。即使您的数据格式是定制的，它也必须具有一些语法和语义，否则应用程序无法以编程方式读取和写入它。了解数据格式以正确最小化一个值是必要的。
+- en: 'The most minimal value is no value at all: `NULL`. I know that dealing with
+    `NULL` can be a challenge, but there’s an elegant solution that I highly encourage
+    you to use: [`COALESCE()`](https://oreil.ly/muYZW). For example, if column `middle_name`
+    is nullable (not all people have middle names), then use `COALESCE(middle_name,
+    '''')` to return the value if set, else return an empty string. This way, you
+    get the benefits of `NULL` storage—which requires only one bit—without the hassle
+    of handling null strings (or pointers) in the application. Use `NULL` instead
+    of empty strings, zero values, and magical values when practical. It requires
+    a little extra work, but it’s the best practice.'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最小的值是没有值：`NULL`。我知道处理 `NULL` 可能是个挑战，但有一个优雅的解决方案，强烈建议您使用：[`COALESCE()`](https://oreil.ly/muYZW)。例如，如果
+    `middle_name` 列是可空的（不是所有人都有中间名），则使用 `COALESCE(middle_name, '')` 来返回设置的值，否则返回空字符串。这样，您可以享受
+    `NULL` 存储的好处——只需一个比特——而无需在应用程序中处理空字符串（或指针）。在实际情况下，使用 `NULL` 而不是空字符串、零值和魔法值需要一些额外的工作，但这是最佳实践。
+- en: Warning
+  id: totrans-187
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: '`NULL` and `NULL` are unique; that is, two null values are unique. Avoid unique
+    indexes on nullable columns, or be certain that the application properly handles
+    duplicate rows with `NULL` values.'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`NULL` 和 `NULL` 是唯一的；也就是说，两个空值是唯一的。避免在可空列上使用唯一索引，或确保应用程序正确处理带有 `NULL` 值的重复行。'
+- en: 'If you really want to avoid using `NULL`, the previous warning is your technical
+    reason. These two sets of values are *unique*: `(1, NULL)` and `(1, NULL)`. That
+    is not a typo. To humans, those values look identical, but to MySQL they are unique
+    because the comparison of `NULL` to `NULL` is undefined. Check out [“Working with
+    NULL Values”](https://oreil.ly/oyTPZ) in the MySQL manual. It begins with a humble
+    admission: “The `NULL` value can be surprising until you get used to it.”'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您确实想避免使用 `NULL`，上述警告是您的技术原因。这两组值是*唯一*的：`(1, NULL)` 和 `(1, NULL)`。这不是打印错误。对于人类来说，这些值看起来是相同的，但对于
+    MySQL 来说它们是唯一的，因为 `NULL` 与 `NULL` 的比较是未定义的。请查看 MySQL 手册中的 [“Working with NULL
+    Values”](https://oreil.ly/oyTPZ)。它以一种谦逊的承认开始：“直到你习惯了它，`NULL` 的值可能会让人惊讶。”
+- en: Encode
+  id: totrans-190
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 编码
+- en: To encode a value, convert it from human-readable to machine-encoded. Data can
+    be encoded and stored one way for computers, and decoded and displayed another
+    way for humans. The most efficient way to store data on a computer is to encode
+    it for the computer.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要对值进行编码，将其从人类可读转换为机器编码。数据可以编码并以一种方式存储在计算机中，以另一种方式解码并显示给人类。在计算机上存储数据的最有效方法是为计算机编码它。
+- en: Tip
+  id: totrans-192
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Store for the machine, display for the human.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为机器存储，为人类显示。
+- en: The quintessential example and antipattern is storing an IP address as a string.
+    For example, storing `127.0.0.1` as a string in a `CHAR(15)` column. IP addresses
+    are four-byte unsigned integers—that’s the true machine encoding. (If you’re curious,
+    `127.0.0.1` is decimal value 2130706433.) To encode and store IP addresses, use
+    data type `INT UNSIGNED` and functions `INET_ATON()` and `INET_NTOA()` to convert
+    to and from a string, respectively. If encoding IP addresses is impractical, then
+    data type `CHAR(15)` is an acceptable alternative.
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 典型的示例和反模式是将IP地址存储为字符串。例如，将`127.0.0.1`作为字符串存储在`CHAR(15)`列中。 IP地址是四字节无符号整数，这是真正的机器编码。（如果您感兴趣，`127.0.0.1`是十进制值2130706433。）要编码和存储IP地址，请使用数据类型`INT
+    UNSIGNED`和函数`INET_ATON()`和`INET_NTOA()`分别进行字符串转换。如果编码IP地址不切实际，则数据类型`CHAR(15)`是可接受的替代方案。
+- en: Another similar example and antipattern is storing a UUID as a string. A UUID
+    is a multibyte integer represented as a string. Since UUID byte lengths vary,
+    you need to use data type `BINARY(N)`, where `N` is the byte length, and functions
+    `HEX()` and `UNHEX()` to convert the value. Or, if you’re using MySQL 8.0 (or
+    newer) and RFC 4122 UUIDs (which MySQL `UUID()` generates), you can use functions
+    `UUID_TO_BIN()` and `BIN_TO_UUID()`. If encoding UUIDs is impractical, at least
+    store the string representation using data type `CHAR(N)`, where `N` is the string
+    length in characters.
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个类似的示例和反模式是将UUID存储为字符串。 UUID是表示为字符串的多字节整数。由于UUID的字节长度不同，您需要使用数据类型`BINARY(N)`，其中`N`是字节长度，并使用函数`HEX()`和`UNHEX()`来转换值。或者，如果您使用的是MySQL
+    8.0（或更新版本）和RFC 4122 UUID（MySQL `UUID()`生成的），则可以使用函数`UUID_TO_BIN()`和`BIN_TO_UUID()`。如果编码UUID不切实际，至少使用数据类型`CHAR(N)`存储字符串表示，其中`N`是字符长度。
+- en: 'There is a more compact, computer-encoded method to store data: compression.
+    But this is an extreme method that creeps into the gray zone of space-speed trade-offs,
+    which are beyond the scope of this book. I have not seen a case where compression
+    was required for performance or scale. A rigorous application of the efficient
+    data storage checklist ([Table 3-4](#data-storage-checklist)) scales data to sizes
+    so large that other problems become blockers: backup and restore time, online
+    schema changes, and so forth. If you think you need compression to scale performance,
+    consult with an expert to verify.'
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储数据的更紧凑的计算机编码方法是压缩。但这是一种极端方法，涉及到空间和速度权衡的灰色区域，这超出了本书的范围。我还没有看到需要性能或规模化的情况下使用压缩的案例。高效数据存储检查表（[表 3-4](#data-storage-checklist)）的严格应用使数据扩展到如此之大，以至于其他问题变成阻碍：备份和恢复时间等。如果您认为需要压缩以提高性能，请咨询专家以验证。
+- en: 'While we’re on the topic of encoding, there’s an important best practice that
+    I’ll shoehorn into this section: store and access dates and times only as UTC.
+    Convert dates and times to local time (or whatever time zone is appropriate) only
+    on display (or on print). Also be aware that the MySQL `TIMESTAMP` data type ends
+    on January 19, 2038. If you received this book as a holiday gift in December 2037
+    and your databases have `TIMESTAMP` columns, you might want to go back to work
+    a little earlier.'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 顺便说一下编码的问题，有一个重要的最佳实践，我会插入到这一节中：只将日期和时间存储为UTC。仅在显示（或打印）时将日期和时间转换为本地时间（或适当的时区）。还要注意，MySQL的`TIMESTAMP`数据类型将在2038年1月19日结束。如果您在2037年12月收到这本书作为节日礼物，并且您的数据库有`TIMESTAMP`列，您可能希望稍早些回到工作。
+- en: Deduplicate
+  id: totrans-198
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 重复项去除
+- en: 'To deduplicate a value, normalize the column into another table with a one-to-one
+    relationship. This method is entirely application-specific, so let’s consider
+    a concrete example. Imagine an overly simple catalogue of books stored in a table
+    with only two columns: `title` and `genre`. (Let’s focus on the data and ignore
+    the details like data types and indexes.) [Example 3-7](#books-dupe) shows a table
+    with five books and three unique genres.'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要去重值，请将列规范化为另一个具有一对一关系的表。这种方法完全是应用程序特定的，因此让我们考虑一个具体的例子。想象一个过于简单的书籍目录，存储在仅有两列`title`和`genre`的表中。（让我们关注数据，忽略数据类型和索引等细节。）[示例 3-7](#books-dupe)显示了一个包含五本书和三个唯一流派的表。
+- en: Example 3-7\. Book catalogue with duplicate `genre` values
+  id: totrans-200
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例3-7\. 具有重复`genre`值的图书目录
+- en: '[PRE6]'
+  id: totrans-201
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'Column `genre` has duplicate values: three instances of value `computers`.
+    To deduplicate, normalize the column into another table with a one-to-one-relationship.
+    [Example 3-8](#books-dedupe) shows the new table at top and the modified original
+    table at bottom. The two tables have a one-to-one relationship on column `genre_id`.'
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 列`genre`具有重复值：三个“computers”值的实例。为了去重，将该列规范化到另一个具有一对一关系的表中。[示例 3-8](#books-dedupe)
+    展示了顶部的新表和底部修改后的原始表。这两个表在列`genre_id`上有一对一的关系。
+- en: Example 3-8\. Normalized book catalogue
+  id: totrans-203
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 3-8\. 规范化的书目目录
+- en: '[PRE7]'
+  id: totrans-204
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'The original table (at bottom) still has duplicate values for column `genre_id`,
+    but the reduction in data size at scale is huge. For example, it takes 9 bytes
+    to store the string “computers” but only 2 bytes to store the integer 1 as data
+    type `SMALLINT UNSIGNED`, which allows for 65,536 unique genres (probably enough).
+    That’s a 77.7% reduction in data size: 9 bytes to 2 bytes.'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 原始表（底部）仍然具有列`genre_id`的重复值，但在规模上数据尺寸大大减少。例如，“computers”字符串需要9个字节存储，而使用`SMALLINT
+    UNSIGNED`数据类型只需要2个字节存储整数1，允许有65,536个唯一的流派（可能足够）。这是数据尺寸减少了77.7%：从9个字节到2个字节。
+- en: 'Deduplicating values in this way is accomplished by *database normalization*:
+    separating data into tables based on logical relationships (one to one, one to
+    many, and so forth). However, deduplicating values data is *not* the goal or purpose
+    of database normalization.'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以这种方式去重值通过*数据库规范化*完成：根据逻辑关系（一对一、一对多等）将数据分成表。然而，去重数据并不是数据库规范化的目标或目的。
+- en: Note
+  id: totrans-207
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Database normalization is beyond the scope of this book, so I won’t explain
+    it further. There are many books on the subject, so you won’t have any trouble
+    finding a great one to learn about database normalization.
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库规范化超出了本书的范围，因此我不会进一步解释它。关于这个主题有许多书籍，因此你不会有任何麻烦找到一本很好的书来学习数据库规范化。
+- en: From this example, it looks like database normalization *causes* deduplication
+    of values, but that’s not strictly true. The single table in [Example 3-7](#books-dupe)
+    is technically valid first, second, and third normal forms (presuming there’s
+    a primary key)—fully normalized, just poorly designed. It’s more accurate to say
+    that deduplication of values is a common (and desired) side effect of database
+    normalization. And since you should normalize your databases in any case, you’re
+    likely to avoid duplicate values.
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从这个例子可以看出，数据库规范化*导致*值的去重，但这并不完全正确。[示例 3-7](#books-dupe) 中的单个表在技术上是第一、第二和第三正规形式（假设有主键）—完全规范化，只是设计不良。更准确地说，去重值是数据库规范化的常见（且期望的）副作用。而且由于你应该在任何情况下都对数据库进行规范化，因此你可能会避免重复值。
+- en: 'There’s an interesting flip side: *denormalization*. Denormalization is the
+    opposite of normalization: combining related data into one table. The single table
+    in [Example 3-7](#books-dupe) could be a denormalized table, if that was the intention
+    behind its design. Denormalization is a technique to increase performance by eliminating
+    table joins and attendant complexities. But don’t rush to denormalize your schemas
+    because there are details and trade-offs to consider that are beyond the scope
+    of this book. In fact, denormalization is the opposite of *less data* because
+    it intentionally duplicates data to trade space for speed.'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里有一个有趣的反面：*反规范化*。反规范化是规范化的反面：将相关数据组合到一个表中。[示例 3-7](#books-dupe) 中的单个表可能是一个反规范化表，如果这是其设计的意图的话。反规范化是一种通过消除表连接和相关复杂性来提高性能的技术。但不要急于反规范化你的模式，因为这涉及到超出本书范围的细节和权衡。实际上，反规范化是*更多数据*的相反，因为它有意地复制数据以换取速度。
+- en: Tip
+  id: totrans-211
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: The safe bet and best practice is database normalization and less data. Incredible
+    scale and performance are possible with both.
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 安全和最佳实践是数据库规范化和减少数据。使用这两者可以实现令人难以置信的规模和性能。
+- en: Every secondary index is used and not a duplicate
+  id: totrans-213
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 每个二级索引都被使用且不重复。
+- en: 'Second to last on the efficient data storage checklist ([Table 3-4](#data-storage-checklist)):
+    every secondary index is used and not a duplicate. Avoiding unused indexes and
+    duplicate indexes is always a great idea, but it’s especially important for data
+    size because indexes are copies of data. Granted, secondary indexes are much smaller
+    than the full table (the primary key) because they only contain index column values
+    and corresponding primary key column values, but these add up as the table grows.'
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在高效数据存储检查表 ([Table 3-4](#data-storage-checklist)) 中倒数第二：每个次要索引都在使用且不是重复的。避免未使用的索引和重复的索引始终是一个好主意，但对于数据大小尤为重要，因为索引是数据的副本。确实，次要索引比完整表（主键）要小得多，因为它们只包含索引列值和相应的主键列值，但随着表的增长，这些会累积。
+- en: 'Dropping unused and duplicate secondary indexes is an easy way to reduce data
+    size, but be careful. As mentioned in [“Excessive, Duplicate, and Unused”](ch02.html#idx-too-many),
+    finding unused indexes is tricky because an index might not be used frequently,
+    so be sure to check index usage over a sufficiently long period. By contrast,
+    duplicate indexes are easier to find: use [pt-duplicate-key-checker](https://oreil.ly/qSStI).
+    Again: be careful when dropping indexes.'
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 放弃未使用和重复的次要索引是减少数据大小的简单方法，但要小心。如 [“Excessive, Duplicate, and Unused”](ch02.html#idx-too-many)
+    中所述，查找未使用的索引很棘手，因为某个索引可能不经常使用，因此务必检查足够长的时间段内的索引使用情况。相比之下，重复索引更容易找到：使用 [pt-duplicate-key-checker](https://oreil.ly/qSStI)。再次强调：删除索引时要小心。
+- en: Dropping an index only recovers a data size equal to the index size. There are
+    three methods to see index sizes. Let’s use the [`employees` sample database](https://oreil.ly/lwWxR)
+    because it has a few megabytes of index data. The first and preferred method to
+    see index sizes is querying table `INFORMATION_SCHEMA.TABLES`, as shown in [Example 3-9](#show-index-size-1).
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 放弃索引只能恢复与索引大小相等的数据大小。有三种方法可以查看索引大小。让我们使用 [`employees` sample database](https://oreil.ly/lwWxR)，因为它有几兆字节的索引数据。查看索引大小的首选方法是查询表
+    `INFORMATION_SCHEMA.TABLES`，如 [Example 3-9](#show-index-size-1) 所示。
+- en: Example 3-9\. Index sizes of employees sample database (`INFORMATION_SCHEMA`)
+  id: totrans-217
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 3-9\. 员工示例数据库的索引大小 (`INFORMATION_SCHEMA`)
+- en: '[PRE8]'
+  id: totrans-218
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: '`TABLE_NAME` is the table name in the `employees` sample database—only six
+    tables. (The database has some views that are filtered out by condition `TABLE_TYPE
+    = ''BASE TABLE''`.) `DATA_LENGTH` is the size of the primary key (in bytes). `INDEX_LENGTH`
+    is the size of all secondary indexes (in bytes). The last four tables have no
+    secondary indexes, only a primary key.'
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TABLE_NAME` 是 `employees` 示例数据库中的表名——仅有六个表。（该数据库有一些视图，根据条件 `TABLE_TYPE = ''BASE
+    TABLE''` 进行了过滤。）`DATA_LENGTH` 是主键的大小（以字节为单位）。`INDEX_LENGTH` 是所有次要索引的大小（以字节为单位）。最后四个表没有次要索引，只有一个主键。'
+- en: The second and historical (but still widely used) method to see index sizes
+    is `SHOW TABLES STATUS`. You can add a `LIKE` clause to show only one table, as
+    demonstrated in [Example 3-10](#show-index-size-2).
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查看索引大小的第二种历史（但仍广泛使用）方法是 `SHOW TABLES STATUS`。您可以添加一个 `LIKE` 子句，仅显示一个表，如 [Example 3-10](#show-index-size-2)
+    所示。
+- en: Example 3-10\. Index sizes of table `employees.dept_emp` (`SHOW TABLE STATUS`)
+  id: totrans-221
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 3-10\. 表 `employees.dept_emp` 的索引大小 (`SHOW TABLE STATUS`)
+- en: '[PRE9]'
+  id: totrans-222
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: The fields `Data_length` and `Index_length` in the `SHOW TABLE STATUS` output
+    are the same columns and values from `INFORMATION_SCHEMA.TABLES`. It’s better
+    to query `INFORMATION_SCHEMA.TABLES` because you can use functions in the `SELECT`
+    clause like `ROUND(DATA_LENGTH / 1024 / 1024)` to convert and round the values
+    from bytes to other units.
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SHOW TABLE STATUS` 输出中的 `Data_length` 和 `Index_length` 字段与 `INFORMATION_SCHEMA.TABLES`
+    中的相同列和值。最好查询 `INFORMATION_SCHEMA.TABLES`，因为您可以在 `SELECT` 子句中使用函数，例如 `ROUND(DATA_LENGTH
+    / 1024 / 1024)` 将字节转换并四舍五入为其他单位的值。'
+- en: 'The third method to see index sizes is currently the only method to see the
+    size of each index: query table `mysql.innodb_index_stats`, as shown in [Example 3-11](#show-index-size-3)
+    for table `employees.dept_emp`.'
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查看索引大小的第三种方法目前是唯一的方法：查询表 `mysql.innodb_index_stats`，如 [Example 3-11](#show-index-size-3)
+    中显示的 `employees.dept_emp` 表。
+- en: Example 3-11\. Size of each index on table `employees.dept_emp` (`mysql.innodb_index_stats`)
+  id: totrans-225
+  prefs:
+  - PREF_H5
+  type: TYPE_NORMAL
+  zh: 示例 3-11\. 表 `employees.dept_emp` 上每个索引的大小 (`mysql.innodb_index_stats`)
+- en: '[PRE10]'
+  id: totrans-226
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Table `employees.dept_emp` has two indexes: a primary key and a secondary index
+    named `dept_no`. Column `size` contains the size of each index in bytes, which
+    is actually the number of index pages multiplied by the InnoDB page size (16 KB
+    by default).'
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 `employees.dept_emp` 有两个索引：一个主键和一个名为 `dept_no` 的次要索引。`size` 列包含每个索引的大小（以字节为单位），实际上是索引页数乘以
+    InnoDB 页大小（默认为 16 KB）。
+- en: The `employees` sample database is not a spectacular display of secondary index
+    size, but real-world databases can be overflowing with secondary indexes that
+    account for a significant amount of total data size. Regularly check index usage
+    and index sizes, and reduce total data size by carefully dropping unused and duplicate
+    indexes.
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`employees` 示例数据库并不是次级索引大小的壮观展示，但现实世界的数据库可能会因大量次级索引而溢出，这些次级索引占据了总数据大小的相当部分。定期检查索引使用情况和索引大小，并通过仔细删除未使用的和重复的索引来减少总数据大小。'
+- en: Only needed rows are kept
+  id: totrans-229
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 只保留所需行
+- en: 'Last item on the efficient data storage checklist ([Table 3-4](#data-storage-checklist)):
+    only needed rows are kept. This item brings us full circle, closing the loop with
+    the first item: [“Only needed rows are stored”](#data-checklist-1). A row might
+    be needed when stored, but that need changes over time. Delete (or archive) rows
+    that are no longer needed. That sounds obvious, but it’s common to find tables
+    with forgotten or abandoned data. I’ve lost count of how many times I’ve seen
+    teams drop entire tables that were forgotten.'
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 效率数据存储清单的最后一项（[表 3-4](#data-storage-checklist)）：只保留所需行。这一项将我们带回全循环，与第一项闭环：[“只存储所需行”](#data-checklist-1)。存储时可能需要一行，但这种需求随时间变化而变化。删除（或归档）不再需要的行。听起来很明显，但通常会发现包含遗忘或被弃用数据的表格。我已经不记得多少次看到团队删除完全被遗忘的整个表格了。
+- en: Deleting (or archiving) data is a lot easier said than done, and the next section
+    takes on the challenge.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 删除（或归档）数据远比说起来容易，接下来的部分将解决这一挑战。
+- en: Delete or Archive Data
+  id: totrans-232
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 删除或归档数据
+- en: 'I hope this chapter instills in you a desire to delete or archive data. Too
+    much data has woken me from too many pleasant dreams: it’s as if MySQL has a mind
+    of its own and waits until 3 a.m. to fill up the disk. I once had an application
+    page me in the middle of the night in three different time zones (my time zone
+    changed due to meetings in different parts of the world). But enough about me;
+    let’s talk about how to delete or archive data without negatively impacting the
+    application.'
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我希望本章能让您渴望删除或归档数据。太多的数据已经让我从太多愉快的梦中醒来：就好像MySQL有自己的思想，等到凌晨3点再填满磁盘。我曾经在三个不同的时区（因世界各地的会议而改变了我的时区）被应用程序叫醒。但是关于我，够了，让我们谈谈如何在不对应用程序造成负面影响的情况下删除或归档数据。
+- en: 'For brevity, I refer only to deleting data, not deleting *or archiving* data,
+    because the challenge lies almost entirely in the former: deleting data. Archiving
+    data requires copying the data first, then deleting it. Copying data should use
+    nonlocking `SELECT` statements to avoid impacting the application, then write
+    the copied rows to another table or data store that the application doesn’t access.
+    Even with nonlocking `SELECT` statements, you must rate-limit the copy process
+    to avoid increasing QPS beyond what MySQL and the application can handle. (Recall
+    from [“Less QPS Is Better”](#less-qps-is-better) that QPS is relative to the application
+    and difficult to increase.)'
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为简洁起见，我仅指出删除数据，而不是删除*或归档*数据，因为挑战几乎完全在前者：删除数据。归档数据需要首先复制数据，然后删除数据。复制数据应使用非锁定的`SELECT`语句以避免影响应用程序，然后将复制的行写入应用程序无法访问的另一个表格或数据存储中。即使使用非锁定的`SELECT`语句，您也必须对复制过程进行速率限制，以避免增加超过MySQL和应用程序可处理的QPS。
+    （从[“QPS 越少越好”](#less-qps-is-better)回顾，QPS 相对于应用程序而言，很难增加。）
+- en: Tools
+  id: totrans-235
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 工具
+- en: 'You will have to write your own tools to delete or archive data. Sorry to lead
+    with bad news, but it’s the truth. The good news is that deleting and archiving
+    data is not difficult—it’s probably trivial compared to your application. The
+    *critically important* part is throttling the loop that executes SQL statements.
+    Never do this:'
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您将不得不编写自己的工具来删除或归档数据。很抱歉带来不好的消息，但这是事实。好消息是删除和归档数据并不难——与您的应用程序相比可能微不足道。*至关重要*
+    的部分是限制执行SQL语句的循环速率。绝对不要这样做：
+- en: '[PRE11]'
+  id: totrans-237
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: The `LIMIT 1000000` clause is probably too large, and the `for` loop has no
+    delay between statements. That pseudocode is likely to cause an application outage.
+    *Batch size* is the key to a safe and effective data archiving tool.
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LIMIT 1000000` 子句可能过大，而`for`循环在语句之间没有延迟。那段伪代码很可能导致应用程序停机。 *批处理大小* 是安全且有效的数据归档工具的关键。'
+- en: Batch Size
+  id: totrans-239
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 批处理大小
+- en: 'First, a shortcut that might allow you to skip reading this section until needed:
+    it’s safe to *manually* delete 1,000 rows or less in a single `DELETE` statement
+    if the rows are small (no `BLOB`, `TEXT`, or `JSON` columns) and MySQL is not
+    heavily loaded. *Manually* means that you execute each `DELETE` statement in series
+    (one after the other), not in parallel. Do not write a program to execute the
+    `DELETE` statements. Most humans are too slow for MySQL to notice, so no matter
+    how fast you are, you cannot manually execute `DELETE`…`LIMIT 1000` statements
+    fast enough to overload MySQL. Use this shortcut judiciously, and have another
+    engineer review any manual deletes.'
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，可能允许您跳过阅读本节直到需要时的快捷方式：如果行数少于 1,000 行（没有`BLOB`、`TEXT`或`JSON`列），并且 MySQL 负载不重，可以安全地*手动*以单个`DELETE`语句删除
+    1,000 行或更少。*手动*意味着逐个执行每个`DELETE`语句（依次执行），而不是并行执行。不要编写程序来执行`DELETE`语句。大多数人类对于 MySQL
+    来说太慢了，所以无论您多快，都不能手动执行足够快以过载 MySQL 的`DELETE`…`LIMIT 1000`语句。谨慎使用此快捷方式，并请另一位工程师审查任何手动删除操作。
+- en: Note
+  id: totrans-241
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The method described in this section focuses on `DELETE` but applies in general
+    to `INSERT` and `UPDATE`. For `INSERT`, batch size is controlled by the number
+    of rows inserted, not a `LIMIT` clause.
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节描述的方法侧重于`DELETE`，但通常适用于`INSERT`和`UPDATE`。对于`INSERT`，批处理大小由插入的行数控制，而不是`LIMIT`子句。
+- en: The rate at which you can quickly *and safely* delete rows is determined by
+    the batch size that MySQL and the application can sustain without impacting query
+    response time or replication lag. ([Chapter 7](ch07.html#ch07) covers replication
+    lag.) *Batch size* is the number of rows deleted per `DELETE` statement, which
+    is controlled by a `LIMIT` clause and throttled by a simple delay, if necessary.
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以快速且安全地删除行的速率取决于 MySQL 和应用程序能够维持的批处理大小，而不影响查询响应时间或复制延迟。[第 7 章](ch07.html#ch07)详细介绍了复制延迟。*批处理大小*是每个`DELETE`语句删除的行数，由`LIMIT`子句控制，并在必要时通过简单的延迟进行限制。
+- en: 'Batch size is calibrated to an execution time; 500 milliseconds is a good starting
+    point. This means that each `DELETE` statement should take no longer than 500
+    ms to execute. This is critically important for two reasons:'
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 批处理大小根据执行时间进行校准；500 毫秒是一个良好的起点。这意味着每个`DELETE`语句执行时间不应超过 500 毫秒。这对两个原因至关重要：
+- en: Replication lag
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制延迟
+- en: Execution time on a source MySQL instance creates replication lag on replica
+    MySQL instances. If a `DELETE` statement takes 500 ms to execute on the source,
+    then it also takes 500 ms to execute on a replica, which creates 500 ms of replication
+    lag. You cannot avoid replication lag, but you must minimize it because replication
+    lag is data loss. (For now, I gloss over many details about replication that I
+    clarify in [Chapter 7](ch07.html#ch07).)
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 源 MySQL 实例上的执行时间会导致复制 MySQL 实例上的复制延迟。如果源上的`DELETE`语句执行时间为 500 毫秒，则在复制实例上执行时间也为
+    500 毫秒，这会导致 500 毫秒的复制延迟。您无法避免复制延迟，但必须尽量减少，因为复制延迟会导致数据丢失。（目前，我对复制的许多细节进行了概述，稍后在[第
+    7 章](ch07.html#ch07)中详细说明。）
+- en: Throttling
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 限流
+- en: 'In some cases, it’s safe to execute `DELETE` statements with no delay—no throttling—because
+    the calibrated batch size limits query execution time, which limits QPS. A query
+    that takes 500 ms to execute can only execute at 2 QPS in series. But these are
+    no ordinary queries: they’re purpose-built to access and write (delete) as many
+    rows as possible. Without throttling, bulk writes can disrupt other queries and
+    impact the application.'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某些情况下，可以安全地执行没有延迟的`DELETE`语句——没有限流——因为校准的批处理大小限制了查询执行时间，从而限制了每秒查询率（QPS）。一个执行时间为
+    500 毫秒的查询只能以串行方式执行 2 QPS。但这些不是普通的查询：它们是专门设计的，用于尽可能访问和写入（删除）尽可能多的行。没有限流，批量写入可能会干扰其他查询并影响应用程序。
+- en: 'Throttling is paramount when deleting data: always begin with a delay between
+    `DELETE` statements, and monitor replication lag.^([2](ch03.html#idm45829112148736))'
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在删除数据时，限流至关重要：始终在`DELETE`语句之间加入延迟，并监视复制延迟。^([2](ch03.html#idm45829112148736))
+- en: Tip
+  id: totrans-250
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Always build a throttle into bulk operations.
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 始终在批量操作中加入限流。
+- en: 'To calibrate the batch size to a 500 ms execution time (or whatever execution
+    time you chose), start with batch size 1,000 (`LIMIT 1000`) and a 200 ms delay
+    between `DELETE` statements: 200 ms is a long delay, but you decrease it after
+    calibrating the batch size. Let that run for at least 10 minutes while monitoring
+    replication lag and MySQL stability—don’t let MySQL lag or destabilize. (Replication
+    lag and MySQL stability are covered in Chapters [7](ch07.html#ch07) and [6](ch06.html#ch06),
+    respectively.) Use query reporting (see [“Reporting”](ch01.html#query-reporting))
+    to inspect the maximum execution time of the `DELETE` statement, or measure it
+    directly in your data archiving tool. If the maximum execution time is well below
+    the target—500 ms—then double the batch size and re-run for another 10 minutes.
+    Keep doubling the batch size—or making smaller adjustments—until the maximum execution
+    time is consistently on target—preferably just a little below target. When you’re
+    done, record the calibrated batch size and execution time because deleting old
+    data should be a recurring event.'
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将批处理大小校准为500毫秒执行时间（或您选择的任何执行时间），从批处理大小1000（`LIMIT 1000`）和`DELETE`语句之间的200毫秒延迟开始：200毫秒是一个长延迟，但在校准批处理大小后可以减少它。在监控复制延迟和MySQL稳定性的同时运行至少10分钟——不要让MySQL延迟或不稳定。（复制延迟和MySQL稳定性分别在第[7章](ch07.html#ch07)和第[6章](ch06.html#ch06)中讨论。）使用查询报告（参见[“报告”](ch01.html#query-reporting)）来检查`DELETE`语句的最大执行时间，或直接在您的数据存档工具中进行测量。如果最大执行时间远低于目标值——500毫秒——那么将批处理大小加倍，并再次运行10分钟。不断加倍批处理大小——或进行较小的调整——直到最大执行时间稳定在目标值之下为止。完成后，记录校准的批处理大小和执行时间，因为删除旧数据应该是一个经常发生的事件。
+- en: 'To set the throttle using the calibrated batch size, repeat the process by
+    slowly reducing the delay on each 10-minute rerun. Depending on MySQL and the
+    application, you might reach zero (no throttling). Stop at the first sign of replication
+    lag or MySQL destabilizing, then increase the delay to the previous value that
+    didn’t cause either problem. When you’re done, record the delay for the same reason
+    as before: deleting old data should be a recurring event.'
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用校准的批处理大小设置节流，请通过每次10分钟重复运行逐渐减少延迟的过程重复上述过程。根据MySQL和应用程序的情况，您可能会达到零（无节流）。一旦出现复制延迟或MySQL不稳定的首个迹象，请停止，并将延迟增加到以前没有引起任何问题的值。完成后，出于相同的原因记录延迟：删除旧数据应该是一个经常发生的事件。
+- en: 'With the batch size calibrated and the throttle set, you can finally calculate
+    the rate: how many rows per second you can delete without impacting query response
+    time: `batch size * DELETE QPS`. (Use query reporting to inspect the QPS of the
+    `DELETE` statement, or measure it directly in your data archiving tool.) Expect
+    the rate to change throughout the day. If the application is extremely busy during
+    business hours, the only sustainable rate might be zero. If you’re an ambitious
+    go-getter who’s on a rocket ride to the top of your career, your industry, and
+    the world, then wake up in the middle of the night and try a higher rate when
+    the database is quiet: larger batch size, lower delay, or both. Just remember
+    to reset the batch size and delay before the sun rises and database load increases.'
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在校准了批处理大小并设置了节流后，最终可以计算速率：每秒可以删除多少行而不影响查询响应时间：`批处理大小 * DELETE QPS`。（使用查询报告来检查`DELETE`语句的QPS，或直接在您的数据存档工具中测量。）预期速率会在一天中变化。如果应用程序在工作时间非常繁忙，唯一可持续的速率可能是零。如果你是一个雄心勃勃、一路高飞的人，醒来时数据库安静时可以尝试更高的速率：更大的批处理大小、更低的延迟或两者兼而有之。只需记住，在太阳升起并且数据库负载增加之前重新设置批处理大小和延迟。
+- en: Warning
+  id: totrans-255
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: MySQL backups almost always run in the middle of the night. Even if the application
+    is quiet in the dead of night, the database might be busy.
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL备份几乎总是在深夜运行。即使应用程序在深夜非常安静，数据库可能也很忙。
+- en: Row Lock Contention
+  id: totrans-257
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 行锁争用
+- en: 'For write-heavy workloads, bulk operations can cause elevated *row lock contention*:
+    queries waiting to acquire row locks on the same (or nearby) rows. This problem
+    mainly affects `INSERT` and `UPDATE` statements, but `DELETE` statements could
+    be affected, too, if deleted rows are interspersed with kept rows. The problem
+    is that the batch size is too large even though it executes within the calibrated
+    time. For example, MySQL might be able to delete 100,000 rows in 500 ms, but if
+    the locks for those rows overlap with rows that the application is updating, then
+    it causes row lock contention.'
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于写入密集的工作负载，批量操作可能导致增加的*行锁竞争*：查询等待获取同一行（或附近行）的行锁。这个问题主要影响`INSERT`和`UPDATE`语句，但`DELETE`语句也可能受到影响，特别是如果删除的行与保留的行交错。问题在于批处理大小太大，即使在校准时间内执行也是如此。例如，MySQL
+    可能能够在 500 毫秒内删除 100,000 行，但如果这些行的锁与应用程序正在更新的行重叠，那么就会引起行锁竞争。
+- en: 'The solution is to reduce the batch size by calibrating for a much smaller
+    execution time—100 ms, for example. In extreme cases, you might need to increase
+    the delay, too: small batch size, long delay. This reduces row lock contention,
+    which is good for the application, but it makes data archiving slower. There’s
+    no magical solution for this extreme case; it’s best to avoid with *less data*
+    and *fewer QPS*.'
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 解决方案是通过校准更小的执行时间来减少批处理大小 —— 例如 100 毫秒。在极端情况下，您可能需要增加延迟：小批处理大小，长延迟。这样可以减少行锁竞争，对应用程序有利，但会使数据归档变慢。对于这种极端情况，没有神奇的解决方案；最好避免使用*更少的数据*和*更少的QPS*。
+- en: Space and Time
+  id: totrans-260
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 空间与时间
+- en: 'Deleting data does not free disk space. Row deletes are logical, not physical,
+    which is a common performance optimization in many databases. When you delete
+    500 GB of data, you don’t get 500 GB of disk space, you get 500 GB of free pages.
+    Internal details are more complex and beyond the scope of this book, but the general
+    idea is correct: deleting data yields free pages, not free disk space.'
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 删除数据并不会释放磁盘空间。行删除是逻辑操作，而非物理操作，在许多数据库中是一种常见的性能优化。当你删除 500 GB 的数据时，并不会获得 500 GB
+    的磁盘空间，而是获得 500 GB 的空闲页。内部细节更为复杂，超出了本书的范围，但总体概念是正确的：删除数据会释放空闲页，而非空闲磁盘空间。
+- en: 'Free pages do not affect performance, and InnoDB reuses free pages when new
+    rows are inserted. If deleted rows will soon be replaced by new rows, and disk
+    space isn’t limited, then free pages and unclaimed disk space are not a concern.
+    But please be mindful of your colleagues: if your company runs its own hardware
+    and MySQL for your application shares disk space with MySQL for other applications,
+    then don’t waste disk space that can be used by other applications. In the cloud,
+    storage costs money, so don’t waste money: reclaim the disk space.'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 空闲页不会影响性能，当插入新行时，InnoDB 会重用空闲页。如果删除的行将很快被新行替换，并且磁盘空间不受限制，那么空闲页和未索取的磁盘空间就不是问题。但请注意您的同事：如果您的公司运行自己的硬件，并且为您的应用程序的
+    MySQL 与其他应用程序的 MySQL 共享磁盘空间，则不要浪费其他应用程序可以使用的磁盘空间。在云中，存储是需要花钱的，因此不要浪费钱：回收磁盘空间。
+- en: 'The best way to reclaim disk space from InnoDB is to rebuild the table by executing
+    a no-op `ALTER TABLE`…`ENGINE=INNODB` statement. This is a solved problem with
+    three great solutions:'
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从 InnoDB 中回收磁盘空间的最佳方法是通过执行一个空操作 `ALTER TABLE`…`ENGINE=INNODB` 语句来重建表格。这是一个已解决的问题，有三个优秀的解决方案：
+- en: '[pt-online-schema-change](https://oreil.ly/8EJph)'
+  id: totrans-264
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[pt-online-schema-change](https://oreil.ly/8EJph)'
+- en: '[`gh-ost`](https://oreil.ly/IsV83)'
+  id: totrans-265
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[`gh-ost`](https://oreil.ly/IsV83)'
+- en: '[`ALTER TABLE`…`ENGINE=INNODB`](https://oreil.ly/JhWdg)'
+  id: totrans-266
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[`ALTER TABLE`…`ENGINE=INNODB`](https://oreil.ly/JhWdg)'
+- en: 'Each solution works differently, but they have one thing in common: all of
+    them can rebuild huge InnoDB tables *online*: in production without impacting
+    the application. Read the documentation for each to decide which one works best
+    for you.'
+  id: totrans-267
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每种解决方案工作方式不同，但它们有一个共同点：所有这些解决方案都能在生产环境中*在线*重建巨大的 InnoDB 表格，而不会影响应用程序。阅读每个文档以决定哪一个对您最合适。
+- en: Note
+  id: totrans-268
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: To rebuild a table with `ALTER TABLE`…`ENGINE=INNODB`, replace … with the table
+    name. Do not make any other changes.
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `ALTER TABLE`…`ENGINE=INNODB` 重新构建表格时，请将 … 替换为表名。不要进行其他更改。
+- en: 'Deleting large amounts of data takes time. You might read or hear about how
+    fast MySQL can write data, but that’s usually for benchmarks (see [“MySQL Tuning”](ch02.html#mysql-tuning)).
+    In the glamorous world of laboratory research, sure: MySQL will consume every
+    clock cycle and disk IOP you can give it. But in the quotidian world that you
+    and I slog through, data must be deleted with significant restraint to avoid impacting
+    the application. To put it bluntly: it’s going to take a lot longer than you think.
+    The good news is: if done correctly—as detailed in [“Batch Size”](#batch-size)—then
+    time is on your side. A well-calibrated, sustainable bulk operation can run for
+    days and weeks. This includes the solution that you use to reclaim disk space
+    from InnoDB because rebuilding the table is just another type of bulk operation.
+    It takes time to delete rows, and it takes additional time to reclaim the disk
+    space.'
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 删除大量数据需要时间。您可能会读到或听到MySQL写入数据有多快，但那通常是基准测试的结果（参见[“MySQL调整”](ch02.html#mysql-tuning)）。在实验室研究的光辉世界中，当然：MySQL会利用您能提供的每一个时钟周期和磁盘IOP。但在您和我经历的日常世界中，必须谨慎地删除数据，以避免对应用程序造成影响。坦率地说：这将比您想象的要花费更多时间。好消息是：如果操作正确执行——如[“批量大小”](#batch-size)中详细说明的那样——那么时间是站在您这边的。一个良好校准的、可持续的批量操作可以运行数天甚至数周。这包括您用于从InnoDB回收磁盘空间的解决方案，因为重建表格只是另一种批量操作。删除行需要时间，而回收磁盘空间还需要额外的时间。
+- en: The Binary Log Paradox
+  id: totrans-271
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 二进制日志悖论
+- en: Deleting data creates data. This paradox happens because data changes are written
+    to the binary logs. Binary logging can be disabled, but it never is in production
+    because the binary logs are required for replication, and no sane production system
+    runs without replicas.
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 删除数据会生成数据。这种悖论发生在数据更改被写入二进制日志的情况下。虽然可以禁用二进制日志记录，但生产中从不这样做，因为二进制日志对于复制是必需的，而没有理智的生产系统会在没有副本的情况下运行。
+- en: 'If the table contains large `BLOB`, `TEXT`, or `JSON` columns, then binary
+    log size could increase dramatically because the MySQL system variable [`binlog_row_image`](https://oreil.ly/0bNcG)
+    defaults to `full`. That variable determines how row images are written to the
+    binary logs; it has three settings:'
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果表中包含大量的`BLOB`、`TEXT`或`JSON`列，则由于MySQL系统变量[`binlog_row_image`](https://oreil.ly/0bNcG)默认为`full`，二进制日志的大小可能会显著增加。该变量决定了如何将行图像写入二进制日志；它有三个设置：
+- en: '`full`'
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`full`'
+- en: Write the value of every column (the full row).
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写入每一列的值（完整行）。
+- en: '`minimal`'
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`minimal`'
+- en: Write the value of columns that changed and columns required to identify the
+    row.
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写入已更改的列的值以及用于识别行的列。
+- en: '`noblob`'
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`noblob`'
+- en: Write the value of every column *except* `BLOB` and `TEXT` columns that aren’t
+    required.
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写入除了不需要的`BLOB`和`TEXT`列之外的每一列的值。
+- en: It’s both safe and recommended to use `minimal` (or `noblob`) if there are no
+    external services that rely on full row images in the binary logs—for example,
+    a data pipeline service that stream changes to a data lake or big data store.
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果没有依赖于二进制日志中完整行图像的外部服务（例如将更改流式传输到数据湖或大数据存储的数据流水线服务），那么使用`minimal`（或`noblob`）是安全且推荐的。
+- en: If you use [pt-online-schema-change](https://oreil.ly/2EB4l) or [`gh-ost`](https://oreil.ly/nUuvv)
+    to rebuild the table, these tools copy the table (safely and automatically), and
+    that copy process writes even more data changes to the binary logs. However, `ALTER
+    TABLE`…`ENGINE=INNODB` defaults to an in-place alter—no table copy.
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您使用[pt-online-schema-change](https://oreil.ly/2EB4l)或[`gh-ost`](https://oreil.ly/nUuvv)来重建表格，这些工具会复制表格（安全且自动），并且该复制过程会将更多数据更改写入二进制日志。然而，`ALTER
+    TABLE`…`ENGINE=INNODB`默认为原地更改，不会复制表格。
+- en: Warning
+  id: totrans-282
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: When deleting a lot of data, disk usage will *increase* because of binary logging
+    and the fact that deleting data does not free disk space.
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 删除大量数据时，由于二进制日志记录和删除数据并不释放磁盘空间，磁盘使用量会*增加*。
+- en: Paradoxically, you must ensure that the server has enough free disk space to
+    delete data and rebuild the table.
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其矛盾之处在于，您必须确保服务器有足够的空闲磁盘空间来删除数据并重建表格。
+- en: Summary
+  id: totrans-285
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: 'This chapter examined data with respect to performance and argued that reducing
+    data access and storage is a technique—an indirect query optimization—for improving
+    performance. The primary takeaway points are:'
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章探讨了与性能相关的数据，并提出减少数据访问和存储是一种提高性能的技术——一种间接查询优化。主要的要点是：
+- en: Less data yields better performance.
+  id: totrans-287
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 较少的数据产生更好的性能。
+- en: Less QPS is better because it’s a liability, not an asset.
+  id: totrans-288
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 较少的QPS更好，因为它是一种负担，而非资产。
+- en: Indexes are necessary for maximum MySQL performance, but there are cases when
+    indexes may not help.
+  id: totrans-289
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 索引对于最大化 MySQL 性能是必要的，但在某些情况下，索引可能无法帮助。
+- en: 'The principle of least data means: store and access only needed data.'
+  id: totrans-290
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 最小数据原则意味着：仅存储和访问所需的数据。
+- en: Ensure that queries access as few rows as possible.
+  id: totrans-291
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 确保查询尽可能少地访问行。
+- en: 'Do not store more data than needed: data is valuable to you, but it’s dead
+    weight to MySQL.'
+  id: totrans-292
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不要存储比所需更多的数据：数据对你来说很有价值，但对 MySQL 而言只是多余的负担。
+- en: Deleting or archiving data is important and improves performance.
+  id: totrans-293
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 删除或归档数据非常重要，并且可以提高性能。
+- en: The next chapter centers on access patterns that determine how you can change
+    the application to use MySQL efficiently.
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一章将集中讨论访问模式，确定如何更改应用程序以有效使用 MySQL。
+- en: 'Practice: Audit Query Data Access'
+  id: totrans-295
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实践：审核查询数据访问
+- en: 'The goal of this practice is to audit queries for inefficient data access.
+    This is the efficient data access checklist ([Table 3-2](#data-access-checklist)):'
+  id: totrans-296
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这一实践的目标是审核查询，以提高数据访问效率。这是高效数据访问检查表（[表 3-2](#data-access-checklist)）：
+- en: ☐ Return only needed columns
+  id: totrans-297
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: ☐ 仅返回所需列
+- en: ☐ Reduce query complexity
+  id: totrans-298
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: ☐ 减少查询复杂性
+- en: ☐ Limit row access
+  id: totrans-299
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: ☐ 限制行访问
+- en: ☐ Limit the result set
+  id: totrans-300
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: ☐ 限制结果集
+- en: ☐ Avoid sorting rows
+  id: totrans-301
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: ☐ 避免对行进行排序
+- en: 'Apply the checklist to the top 10 slow queries. (To get slow queries, refer
+    back to [“Query profile”](ch01.html#query-profile) and [“Practice: Identify Slow
+    Queries”](ch01.html#ch01-ai).) An easy fix is any `SELECT *`: explicitly select
+    only the columns needed. Also pay close attention to any query with an `ORDER
+    BY` clause: is it using an index? Does it have a `LIMIT`? Can the application
+    sort rows instead?'
+  id: totrans-302
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将检查表应用于前 10 个慢查询。（要获取慢查询，请参考[“查询概要”](ch01.html#query-profile)和[“实践：识别慢查询”](ch01.html#ch01-ai)。）修复一个简单的方法是任何`SELECT
+    *`：显式选择所需的列。还要特别注意带有`ORDER BY`子句的查询：是否使用索引？是否有`LIMIT`？应用程序是否可以对行进行排序？
+- en: 'Unlike [“Practice: Identify Slow Queries”](ch01.html#ch01-ai) and [“Practice:
+    Find Duplicate Indexes”](ch02.html#ch02-ai), there is no tool to audit query data
+    access. But the checklist is only five items, so it doesn’t take long to audit
+    queries manually. Carefully and methodically auditing queries for optimal data
+    access is expert-level MySQL performance practice.'
+  id: totrans-303
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与[“实践：识别慢查询”](ch01.html#ch01-ai)和[“实践：查找重复索引”](ch02.html#ch02-ai)不同，没有工具来审核查询数据访问。但检查表只有五项，因此手动审核查询不会花费太多时间。仔细和有条不紊地审核查询，以实现最佳数据访问是专家级别的
+    MySQL 性能实践。
+- en: ^([1](ch03.html#idm45829112705168-marker)) MySQL does not support sparse or
+    partial indexes.
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch03.html#idm45829112705168-marker)) MySQL 不支持稀疏或部分索引。
+- en: '^([2](ch03.html#idm45829112148736-marker)) Check out [`freno`](https://oreil.ly/vSmUb)
+    by GitHub Engineering: an open source throttle for MySQL.'
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch03.html#idm45829112148736-marker)) 查看 GitHub Engineering 的[`freno`](https://oreil.ly/vSmUb)：一个用于
+    MySQL 的开源限流工具。

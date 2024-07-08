@@ -1,0 +1,1249 @@
+- en: Chapter 10\. Setting Up a Replica Set
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第10章 设置副本集
+- en: 'This chapter introduces MongoDB’s high-availability system: replica sets. It
+    covers:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章介绍了 MongoDB 的高可用性系统：副本集。它涵盖了：
+- en: What replica sets are
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 什么是副本集
+- en: How to set up a replica set
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何设置副本集
+- en: What configuration options are available for replica set members
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 副本集成员的配置选项有哪些
+- en: Introduction to Replication
+  id: totrans-5
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 引入复制
+- en: Since the first chapter, we’ve been using a standalone server, a single *mongod*
+    server. It’s an easy way to get started but a dangerous way to run in production.
+    What if your server crashes or becomes unavailable? Your database will be unavailable
+    for at least a little while. If there are problems with the hardware, you might
+    have to move your data to another machine. In the worst case, disk or network
+    issues could leave you with corrupt or inaccessible data.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自从第一章以来，我们一直在使用独立服务器，即单个*mongod*服务器。这是一个快速入门的方式，但在生产环境中运行是有风险的。如果服务器崩溃或不可用，您的数据库将在一段时间内无法访问。如果硬件出现问题，可能需要将数据迁移到另一台机器。在最坏的情况下，磁盘或网络问题可能导致数据损坏或无法访问。
+- en: Replication is a way of keeping identical copies of your data on multiple servers
+    and is recommended for all production deployments. Replication keeps your application
+    running and your data safe, even if something happens to one or more of your servers.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制是将数据的完全相同副本存储在多个服务器上的一种方式，并且建议在所有生产部署中使用。即使一台或多台服务器发生故障，复制也能保持应用程序运行和数据安全。
+- en: With MongoDB, you set up replication by creating a *replica set*. A replica
+    set is a group of servers with one *primary*, the server taking writes, and multiple
+    *secondaries*, servers that keep copies of the primary’s data. If the primary
+    crashes, the secondaries can elect a new primary from amongst themselves.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MongoDB 中，通过创建*副本集*来设置复制。副本集是一组服务器，其中包括一个*主服务器*（负责写入数据）和多个*从服务器*（负责保留主服务器数据的副本）。如果主服务器崩溃，从服务器可以从自身选举新的主服务器。
+- en: If you are using replication and a server goes down, you can still access your
+    data from the other servers in the set. If the data on a server is damaged or
+    inaccessible, you can make a new copy of the data from one of the other members
+    of the set.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您正在使用复制，并且一台服务器出现故障，仍然可以从集合中的其他服务器访问数据。如果服务器上的数据受损或无法访问，则可以从集合中的其他成员制作数据的新副本。
+- en: This chapter introduces replica sets and covers how to set up replication on
+    your system. If you are less interested in replication mechanics and simply want
+    to create a replica set for testing/development or production, use MongoDB’s cloud
+    solution, [MongoDB Atlas](https://atlas.mongodb.com). It’s easy to use and provides
+    a free-tier option for experimentation. Alternatively, to manage MongoDB clusters
+    in your own infrastructure, you can use [Ops Manager](https://oreil.ly/-X6yp).
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章介绍了副本集，并涵盖了如何在您的系统上设置复制。如果您对复制机制不太感兴趣，只是想为测试/开发或生产创建一个副本集，可以使用 MongoDB 的云解决方案，[MongoDB
+    Atlas](https://atlas.mongodb.com)。它易于使用，并提供免费的试用选项供实验。或者，要在自己的基础架构中管理 MongoDB
+    集群，可以使用[Ops Manager](https://oreil.ly/-X6yp)。
+- en: Setting Up a Replica Set, Part 1
+  id: totrans-11
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 设置副本集，第一部分
+- en: In this chapter, we’ll show you how to set up a three-node replica set on a
+    single machine so you can start experimenting with replica set mechanics. This
+    is the type of setup that you might script just to get a replica set up and running
+    and then poke at it with administrative commands in the *mongo* shell or simulate
+    network partitions or server failures to better understand how MongoDB handles
+    high availability and disaster recovery. In production, you should always use
+    a replica set and allocate a dedicated host to each member to avoid resource contention
+    and provide isolation against server failure. To provide further resilience, you
+    should also use the [DNS Seedlist Connection format](https://oreil.ly/cCORE) to
+    specify how your applications connect to your replica set. The advantage to using
+    DNS is that servers hosting your MongoDB replica set members can be changed in
+    rotation without needing to reconfigure the clients (specifically, their connection
+    strings).
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们将向您展示如何在单台机器上设置一个三节点复制集，以便您可以开始实验复制集机制。这种设置可能只是为了快速启动和运行一个复制集，然后在*mongo*
+    shell中使用管理命令或模拟网络分区或服务器故障，以更好地了解MongoDB如何处理高可用性和灾难恢复。在生产环境中，您应该始终使用复制集，并为每个成员分配一个专用主机，以避免资源争用并提供对服务器故障的隔离。为了提供进一步的弹性，您还应该使用[DNS种子连接格式](https://oreil.ly/cCORE)来指定应用程序如何连接到您的复制集。使用DNS的优势在于，托管MongoDB复制集成员的服务器可以轮换更改，而无需重新配置客户端（特别是它们的连接字符串）。
+- en: Given the variety of virtualization and cloud options available, it is nearly
+    as easy to bring up a test replica set with each member on a dedicated host. We’ve
+    provided a Vagrant script to allow you to experiment with this option.^([1](ch10.xhtml#idm45882356792632))
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 鉴于现有的虚拟化和云选项的多样性，几乎可以像为每个成员在专用主机上创建一个测试副本集一样简单。我们提供了一个Vagrant脚本，让您可以尝试这个选项。^([1](ch10.xhtml#idm45882356792632))
+- en: 'To get started with our test replica set, let’s first create separate data
+    directories for each node. On Linux or macOS, run the following command in the
+    terminal to create the three directories:'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要开始测试我们的复制集，请首先为每个节点创建单独的数据目录。在Linux或macOS上，在终端中运行以下命令来创建这三个目录：
+- en: '[PRE0]'
+  id: totrans-15
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: This will create the directories *~/data/rs1*, *~/data/rs2*, and *~/data/rs3*
+    (`~` identifies your home directory).
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将创建目录*~/data/rs1*、*~/data/rs2*和*~/data/rs3*（`~`表示您的主目录）。
+- en: 'On Windows, to create these directories, run the following in the Command Prompt
+    (cmd) or PowerShell:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Windows上，要创建这些目录，请在命令提示符（cmd）或PowerShell中运行以下命令：
+- en: '[PRE1]'
+  id: totrans-18
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Then, on Linux or macOS, run each of the following commands in a separate terminal:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，在Linux或macOS上，需要在单独的终端中运行以下每个命令：
+- en: '[PRE2]'
+  id: totrans-20
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'On Windows, run each of the following commands in its own Command Prompt or
+    PowerShell window:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Windows上，每个命令都需要在单独的命令提示符或PowerShell窗口中运行：
+- en: '[PRE3]'
+  id: totrans-22
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Once you’ve started them, you should have three separate *mongod* processes
+    running.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 启动后，您应该有三个独立的*mongod*进程在运行。
+- en: Note
+  id: totrans-24
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: In general, the principles we will walk through in the rest of this chapter
+    apply to replica sets used in production deployments where each *mongod* has a
+    dedicated host. However, there are additional details pertaining to securing replica
+    sets that we address in [Chapter 19](ch19.xhtml#chapter-data-admin); we’ll touch
+    on those just briefly here as a preview.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，我们将在本章剩余部分介绍的原则适用于在生产部署中使用的复制集，其中每个*mongod*都有一个专用的主机。然而，在保护复制集的相关细节方面，我们会在[第19章](ch19.xhtml#chapter-data-admin)中简要提及一些额外的细节。
+- en: Networking Considerations
+  id: totrans-26
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 网络考虑事项
+- en: Every member of a set must be able to make connections to every other member
+    of the set (including itself). If you get errors about members not being able
+    to reach other members that you know are running, you may have to change your
+    network configuration to allow connections between them.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 集合的每个成员必须能够与集合中的每个其他成员（包括自身）建立连接。如果出现有关无法连接正在运行的其他成员的错误，请检查您的网络配置，确保允许它们之间的连接。
+- en: 'The processes you’ve launched can just as easily be running on separate servers.
+    However, with the release of MongoDB 3.6, *mongod* binds to *localhost* (127.0.0.1)
+    only by default. In order for each member of replica set to communicate with the
+    others, you must also bind to an IP address that is reachable by other members.
+    If we were running a *mongod* instance on a server with a network interface having
+    an IP address of 198.51.100.1 and we wanted to run it as a member of replica set
+    with each member on different servers, we could specify the command-line parameter
+    `--bind_ip` or use `bind_ip` in the configuration file for this instance:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您启动的进程同样可以轻松运行在单独的服务器上。但是，从MongoDB 3.6版本开始，默认情况下*mongod*仅绑定到*localhost*（127.0.0.1）。为了使复制集的每个成员能够与其他成员通信，您还必须绑定到其他成员可达的IP地址。如果我们在具有IP地址为198.51.100.1的网络接口的服务器上运行*mongod*实例，并且希望将其作为复制集的成员与不同服务器上的每个成员一起运行，则可以指定命令行参数`--bind_ip`或在该实例的配置文件中使用`bind_ip`：
+- en: '[PRE4]'
+  id: totrans-29
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: We would make similar modifications to launch the other *mongod*s as well in
+    this case, regardless of whether we’re running on Linux, macOS, or Windows.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，无论我们运行在Linux、macOS还是Windows上，我们都会对其他*mongod*进行类似的修改。
+- en: Security Considerations
+  id: totrans-31
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 安全注意事项
+- en: Before you bind to IP addresses other than *localhost*, when configuring a replica
+    set, you should enable authorization controls and specify an authentication mechanism.
+    In addition, it is a good idea to encrypt data on disk and communication among
+    replica set members and between the set and clients. We’ll go into more detail
+    on securing replica sets in [Chapter 19](ch19.xhtml#chapter-data-admin).
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在绑定到除*localhost*以外的IP地址之前，在配置复制集时，应启用授权控制并指定身份验证机制。此外，建议对磁盘上的数据以及复制集成员之间和集合与客户端之间的通信进行加密。我们将在[第19章](ch19.xhtml#chapter-data-admin)中详细讨论保护复制集的问题。
+- en: Setting Up a Replica Set, Part 2
+  id: totrans-33
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 设置复制集，第2部分
+- en: Returning to our example, with the work we’ve done so far, each *mongod* does
+    not yet know that the others exist. To tell them about one another, we need to
+    create a configuration that lists each of the members and send this configuration
+    to one of our *mongod* processes. It will take care of propagating the configuration
+    to the other members.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 回到我们的例子，到目前为止我们所做的工作，每个*mongod*都还不知道其他实例的存在。为了告诉它们彼此的存在，我们需要创建一个列出每个成员的配置，并将此配置发送给我们的一个*mongod*进程。它将负责将配置传播到其他成员。
+- en: 'In a fourth terminal, Windows Command Prompt, or PowerShell window, launch
+    a *mongo* shell that connects to one of the running *mongod* instances. You can
+    do this by typing the following command. With this command, we’ll connect to the
+    *mongod* running on port 27017:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在第四个终端、Windows命令提示符或PowerShell窗口中，启动连接到运行中的*mongod*实例之一的*mongo* shell。您可以通过输入以下命令来执行此操作。使用此命令，我们将连接到运行在端口27017上的*mongod*：
+- en: '[PRE5]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Then, in the *mongo* shell, create a configuration document and pass this to
+    the `rs.initiate()` helper to initiate a replica set. This will initiate a replica
+    set containing three members and propagate the configuration to the rest of the
+    *mongod*s so that a replica set is formed:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，在*mongo* shell中，创建一个配置文档，并将其传递给`rs.initiate()`助手以初始化一个复制集。这将启动一个包含三个成员的复制集，并将配置传播到其余的*mongod*实例，从而形成一个复制集：
+- en: '[PRE6]'
+  id: totrans-38
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: There are several important parts of a replica set configuration document. The
+    config’s `"_id"` is the name of the replica set that you passed in on the command
+    line (in this example, `"mdbDefGuide"`). Make sure that this name matches exactly.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制集配置文档有几个重要部分。配置的`"_id"`是您在命令行中传递的复制集名称（在本例中为`"mdbDefGuide"`）。确保此名称完全匹配。
+- en: 'The next part of the document is an array of members of the set. Each of these
+    needs two fields: an `"_id"` that is an integer and unique among the replica set
+    members, and a hostname.'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文档的下一部分是一组集合成员的数组。每个成员都需要两个字段：一个`"_id"`，它是复制集成员之间唯一的整数，以及一个主机名。
+- en: Note that we are using *localhost* as a hostname for the members in this set.
+    This is for example purposes only. In later chapters where we discuss securing
+    replica sets, we’ll look at configurations that are more appropriate for production
+    deployments. MongoDB allows all-*localhost* replica sets for testing locally but
+    will protest if you try to mix *localhost* and non-*localhost* servers in a config.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，我们在本套中使用*localhost*作为成员的主机名。这仅供示例目的。在稍后讨论安全复制集的章节中，我们将探讨更适合生产部署的配置。MongoDB允许用于本地测试的全*localhost*复制集，但如果尝试在配置中混合*localhost*和非*localhost*服务器，则会有问题。
+- en: This config document is your replica set configuration. The member running on
+    *localhost:27017* will parse the configuration and send messages to the other
+    members, alerting them of the new configuration. Once they have all loaded the
+    configuration, they will elect a primary and start handling reads and writes.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此配置文档是您的复制集配置。运行在 *localhost:27017* 上的成员将解析配置并向其他成员发送消息，通知它们有新的配置。一旦它们加载了配置，它们将选举主节点并开始处理读写操作。
+- en: Tip
+  id: totrans-43
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Unfortunately, you cannot convert a standalone server to a replica set without
+    some downtime for restarting it and initializing the set. Thus, even if you only
+    have one server to start out with, you may want to configure it as a one-member
+    replica set. That way, if you want to add more members later, you can do so without
+    downtime.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，您无法在不重启并初始化集合的情况下将独立服务器转换为复制集。因此，即使您一开始只有一个服务器，您可能希望将其配置为单成员复制集。这样，如果以后想添加更多成员，也可以在无需停机的情况下执行。
+- en: If you are starting a brand-new set, you can send the configuration to any member
+    in the set. If you are starting with data on one of the members, you must send
+    the configuration to the member with data. You cannot initiate a replica set with
+    data on more than one member.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您正在启动全新的集合，可以将配置发送到集合中的任何成员。如果您在其中一个成员上拥有数据，则必须将配置发送到具有数据的成员。您无法在具有多个成员数据的情况下启动复制集。
+- en: 'Once initiated, you should have a fully functional replica set. The replica
+    set should elect a primary. You can view the status of a replica set using `rs.status()`.
+    The output from `rs.status()` tells you quite a bit about the replica set, including
+    a number of things we’ve not yet covered, but don’t worry, we’ll get there! For
+    now, take a look at the `members` array. Note that all three of our *mongod* instances
+    are listed in this array and that one of them, in this case the *mongod* running
+    on port 27017, has been elected primary. The other two are secondaries. If you
+    try this for yourself you will certainly have different values for `"date"` and
+    the several `Timestamp` values in this output, but you might also find that a
+    different *mongod* was elected primary (that’s totally fine):'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦初始化完成，您应该拥有一个完全功能的复制集。复制集应该会选举一个主节点。您可以使用 `rs.status()` 查看复制集的状态。`rs.status()`
+    的输出会告诉您很多关于复制集的信息，包括我们尚未涵盖的许多内容，但不用担心，我们会介绍的！现在，先看看 `members` 数组。请注意，此输出中列出了我们的三个
+    *mongod* 实例，其中一个（在本例中是运行在端口 27017 上的 *mongod*）已经被选为主节点。其他两个是从节点。如果您自己尝试，可能会发现输出中的
+    `"date"` 和多个 `Timestamp` 值不同，甚至可能会发现不同的 *mongod* 被选为主节点（这完全正常）：
+- en: '[PRE7]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Observing Replication
+  id: totrans-48
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 观察复制
+- en: 'If your replica set elected the *mongod* on port 27017 as primary, then the
+    *mongo* shell used to initiate the replica set is currently connected to the primary.
+    You should see the prompt change to something like the following:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的复制集选举端口为 27017 上的 *mongod* 为主节点，则用于启动复制集的 *mongo* shell 当前已连接到主节点。您应该看到提示更改为以下内容：
+- en: '[PRE8]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: This indicates that we are connected to the primary of the replica set having
+    the `"_id"` `"mdbDefGuide"`. To simplify and for the sake of clarity, we’ll abbreviate
+    the *mongo* shell prompt to just `>` throughout the replication examples.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这表明我们已连接到复制集的主节点，其 `"_id"` 为 `"mdbDefGuide"`。为了简化和清晰起见，我们将在复制示例中仅使用 `>` 来表示
+    *mongo* shell 提示。
+- en: 'If your replica set elected a different node primary, quit the shell and connect
+    to the primary by specifying the correct port number in the command line, as we
+    did when launching the *mongo* shell earlier. For example, if your set’s primary
+    is on port 27018, connect using the following command:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的复制集选举了其他节点作为主节点，请退出 shell 并在命令行中指定正确的端口号连接到主节点，就像我们在启动 *mongo* shell 时所做的那样。例如，如果您的集合的主节点在端口
+    27018 上，请使用以下命令连接：
+- en: '[PRE9]'
+  id: totrans-53
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Now that you’re connected to the primary, try doing some writes and see what
+    happens. First, insert 1,000 documents:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在您已连接到主节点，请尝试执行一些写操作并查看发生了什么。首先，插入 1000 个文档：
+- en: '[PRE10]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: Now check one of the secondaries and verify that it has a copy of all of these
+    documents. You could do this by quitting the shell and connecting using the port
+    number of one of the secondaries, but it’s easy to acquire a connection to one
+    of the secondaries by instantiating a connection object using the `Mongo` constructor
+    within the shell you’re already running.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在检查其中一个从节点，并验证它是否拥有所有这些文档的副本。您可以退出 shell 并使用其中一个从节点的端口号连接来执行此操作，但是通过在已运行的 shell
+    中使用 `Mongo` 构造函数实例化连接对象，即可轻松获得连接到其中一个从节点的连接。
+- en: 'First, use your connection to the *test* database on the primary to run the
+    `isMaster` command. This will show you the status of the replica set, in a much
+    more concise form than `rs.status()`. It is also a convenient means of determining
+    which member is primary when writing application code or scripting:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，在主服务器上使用你连接到*test*数据库来运行`isMaster`命令。这将以比`rs.status()`更为简洁的形式显示副本集的状态。在编写应用程序代码或脚本时，这也是一个方便的确定主成员的方式：
+- en: '[PRE11]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'If at any point an election is called and the *mongod* you’re connected to
+    becomes a secondary, you can use the `isMaster` command to determine which member
+    has become primary. The output here tells us that *localhost:27018* and *localhost:27019*
+    are both secondaries, so we can use either for our purposes. Let’s instantiate
+    a connection to *localhost:27019*:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果在任何时候发生选举，你连接的*mongod*成为辅助服务器，你可以使用`isMaster`命令确定哪个成员已成为主服务器。这里的输出告诉我们，*localhost:27018*和*localhost:27019*都是辅助服务器，因此我们可以使用任何一个来实现我们的目的。让我们实例化一个连接到*localhost:27019*：
+- en: '[PRE12]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Now, if we attempt to do a read on the collection that has been replicated
+    to the secondary, we’ll get an error. Let’s attempt to do a `find` on this collection
+    and then review the error and why we get it:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，如果我们试图在已复制到辅助服务器的集合上进行读取，我们会收到一个错误。让我们尝试在这个集合上进行`find`操作，然后查看错误及其原因：
+- en: '[PRE13]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'Secondaries may fall behind the primary (or *lag*) and not have the most current
+    writes, so secondaries will refuse read requests by default to prevent applications
+    from accidentally reading stale data. Thus, if you attempt to query a secondary,
+    you’ll get an error stating that it’s not the primary. This is to protect your
+    application from accidentally connecting to a secondary and reading stale data.
+    To allow queries on the secondary, we can set an “I’m okay with reading from secondaries”
+    flag, like so:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 辅助服务器可能落后于主服务器（或*滞后*），因此可能没有最新的写操作，所以默认情况下，辅助服务器将拒绝读请求，以防止应用程序意外读取陈旧数据。因此，如果你尝试查询一个辅助服务器，你会收到一个错误，指示它不是主服务器。这是为了保护你的应用程序免受意外连接到辅助服务器并读取陈旧数据的影响。为了允许在辅助服务器上进行查询，我们可以设置一个“我允许从辅助服务器读取”的标志，像这样：
+- en: '[PRE14]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Note that `slaveOk` is set on the *connection* (`secondaryConn`), not the database
+    (`secondaryDB`).
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，`slaveOk`设置在连接（`secondaryConn`）上，而不是数据库（`secondaryDB`）上。
+- en: 'Now you’re all set to read from this member. Query it normally:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在你已经准备好从这个成员读取了。正常查询它：
+- en: '[PRE15]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: You can see that all of our documents are there.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到所有我们的文档都在这里。
+- en: 'Now, try to write to a secondary:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，尝试向辅助服务器写入：
+- en: '[PRE16]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: You can see that the secondary does not accept the write. A secondary will only
+    perform writes that it gets through replication, not from clients.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到辅助服务器不接受写操作。辅助服务器只会执行通过复制获取的写操作，而不会执行来自客户端的写操作。
+- en: 'There is one other interesting feature that you should try out: automatic failover.
+    If the primary goes down, one of the secondaries will automatically be elected
+    primary. To test this, stop the primary:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还有一个有趣的功能需要你尝试：自动故障转移。如果主服务器宕机，其中一个辅助服务器将自动被选为主服务器。为测试此功能，请停止主服务器：
+- en: '[PRE17]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'You’ll see some error messages generated when you run this command because
+    the *mongod* running on port 27017 (the member we’re connected to) will terminate
+    and the shell we’re using will lose its connection:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你运行此命令时，你会看到一些错误消息，因为运行在端口27017上的*mongod*（我们连接到的成员）将终止，我们使用的shell会失去连接：
+- en: '[PRE18]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'This isn’t a problem. It won’t cause the shell to crash. Go ahead and run `isMaster`
+    on the secondary to see who has become the new primary:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这不是问题。它不会导致shell崩溃。继续在辅助服务器上运行`isMaster`，看看谁已成为新的主服务器：
+- en: '[PRE19]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'The output from `isMaster` should look something like this:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`isMaster`命令的输出应该看起来像这样：'
+- en: '[PRE20]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: Note that the primary has switched to 27018\. Your primary may be the other
+    server; whichever secondary noticed that the primary was down first will be elected.
+    Now you can send writes to the new primary.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，主服务器已切换到27018端口。你的主服务器可能是另一个服务器；首先注意到主服务器已下线的任何辅助服务器都将被选为主服务器。现在你可以向新的主服务器发送写操作。
+- en: Tip
+  id: totrans-81
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 小贴士
+- en: '`isMaster` is a very old command, predating replica sets to when MongoDB only
+    supported master/slave replication. Thus, it does not use the replica set terminology
+    consistently: it still calls the primary a “master.” You can generally think of
+    “master” as equivalent to “primary” and “slave” as equivalent to “secondary.”'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`isMaster`是一个非常古老的命令，早于MongoDB只支持主/从复制的复制集。因此，它在使用复制集术语时并不一致：它仍然将主服务器称为“master”。你可以通常将“master”等同于“primary”，将“slave”等同于“secondary”。'
+- en: Go ahead and bring back up the server we had running at *localhost:27017*. You
+    simply need to find the command-line interface from which you launched it. You’ll
+    see some messages indicating that it terminated. Just run it again using the same
+    command you used to launch it originally.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 继续并重新启动我们在 *localhost:27017* 上运行的服务器。您只需要找到启动它的命令行界面。您将看到一些指示它已终止的消息。只需再次使用最初启动它时使用的相同命令来运行它。
+- en: Congratulations! You just set up, used, and even poked a little at a replica
+    set to force a shutdown and an election for a new primary.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 恭喜！您刚刚设置、使用甚至稍微试验了一下复制集，以强制关闭并选举新的主服务器。
+- en: 'There are a few key concepts to remember:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有几个关键概念需要记住：
+- en: Clients can send a primary all the same operations they could send a standalone
+    server (reads, writes, commands, index builds, etc.).
+  id: totrans-86
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 客户端可以向主服务器发送与独立服务器相同的所有操作（读取、写入、命令、索引构建等）。
+- en: Clients cannot write to secondaries.
+  id: totrans-87
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 客户端无法向次要节点写入。
+- en: Clients, by default, cannot read from secondaries. You can enable this by explicitly
+    setting an “I know I’m reading from a secondary” setting on the connection.
+  id: totrans-88
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 默认情况下，客户端无法从次要节点读取。您可以通过在连接上显式设置“我知道我正在从次要节点读取”选项来启用此功能。
+- en: Changing Your Replica Set Configuration
+  id: totrans-89
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 更改您的复制集配置
+- en: 'Replica set configurations can be changed at any time: members can be added,
+    removed, or modified. There are shell helpers for some common operations. For
+    example, to add a new member to the set, you can use `rs.add`:'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制集配置可以随时更改：可以添加、移除或修改成员。对于一些常见操作，有 shell 辅助工具。例如，要向集合添加新成员，可以使用 `rs.add`：
+- en: '[PRE21]'
+  id: totrans-91
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'Similarly, you can remove members:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同样，您也可以删除成员：
+- en: '[PRE22]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'You can check that a reconfiguration succeeded by running `rs.config()` in
+    the shell. It will print the current configuration:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过在 shell 中运行 `rs.config()` 来检查重新配置是否成功。它将打印当前配置：
+- en: '[PRE23]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: Each time you change the configuration, the `"version"` field will increase.
+    It starts at version 1.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每次更改配置时，“version”字段都会增加。它从版本 1 开始。
+- en: 'You can also modify existing members, not just add and remove them. To make
+    modifications, create the configuration document that you want in the shell and
+    call `rs.reconfig()`. For example, suppose we have a configuration such as the
+    one shown here:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以修改现有成员，而不仅仅是添加和删除它们。要进行修改，请在 shell 中创建您想要的配置文档，然后调用 `rs.reconfig()`。例如，假设我们有如下配置：
+- en: '[PRE24]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'Someone accidentally added member 0 by IP address, instead of its hostname.
+    To change that, first we load the current configuration in the shell and then
+    we change the relevant fields:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 某人意外地通过 IP 地址添加了成员 0，而不是其主机名。要更改此设置，首先在 shell 中加载当前配置，然后更改相关字段：
+- en: '[PRE25]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'Now that the config document is correct, we need to send it to the database
+    using the `rs.reconfig()` helper:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在配置文档正确后，我们需要使用 `rs.reconfig()` 辅助函数将其发送到数据库：
+- en: '[PRE26]'
+  id: totrans-102
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: '`rs.reconfig()` is often more useful than `rs.add()` and `rs.remove()` for
+    complex operations, such as modifying members’ configurations or adding/removing
+    multiple members at once. You can use it to make any legal configuration change
+    you need: simply create the config document that represents your desired configuration
+    and pass it to `rs.reconfig()`.'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`rs.reconfig()` 在复杂操作（如修改成员配置或同时添加/删除多个成员）中通常比 `rs.add()` 和 `rs.remove()` 更有用。您可以使用它进行任何合法的配置更改：只需创建表示所需配置的配置文档，并将其传递给
+    `rs.reconfig()`。'
+- en: How to Design a Set
+  id: totrans-104
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 如何设计一个集合
+- en: 'To plan out your set, there are certain concepts that you must be familiar
+    with. The next chapter goes into more detail about these, but the most important
+    is that replica sets are all about majorities: you need a majority of members
+    to elect a primary, a primary can only stay primary as long as it can reach a
+    majority, and a write is safe when it’s been replicated to a majority. This majority
+    is defined to be “more than half of all members in the set,” as shown in [Table 10-1](#table9-1).'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了规划您的集合，您必须熟悉某些概念。下一章将更详细地讨论这些概念，但最重要的是复制集主要与多数派有关：您需要大多数成员来选举主服务器，主服务器只能在能够达到多数派时保持主要地位，并且在写入被复制到多数派时是安全的。这个多数派被定义为“集合中所有成员的一半以上”，如
+    [表 10-1](#table9-1) 所示。
+- en: Table 10-1\. What is a majority?
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 10-1\. 什么是多数派？
+- en: '| Number of members in the set | Majority of the set |'
+  id: totrans-107
+  prefs: []
+  type: TYPE_TB
+  zh: '| 集合中的成员数量 | 集合的多数派 |'
+- en: '| --- | --- |'
+  id: totrans-108
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| 1 | 1 |'
+  id: totrans-109
+  prefs: []
+  type: TYPE_TB
+  zh: '| 1 | 1 |'
+- en: '| 2 | 2 |'
+  id: totrans-110
+  prefs: []
+  type: TYPE_TB
+  zh: '| 2 | 2 |'
+- en: '| 3 | 2 |'
+  id: totrans-111
+  prefs: []
+  type: TYPE_TB
+  zh: '| 3 | 2 |'
+- en: '| 4 | 3 |'
+  id: totrans-112
+  prefs: []
+  type: TYPE_TB
+  zh: '| 4 | 3 |'
+- en: '| 5 | 3 |'
+  id: totrans-113
+  prefs: []
+  type: TYPE_TB
+  zh: '| 5 | 3 |'
+- en: '| 6 | 4 |'
+  id: totrans-114
+  prefs: []
+  type: TYPE_TB
+  zh: '| 6 | 4 |'
+- en: '| 7 | 4 |'
+  id: totrans-115
+  prefs: []
+  type: TYPE_TB
+  zh: '| 7 | 4 |'
+- en: Note that it doesn’t matter how many members are down or unavailable; majority
+    is based on the set’s configuration.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，成员数量如何无关紧要或不可用；多数是基于集合的配置。
+- en: For example, suppose that we have a five-member set and three members go down,
+    as shown in [Figure 10-1](#repl141). There are still two members up. These two
+    members cannot reach a majority of the set (at least three members), so they cannot
+    elect a primary. If one of them were primary, it would step down as soon as it
+    noticed that it could not reach a majority. After a few seconds, your set would
+    consist of two secondaries and three unreachable members.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设我们有一个五成员集合，三个成员下线，如[图 10-1](#repl141)所示。仍然有两个成员在线。这两个成员无法达到集合的多数（至少三个成员），因此无法选举主节点。如果其中一个是主节点，它会在注意到无法达到多数后下台。几秒钟后，您的集合将由两个次要成员和三个不可达成员组成。
+- en: '![](Images/mdb3_1001.png)'
+  id: totrans-118
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1001.png)'
+- en: Figure 10-1\. With a minority of the set available, all members will be secondaries
+  id: totrans-119
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 10-1。当集合中少数成员可用时，所有成员将成为次要节点。
+- en: 'Many users find this frustrating: why can’t the two remaining members elect
+    a primary? The problem is that it’s possible that the other three members didn’t
+    actually go down, and that it was instead the network that went down, as shown
+    in [Figure 10-2](#repl142). In this case, the three members on the left will elect
+    a primary, since they can reach a majority of the set (three members out of five).
+    In the case of a network partition, we do not want both sides of the partition
+    to elect a primary, because then the set would have two primaries. Both primaries
+    would be writing to the database, and the datasets would diverge. Requiring a
+    majority to elect or stay a primary is a neat way of avoiding ending up with more
+    than one primary.'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多用户觉得这很令人沮丧：为什么剩下的两个成员不能选举出一个主节点？问题在于，可能并非其他三个成员实际宕机，而是网络宕机，如[图 10-2](#repl142)所示。在这种情况下，左侧的三个成员将选举出一个主节点，因为他们能够达到集合的多数（五个成员中的三个）。在网络分区的情况下，我们不希望分区的两侧都选举出一个主节点，因为那样集合将会有两个主节点。两个主节点将都在写入数据库，并且数据集会发散。要求多数选举或保持主节点是避免出现多个主节点的一个巧妙方法。
+- en: '![](Images/mdb3_1002.png)'
+  id: totrans-121
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1002.png)'
+- en: Figure 10-2\. For the members, a network partition looks identical to servers
+    on the other side of the partition going down
+  id: totrans-122
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 10-2。对于成员来说，网络分区看起来与分区另一侧的服务器宕机是相同的。
+- en: It is important to configure your set in such a way that you’ll usually be able
+    to have one primary. For example, in the five-member set described here, if members
+    1, 2, and 3 are in one data center and members 4 and 5 are in another, there should
+    almost always be a majority available in the first data center (it’s more likely
+    to have a network break between data centers than within them).
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 非常重要的是，要配置您的集合，以便通常能够拥有一个主节点。例如，在这里描述的五成员集合中，如果成员1、2和3位于一个数据中心，成员4和5位于另一个数据中心，第一个数据中心几乎总是可以获得多数（在数据中心之间更有可能发生网络中断而非在它们内部）。
+- en: 'There are a couple of common configurations that are recommended:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有几种常见的推荐配置：
+- en: A majority of the set in one data center, as in [Figure 10-2](#repl142). This
+    is a good design if you have a primary data center where you always want your
+    replica set’s primary to be located. So long as your primary data center is healthy,
+    you will have a primary. However, if that data center becomes unavailable, your
+    secondary data center will not be able to elect a new primary.
+  id: totrans-125
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在一个数据中心中占据大多数，如[图 10-2](#repl142)所示。如果您有一个主要数据中心，您总是希望将副本集的主节点放置在那里，这是一个很好的设计。只要您的主要数据中心健康，您就会有一个主节点。但是，如果该数据中心不可用，您的次要数据中心将无法选举新的主节点。
+- en: An equal number of servers in each data center, plus a tie-breaking server in
+    a third location. This is a good design if your data centers are “equal” in preference,
+    since generally servers from either data center will be able to see a majority
+    of the set. However, it involves having three separate locations for servers.
+  id: totrans-126
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 每个数据中心中有相同数量的服务器，加上第三个位置的决策性服务器。如果您的数据中心具有“相等”的偏好，这是一个很好的设计，因为通常来自任何数据中心的服务器都能看到集合的多数。但它涉及在服务器的三个单独位置。
+- en: More complex requirements might require different configurations, but you should
+    keep in mind how your set will acquire a majority under adverse conditions.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更复杂的需求可能需要不同的配置，但您应该记住在逆境条件下，您的集合如何获得多数。
+- en: 'All of these complexities would disappear if MongoDB supported having more
+    than one primary. However, this would bring its own host of complexities. With
+    two primaries, you would have to handle conflicting writes (e.g., if someone updates
+    a document on one primary and someone deletes it on another primary). There are
+    two popular ways of handling conflicts in systems that support multiple writers:
+    manual reconciliation or having the system arbitrarily pick a “winner.” Neither
+    of these options is a very easy model for developers to code against, seeing as
+    you can’t be sure that the data you’ve written won’t change out from under you.
+    Thus, MongoDB chose to only support having a single primary. This makes development
+    easier but can result in periods when the replica set is read-only.'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果 MongoDB 支持多个主节点，则所有这些复杂性将消失。然而，这会带来自己的一系列复杂性。有了两个主节点，您必须处理冲突写入（例如，如果某人在一个主节点上更新文档，而在另一个主节点上删除它）。在支持多个写入者的系统中，处理冲突的两种流行方法是：手动协调或让系统随意选择“赢家”。这两个选项都不是开发人员编码的非常简单模型，因为您不能确定您编写的数据不会在您下面更改。因此，MongoDB
+    选择仅支持单个主节点。这使开发变得更简单，但可能导致复制集在某些时期变为只读状态。
+- en: How Elections Work
+  id: totrans-129
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 选举工作原理
+- en: 'When a secondary cannot reach a primary, it will contact all the other members
+    and request that it be elected primary. These other members do several sanity
+    checks: Can they reach a primary that the member seeking election cannot? Is the
+    member seeking election up to date with replication? Is there any member with
+    a higher priority available that should be elected instead?'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当次要节点无法联系主节点时，它将联系所有其他成员并请求被选为主节点。这些其他成员进行几项健全检查：它们是否能联系到寻求选举的成员无法联系的主节点？寻求选举的成员是否保持与复制的最新状态？是否有任何具有更高优先级的可用成员应该被选为主节点？
+- en: In version 3.2, MongoDB introduced version 1 of the replication protocol. Protocol
+    version 1 is based on the RAFT consensus protocol developed by Diego Ongaro and
+    John Ousterhout at Stanford University. It is best described as RAFT-like and
+    is tailored to include a number of replication concepts that are specific to MongoDB,
+    such as arbiters, priority, nonvoting members, write concern, etc. Protocol version
+    1 provided the foundation for new features such as a shorter failover time and
+    greatly reduces the time to detect false primary situations. It also prevents
+    double voting through the use of term IDs.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在版本 3.2 中，MongoDB 引入了复制协议的第一个版本。协议版本 1 基于 Diego Ongaro 和 John Ousterhout 在斯坦福大学开发的
+    RAFT 共识协议。它最适合描述为类似 RAFT 的协议，并专门设计以包括一些 MongoDB 特有的复制概念，如仲裁者、优先级、非投票成员、写入关注等。协议版本
+    1 为新功能提供了基础，如较短的故障切换时间，并极大地减少了检测错误主节点情况的时间。它还通过使用术语 ID 防止了双重投票。
+- en: Note
+  id: totrans-132
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: RAFT is a consensus algorithm that is broken into relatively independent subproblems.
+    Consensus is the process through which multiple servers or processes agree on
+    values. RAFT ensures consensus such that the same series of commands produces
+    the same series of results and arrives at the same series of states across the
+    members of a deployment.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: RAFT 是一个共识算法，可分为相对独立的子问题。共识是多个服务器或进程就数值达成一致的过程。RAFT 确保共识，使得相同的一系列命令产生相同的一系列结果，并在部署的成员之间达到相同的一系列状态。
+- en: Replica set members send heartbeats (pings) to each other every two seconds.
+    If a heartbeat does not return from a member within 10 seconds, the other members
+    mark the delinquent member as inaccessible. The election algorithm will make a
+    “best-effort” attempt to have the secondary with the highest priority available
+    call an election. Member priority affects both the timing and the outcome of elections;
+    secondaries with higher priority call elections relatively sooner than secondaries
+    with lower priority, and are also more likely to win. However, a lower-priority
+    instance can be elected as primary for brief periods, even if a higher-priority
+    secondary is available. Replica set members continue to call elections until the
+    highest-priority member available becomes primary.
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制集成员每两秒向彼此发送心跳（ping）。如果在 10 秒内没有从成员收到心跳，则其他成员将标记该不良成员为不可访问。选举算法将“尽力”尝试让优先级最高的次要成员发起选举。成员的优先级影响选举的时间和结果；具有较高优先级的次要成员相对较早地发起选举，并且更有可能获胜。然而，即使有更高优先级的次要实例可用，较低优先级的实例也可能在短时间内被选为主节点。复制集成员持续发起选举，直到可用的优先级最高的成员成为主节点为止。
+- en: To be elected primary, a member must be up to date with replication, as far
+    as the members it can reach know. All replicated operations are strictly ordered
+    by an ascending identifier, so the candidate must have operations later than or
+    equal to those of any member it can reach.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要被选为主节点，成员必须在复制上保持最新状态，就像它能够到达的成员所知道的那样。所有复制的操作都严格按升序标识符排序，因此候选者的操作必须晚于或等于任何它能够到达的成员的操作。
+- en: Member Configuration Options
+  id: totrans-136
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 成员配置选项
+- en: 'The replica sets we have set up so far have been fairly uniform in that every
+    member has the same configuration as every other member. However, there are many
+    situations when you don’t want members to be identical: you might want one member
+    to preferentially be primary or make a member invisible to clients so that no
+    read requests can be routed to it. These and many other configuration options
+    can be specified in the member subdocuments of the replica set configuration.
+    This section outlines the member options that you can set.'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们设置的副本集在每个成员的配置上都相当统一。然而，在许多情况下，你可能不希望成员完全相同：你可能希望一个成员优先成为主节点，或者使一个成员对客户端不可见，以便不会将读取请求路由到它。这些以及其他许多配置选项可以在副本集配置的成员子文档中指定。本节概述了可以设置的成员选项。
+- en: Priority
+  id: totrans-138
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 优先级
+- en: 'Priority is an indication of how strongly this member “wants” to become primary.
+    Its value can range from `0` to `100`, and the default is `1`. Setting `"priority"`
+    to `0` has a special meaning: members with a priority of `0` can never become
+    primary. These are called *passive* members.'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 优先级是指这个成员“希望”成为主节点的程度。它的值可以从`0`到`100`，默认为`1`。将`"priority"`设置为`0`具有特殊含义：具有优先级为`0`的成员永远不能成为主节点。这些被称为*passive*成员。
+- en: 'The highest-priority member will always be elected primary (so long as it can
+    reach a majority of the set and has the most up-to-date data). For example, suppose
+    you add a member with a priority of `1.5` to the set, like so:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 优先级最高的成员将始终被选为主节点（只要它能够达到集合的大多数，并具有最新的数据）。例如，假设你向集合中添加了优先级为`1.5`的成员，如下所示：
+- en: '[PRE27]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: Assuming the other members of the set have priority `1`, once *server-4* caught
+    up with the rest of the set, the current primary would automatically step down
+    and *server-4* would elect itself. If *server-4* was, for some reason, unable
+    to catch up, the current primary would stay primary. Setting priorities will never
+    cause your set to go primary-less. It will also never cause a member that is behind
+    to become primary (until it has caught up).
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设集合中的其他成员的优先级是`1`，一旦*server-4*赶上了集合的其他部分，当前的主节点将自动下台，*server-4*将选举自己。如果由于某种原因*server-4*无法赶上，当前的主节点将继续保持主节点状态。设置优先级永远不会导致你的集合没有主节点。它也永远不会导致落后的成员成为主节点（直到它赶上为止）。
+- en: 'The absolute value of `"priority"` only matters in relation to whether it is
+    greater or less than the other priorities in the set: members with priorities
+    of `100`, `1`, and `1` will behave the same way as members of another set with
+    priorities `2`, `1`, and `1`.'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"priority"`的绝对值只关系到它是大于还是小于集合中其他优先级的值：具有优先级为`100`、`1`和`1`的成员将与具有优先级为`2`、`1`和`1`的另一个集合中的成员表现相同。'
+- en: Hidden Members
+  id: totrans-144
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 隐藏成员
+- en: Clients do not route requests to hidden members, and hidden members are not
+    preferred as replication sources (although they will be used if more desirable
+    sources are not available). Thus, many people will hide less powerful or backup
+    servers.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 客户端不会向隐藏成员发送请求，隐藏成员也不会作为复制源首选（尽管如果没有更理想的源可用，则会使用它们）。因此，许多人会隐藏较不强大或备用的服务器。
+- en: 'For example, suppose you had a set that looked like this:'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设你有一个看起来像这样的集合：
+- en: '[PRE28]'
+  id: totrans-147
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'To hide *server-3*, you could add the `hidden: true` field to its configuration.
+    A member must have a priority of `0` to be hidden (you can’t have a hidden primary):'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '要隐藏*server-3*，你可以在其配置中添加`hidden: true`字段。成员必须具有优先级`0`才能被隐藏（不能有隐藏的主节点）：'
+- en: '[PRE29]'
+  id: totrans-149
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'Now running `isMaster` will show:'
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在运行`isMaster`将显示：
+- en: '[PRE30]'
+  id: totrans-151
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: '`rs.status()` and `rs.config()` will still show the member; it only disappears
+    from `isMaster`. When clients connect to a replica set, they call `isMaster` to
+    determine the members of the set. Thus, hidden members will never be used for
+    read requests.'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`rs.status()`和`rs.config()`仍会显示该成员；它只是在`isMaster`中消失。当客户端连接到副本集时，它们会调用`isMaster`来确定集合的成员。因此，隐藏成员永远不会用于读取请求。'
+- en: To unhide a member, change the `hidden` option to `false` or remove the option
+    entirely.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要取消隐藏一个成员，将`hidden`选项更改为`false`或完全删除该选项。
+- en: Election Arbiters
+  id: totrans-154
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 选举仲裁者
+- en: A two-member set has clear disadvantages for majority requirements. However,
+    many people with small deployments do not want to keep three copies of their data,
+    feeling that two is enough and that keeping a third copy is not worth the administrative,
+    operational, and financial costs.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 两成员集在多数需求上有明显的缺点。然而，许多小型部署的人并不想保留三份数据副本，他们认为两份足够了，保留第三份副本并不值得管理、运维和财务成本。
+- en: 'For these deployments, MongoDB supports a special type of member called an
+    *arbiter*, whose only purpose is to participate in elections. Arbiters hold no
+    data and aren’t used by clients: they just provide a majority for two-member sets.
+    In general, deployments without arbiters are preferable.'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于这些部署，MongoDB支持一种特殊类型的成员称为*仲裁者*，其唯一目的是参与选举。仲裁者不持有任何数据，也不被客户端使用：它们只是为两成员集提供多数。一般来说，没有仲裁者的部署更为理想。
+- en: As arbiters don’t have any of the traditional responsibilities of a *mongod*
+    server, you can run an arbiter as a lightweight process on a wimpier server than
+    you’d generally use for MongoDB. It’s often a good idea, if possible, to run an
+    arbiter in a separate failure domain from the other members, so that it has an
+    “outside perspective” on the set, as described in the deployment recommendations
+    in [“How to Design a Set”](#repl-setup-section4).
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于仲裁者没有*mongod*服务器的传统责任，因此可以在比一般用于MongoDB的服务器更轻量的服务器上运行仲裁者作为一个轻量级进程。如果可能的话，通常建议将仲裁者运行在与其他成员不同的故障域中，这样它对集合有一个“外部视角”，正如在[“如何设计一个集合”](#repl-setup-section4)中描述的部署建议中所述。
+- en: 'You start up an arbiter in the same way that you start a normal *mongod*, using
+    the ``--replSet *`name`*`` option and an empty data directory. You can add it
+    to the set using the `rs.addArb()` helper:'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 启动仲裁者的方法与启动普通的*mongod*相同，使用``--replSet *`name`*``选项和一个空数据目录。您可以使用`rs.addArb()`助手将其添加到集合中：
+- en: '[PRE31]'
+  id: totrans-159
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'Equivalently, you can specify the `"arbiterOnly"` option in the member configuration:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同样地，您可以在成员配置中指定`"arbiterOnly"`选项：
+- en: '[PRE32]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'An arbiter, once added to the set, is an arbiter forever: you cannot reconfigure
+    an arbiter to become a nonarbiter, or vice versa.'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦将仲裁者添加到集合中，它将永远是仲裁者：您无法重新配置仲裁者成为非仲裁者，反之亦然。
+- en: One other thing that arbiters are good for is breaking ties in larger clusters.
+    If you have an even number of nodes, you may have half the nodes vote for one
+    member and half for another. An arbiter can cast the deciding vote. There are
+    a few things to keep in mind when using arbiters, though; we’ll look at these
+    next.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 仲裁者另一个好处是在更大的集群中打破平局。如果节点数量是偶数，可能会有一半节点投票支持一个成员，另一半支持另一个成员。仲裁者可以做出决定性的投票。然而，在使用仲裁者时有几件事情需要记住；我们接下来会讨论这些事情。
+- en: Use at most one arbiter
+  id: totrans-164
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 最多使用一个仲裁者
+- en: Note that, in both of the use cases just described, you need *at most* one arbiter.
+    You do not need an arbiter if you have an odd number of nodes. A common misconception
+    seems to be that you should add extra arbiters “just in case.” However, it doesn’t
+    help elections go any faster or provide any additional data safety to add extra
+    arbiters.
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在刚刚描述的两种用例中，您最多只需要一个仲裁者。如果节点数为奇数，则不需要仲裁者。一个常见的误解似乎是应该“预防性地”添加额外的仲裁者。然而，增加额外的仲裁者既不能加快选举速度，也不能提供额外的数据安全性。
+- en: 'Suppose you have a three-member set. Two members are required to elect a primary.
+    If you add an arbiter, you’ll have a four-member set, so three members will be
+    required to choose a primary. Thus, your set is potentially less stable: instead
+    of requiring 67% of your set to be up, you’re now requiring 75%.'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您有一个三成员集。需要两个成员来选举主节点。如果添加一个仲裁者，您将得到一个四成员集，因此需要三个成员来选择主节点。因此，您的集合可能不够稳定：现在不再需要67%的集合在线，而是需要75%。
+- en: Having extra members can also make elections take longer. If you have an even
+    number of nodes because you added an arbiter, your arbiters can cause ties, not
+    prevent them.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 添加额外的成员也可能导致选举时间更长。如果节点数量是偶数因为您添加了仲裁者，您的仲裁者可能导致平局，而非阻止它们。
+- en: The downside to using an arbiter
+  id: totrans-168
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用仲裁者的缺点
+- en: If you have a choice between a data node and an arbiter, choose a data node.
+    Using an arbiter instead of a data node in a small set can make some operational
+    tasks more difficult. For example, suppose you are running a replica set with
+    two “normal” members and one arbiter, and one of the data-holding members goes
+    down. If that member is well and truly dead (the data is unrecoverable), you will
+    have to get a copy of the data from the current primary to the new server you’ll
+    be using as a secondary. Copying data can put a lot of stress on a server, and
+    thus slow down your application. (Generally, copying a few gigabytes to a new
+    server is trivial but more than a hundred starts becoming impractical.)
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您在数据节点和仲裁者之间可以选择，选择数据节点。在小型集群中使用仲裁者而不是数据节点可能会使一些操作任务更加困难。例如，假设您正在运行一个包含两个“普通”成员和一个仲裁者的副本集，并且其中一个数据持有成员宕机。如果该成员确实已经彻底死亡（数据不可恢复），则必须将数据从当前主服务器复制到将用作次要服务器的新服务器上。复制数据可能会给服务器带来很大压力，从而减慢应用程序的运行速度。（通常情况下，将几十个GB复制到新服务器是微不足道的，但超过一百个GB就变得不切实际了。）
+- en: Conversely, if you have three data-holding members, there’s more “breathing
+    room” if a server completely dies. You can use the remaining secondary to bootstrap
+    a new server instead of depending on your primary.
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相反，如果您有三个数据持有成员，如果一个服务器完全崩溃，会有更多的“呼吸空间”。您可以使用剩余的次要成员引导一个新的服务器，而不是依赖于主服务器。
+- en: In the two-member-plus-arbiter scenario, the primary is the last remaining good
+    copy of your data *and* the one trying to handle load from your application while
+    you’re trying to get another copy of your data online.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在两成员加仲裁者的场景中，主服务器是您数据的最后一个良好副本，同时也是尝试处理应用程序负载的服务器，当您尝试将另一个数据副本上线时。
+- en: Thus, if possible, use an odd number of “normal” members instead of an arbiter.
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，如果可能的话，使用奇数个“普通”成员而不是仲裁者。
+- en: Warning
+  id: totrans-173
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: In three-member replica sets with a primary-secondary-arbiter (PSA) architecture
+    or sharded clusters with a three-member PSA shard, there is a known issue with
+    cache pressure increasing if either of the two data-bearing nodes are down and
+    the `"majority"` read concern is enabled. Ideally, you should replace the arbiter
+    with a data-bearing member for these deployments. Alternatively, to prevent storage
+    cache pressure the [`"majority"` read concern can be disabled](https://oreil.ly/p6nUm)
+    on each of the *mongod* instances in the deployment or shards.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在具有主-次-仲裁者（PSA）架构的三成员副本集或具有三成员PSA分片的分片集群中，存在一个已知问题：如果其中任何两个数据节点之一宕机，并启用了`"majority"`读关注，那么缓存压力会增加。理想情况下，对于这些部署，您应该用数据节点替换仲裁者。或者，为了防止存储缓存压力，可以在部署或分片的每个*mongod*实例上禁用[`"majority"`读关注](https://oreil.ly/p6nUm)。
+- en: Building Indexes
+  id: totrans-175
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 创建索引
+- en: 'Sometimes a secondary does not need to have the same (or any) indexes that
+    exist on the primary. If you are using a secondary only for backup data or offline
+    batch jobs, you might want to specify `"buildIndexes" : false` in the member’s
+    configuration. This option prevents the secondary from building any indexes.'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '有时，次要节点不需要与主节点上存在的索引相同（或者根本不需要索引）。如果您仅将次要节点用于备份数据或离线批处理作业，则可能需要在成员配置中指定`"buildIndexes"
+    : false`。此选项可防止次要节点构建任何索引。'
+- en: 'This is a permanent setting: members that have `"buildIndexes" : false` specified
+    can never be reconfigured to be “normal” index-building members again. If you
+    want to change a non-index-building member to an index-building one, you must
+    remove it from the set, delete all of its data, add it to the set again, and allow
+    it to resync from scratch.'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '这是一个永久设置：已指定`"buildIndexes" : false`的成员将永远无法重新配置为“正常”索引构建成员。如果您想将非索引构建成员更改为索引构建成员，则必须从集合中删除它，删除其所有数据，然后将其重新添加到集合中，并允许其重新同步。'
+- en: As with hidden members, this option requires the member’s priority to be `0`.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与隐藏成员一样，此选项要求成员的优先级为`0`。
+- en: ^([1](ch10.xhtml#idm45882356792632-marker)) See [*https://github.com/mongodb-the-definitive-guide-3e/mongodb-the-definitive-guide-3e*](https://github.com/mongodb-the-definitive-guide-3e/mongodb-the-definitive-guide-3e).
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch10.xhtml#idm45882356792632-marker)) 请参阅[*https://github.com/mongodb-the-definitive-guide-3e/mongodb-the-definitive-guide-3e*](https://github.com/mongodb-the-definitive-guide-3e/mongodb-the-definitive-guide-3e)。

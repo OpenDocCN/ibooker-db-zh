@@ -1,0 +1,1525 @@
+- en: Chapter 7\. Introduction to the Aggregation Framework
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第7章。聚合框架简介
+- en: 'Many applications require data analysis of one form or another. MongoDB provides
+    powerful support for running analytics natively using the aggregation framework.
+    In this chapter, we introduce this framework and some of the fundamental tools
+    it provides. We’ll cover:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多应用程序需要进行某种形式的数据分析。MongoDB通过聚合框架提供强大的本机分析支持。在本章中，我们介绍这个框架及其提供的一些基本工具。我们将涵盖：
+- en: The aggregation framework
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 聚合框架
+- en: Aggregation stages
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 聚合阶段
+- en: Aggregation expressions
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 聚合表达式
+- en: Aggregation accumulators
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 聚合累加器
+- en: In the next chapter we’ll dive deeper and look at more advanced aggregation
+    features, including the ability to perform joins across collections.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下一章中，我们将深入探讨更高级的聚合特性，包括能够在集合之间执行联接的能力。
+- en: Pipelines, Stages, and Tunables
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 管道、阶段和可调参数
+- en: The aggregation framework is a set of analytics tools within MongoDB that allow
+    you to do analytics on documents in one or more collections.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 聚合框架是MongoDB中的一组分析工具，允许您对一个或多个集合中的文档进行分析。
+- en: The aggregation framework is based on the concept of a pipeline. With an aggregation
+    pipeline we take input from a MongoDB collection and pass the documents from that
+    collection through one or more stages, each of which performs a different operation
+    on its inputs ([Figure 7-1](#fig0701)). Each stage takes as input whatever the
+    stage before it produced as output. The inputs and outputs for all stages are
+    documents—a stream of documents, if you will.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 聚合框架基于管道的概念。通过聚合管道，我们从MongoDB集合中获取输入，并将这些文档通过一个或多个阶段，每个阶段在其输入上执行不同的操作（[图7-1](#fig0701)）。每个阶段的输入是前一个阶段产生的输出。所有阶段的输入和输出都是文档——可以说是文档流。
+- en: '![](Images/mdb3_0701.png)'
+  id: totrans-10
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_0701.png)'
+- en: Figure 7-1\. The aggregation pipeline
+  id: totrans-11
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图7-1。聚合管道
+- en: If you’re familiar with pipelines in a Linux shell, such as bash, this is a
+    very similar idea. Each stage has a specific job that it does. It expects a specific
+    form of document and produces a specific output, which is itself a stream of documents.
+    At the end of the pipeline we get access to the output, in much the same way that
+    we would by executing a find query. That is, we get a stream of documents back
+    that we can then use to do additional work, whether it’s creating a report of
+    some kind, generating a website, or some other type of task.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您熟悉Linux Shell（如bash）中的管道，那么这个概念非常类似。每个阶段都有它要执行的特定任务。它期望特定形式的文档，并产生一个特定的输出，这本身就是文档流。在管道的末端，我们可以访问输出，这与执行查找查询时的方式非常相似。也就是说，我们得到了一系列文档，我们可以用来进行其他工作，无论是创建报告、生成网站还是其他类型的任务。
+- en: Now, let’s dive in a little deeper and consider the individual stages. An individual
+    stage of an aggregation pipeline is a data processing unit. It takes in a stream
+    of input documents one at a time, processes each document one at a time, and produces
+    an output stream of documents one at a time ([Figure 7-2](#fig0702)).
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，让我们深入了解并考虑单个阶段。聚合管道的单个阶段是一个数据处理单元。它逐个接收输入文档流，逐个处理每个文档，并逐个生成输出文档流（[图7-2](#fig0702)）。
+- en: '![](Images/mdb3_0702.png)'
+  id: totrans-14
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_0702.png)'
+- en: Figure 7-2\. Stages of the aggregation pipeline
+  id: totrans-15
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图7-2。聚合管道的各个阶段
+- en: Each stage provides a set of knobs, or *tunables*, that we can control to parameterize
+    the stage to perform whatever task we’re interested in doing. A stage performs
+    a generic, general-purpose task of some kind, and we parameterize the stage for
+    the particular collection that we’re working with and exactly what we would like
+    that stage to do with those documents.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个阶段提供了一组旋钮，或称为*tunables*，我们可以控制这些旋钮来参数化阶段，以执行我们感兴趣的任务。一个阶段执行某种通用的、多功能的任务，并且我们根据我们正在处理的特定集合以及我们希望该阶段对这些文档执行的确切操作来参数化该阶段。
+- en: These tunables typically take the form of operators that we can supply that
+    will modify fields, perform arithmetic operations, reshape documents, or do some
+    sort of accumulation task or a variety of other things.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些可调参数通常采用我们可以提供的运算符的形式，这些运算符将修改字段、执行算术运算、重塑文档，或执行某种累积任务或其他多种操作。
+- en: Before we start looking at some concrete examples, there’s one more aspect of
+    pipelines that is especially important to keep in mind as you begin to work with
+    them. Frequently, we want to include the same type of stage multiple times within
+    a single pipeline ([Figure 7-3](#fig0703)). For example, we may want to perform
+    an initial filter so that we don’t have to pass the entire collection into our
+    pipeline. Later, following some additional processing, we might then want to filter
+    further, applying a different set of criteria.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们开始查看一些具体示例之前，有一个管道的另一个方面尤为重要，在您开始使用它们时特别要牢记。经常情况下，我们希望在单个管道中多次包含相同类型的阶段（[图 7-3](#fig0703)）。例如，我们可能希望执行初始过滤，这样我们就不必将整个集合传递到我们的管道中。稍后，在进行了一些额外处理之后，我们可能希望进一步过滤，应用不同的条件。
+- en: '![](Images/mdb3_0703.png)'
+  id: totrans-19
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_0703.png)'
+- en: Figure 7-3\. Repeated stages in the aggregation pipeline
+  id: totrans-20
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-3\. 聚合管道中的重复阶段
+- en: To recap, pipelines work with MongoDB collections. They’re composed of stages,
+    each of which does a different data processing task on its input and produces
+    documents as output to be passed to the next stage. Finally, at the end of the
+    processing, a pipeline produces output that we can then do something with in our
+    application or that we can send to a collection for later use. In many cases,
+    in order to perform the analysis we need to do, we will include the same type
+    of stage multiple times within an individual pipeline.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总结一下，管道适用于 MongoDB 集合。它们由多个阶段组成，每个阶段对其输入执行不同的数据处理任务，并生成文档作为输出传递到下一个阶段。最终，在处理结束时，管道产生的输出可以用于我们的应用程序中的某些操作，或者可以发送到集合以供以后使用。在许多情况下，为了执行我们需要做的分析，我们会在单个管道内多次包含相同类型的阶段。
+- en: 'Getting Started with Stages: Familiar Operations'
+  id: totrans-22
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 开始阶段：熟悉的操作
+- en: To get started developing aggregation pipelines, we will look at building some
+    pipelines that involve operations that are already familiar to you. For this we
+    will look at the *match*, *project*, *sort*, *skip*, and *limit* stages.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要开始开发聚合管道，我们将看看构建一些涉及您已经熟悉的操作的管道。为此，我们将查看 *match*、*project*、*sort*、*skip* 和
+    *limit* 阶段。
+- en: To work through these aggregation examples, we will use a collection of company
+    data. The collection has a number of fields that specify details about the companies,
+    such as name, a short description of the company, and when the company was founded.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了通过这些聚合示例，我们将使用一个公司数据集合。该集合有多个字段，指定了关于公司的详细信息，例如名称、公司的简短描述以及公司成立的时间。
+- en: 'There are also fields describing the rounds of funding a company has gone through,
+    important milestones for the company, whether or not the company has been through
+    an initial public offering (IPO), and, if so, the details of the IPO. Here’s an
+    example document containing data on Facebook, Inc.:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还有描述公司经历的融资轮次、公司的重要里程碑、公司是否进行了首次公开发行（IPO），以及如果进行了首次公开发行，则 IPO 的详细信息的字段。这里有一个包含
+    Facebook, Inc. 数据的示例文档：
+- en: '[PRE0]'
+  id: totrans-26
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'As our first aggregation example, let’s do a simple filter looking for all
+    companies that were founded in 2004:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为我们的第一个聚合示例，让我们做一个简单的过滤，寻找所有在 2004 年成立的公司：
+- en: '[PRE1]'
+  id: totrans-28
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'This is equivalent to the following operation using `find`:'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这等同于使用 `find` 进行以下操作：
+- en: '[PRE2]'
+  id: totrans-30
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Now let’s add a project stage to our pipeline to reduce the output to just
+    a few fields per document. We’ll exclude the `"_id"` field, but include `"name"`
+    and `"founded_year"`. Our pipeline will be as follows:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们向我们的管道中添加一个 project 阶段，将输出减少到每个文档的几个字段。我们将排除 `"_id"` 字段，但包括 `"name"` 和
+    `"founded_year"`。我们的管道如下所示：
+- en: '[PRE3]'
+  id: totrans-32
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'If we run this, we get output that looks like the following:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们运行这个操作，我们将得到如下所示的输出：
+- en: '[PRE4]'
+  id: totrans-34
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'Let’s unpack this aggregation pipeline in a little more detail. The first thing
+    you will notice is that we’re using the `aggregate` method. This is the method
+    we call when we want to run an aggregation query. To aggregate, we pass in an
+    aggregation pipeline. A pipeline is an array with documents as elements. Each
+    of the documents must stipulate a particular stage operator. In this example,
+    we have a pipeline that has two stages: a match stage for filtering and a project
+    stage with which we’re limiting the output to just two fields per document.'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们稍微详细解释一下这个聚合管道。你会注意到的第一件事是，我们正在使用 `aggregate` 方法。这是当我们想要运行聚合查询时调用的方法。要进行聚合，我们传入一个聚合管道。管道是一个具有文档作为元素的数组。每个文档必须规定一个特定的阶段操作符。在这个示例中，我们有一个包含两个阶段的管道：一个用于过滤的
+    match 阶段和一个 project 阶段，我们在其中将输出限制为每个文档的两个字段。
+- en: The match stage filters against the collection and passes the resulting documents
+    to the project stage one at a time. The project stage then performs its operation,
+    reshaping the documents, and passes the output out of the pipeline and back to
+    us.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 匹配阶段根据集合进行过滤，并一次将结果文档传递给项目阶段。然后，项目阶段执行其操作，重塑文档，并将输出传递出流水线，返回给我们。
+- en: 'Now let’s extend our pipeline a bit further to include a limit stage. We’re
+    going to match using the same query, but we’ll limit our result set to five and
+    then project out the fields we want. For simplicity, let’s limit our output to
+    just the names of each company:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们进一步扩展我们的流水线，包括一个限制阶段。我们将使用相同的查询进行匹配，但我们将把结果集限制为五个，然后投影出我们想要的字段。为简单起见，让我们的输出仅限于每家公司的名称：
+- en: '[PRE5]'
+  id: totrans-38
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'The result is as follows:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果如下：
+- en: '[PRE6]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'Note that we’ve constructed this pipeline so that we limit before the project
+    stage. If we ran the project stage first and then the limit, as in the following
+    query, we would get exactly the same results, but we’d have to pass hundreds of
+    documents through the project stage before finally limiting the results to five:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，我们设计这个流水线的方式是在项目阶段之前进行限制。如果我们先运行项目阶段，然后再进行限制，就像下面的查询一样，我们会得到完全相同的结果，但是在最终将结果限制为五个之前，我们需要通过项目阶段传递数百个文档：
+- en: '[PRE7]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Regardless of what types of optimizations the MongoDB query planner might be
+    capable of in a given release, you should always consider the efficiency of your
+    aggregation pipeline. Ensure that you are limiting the number of documents that
+    need to be passed on from one stage to another as you build your pipeline.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不管MongoDB查询规划器在特定版本中可能有什么类型的优化，您都应始终考虑聚合流水线的效率。确保在构建流水线时限制需要从一个阶段传递到另一个阶段的文档数量。
+- en: This requires careful consideration of the entire flow of documents through
+    a pipeline. In the case of the preceding query, we’re only interested in the first
+    five documents that match our query, regardless of how they are sorted, so it’s
+    perfectly fine to limit as our second stage.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这需要仔细考虑整个文档在流水线中的流动。在前面的查询中，我们只对匹配查询的前五个文档感兴趣，无论它们如何排序，所以在第二阶段进行限制是完全可以的。
+- en: 'However, if the order matters, then we’ll need to sort before the limit stage.
+    Sorting works in a manner similar to what we have seen already, except that in
+    the aggregation framework, we specify sort as a stage within a pipeline as follows
+    (in this case, we will sort by name in ascending order):'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，如果顺序很重要，那么我们需要在限制阶段之前进行排序。排序工作方式与我们已经看到的类似，不同之处在于在聚合框架中，我们将排序作为流水线中的一个阶段来指定（在本例中，我们将按名称升序排序）：
+- en: '[PRE8]'
+  id: totrans-46
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'We get the following result from our *companies* collection:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们从我们的*companies*集合中得到以下结果：
+- en: '[PRE9]'
+  id: totrans-48
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: Note that we’re looking at a different set of five companies now, getting instead
+    the first five documents in alphanumeric order by name.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，我们现在正在查看一组不同的五家公司，而是按名称的字母顺序获取前五个文档。
+- en: 'Finally, let’s take a look at including a skip stage. Here, we sort first,
+    then skip the first 10 documents and again limit our result set to 5 documents:'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，让我们看看如何包含跳过阶段。在这里，我们首先进行排序，然后跳过前10个文档，再次将我们的结果集限制为5个文档：
+- en: '[PRE10]'
+  id: totrans-51
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: Let’s review our pipeline one more time. We have five stages. First, we’re filtering
+    the *companies* collection, looking only for documents where the `"founded_year"`
+    is `2004`. Then we’re sorting based on the name in ascending order, skipping the
+    first 10 matches, and limiting our end results to 5\. Finally, we pass those five
+    documents on to the project stage, where we reshape the documents such that our
+    output documents contain just the company name.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们再次审视我们的流水线。我们有五个阶段。首先，我们正在过滤*companies*集合，只寻找`"founded_year"`为`2004`的文档。然后，我们按名称升序排序，跳过前10个匹配项，并将最终结果限制为5个。最后，我们将这五个文档传递给项目阶段，在那里重塑文档，使我们的输出文档仅包含公司名称。
+- en: Here, we’ve looked at constructing pipelines using stages that perform operations
+    that should already be familiar to you. These operations are provided in the aggregation
+    framework because they are necessary for the types of analytics that we’ll want
+    to accomplish using stages discussed in later sections. As we move through the
+    rest of this chapter, we will take a deep dive into the other operations that
+    the aggregation framework provides.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们已经看过如何使用阶段来构建管道，这些阶段执行的操作应该已经对你来说很熟悉了。这些操作在聚合框架中提供，因为它们对于我们后面讨论的阶段所要完成的分析类型是必需的。在本章剩余部分的过程中，我们将深入探讨聚合框架提供的其他操作。
+- en: Expressions
+  id: totrans-54
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 表达式
+- en: 'As we move deeper into our discussion of the aggregation framework, it is important
+    to have a sense of the different types of expressions available for use as you
+    construct aggregation pipelines. The aggregation framework supports many different
+    classes of expressions:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们深入讨论聚合框架时，重要的是要了解可用于构建聚合管道的不同类型的表达式。聚合框架支持许多不同类别的表达式：
+- en: '*Boolean* expressions allow us to use AND, OR, and NOT expressions.'
+  id: totrans-56
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*布尔* 表达式允许我们使用 AND、OR 和 NOT 表达式。'
+- en: '*Set* expressions allow us to work with arrays as sets. In particular, we can
+    get the intersection or union of two or more sets. We can also take the difference
+    of two sets and perform a number of other set operations.'
+  id: totrans-57
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*集合* 表达式允许我们使用数组作为集合进行工作。特别是，我们可以获取两个或多个集合的交集或并集。我们还可以取两个集合的差集并执行许多其他集合操作。'
+- en: '*Comparison* expressions enable us to express many different types of range
+    filters.'
+  id: totrans-58
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*比较* 表达式使我们能够表示许多不同类型的范围过滤器。'
+- en: '*Arithmetic* expressions enable us to calculate the ceiling, floor, natural
+    log, and log, as well as perform simple arithmetic operations like multiplication,
+    division, addition, and subtraction. We can even do more complex operations, such
+    as calculating the square root of a value.'
+  id: totrans-59
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*算术* 表达式使我们能够计算天花板、地板、自然对数和对数，以及执行简单的算术运算，如乘法、除法、加法和减法。我们甚至可以进行更复杂的操作，比如计算一个值的平方根。'
+- en: '*String* expressions allow us to concatenate, find substrings, and perform
+    operations having to do with case and text search operations.'
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*字符串* 表达式允许我们连接、查找子字符串，并执行与大小写和文本搜索操作相关的操作。'
+- en: '*Array* expressions provide a lot of power for manipulating arrays, including
+    the ability to filter array elements, slice an array, or just take a range of
+    values from a specific array.'
+  id: totrans-61
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*数组* 表达式提供了许多操作数组的强大功能，包括过滤数组元素、切片数组或仅获取特定数组的值范围。'
+- en: '*Variable* expressions, which we won’t dive into too deeply, allow us to work
+    with literals, expressions for parsing date values, and conditional expressions.'
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*变量* 表达式，我们不会深入探讨，允许我们使用文字、解析日期值的表达式和条件表达式进行工作。'
+- en: '*Accumulators* provide the ability to calculate sums, descriptive statistics,
+    and many other types of values.'
+  id: totrans-63
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*累加器* 提供了计算总和、描述统计以及许多其他类型数值的能力。'
+- en: $project
+  id: totrans-64
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: $project
+- en: Now we’re going to take a deeper dive into the project stage and reshaping documents,
+    exploring the types of reshaping operations that should be most common in the
+    applications that you develop. We have seen some simple projections in aggregation
+    pipelines, and now we’ll take a look at some that are a little more complex.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们将深入探讨项目阶段和重塑文档，探索在你开发的应用程序中应该最常见的重塑操作类型。我们已经在聚合管道中看到了一些简单的投影，现在我们将看一些更复杂的投影。
+- en: 'First, let’s look at promoting nested fields. In the following pipeline, we
+    are doing a match:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，让我们来看看如何提升嵌套字段。在以下的管道中，我们正在进行匹配：
+- en: '[PRE11]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'As an example of the relevant fields for documents in our *companies* collection,
+    let’s again look at a portion of the Facebook document:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为我们 *companies* 集合文档中相关字段的示例，让我们再次看一下 Facebook 文档的一部分：
+- en: '[PRE12]'
+  id: totrans-69
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Going back to our match:'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 回到我们的匹配过程：
+- en: '[PRE13]'
+  id: totrans-71
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'we are filtering for all companies that had a funding round in which Greylock
+    Partners participated. The permalink value, `"greylock"`, is the unique identifier
+    for such documents. Here is another view of the Facebook document with just the
+    relevant fields displayed:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们正在过滤所有那些参与过 Greylock Partners 融资轮次的公司。"greylock" 的永久链接值是这些文档的唯一标识符。这里是 Facebook
+    文档的另一视图，只显示了相关字段：
+- en: '[PRE14]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'The project stage we have defined in this aggregation pipeline will suppress
+    the `"_id"` and include the `"name"`. It will also promote some nested fields.
+    This project uses dot notation to express field paths that reach into the `"ipo"`
+    field and the `"funding_rounds"` field to select values from those nested documents
+    and arrays. This project stage will make those the values of top-level fields
+    in the documents it produces as output, as shown here:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在这个聚合管道中定义的投影阶段将抑制`"_id"`并包括`"name"`。它还将提升一些嵌套字段。此投影使用点表示法来表达字段路径，以从`"ipo"`字段和`"funding_rounds"`字段中选择那些嵌套文档和数组中的值。此投影阶段将使这些值成为所生成输出文档中的顶级字段值，如下所示：
+- en: '[PRE15]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: In the output, each document has a `"name"` field and a `"funders"` field. For
+    those companies that have gone through an IPO, the `"ipo"` field contains the
+    year the company went public and the `"valuation"` field contains the value of
+    the company at the time of the IPO. Note that in all of these documents, these
+    are top-level fields and the values for those fields were promoted from nested
+    documents and arrays.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在输出中，每个文档都有一个`"name"`字段和一个`"funders"`字段。对于那些已经进行了IPO的公司，`"ipo"`字段包含公司上市的年份，`"valuation"`字段包含公司在IPO时的估值。请注意，在所有这些文档中，这些都是顶层字段，并且这些字段的值是从嵌套文档和数组中提升而来的。
+- en: The `$` character used to specify the values for `ipo`, `valuation`, and `funders`
+    in our project stage indicates that the values should be interpreted as field
+    paths and used to select the value that should be projected for each field, respectively.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的投影阶段中，用于指定`ipo`、`valuation`和`funders`值的`$`字符表示这些值应被解释为字段路径，并用于选择每个字段应投影的值，分别如此。
+- en: One thing you might have noticed is that we’re seeing multiple values printed
+    out for `funders`. In fact, we’re seeing an array of arrays. Based on our review
+    of the Facebook example document, we know that all of the funders are listed within
+    an array called `"investments"`. Our stage specifies that we want to project the
+    `financial_org.permalink` value for each entry in the `"investments"` array, for
+    every funding round. So, an array of arrays of funders’ names is built up.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能已经注意到的一件事是，我们看到了多个值打印出来作为`funders`。事实上，我们看到的是一个数组的数组。根据我们对Facebook示例文档的审查，我们知道所有的投资者都列在一个名为`"investments"`的数组中。我们的阶段指定，我们要为每个资金轮次中的每个条目投影`financial_org.permalink`值。因此，建立了一个投资者名称数组的数组。
+- en: In later sections we will look at how to perform arithmetic and other operations
+    on strings, dates, and a number of other value types to project documents of all
+    shapes and sizes. Just about the only thing we can’t do from a project stage is
+    change the data type for a value.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在后续章节中，我们将看看如何在字符串、日期和其他多种值类型上执行算术和其他操作，以投影各种形状和大小的文档。从投影阶段唯一不能做到的事情几乎是更改值的数据类型。
+- en: $unwind
+  id: totrans-80
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: $unwind
+- en: When working with array fields in an aggregation pipeline, it is often necessary
+    to include one or more unwind stages. This allows us to produce output such that
+    there is one output document for each element in a specified array field.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在聚合管道中处理数组字段时，通常需要包括一个或多个`$unwind`阶段。这使得我们可以生成输出，使得指定的数组字段中的每个元素都有一个输出文档。
+- en: '![](Images/mdb3_0704.png)'
+  id: totrans-82
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_0704.png)'
+- en: Figure 7-4\. $unwind takes an array from the input document and creates an output
+    document for each element in that array
+  id: totrans-83
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图7-4\. $unwind从输入文档中获取一个数组，并为该数组中的每个元素创建一个输出文档。
+- en: In the example in [Figure 7-4](#fig0704), we have an input document that has
+    three keys and their corresponding values. The third key has as its value an array
+    with three elements. `$unwind` if run on this type of input document and configured
+    to unwind the `key3` field will produce documents that look like those shown at
+    the bottom of [Figure 7-4](#fig0704). The thing that might not be intuitive to
+    you about this is that in each of these output documents there will be a `key3`
+    field, but that field will contain a single value rather than an array value,
+    and there will be a separate document for each one of the elements that were in
+    this array. In other words, if there were 10 elements in the array, the unwind
+    stage would produce 10 output documents.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在示例 [图 7-4](#fig0704) 中，我们有一个输入文档，其中包含三个键及其对应的值。第三个键的值是一个包含三个元素的数组。如果在这种输入文档上运行
+    `$unwind` 并配置为展开 `key3` 字段，将生成类似于 [图 7-4](#fig0704) 底部显示的文档。关于这一点可能对你不直观的是，在每个这些输出文档中将会有一个
+    `key3` 字段，但该字段将包含一个单独的值而不是一个数组值，并且每个数组元素都会生成一个单独的文档。换句话说，如果数组中有 10 个元素，展开阶段将生成
+    10 个输出文档。
+- en: 'Let’s go back to our *companies* example, and take a look at the use of an
+    unwind stage. We’ll start with the following aggregation pipeline. Note that in
+    this pipeline, as in the previous section, we are simply matching on a specific
+    funder and promoting values from embedded `funding_rounds` documents using a project
+    stage:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们回到我们的 *公司* 示例，并看看展开阶段的使用。我们将从以下聚合管道开始。请注意，在这个管道中，与前一节一样，我们只是在特定的资助者上进行匹配，并使用项目阶段提升嵌入的
+    `funding_rounds` 文档的值：
+- en: '[PRE16]'
+  id: totrans-86
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'Once again, here’s an example of the data model for documents in this collection:'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再次，这里是该集合中文档的数据模型示例：
+- en: '[PRE17]'
+  id: totrans-88
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'Our aggregation query will produce results such as the following:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的聚合查询将生成如下结果：
+- en: '[PRE18]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: The query produces documents that have arrays for both `"amount"` and `"year"`,
+    because we’re accessing the `"raised_amount"` and `"funded_year"` for every element
+    in the `"funding_rounds"` array.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询会生成文档，其中 `"amount"` 和 `"year"` 都是数组，因为我们访问了 `"funding_rounds"` 数组中每个元素的 `"raised_amount"`
+    和 `"funded_year"`。
+- en: To fix this, we can include an unwind stage before our project stage in this
+    aggregation pipeline, and parameterize this by specifying that it is the `"funding_rounds"`
+    array that should be unwound ([Figure 7-5](#fig0705)).
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要解决这个问题，我们可以在聚合管道的项目阶段之前包含一个展开阶段，并通过指定应展开的 `"funding_rounds"` 数组来参数化此过程（参见 [图 7-5](#fig0705)）。
+- en: '![](Images/mdb3_0705.png)'
+  id: totrans-93
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_0705.png)'
+- en: Figure 7-5\. The outline of our aggregation pipeline so far, matching for “greylock”
+    then unwinding the “funding_rounds”, and finally projecting out the name, amount,
+    and year for each of the funding rounds
+  id: totrans-94
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 7-5\. 到目前为止我们聚合管道的轮廓，匹配“greylock”，然后展开“funding_rounds”，最后为每一轮融资项目投影出名称、金额和年份
+- en: Returning again to our Facebook example, we can see that for each funding round
+    there is a `"raised_amount"` field and a `"funded_year"` field.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再次回到我们的 Facebook 示例，我们可以看到每一轮融资都有一个 `"raised_amount"` 字段和一个 `"funded_year"`
+    字段。
+- en: 'The unwind stage will produce an output document for each element of the `"funding_rounds"`
+    array. In this example our values are strings, but regardless of the type of value,
+    the unwind stage will produce an output document for each one. Here’s the updated
+    aggregation query:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 展开阶段将为 `"funding_rounds"` 数组的每个元素生成一个输出文档。在这个例子中，我们的值是字符串，但无论值的类型如何，展开阶段都会为每个值生成一个输出文档。以下是更新后的聚合查询：
+- en: '[PRE19]'
+  id: totrans-97
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'The unwind stage produces an exact copy of every one of the documents that
+    it receives as input. All the fields will have the same key and value, with the
+    exception of the `"funding_rounds"` field. Rather than being an array of `"funding_rounds"`
+    documents, instead it will have a value that is a single document, which corresponds
+    to an individual funding round:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 展开阶段会生成输入的每一个文档的精确副本。所有字段将具有相同的键和值，除了 `"funding_rounds"` 字段。该字段不再是一个 `"funding_rounds"`
+    文档的数组，而是包含一个单独文档的值，该文档对应于单个的融资轮次：
+- en: '[PRE20]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'Now let’s add an additional field to our output documents. In doing so, we’ll
+    actually identify a small problem with this aggregation pipeline as currently
+    written:'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们在输出文档中添加一个额外的字段。这样做时，我们实际上会发现当前编写的聚合管道中存在一个小问题：
+- en: '[PRE21]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'In adding the `"funder"` field we now have a field path value that will access
+    the `"investments"` field of the `"funding_rounds"` embedded document that it
+    gets from the unwind stage and, for the financial organization, selects the permalink
+    value. Note that this is very similar to what we’re doing in our match filter.
+    Let’s have a look at our output:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在添加了 `"funder"` 字段之后，我们现在有一个字段路径值，可以访问来自解开阶段的 `"funding_rounds"` 嵌入式文档的 `"investments"`
+    字段，并选择永久链接值作为金融机构。请注意，这与我们在匹配过滤器中所做的非常相似。让我们来看看我们的输出：
+- en: '[PRE22]'
+  id: totrans-103
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: To understand what we’re seeing here, we need to go back to our document and
+    look at the `"investments"` field.
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要理解我们在这里看到的内容，我们需要回到我们的文档并查看 `"investments"` 字段。
+- en: The `"funding_rounds.investments"` field is itself an array. Multiple funders
+    can participate in each funding round, so `"investments"` will list every one
+    of those funders. Looking at the results, as we originally saw with the `"raised_amount"`
+    and `"funded_year"` fields, we’re now seeing an array for `"funder"` because `"investments"`
+    is an array-valued field.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"funding_rounds.investments"` 字段本身就是一个数组。每一轮融资都可能有多个资助者参与，所以 `"investments"`
+    将列出所有这些资助者。查看结果，正如我们最初看到的 `"raised_amount"` 和 `"funded_year"` 字段一样，现在我们看到了 `"funder"`
+    的数组，因为 `"investments"` 是一个数组值字段。'
+- en: Another problem is that because of the way we’ve written our pipeline, many
+    documents are passed to the project stage that represent funding rounds that Greylock
+    did not participate in. We can see this by looking at the funding rounds for Farecast.
+    This problem stems from the fact that our match stage selects all companies where
+    Greylock participated in at least one funding round. If we are interested in considering
+    only those funding rounds in which Greylock actually participated, we need to
+    figure out a way to filter differently.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个问题是，由于我们编写流水线的方式，许多文档被传递到项目阶段，这些文档代表了 Greylock 没有参与的融资轮次。我们可以通过查看 Farecast
+    的融资轮次来看到这一点。这个问题源于我们的匹配阶段选择了所有 Greylock 至少参与了一轮融资的公司。如果我们只关注 Greylock 实际参与的那些融资轮次，我们需要找出一种不同的过滤方式。
+- en: One possibility is to reverse the order of our unwind and match stages—that
+    is to say, do the unwind first and then do the match. This guarantees that we
+    will only match documents coming out of the unwind stage. But in thinking through
+    this approach, it quickly becomes clear that, with unwind as the first stage,
+    we would be doing a scan through the entire collection.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有一种可能性是颠倒我们的解开和匹配阶段的顺序——也就是说，先解开然后再匹配。这样可以确保我们只匹配出解开阶段产生的文档。但是通过这种方法的思考很快就会明显，将解开设为第一阶段时，我们将会扫描整个集合。
+- en: 'For efficiency, we want to match as early as possible in our pipeline. This
+    enables the aggregation framework to make use of indexes, for example. So, in
+    order to select only those funding rounds in which Greylock participated, we can
+    include a second match stage:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 出于效率考虑，我们希望在流水线中尽早进行匹配。这样可以使聚合框架能够利用索引，例如。因此，为了仅选择 Greylock 参与的那些融资轮次，我们可以包含第二个匹配阶段：
+- en: '[PRE23]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: This pipeline will first filter for companies where Greylock participated in
+    at least one funding round. It will then unwind the funding rounds and filter
+    again, so that only documents that represent funding rounds that Greylock actually
+    participated in will be passed on to the project stage.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个流水线首先会筛选出 Greylock 至少参与了一轮融资的公司。然后解开融资轮次并再次筛选，以便只传递那些实际上 Greylock 参与的融资轮次的文档到项目阶段。
+- en: 'As mentioned at the beginning of this chapter, it is often the case that we
+    need to include multiple stages of the same type. This is a good example: we’re
+    filtering to reduce the number of documents that we’re looking at initially by
+    narrowing down our set of documents for consideration to those for which Greylock
+    participated in at least one funding round. Then, through our unwind stage, we
+    end up with a number of documents that represent funding rounds from companies
+    that Greylock did, in fact, fund, but individual funding rounds that Greylock
+    did not participate in. We can get rid of all the funding rounds we’re not interested
+    in by simply including another filter, using a second match stage.'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如本章开头所述，我们经常需要包含同一类型的多个阶段。这是一个很好的例子：我们通过筛选来减少最初查看的文档数量，通过缩小我们考虑的文档集合，只选择那些格雷洛克参与至少一轮融资的文档。然后，通过我们的展开阶段，我们最终得到一些文档，这些文档代表了格雷洛克确实资助的公司的融资轮次，但格雷洛克没有参与的个别融资轮次。我们可以通过简单地包括另一个过滤器来摆脱我们不感兴趣的所有融资轮次，使用第二个匹配阶段。
+- en: Array Expressions
+  id: totrans-112
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数组表达式
+- en: Now let’s turn our attention to array expressions. As part of our deep dive,
+    we’ll take a look at using array expressions in project stages.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们转向数组表达式。作为我们深入研究的一部分，我们将看看如何在项目阶段中使用数组表达式。
+- en: The first expression we’ll examine is a filter expression. A filter expression
+    selects a subset of the elements in an array based on filter criteria.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将要检查的第一个表达式是一个过滤表达式。过滤表达式基于过滤条件从数组中选择子集元素。
+- en: 'Working again with our *companies* dataset, we’ll match using the same criteria
+    for funding rounds in which Greylock participated. Take a look at the `rounds`
+    field in this pipeline:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再次使用我们*companies*数据集，我们将使用相同的资金轮次的条件进行匹配，看看此管道中的`rounds`字段：
+- en: '[PRE24]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: The `rounds` field uses a filter expression. The `$filter` operator is designed
+    to work with array fields and specifies the options we must supply. The first
+    option to `$filter` is `input`. For `input`, we simply specify an array. In this
+    case, we use a field path specifier to identify the `"funding_rounds"` array found
+    in documents in our *companies* collection. Next, we specify the name we’d like
+    to use for this `"funding_rounds"` array throughout the rest of our filter expression.
+    Then, as the third option, we need to specify a condition. The condition should
+    provide criteria used to filter whatever array we’ve provided as input, selecting
+    a subset. In this case, we’re filtering such that we only select elements where
+    the `"raised_amount"` for a `"funding_round"` is greater than or equal to 100
+    million.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`rounds`字段使用了一个过滤表达式。`$filter`运算符设计用于处理数组字段，并指定我们必须提供的选项。`$filter`的第一个选项是`input`。对于`input`，我们简单地指定一个数组。在本例中，我们使用字段路径指示符来识别我们*companies*集合中的文档中找到的`"funding_rounds"`数组。接下来，我们指定我们希望在后续过滤表达式中使用的此`"funding_rounds"`数组的名称。然后，作为第三个选项，我们需要指定一个条件。条件应该提供用于过滤我们提供的任何数组的标准，选择一个子集。在本例中，我们通过过滤器来选择`"raised_amount"`大于或等于1亿的`"funding_round"`元素。'
+- en: In specifying the condition, we’ve made use of `$$`. We use `$$` to reference
+    a variable defined within the expression we’re working in. The `as` clause defines
+    a variable within our filter expression. This variable has the name `"round"`
+    because that’s what we labeled it in the `as` clause. This is to disambiguate
+    a reference to a variable from a field path. In this case, our comparison expression
+    takes an array of two values and will return `true` if the first value provided
+    is greater than or equal to the second value.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在指定条件时，我们使用了`$$`。我们使用`$$`来引用在我们正在工作的表达式中定义的变量。`as`子句在我们的过滤表达式中定义了一个变量。这个变量的名称是`"round"`，因为这是我们在`as`子句中标记它的名称。这是为了消除对变量引用与字段路径的歧义。在本例中，我们的比较表达式接受两个值的数组，并且如果提供的第一个值大于或等于第二个值，则返回`true`。
+- en: 'Now let’s consider what documents the project stage of this pipeline will produce,
+    given this filter. The output documents will have `"name"`, `"founded_year"`,
+    and `"rounds"` fields. The values for `"rounds"` will be arrays composed of the
+    elements that match our filter condition: that the raised amount is greater than
+    $100,000,000.'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们考虑一下此管道的项目阶段将会生成哪些文档，考虑到此过滤条件。输出文档将具有`"name"`、`"founded_year"`和`"rounds"`字段。`"rounds"`的值将是由符合我们的过滤条件的元素组成的数组：即筹集金额大于$100,000,000的元素。
+- en: 'In the match stage that follows, as we did previously, we will simply filter
+    the input documents for those that were funded in some way by Greylock. Documents
+    output by this pipeline will resemble the following:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的匹配阶段中，就像我们之前做的那样，我们将简单地过滤那些以某种方式由 Greylock 资助的输入文档。由此管道输出的文档将类似于以下内容：
+- en: '[PRE25]'
+  id: totrans-121
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: Only the `"rounds"` array items for which the raised amount exceeds $100,000,000
+    will pass through the filter. In the case of Dropbox, there is just one round
+    that meets that criterion. You have a lot of flexibility in how you set up filter
+    expressions, but this is the basic form and provides a concrete example of a use
+    case for this particular array expression.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 仅超过 100,000,000 美元的“rounds”数组项将通过过滤器。在 Dropbox 的情况下，只有一轮符合此标准。您在设置过滤器表达式时有很大的灵活性，但这是基本形式，并提供了此特定数组表达式的用例的具体示例。
+- en: Next, let’s look at the array element operator. We’ll continue working with
+    funding rounds, but in this case we simply want to pull out the first round and
+    the last round. We might be interested, for example, in seeing when these rounds
+    occurred or in comparing their amounts. These are things we can do with date and
+    arithmetic expressions, as we’ll see in the next section.
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，让我们看一下数组元素运算符。我们将继续处理融资轮次，但在这种情况下，我们只想提取第一轮和最后一轮。例如，我们可能对看到这些轮次发生的时间或比较它们的金额感兴趣。我们可以通过日期和算术表达式来完成这些操作，正如我们将在下一节中看到的那样。
+- en: 'The `$arrayElemAt` operator enables us to select an element at a particular
+    slot within an array. The following pipeline provides an example of using `$arrayElemAt`:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`$arrayElemAt` 运算符使我们能够选择数组中特定插槽的元素。以下管道提供了使用 `$arrayElemAt` 的示例：'
+- en: '[PRE26]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: Note the syntax for using `$arrayElemAt` within a project stage. We define a
+    field that we want projected out and as the value specify a document with `$arrayElemAt`
+    as the field name and a two-element array as the value. The first element should
+    be a field path that specifies the array field we want to select from. The second
+    element identifies the slot within that array that we want. Remember that arrays
+    are 0-indexed.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意在项目阶段使用 `$arrayElemAt` 的语法。我们定义一个要投影出的字段，并指定一个包含 `$arrayElemAt` 作为字段名和一个两元素数组作为值的文档。第一个元素应该是一个字段路径，指定我们想要选择的数组字段。第二个元素标识我们想要的数组中的插槽。请记住，数组是从
+    0 开始索引的。
+- en: In many cases, the length of an array is not readily available. To select array
+    slots starting from the end of the array, use negative integers. The last element
+    in an array is identified with `-1`.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在许多情况下，数组的长度并不容易得到。要从数组末尾选择数组插槽，使用负整数。数组中的最后一个元素用 `-1` 标识。
+- en: 'A simple output document for this aggregation pipeline would resemble the following:'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此聚合管道的简单输出文档将类似于以下内容：
+- en: '[PRE27]'
+  id: totrans-129
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'Related to `$arrayElemAt` is the `$slice` expression. This allows us to return
+    not just one but multiple items from an array in sequence, beginning with a particular
+    index:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`$arrayElemAt` 表达式相关的是 `$slice` 表达式。这允许我们按顺序从数组中返回不止一个，而是多个项，从特定索引开始：'
+- en: '[PRE28]'
+  id: totrans-131
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: Here, again with the `funding_rounds` array, we begin at index 1 and take three
+    elements from the array. Perhaps we know that in this dataset the first funding
+    round isn’t all that interesting, or we simply want some early ones but not the
+    very first one.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，再次使用 `funding_rounds` 数组，我们从索引 1 开始，从数组中取三个元素。也许我们知道在这个数据集中，第一个融资轮并不那么有趣，或者我们只是想要一些早期的轮次但不包括第一个。
+- en: 'Filtering and selecting individual elements or slices of arrays are among the
+    more common operations we need to perform on arrays. Probably the most common,
+    however, is determining an array’s size or length. To do this we can use the `$size`
+    operator:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对数组进行过滤和选择单个元素或数组切片是我们需要在数组上执行的更常见的操作之一。然而，可能最常见的操作是确定数组的大小或长度。为了做到这一点，我们可以使用
+    `$size` 运算符：
+- en: '[PRE29]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: When used in a project stage, a `$size` expression will simply provide a value
+    that is the number of elements in the array.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当在项目阶段使用 `$size` 表达式时，它将简单地提供一个值，即数组中元素的数量。
+- en: In this section, we’ve explored some of the most common array expressions. There
+    are many more, and the list grows with each release. Please review the [Aggregation
+    Pipeline Quick Reference in the MongoDB documentation](https://oreil.ly/ZtUES)
+    for a summary of all expressions that are available.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本节中，我们探讨了一些最常见的数组表达式。还有许多其他表达式，且每个版本都在增加列表。请查看 [MongoDB 文档中的聚合管道快速参考](https://oreil.ly/ZtUES)
+    来获取所有可用表达式的摘要。
+- en: Accumulators
+  id: totrans-137
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 累加器
+- en: At this point, we’ve covered a few different types of expressions. Next, let’s
+    look at what accumulators the aggregation framework has to offer. Accumulators
+    are essentially another type of expression, but we think about them in their own
+    class because they calculate values from field values found in multiple documents.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们已经涵盖了几种不同类型的表达式。接下来，让我们看看聚合框架提供了哪些累加器。累加器本质上是另一种类型的表达式，但我们将它们视为自己的类别，因为它们从多个文档中找到的字段值计算值。
+- en: Accumulators the aggregation framework provides enable us to perform operations
+    such as summing all values in a particular field (`$sum`), calculating an average
+    (`$avg`), etc. We also consider `$first` and `$last` to be accumulators because
+    these consider values in all documents that pass through the stage in which they
+    are used. `$max` and `$min` are two more examples of accumulators that consider
+    a stream of documents and save just one of the values they see. We can use `$mergeObjects`
+    to combine multiple documents into a single document.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 聚合框架提供的累加器使我们能够执行诸如在特定字段中求和(`$sum`)、计算平均值(`$avg`)等操作。我们还考虑`$first`和`$last`也是累加器，因为它们考虑通过它们使用的阶段中的所有文档中的值。`$max`和`$min`是另外两个考虑文档流并仅保存一个值的累加器的例子。我们可以使用`$mergeObjects`将多个文档合并成一个文档。
+- en: We also have accumulators for arrays. We can `$push` values onto an array as
+    documents pass through a pipeline stage. `$addToSet` is very similar to `$push`
+    except that it ensures no duplicate values are included in the resulting array.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还有用于数组的累加器。我们可以在通过管道阶段的文档上`$push`值到数组中。`$addToSet`与`$push`非常相似，不同之处在于它确保结果数组中不包含重复值。
+- en: Then there are some expressions for calculating descriptive statistics⁠—for
+    example, for calculating the standard deviation of a sample and of a population.
+    Both work with a stream of documents that pass through a pipeline stage.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来有一些用于计算描述统计量的表达式⁠—例如，用于计算样本和总体标准偏差的表达式。这两种表达式都可以处理通过管道阶段的文档流。
+- en: Prior to MongoDB 3.2, accumulators were available only in the group stage. MongoDB
+    3.2 introduced the ability to access a subset of accumulators within the project
+    stage. The primary difference between the accumulators in the group stage and
+    the project stage is that in the project stage accumulators such as `$sum` and
+    `$avg` must operate on arrays within a single document, whereas accumulators in
+    the group stage, as we’ll see in a later section, provide you with the ability
+    to perform calculations on values across multiple documents.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在MongoDB 3.2之前，累加器仅在group阶段可用。MongoDB 3.2引入了在project阶段访问累加器子集的功能。group阶段和project阶段累加器的主要区别在于，在project阶段，诸如`$sum`和`$avg`的累加器必须在单个文档的数组上操作，而在group阶段，正如我们将在后面的部分中看到的，累加器允许您在多个文档上执行值的计算。
+- en: That’s a quick overview of accumulators to provide some context and set the
+    stage for our deep dive into examples.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是对累加器的快速概述，为我们深入探讨示例提供一些背景和舞台设定。
+- en: Using Accumulators in Project Stages
+  id: totrans-144
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 在项目阶段使用累加器
+- en: 'We’ll begin with an example of using an accumulator in a project stage. Note
+    that our match stage filters for documents that contain a `"funding_rounds"` field
+    and for which the `funding_rounds` array is not empty:'
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将从在项目阶段使用累加器的示例开始。请注意，我们的匹配阶段过滤包含`"funding_rounds"`字段且`funding_rounds`数组不为空的文档：
+- en: '[PRE30]'
+  id: totrans-146
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'Because the value for `$funding_rounds` is an array within each company document,
+    we can use an accumulator. Remember that in project stages accumulators must work
+    on an array-valued field. In this case, we’re able to do something pretty cool
+    here. We are easily identifying the largest value in an array by reaching into
+    an embedded document within that array and projecting the max value in the output
+    documents:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为`$funding_rounds`的值是每个公司文档中的一个数组，所以我们可以使用一个累加器。请记住，在项目阶段，累加器必须在一个数组值字段上工作。在这种情况下，我们可以做些很酷的事情。我们可以轻松地通过访问该数组中的嵌入文档来识别数组中的最大值，并在输出文档中投影出最大值。
+- en: '[PRE31]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'As another example, let’s use the `$sum` accumulator to calculate the total
+    funding for each company in our collection:'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 举个例子，让我们使用`$sum`累加器来计算我们集合中每家公司的总资金：
+- en: '[PRE32]'
+  id: totrans-150
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: This is just a taste of what you can do using accumulators in project stages.
+    Again, you’re encouraged to review the [Aggregation Pipeline Quick Reference in
+    the MongoDB docs](https://oreil.ly/SZiFx) for a complete overview of the accumulator
+    expressions available.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这只是使用项目阶段中累加器的一小部分功能。再次建议您查阅 MongoDB 文档中的 [聚合管道快速参考](https://oreil.ly/SZiFx)，了解可用的累加器表达式的完整概述。
+- en: Introduction to Grouping
+  id: totrans-152
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 分组介绍
+- en: 'Historically, accumulators were the province of the group stage in the MongoDB
+    aggregation framework. The group stage performs a function that is similar to
+    the SQL `GROUP BY` command. In a group stage, we can aggregate together values
+    from multiple documents and perform some type of aggregation operation on them,
+    such as calculating an average. Let’s take a look at an example:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 历史上，累加器是 MongoDB 聚合框架中小组阶段的特色。小组阶段执行类似于 SQL `GROUP BY` 命令的功能。在小组阶段中，我们可以聚合多个文档的值，并对它们执行某种类型的聚合操作，例如计算平均值。让我们看一个例子：
+- en: '[PRE33]'
+  id: totrans-154
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'Here, we’re using a group stage to aggregate together all companies based on
+    the year they were founded, then calculate the average number of employees for
+    each year. The output for this pipeline resembles the following:'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们使用一个小组阶段根据公司成立的年份聚合所有公司，然后计算每年的平均员工人数。这个管道的输出类似于以下内容：
+- en: '[PRE34]'
+  id: totrans-156
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: The output includes documents that have a document as their `"_id"` value, and
+    then a report on the average number of employees. This is the type of analysis
+    we might do as a first step in assessing the correlation between the year in which
+    a company was founded and its growth, possibly normalizing for how old the company
+    is.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出包括具有文档作为其 `"_id"` 值的文档，然后是员工平均数的报告。这是我们可能作为评估公司成立年份与其增长之间相关性的第一步分析类型，可能会标准化公司的年龄。
+- en: 'As you can see, the pipeline we built has two stages: a group stage and a sort
+    stage. Fundamental to the group stage is the `"_id"` field that we specify as
+    part of the document. This is the value of the `$group` operator itself, using
+    a very strict interpretation.'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如您所见，我们构建的管道有两个阶段：小组阶段和排序阶段。小组阶段的基础是我们作为文档一部分指定的 `"_id"` 字段。这是 `$group` 操作符本身的值，使用非常严格的解释。
+- en: We use this field to define what the group stage uses to organize the documents
+    that it sees. Since the group stage is first, the `aggregate` command will pass
+    all documents in the *companies* collection through this stage. The group stage
+    will take every document that has the same value for `"founded_year"` and treat
+    them as a single group. In constructing the value for this field, this stage will
+    use the `$avg` accumulator to calculate an average number of employees for all
+    companies with the same `"founded_year"`.
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们使用这个字段来定义小组阶段用于组织其所见文档的方式。由于小组阶段位于首位，`aggregate` 命令将通过这一阶段传递 *companies* 集合中的所有文档。小组阶段将获取每个具有相同
+    `"founded_year"` 值的文档，并将它们视为单一分组。在构建该字段的值时，此阶段将使用 `$avg` 累加器计算具有相同 `"founded_year"`
+    的所有公司的平均员工人数。
+- en: You can think of it this way. Each time the group stage encounters a document
+    with a specific founding year, it adds the value for `"number_of_employees"` from
+    that document to a running sum of the number of employees and adds one to a count
+    of the number of documents seen so far for that year. Once all documents have
+    passed through the group stage, it can then calculate the average using that running
+    sum and count for every grouping of documents it identified based on the year
+    of founding.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以这样想。每当小组阶段遇到具有特定成立年份的文档时，它将从该文档中的 `"number_of_employees"` 值添加到员工数量的累加和，并将该年份文档数量的计数加一。一旦所有文档都通过小组阶段，它便可以使用该累加和和计数计算出每个根据成立年份标识出的文档分组的平均值。
+- en: At the end of this pipeline, we sort the documents into descending order by
+    `average_number_of_employees`.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此管道的最后，我们按 `average_number_of_employees` 的降序对文档进行排序。
+- en: 'Let’s look at another example. One field we’ve not yet considered in the *companies*
+    dataset is the relationships. The `relationships` field appears in documents in
+    the following form:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看另一个例子。在 *companies* 数据集中，我们尚未考虑的一个字段是关系。`relationships` 字段出现在以下形式的文档中：
+- en: '[PRE35]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'The `"relationships"` field gives us the ability to dive in and look for people
+    who have, in one way or another, been associated with a relatively large number
+    of companies. Let’s take a look at this aggregation:'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"relationships"` 字段使我们能够深入挖掘并寻找与相对较多公司有关联的人员。让我们看看这个聚合：'
+- en: '[PRE36]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'We’re matching on `relationships.person`. If we look at our Facebook example
+    document, we can see how relationships are structured and get a sense for what
+    it means to do this. We are filtering for all relationships for which `"person"`
+    is not `null`. Then we project out all relationships for documents that match.
+    We will pass only relationships to the next stage in the pipeline, which is unwind.
+    We unwind the relationships so that every relationship in the array comes through
+    to the group stage that follows. In the group stage, we use a field path to identify
+    the person within each `"relationship"` document. All documents with the same
+    `"person"` value will be grouped together. As we saw previously, it’s perfectly
+    fine for a document to be the value around which we group. So, every match to
+    a document for a first name, last name, and permalink for a person will be aggregated
+    together. We use the `$sum` accumulator to count the number of relationships in
+    which each person has participated. Finally, we sort into descending order. The
+    output for this pipeline resembles the following:'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在 `relationships.person` 上进行匹配。如果我们看看我们的 Facebook 示例文档，我们可以看到关系是如何构造的，并了解进行此操作的含义。我们正在过滤所有
+    `"person"` 不为空的关系。然后我们投射出所有匹配文档的所有关系。我们只会将关系传递到管道的下一个阶段，即展开。我们展开关系，以便数组中的每个关系都通过到接下来的分组阶段。在分组阶段，我们使用字段路径来识别每个
+    `"relationship"` 文档中的人员。所有具有相同 `"person"` 值的文档将被分组在一起。正如我们之前看到的那样，一个文档可以完全成为我们分组的值。因此，每个与一个人的名字、姓氏和永久链接匹配的文档都将被聚合在一起。我们使用
+    `$sum` 累加器来计算每个人参与的关系数量。最后，我们按降序排序。该管道的输出类似于以下内容：
+- en: '[PRE37]'
+  id: totrans-167
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'Tim Hanlon is the individual who has participated in the most relationships
+    with companies in this collection. It could be that Mr. Hanlon has actually had
+    a relationship with 28 companies, but we can’t know that for sure, because it’s
+    also possible that he has had multiple relationships with one or more companies,
+    each with a different title. This example illustrates a very important point about
+    aggregation pipelines: make sure you fully understand what it is you’re working
+    with as you do calculations, particularly when you’re calculating aggregate values
+    using accumulator expressions of some kind.'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Tim Hanlon 是这个集合中参与最多公司关系的个人。可能是因为汉隆先生实际上与 28 家公司有关系，但我们无法确定，因为他可能与一家或多家公司有多个关系，每个关系都有不同的职位。这个例子说明了聚合管道的一个非常重要的点：在进行计算时，特别是使用累加器表达式计算聚合值时，一定要充分理解你所处理的内容。
+- en: In this case, we can say that Tim Hanlon appears 28 times in `"relationships"`
+    documents throughout the companies in our collection. We would have to dig a little
+    deeper to see exactly how many unique companies he was associated with, but we’ll
+    leave the construction of that pipeline to you as an exercise.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，我们可以说 Tim Hanlon 在我们收集的公司的 `"relationships"` 文档中出现了 28 次。我们需要深入挖掘一下，以查看他究竟与多少个独特的公司有关联，但是我们将把构建该管道的任务留给您作为练习。
+- en: The _id Field in Group Stages
+  id: totrans-170
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 在分组阶段的 `_id` 字段
+- en: 'Before we go any further with our discussion of the group stage, let’s talk
+    a little more about the `_id` field and look at some best practices for constructing
+    values for this field in group aggregation stages. We’ll walk through a few examples
+    that illustrate several different ways in which we commonly group documents. As
+    our first example, consider this pipeline:'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在继续讨论分组阶段之前，让我们再谈谈 `_id` 字段，并查看一些在组合聚合阶段为该字段构造值的最佳实践。我们将演示几个示例，说明我们通常如何组合文档。作为我们的第一个例子，请考虑以下管道：
+- en: '[PRE38]'
+  id: totrans-172
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'The output for this pipeline resembles the following:'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该管道的输出类似于以下内容：
+- en: '[PRE39]'
+  id: totrans-174
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'In our output we have documents with two fields: `"_id"` and `"companies"`.
+    Each of these documents contains a list of the companies founded in whatever the
+    `"founded_year"` is, `"companies"` being an array of company names.'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的输出中，我们有两个字段的文档：`"_id"` 和 `"companies"`。每个文档包含了一个数组，这些数组包含了根据 `"founded_year"`
+    的公司名称列表。
+- en: Notice here how we’ve constructed the `"_id"` field in the group stage. Why
+    not just provide the founding year rather than putting it inside a document with
+    a field labeled `"founded_year"`. The reason we don’t do it that way is that if
+    we don’t label the group value, it’s not explicit that we are grouping on the
+    year in which the company was founded. In order to avoid confusion, it is a best
+    practice to explicitly label values on which we group.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意这里我们如何在组阶段构建`"_id"`字段。为什么不直接提供成立年份，而是将其放在一个带有标记为`"founded_year"`的字段的文档中？我们之所以不这样做的原因是，如果我们不标记组值，那么就不明确我们是在公司成立年份上进行分组。为了避免混淆，明确标记我们分组的值是一个最佳实践。
+- en: 'In some circumstances it might be necessary to use another approach in which
+    our `_id` value is a document composed of multiple fields. In this case, we’re
+    actually grouping documents on the basis of their founding year and category code:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某些情况下，可能需要使用另一种方法，其中我们的`_id`值是由多个字段组成的文档。在这种情况下，我们实际上是根据它们的成立年份和类别代码对文档进行分组：
+- en: '[PRE40]'
+  id: totrans-178
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'It is perfectly fine to use documents with multiple fields as our `_id` value
+    in group stages. In other cases, it might also be necessary to do something like
+    this:'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在组阶段使用多字段文档作为我们的`_id`值是完全可以的。在其他情况下，可能也需要像这样做：
+- en: '[PRE41]'
+  id: totrans-180
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'In this case, we’re grouping documents based on the year in which the companies
+    had their IPO, and that year is actually a field of an embedded document. It is
+    common practice to use field paths that reach into embedded documents as the value
+    on which to group in a group stage. In this case, the output will resemble the
+    following:'
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，我们根据公司进行首次公开募股的年份对文档进行分组，而那一年实际上是嵌入文档的一个字段。在组阶段使用到嵌入文档的字段路径作为分组值是一种常见做法。在这种情况下，输出将类似于以下内容：
+- en: '[PRE42]'
+  id: totrans-182
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: 'Note that the examples in this section use an accumulator we haven’t seen before:
+    `$push`. As the group stage processes documents in its input stream, a `$push`
+    expression will add the resulting value to an array that it builds throughout
+    its run. In the case of the preceding pipeline, the group stage is building an
+    array composed of company names.'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，本节中的示例使用了我们以前没有见过的累加器`$push`。在组阶段处理其输入流中的文档时，`$push`表达式将把结果值添加到它在运行过程中构建的数组中。在前述管道的情况下，组阶段正在构建一个由公司名称组成的数组。
+- en: 'Our final example is one we’ve already seen, but it’s included here for the
+    sake of completeness:'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的最后一个例子是我们已经看过的，但是为了完整起见，这里包括了它：
+- en: '[PRE43]'
+  id: totrans-185
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'In the preceding example where we were grouping on IPO year, we used a field
+    path that resolved to a scalar value—the IPO year. In this case, our field path
+    resolves to a document containing three fields: `"first_name`“, `"last_name"`,
+    and `"permalink"`. This demonstrates that the group stage supports grouping on
+    document values.'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的例子中，我们是根据首次公开募股年份进行分组，使用的是解析为标量值的字段路径 — 首次公开募股年份。在这种情况下，我们的字段路径解析为包含三个字段的文档："first_name"，"last_name"和"permalink"。这表明组阶段支持在文档值上进行分组。
+- en: You’ve now seen several ways in which we can construct `_id` values in group
+    stages. In general, bear in mind that what we want to do here is make sure that
+    in our output, the semantics of our `_id` value are clear.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您现在已经看到了在组阶段如何构建`_id`值的几种方式。总的来说，要记住我们在这里想要做的是确保在输出中，我们的`_id`值的语义是清晰的。
+- en: Group Versus Project
+  id: totrans-188
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 组与项目
+- en: 'To round out our discussion of the group aggregation stage, we’ll take a look
+    at a couple of additional accumulators that are not available in the project stage.
+    This is to encourage you to think a little more deeply about what we can do in
+    a project stage with respect to accumulators, and what we can do in group. As
+    an example, consider this aggregation query:'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了完善我们对组聚合阶段的讨论，我们将看一看一些在项目阶段不可用的额外累加器。这是为了鼓励您更深入地思考在项目阶段和组阶段对累加器可以做什么。例如，考虑以下聚合查询：
+- en: '[PRE44]'
+  id: totrans-190
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: Here, we begin by filtering for documents for which the array `funding_rounds`
+    is not empty. Then we unwind `funding_rounds`. Therefore, the sort and group stages
+    will see one document for each element of the `funding_rounds` array for every
+    company.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们首先过滤数组`funding_rounds`不为空的文档。然后展开`funding_rounds`。因此，排序和分组阶段将为每个公司的`funding_rounds`数组的每个元素看到一个文档。
+- en: Our sort stage in this pipeline sorts on first year, then month, then day, all
+    in ascending order. This means that this stage will output the oldest funding
+    rounds first. And as you are aware from [Chapter 5](ch05.xhtml#chapter_d1e5128),
+    we can support this type of sort with a compound index.
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个流水线中的排序阶段按照年、月、日的升序排序。这意味着这个阶段将首先输出最早的融资轮次。正如您在[第5章](ch05.xhtml#chapter_d1e5128)中了解到的，我们可以使用复合索引来支持这种类型的排序。
+- en: In the group stage that follows the sort, we group by company name and use the
+    `$push` accumulator to construct a sorted array of funding rounds. The `funding_rounds`
+    array will be sorted for each company because we sorted all funding rounds, globally,
+    in the sort stage.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在排序后的组阶段中，我们按公司名称分组，并使用`$push`累加器构建一个排序后的`funding_rounds`数组。因为我们在排序阶段全局排序了所有的融资轮次，所以每家公司的`funding_rounds`数组都会被排序。
+- en: 'Documents output from this pipeline will resemble the following:'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从这个流水线输出的文档将类似于以下内容：
+- en: '[PRE45]'
+  id: totrans-195
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: In this pipeline, with `$push`, we are accumulating an array. In this case,
+    we have specified our `$push` expression so that it adds documents to the end
+    of the accumulation array. Since the funding rounds are in chronological order,
+    pushing onto the end of the array guarantees that the the funding amounts for
+    each company are sorted in chronological order.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个流水线中，使用`$push`，我们正在累积一个数组。在这种情况下，我们已经指定了我们的`$push`表达式，使其将文档添加到累积数组的末尾。由于融资轮次是按时间顺序排列的，将文档推送到数组的末尾可以确保每家公司的融资金额按时间顺序排序。
+- en: '`$push` expressions only work in group stages. This is because group stages
+    are designed to take an input stream of documents and accumulate values by processing
+    each document in turn. Project stages, on the other hand, work with each document
+    in their input stream individually.'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`$push`表达式只能在组阶段中使用。这是因为组阶段旨在接受文档的输入流，并通过依次处理每个文档来累积值。相反，投影阶段是逐个处理其输入流中的每个文档。'
+- en: 'Let’s take a look at one other example. This is a little longer, but it builds
+    on the previous one:'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们再看一个例子。这个例子有点长，但是它是在前一个例子的基础上构建的：
+- en: '[PRE46]'
+  id: totrans-199
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: 'Again, we are unwinding `funding_rounds` and sorting chronologically. However,
+    in this case, instead of accumulating an array of entries, each entry representing
+    a single `funding_rounds`, we are using two accumulators we’ve not yet seen in
+    action: `$first` and `$last`. A `$first` expression simply saves the first value
+    that passes through the input stream for the stage. A `$last` expression simply
+    tracks the values that pass through the group stage and hangs onto the last one.'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再次，我们正在解开`funding_rounds`并按时间顺序排序。但在这种情况下，我们不是累积条目数组，每个条目代表一个`funding_rounds`，而是使用了两个我们尚未看到实际运行的累加器：`$first`和`$last`。`$first`表达式简单地保存通过阶段输入流的第一个值。`$last`表达式简单地跟踪通过组阶段的值，并保留最后一个。
+- en: As with `$push`, we can’t use `$first` and `$last` in project stages because,
+    again, project stages are not designed to accumulate values based on multiple
+    documents streaming through them. Rather, they are designed to reshape documents
+    individually.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与`$push`一样，我们不能在投影阶段中使用`$first`和`$last`，因为投影阶段不是根据流经它们的多个文档累积值的设计。相反，它们被设计为单独重塑文档。
+- en: In addition to `$first` and `$last`, we also use `$sum` in this example to calculate
+    the total number of funding rounds. For this expression we can just specify the
+    value, `1`. A `$sum` expression like this simply serves to count the number of
+    documents that it sees in each grouping.
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了`$first`和`$last`，我们在这个例子中还使用了`$sum`来计算融资轮次的总数。对于这个表达式，我们只需指定值`1`。这样的`$sum`表达式简单地用于计算每个分组中看到的文档数量。
+- en: Finally, this pipeline includes a fairly complex project stage. However, all
+    it is really doing is making the output prettier. Rather than show the `first_round`
+    values, or entire documents for the first and last funding rounds, this project
+    stage creates a summary. Note that this maintains good semantics, because each
+    value is clearly labeled. For `first_round` we’ll produce a simple embedded document
+    that contains just the essential details of amount, article, and year, pulling
+    those values from the original funding round document that will be the value of
+    `$first_round`. The project stage does something similar for `$last_round`. Finally,
+    this project stage just passes through to output documents the `num_rounds` and
+    `total_raised` values for documents it receives in its input stream.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，此管道包含一个相当复杂的项目阶段。然而，它真正做的只是使输出更美观。不是显示 `first_round` 的值，或者整个首轮和最后一轮融资轮次的文档，这个项目阶段创建了一个摘要。请注意，这保持了良好的语义，因为每个值都有明确的标签。对于
+    `first_round`，我们将生成一个简单的嵌入文档，其中包含金额、文章和年份的基本细节，这些值来自将成为 `$first_round` 值的原始融资轮次文档。项目阶段对于
+    `$last_round` 也执行类似的操作。最后，这个项目阶段只是将输入流中接收到的文档的 `num_rounds` 和 `total_raised` 值传递到输出文档中。
+- en: 'Documents output from this pipeline resemble the following:'
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从此管道输出的文档如下所示：
+- en: '[PRE47]'
+  id: totrans-205
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: And with that, we’ve concluded an overview of the group stage.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 至此，我们已经完成了对组阶段的概述。
+- en: Writing Aggregation Pipeline Results to a Collection
+  id: totrans-207
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 将聚合管道结果写入集合
+- en: 'There are two specific stages, `$out` and `$merge`, that can write documents
+    resulting from the aggregation pipeline to a collection. You can use only one
+    of these two stages, and it must be the last stage of an aggregation pipeline.
+    `$merge` was introduced in MongoDB version 4.2 and is the preferred stage for
+    writing to a collection, if available. `$out` has some limitations: it can only
+    write to the same database, it overwrites any existing collection if present,
+    and it cannot write to a sharded collection. `$merge` can write to any database
+    and collection, sharded or not. `$merge` can also incorporate results (insert
+    new documents, merge with existing documents, fail the operation, keep existing
+    documents, or process all documents with a custom update) when working with an
+    existing collection. But the real advantage of using `$merge` is that it can create
+    on-demand materialized views, where the content of the output collection is incrementally
+    updated when the pipeline is run.'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在聚合管道中，有两个特定阶段，`$out` 和 `$merge`，可以将文档写入集合。你只能使用这两个阶段中的一个，并且它必须是聚合管道的最后一个阶段。`$merge`
+    是 MongoDB 版本 4.2 引入的首选阶段，用于向集合写入数据（如果可用）。`$out` 存在一些限制：只能写入同一数据库，会覆盖现有集合（如果存在），且无法写入分片集合。`$merge`
+    能够向任何数据库和集合写入数据，无论是否分片。在处理现有集合时，`$merge` 还可以包含以下结果（插入新文档、与现有文档合并、操作失败、保留现有文档或使用自定义更新处理所有文档）。但是，使用
+    `$merge` 的真正优势在于它可以创建按需的物化视图，当运行管道时增量更新输出集合的内容。
+- en: In this chapter, we have covered a number of different accumulators, some that
+    are available in the project stage, and we’ve also covered how to think about
+    when to use group versus project when considering various accumulators. Next,
+    we’ll take a look at transactions in MongoDB.
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们涵盖了许多不同的累加器，一些累加器在项目阶段可用，我们还讨论了在考虑各种累加器时何时使用组和项目的思考方式。接下来，我们将看看 MongoDB
+    中的事务。

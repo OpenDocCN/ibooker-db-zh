@@ -1,0 +1,963 @@
+- en: Chapter 15\. Configuring Sharding
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第 15 章。配置分片
+- en: 'In the previous chapter, you set up a “cluster” on one machine. This chapter
+    covers how to set up a more realistic cluster and how each piece fits. In particular,
+    you’ll learn:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上一章中，您在一台机器上设置了一个“集群”。本章将介绍如何设置一个更真实的集群以及每个组件的作用。特别是，您将了解：
+- en: How to set up config servers, shards, and *mongos* processes
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何设置配置服务器、分片和 *mongos* 进程
+- en: How to add capacity to a cluster
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何向集群添加容量
+- en: How data is stored and distributed
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据如何存储和分布
+- en: When to Shard
+  id: totrans-5
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 何时分片
+- en: Deciding when to shard is a balancing act. You generally do not want to shard
+    too early because it adds operational complexity to your deployment and forces
+    you to make design decisions that are difficult to change later. On the other
+    hand, you do not want to wait too long to shard because it is difficult to shard
+    an overloaded system without downtime.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 决定何时进行分片是一个权衡考量。通常不希望过早进行分片，因为这会增加部署的操作复杂性，并迫使您做出后续难以更改的设计决策。另一方面，也不希望等待过长时间再进行分片，因为在系统超载的情况下进行分片会很困难且可能导致停机。
+- en: 'In general, sharding is used to:'
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，分片用于：
+- en: Increase available RAM
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 增加可用内存
+- en: Increase available disk space
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 增加可用磁盘空间
+- en: Reduce load on a server
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 减少服务器负载
+- en: Read or write data with greater throughput than a single *mongod* can handle
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 以比单个 *mongod* 能处理的更大吞吐量读取或写入数据
+- en: Thus, good monitoring is important to decide when sharding will be necessary.
+    Carefully measure each of these metrics. Generally people speed toward one of
+    these bottlenecks much faster than the others, so figure out which one your deployment
+    will need to provision for first and make plans well in advance about when and
+    how you plan to convert your replica set.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，良好的监控对于确定何时需要进行分片至关重要。仔细测量每个指标。通常情况下，人们会更快地达到其中一个瓶颈，因此要确定您的部署将首先需要为哪一个瓶颈提供资源，并提前计划何时以及如何转换您的复制集。
+- en: Starting the Servers
+  id: totrans-13
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 启动服务器
+- en: 'The first step in creating a cluster is to start up all of the processes required.
+    As mentioned in the previous chapter, you need to set up the *mongos* and the
+    shards. There’s also a third component, the config servers, which are an important
+    piece. Config servers are normal *mongod* servers that store the cluster configuration:
+    which replica sets host the shards, what collections are sharded by, and on which
+    shard each chunk is located. MongoDB 3.2 introduced the use of replica sets as
+    config servers. Replica sets replace the original syncing mechanism used by config
+    servers; the ability to use that mechanism was removed in MongoDB 3.4.'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建集群的第一步是启动所需的所有进程。正如前一章提到的，您需要设置 *mongos* 和分片。还有第三个组件，即配置服务器，它们是一个重要组成部分。配置服务器是正常的
+    *mongod* 服务器，用于存储集群配置：哪些复制集托管分片、哪些集合被分片以及每个分块位于哪个分片上。MongoDB 3.2 引入了将复制集用作配置服务器的功能。复制集替代了配置服务器使用的原始同步机制；在
+    MongoDB 3.4 中删除了使用该机制的能力。
+- en: Config Servers
+  id: totrans-15
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 配置服务器
+- en: 'Config servers are the brains of your cluster: they hold all of the metadata
+    about which servers hold what data. Thus, they must be set up first, and the data
+    they hold is *extremely* important: make sure that they are running with journaling
+    enabled and that their data is stored on nonephemeral drives. In production deployments,
+    your config server replica set should consist of at least three members. Each
+    config server should be on a separate physical machine, preferable geographically
+    distributed.'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 配置服务器是集群的大脑：它们保存关于哪些服务器持有哪些数据的所有元数据。因此，它们必须首先设置，并且它们持有的数据非常重要：确保它们启用了日志记录，并且它们的数据存储在非临时驱动器上。在生产部署中，您的配置服务器复制集应至少包含三个成员。每个配置服务器应位于单独的物理机器上，最好是地理分布均匀的。
+- en: 'The config servers must be started before any of the *mongos* processes, as
+    *mongos* pulls its configuration from them. To begin, run the following commands
+    on three separate machines to start your config servers:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在启动任何 *mongos* 进程之前，必须先启动配置服务器，因为 *mongos* 从配置服务器获取其配置。要开始，请在三台单独的机器上运行以下命令来启动您的配置服务器：
+- en: '[PRE0]'
+  id: totrans-18
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Then initiate the config servers as a replica set. To do this, connect a *mongo*
+    shell to one of the replica set members:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，将配置服务器初始化为一个复制集。为此，请将 *mongo* shell 连接到其中一个复制集成员：
+- en: '[PRE1]'
+  id: totrans-20
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'and use the `rs.initiate()` helper:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并使用 `rs.initiate()` 助手：
+- en: '[PRE2]'
+  id: totrans-22
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Here we’re using *configRS* as the replica set name. Note that this name appears
+    both on the command line when instantiating each config server and in the call
+    to `rs.initiate()`.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里我们将 *configRS* 用作复制集名称。请注意，此名称在每个配置服务器实例化时的命令行上显示，并且在调用 `rs.initiate()` 时也会出现。
+- en: The `--configsvr` option indicates to the *mongod* that you are planning to
+    use it as a config server. On a server running with this option, clients (i.e.,
+    other cluster components) cannot write data to any database other than *config*
+    or *admin*.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`--configsvr`选项指示*mongod*您计划将其用作配置服务器。在运行此选项的服务器上，客户端（即其他集群组件）无法向除*config*或*admin*之外的任何数据库写入数据。'
+- en: The *admin* database contains the collections related to authentication and
+    authorization, as well as the other *system.** collections for internal use. The
+    *config* database contains the collections that hold the sharded cluster metadata.
+    MongoDB writes data to the *config* database when the metadata changes, such as
+    after a chunk migration or a chunk split.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*admin*数据库包含与身份验证和授权相关的集合，以及其他用于内部用途的*system.*集合。*config*数据库包含保存分片集群元数据的集合。当元数据发生更改时（例如分块迁移或分块拆分后），MongoDB将数据写入*config*数据库。'
+- en: When writing to config servers, MongoDB uses a `writeConcern` level of `"majority"`.
+    Similarly, when reading from config servers, MongoDB uses a `readConcern` level
+    of `"majority"`. This ensures that sharded cluster metadata will not be committed
+    to the config server replica set until it can’t be rolled back. It also ensures
+    that only metadata that will survive a failure of the config servers will be read.
+    This is necessary to ensure all *mongos* routers have a consistent view of how
+    data is organized in a sharded cluster.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在写入配置服务器时，MongoDB使用`writeConcern`级别为`"majority"`。类似地，从配置服务器读取时，MongoDB使用`readConcern`级别为`"majority"`。这确保分片集群元数据不会提交到配置服务器副本集，直到无法回滚为止。它还确保只有在配置服务器失败后将幸存的元数据读取出来。这是确保所有*mongos*路由器在分片集群中组织数据的方式的一致视图的必要条件。
+- en: In terms of provisioning, config servers should be provisioned adequately in
+    terms of networking and CPU resources. They only hold a table of contents of the
+    data in the cluster so the storage resources required are minimal. They should
+    be deployed on separate hardware to avoid contention for the machine’s resources.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在配置方面，配置服务器应在网络和CPU资源方面充分配置。它们仅保存集群数据的目录，因此所需的存储资源很少。它们应该部署在单独的硬件上，以避免争用机器资源。
+- en: Warning
+  id: totrans-28
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: If all of your config servers are lost, you must dig through the data on your
+    shards to figure out which data is where. This is possible, but slow and unpleasant.
+    Take frequent backups of config server data. Always take a backup of your config
+    servers before performing any cluster maintenance.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的所有配置服务器都丢失了，您必须深入分析分片上的数据，以确定数据在哪里。这是可能的，但速度较慢且不愉快。定期备份配置服务器数据。在执行任何集群维护之前，务必备份配置服务器。
+- en: The mongos Processes
+  id: totrans-30
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: mongos进程
+- en: 'Once you have three config servers running, start a *mongos* process for your
+    application to connect to. *mongos* processes need to know where the config servers
+    are, so you must always start *mongos* with the `--configdb` option:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦您有三个配置服务器运行，就启动一个*mongos*进程供应用程序连接。*mongos*进程需要知道配置服务器的位置，因此您必须始终使用`--configdb`选项启动*mongos*：
+- en: '[PRE3]'
+  id: totrans-32
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: By default, *mongos* runs on port 27017\. Note that it does not need a data
+    directory (*mongos* holds no data itself; it loads the cluster configuration from
+    the config servers on startup). Make sure that you set `--logpath` to save the
+    *mongos* log somewhere safe.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，*mongos*在端口27017上运行。请注意，它不需要数据目录（*mongos*本身不存储数据；它在启动时从配置服务器加载集群配置）。确保将`--logpath`设置为将*mongos*日志保存到安全的位置。
+- en: You should start a small number of *mongos* processes and locate them as close
+    to all the shards as possible. This improves performance of queries that need
+    to access multiple shards or which perform scatter/gather operations. The minimal
+    setup is at least two *mongos* processes to ensure high availability. It is possible
+    to run tens or hundreds of *mongos* processes but this causes resource contention
+    on the *config server*s. The recommended approach is to provide a small pool of
+    routers.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您应该启动少量的*mongos*进程，并将它们尽可能靠近所有分片。这可以提高需要访问多个分片或执行散列/聚合操作的查询性能。最小设置至少需要两个*mongos*进程以确保高可用性。可以运行数十个或数百个*mongos*进程，但这会在*配置服务器*上引起资源争用。推荐的方法是提供一个小型路由器池。
+- en: Adding a Shard from a Replica Set
+  id: totrans-35
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 从副本集添加分片
+- en: 'Finally, you’re ready to add a shard. There are two possibilities: you may
+    have an existing replica set or you may be starting from scratch. We will cover
+    starting from an existing set. If you are starting from scratch, initialize an
+    empty set and follow the steps outlined here.'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，您准备好添加一个分片。有两种可能性：您可能有一个现有的副本集，也可能从头开始。我们将介绍从现有集开始的步骤。如果您从头开始，请初始化一个空集，并按照这里概述的步骤操作。
+- en: If you already have a replica set serving your application, that will become
+    your first shard. To convert it into a shard, you need to make some small configuration
+    modifications to the members and then tell the *mongos* how to find the replica
+    set that will comprise the shard.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您已经有一个为应用程序服务的副本集，那么它将成为您的第一个分片。要将其转换为分片，您需要对成员进行一些小的配置修改，然后告诉*mongos*如何找到将组成该分片的副本集。
+- en: 'For example, if you have a replica set named *rs0* on *svr1.example.net*, *svr2.example.net*,
+    and *svr3.example.net*, you would first connect to one of the members using the
+    *mongo* shell:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，如果您在*svr1.example.net*、*svr2.example.net*和*svr3.example.net*上有一个名为*rs0*的副本集，则首先使用*mongo*
+    shell连接到其中一个成员：
+- en: '[PRE4]'
+  id: totrans-39
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'Then use `rs.status()` to determine which member is the primary and which are
+    secondaries:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后使用`rs.status()`确定哪个成员是主节点，哪些是辅助节点：
+- en: '[PRE5]'
+  id: totrans-41
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: Beginning with MongoDB 3.4, for sharded clusters, *mongod* instances for shards
+    *must* be configured with the `--shardsvr` option, either via the configuration
+    file setting `sharding.clusterRole` or via the command-line option `--shardsvr`.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从MongoDB 3.4开始，对于分片集群，*mongod*实例必须使用`--shardsvr`选项进行配置，可以通过配置文件设置`sharding.clusterRole`或通过命令行选项`--shardsvr`进行设置。
+- en: You will need to do this for each of the members of the replica set you are
+    in the process of converting to a shard. You’ll do this by first restarting each
+    secondary in turn with the `--shardsvr` option, then stepping down the primary
+    and restarting it with the `--shardsvr` option.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要为正在转换为分片的副本集的每个成员执行此操作。您将首先使用`--shardsvr`选项依次重新启动每个辅助节点，然后让主节点下台并使用`--shardsvr`选项重新启动它。
+- en: 'After shutting down a secondary, restart it as follows:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在关闭辅助节点后，按以下步骤重新启动：
+- en: '[PRE6]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Note that you’ll need to use the correct IP address for each secondary for the
+    `--bind_ip` parameter.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，您需要为`--bind_ip`参数的每个辅助节点使用正确的IP地址。
+- en: 'Now connect a *mongo* shell to the primary:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在连接到主节点的*mongo* shell：
+- en: '[PRE7]'
+  id: totrans-48
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'and step it down:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并让其下台：
+- en: '[PRE8]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Then restart the former primary with the `--shardsvr` option:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后使用`--shardsvr`选项重新启动前主节点：
+- en: '[PRE9]'
+  id: totrans-52
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Now you’re ready to add your replica set as a shard. Connect a *mongo* shell
+    to the *admin* database of the *mongos*:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在您准备将您的副本集作为分片添加。连接到*mongos*的*admin*数据库的*mongo* shell：
+- en: '[PRE10]'
+  id: totrans-54
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'And add a shard to the cluster using the `sh.addShard()` method:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并使用`sh.addShard()`方法向集群添加一个分片：
+- en: '[PRE11]'
+  id: totrans-56
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: You can specify all the members of the set, but you do not have to. *mongos*
+    will automatically detect any members that were not included in the seed list.
+    If you run `sh.status()`, you’ll see that MongoDB soon lists the shard as
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以指定集合中的所有成员，但不必如此。*mongos*将自动检测未包含在种子列表中的任何成员。如果运行`sh.status()`，您会看到MongoDB很快将分片列为
+- en: '[PRE12]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: The set name, *rs0*, is taken on as an identifier for this shard. If you ever
+    want to remove this shard or migrate data to it, you can use *rs0* to describe
+    it. This works better than using a specific server (e.g., *svr1.example.net*),
+    as replica set membership and status can change over time.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 集合名称*rs0*被用作此分片的标识符。如果您希望删除此分片或将数据迁移到它，可以使用*rs0*来描述它。这比使用特定服务器（例如*svr1.example.net*）更好，因为副本集成员资格和状态可能随时间而变化。
+- en: 'Once you’ve added the replica set as a shard you can convert your application
+    from connecting to the replica set to connecting to the *mongos*. When you add
+    the shard, *mongos* registers that all the databases in the replica set are “owned”
+    by that shard, so it will pass through all queries to your new shard. *mongos*
+    will also automatically handle failover for your application as your client library
+    would: it will pass the errors through to you.'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦将副本集添加为分片，您可以将应用程序从连接到副本集切换到连接到*mongos*。当您添加分片时，*mongos*会注册副本集中所有数据库为该分片的“所有权”，因此它将所有查询传递到您的新分片上。*mongos*还将自动处理应用程序的故障转移，就像您的客户端库一样：它会将错误传递给您。
+- en: Test failing over a shard’s primary in a development environment to ensure that
+    your application handles the errors received from *mongos* correctly (they should
+    be identical to the errors that you receive from talking to the primary directly).
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在开发环境中测试分片的主节点故障转移，以确保您的应用程序正确处理从 *mongos* 接收的错误（它们应与直接与主节点交互时接收到的错误相同）。
+- en: Note
+  id: totrans-62
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Once you have added a shard, you *must* set up all clients to send requests
+    to the *mongos* instead of contacting the replica set. Sharding will not function
+    correctly if some clients are still making requests to the replica set directly
+    (not through the *mongos*). Switch all clients to contacting the *mongos* immediately
+    after adding the shard and set up a firewall rule to ensure that they are unable
+    to connect directly to the shard.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 添加了分片后，您必须设置所有客户端发送请求到 *mongos* 而不是直接连接到副本集。如果某些客户端仍然直接向副本集发出请求（而不通过 *mongos*），则分片功能将无法正常运行。在添加分片后立即切换所有客户端以联系
+    *mongos*，并设置防火墙规则以确保它们无法直接连接到分片。
+- en: Prior to MongoDB 3.6 it was possible to create a standalone *mongod* as a shard.
+    This is no longer an option in versions of MongoDB later than 3.6\. All shards
+    must be replica sets.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MongoDB 3.6 之前，可以将独立的 *mongod* 作为一个分片。但是在 MongoDB 3.6 之后的版本中不再支持这个选项。所有的分片必须是副本集。
+- en: Adding Capacity
+  id: totrans-65
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 增加容量
+- en: When you want to add more capacity, you’ll need to add more shards. To add a
+    new, empty shard, create a replica set. Make sure it has a distinct name from
+    any of your other shards. Once it is initialized and has a primary, add it to
+    your cluster by running the `addShard` command through *mongos*, specifying the
+    new replica set’s name and its hosts as seeds.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您需要增加更多的容量时，您需要添加更多的分片。要添加一个新的空分片，需要创建一个副本集。确保它的名称与您的其他任何分片不同。一旦初始化并有了主节点，通过
+    *mongos* 运行 `addShard` 命令，指定新副本集的名称和其主机作为种子，将其添加到集群中。
+- en: If you have several existing replica sets that are not shards, you can add all
+    of them as new shards in your cluster so long as they do not have any database
+    names in common. For example, if you had one replica set with a *blog* database,
+    one with a *calendar* database, and one with *mail*, *tel*, and *music* databases,
+    you could add each replica set as a shard and end up with a cluster with three
+    shards and five databases. However, if you had a fourth replica set that also
+    had a database named *tel*, *mongos* would refuse to add it to the cluster.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您有几个现有的副本集不是分片，只要它们没有任何公共数据库名称，就可以将它们全部添加为集群中的新分片。例如，如果您有一个带有 *blog* 数据库的副本集，一个带有
+    *calendar* 数据库，以及一个带有 *mail*、*tel* 和 *music* 数据库的副本集，您可以将每个副本集添加为一个分片，并最终得到一个有三个分片和五个数据库的集群。但是，如果您有第四个副本集，它也有一个名为
+    *tel* 的数据库，*mongos* 将拒绝将其添加到集群中。
+- en: Sharding Data
+  id: totrans-68
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 分片数据
+- en: 'MongoDB won’t distribute your data automatically until you tell it how to do
+    so. You must explicitly tell both the database and the collection that you want
+    them to be distributed. For example, suppose you wanted to shard the *artists*
+    collection in the *music* database on the `"name"` key. First, you’d enable sharding
+    for the database:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在告诉 MongoDB 如何分配数据之前，它不会自动分配您的数据。您必须明确告诉数据库和集合，您希望它们被分布。例如，假设您希望在 *music* 数据库的
+    *artists* 集合上按 `"name"` 键进行分片。首先，您需要为数据库启用分片：
+- en: '[PRE13]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: Sharding a database is always a prerequisite to sharding one of its collections.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在分片集合之前，分片数据库始终是先决条件。
+- en: 'Once you’ve enabled sharding on the database level, you can shard a collection
+    by running `sh.shardCollection()`:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦在数据库级别启用了分片，您可以通过运行 `sh.shardCollection()` 来为集合分片：
+- en: '[PRE14]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Now the *artists* collection will be sharded by the `"name"` key. If you are
+    sharding an existing collection there must be an index on the `"name"` field;
+    otherwise, the `shardCollection` call will return an error. If you get an error,
+    create the index (*mongos* will return the index it suggests as part of the error
+    message) and retry the `shardCollection` command.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在 *artists* 集合将按 `"name"` 键进行分片。如果要对现有集合进行分片，必须在 `"name"` 字段上存在一个索引；否则，`shardCollection`
+    调用将返回错误。如果出现错误，请创建索引（*mongos* 将在错误消息的一部分返回建议的索引）并重试 `shardCollection` 命令。
+- en: If the collection you are sharding does not yet exist, *mongos* will automatically
+    create the shard key index for you.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您要分片的集合尚不存在，*mongos* 将为您自动创建分片键索引。
+- en: The `shardCollection` command splits the collection into chunks, which are the
+    units MongoDB uses to move data around. Once the command returns successfully,
+    MongoDB will begin balancing the collection across the shards in your cluster.
+    This process is not instantaneous. For large collections it may take hours to
+    finish this initial balancing. This time can be reduced with presplitting where
+    chunks are created on the shards prior to loading the data. Data loaded after
+    this point will be inserted directly to the current shard without requiring additional
+    balancing.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`shardCollection`命令将集合分成分块，这些分块是MongoDB用于数据移动的单位。一旦命令成功返回，MongoDB将开始在集群中的分片之间平衡集合。这个过程不是即时的。对于大集合，可能需要几个小时来完成初始平衡。可以通过预分片来减少这段时间，预分片是指在加载数据之前在分片上创建分块。在此之后加载的数据将直接插入到当前分片，而无需额外的平衡。'
+- en: How MongoDB Tracks Cluster Data
+  id: totrans-77
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MongoDB如何跟踪集群数据
+- en: Each *mongos* must always know where to find a document, given its shard key.
+    Theoretically, MongoDB could track where each and every document lived, but this
+    becomes unwieldy for collections with millions or billions of documents. Thus,
+    MongoDB groups documents into chunks, which are documents in a given range of
+    the shard key. A chunk always lives on a single shard, so MongoDB can keep a small
+    table of chunks mapped to shards.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个*mongos*都必须始终知道如何根据其分片键找到文档的位置。从理论上讲，MongoDB可以追踪每个文档的存储位置，但对于包含数百万或数十亿文档的集合来说，这变得难以管理。因此，MongoDB将文档分组成分块，即在给定分片键范围内的文档。每个分块始终驻留在单个分片上，因此MongoDB可以维护一个映射到分片的小表格。
+- en: 'For example, if a user collection’s shard key is `{"age" : 1}`, one chunk might
+    be all documents with an `"age"` field between `3` and `17`. If *mongos* gets
+    a query for `{"age" : 5}`, it can route the query to the shard where this chunk
+    lives.'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '例如，如果用户集合的分片键是`{"age" : 1}`，一个分块可能包含所有具有`"age"`字段在3和17之间的文档。如果*mongos*收到一个查询`{"age"
+    : 5}`，它可以将查询路由到包含此分块的分片。'
+- en: 'As writes occur, the number and size of the documents in a chunk might change.
+    Inserts can make a chunk contain more documents, and removes fewer. For example,
+    if we were making a game for children and preteens, our chunk for ages 3−17 might
+    get larger and larger (one would hope). Almost all of our users would be in that
+    chunk and so would be on a single shard, somewhat defeating the point of distributing
+    our data. Thus, once a chunk grows to a certain size, MongoDB automatically splits
+    it into two smaller chunks. In this example, the original chunk might be split
+    into one chunk containing documents with ages 3 through 11 and another with ages
+    12 through 17\. Note that these two chunks still cover the entire age range that
+    the original chunk covered: 3−17\. As these new chunks grow, they can be split
+    into still smaller chunks until there is a chunk for each age.'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着写入的发生，分块中文档的数量和大小可能会改变。插入操作可以使分块包含更多文档，而删除操作则减少文档数量。例如，如果我们为儿童和青少年制作游戏，我们的3−17岁的年龄分块可能会越来越大（希望如此）。几乎所有用户都会在该分块中，并且会在一个单独的分片上，这在某种程度上违背了分配数据的初衷。因此，一旦分块增长到一定大小，MongoDB会自动将其拆分为两个较小的分块。例如，在此示例中，原始分块可能会被拆分为一个包含年龄3至11岁的分块，以及一个包含年龄12至17岁的分块。请注意，这两个分块仍然覆盖了原始分块所涵盖的整个年龄范围：3−17岁。随着这些新分块的增长，它们可以进一步分成更小的分块，直到每个年龄段都有一个分块。
+- en: You cannot have chunks with overlapping ranges, like 3−15 and 12−17. If you
+    could, MongoDB would need to check both chunks when attempting to find an age
+    in the overlap, like 14\. It is more efficient to only have to look in one place,
+    particularly once chunks begin moving around the cluster.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不能有重叠范围的分块，比如3−15和12−17。如果允许存在这样的重叠，当尝试查找重叠中的年龄（例如14）时，MongoDB将需要检查两个分块，这样效率不高。只需在一个位置查找更有效，特别是一旦分块开始在集群中移动。
+- en: A document always belongs to one and only one chunk. One consequence of this
+    rule is that you cannot use an array field as your shard key, since MongoDB creates
+    multiple index entries for arrays. For example, if a document had `[5, 26, 83]`
+    in its `"age"` field, it would belong in up to three chunks.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个文档始终属于且仅属于一个分块。这一规则的一个结果是，不能使用数组字段作为分片键，因为MongoDB为数组创建多个索引条目。例如，如果文档的“age”字段中有`[5,
+    26, 83]`，它可能属于多达三个分块。
+- en: Note
+  id: totrans-83
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'A common misconception is that the data in a chunk is physically grouped on
+    disk. This is incorrect: chunks have no effect on how *mongod* stores collection
+    data.'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一种常见的误解是分块中的数据在物理上在磁盘上分组。这是不正确的：分块对*mongod*存储集合数据的方式没有影响。
+- en: Chunk Ranges
+  id: totrans-85
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 分块范围
+- en: Each chunk is described by the range it contains. A newly sharded collection
+    starts off with a single chunk, and every document lives in this chunk. This chunk’s
+    bounds are negative infinity to infinity, shown as `$minKey` and `$maxKey` in
+    the shell.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个块由其包含的范围描述。新分片的集合从单个块开始，每个文档都位于此块中。此块的边界为负无穷到正无穷，显示为Shell中的`$minKey`和`$maxKey`。
+- en: 'As this chunk grows, MongoDB will automatically split it into two chunks, with
+    the range negative infinity to *`<some value>`* and *`<some value>`* to infinity.
+    *`<some value>`* is the same for both chunks: the lower chunk contains everything
+    up to (but not including) *`<some value>`*, and the upper chunk contains *`<some
+    value>`* and everything higher.'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当此块增长时，MongoDB将自动将其分为两个块，范围为负无穷到*`<某个值>`*和*`<某个值>`*到正无穷。*`<某个值>`* 对于两个块都是相同的：下面的块包含一切直到（但不包括）*`<某个值>`*，上面的块包含*`<某个值>`*及更高的一切。
+- en: 'This may be more intuitive with an example. Suppose we were sharding by `"age"`
+    as described earlier. All documents with `"age"` between `3` and `17` are contained
+    in one chunk: `3 ≤ "age" < 17`. When this is split, we end up with two ranges:
+    `3 ≤ "age" < 12` in one chunk and `12 ≤ "age" < 17` in the other. 12 is called
+    the *split point*.'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过示例可能更容易理解。假设我们按照前述方式通过`"age"`进行分片。所有`"age"`在`3`和`17`之间的文档都包含在一个块中：`3 ≤ "age"
+    < 17`。当此块被分割时，我们得到两个范围：一个块中的`3 ≤ "age" < 12`，另一个块中的`12 ≤ "age" < 17`。12被称为*分割点*。
+- en: 'Chunk information is stored in the *config.chunks* collection. If you looked
+    at the contents of that collection, you’d see documents that looked something
+    like this (some fields have been omitted for clarity):'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 块信息存储在*config.chunks*集合中。如果您查看该集合的内容，您会看到类似以下内容的文档（为了清晰起见，某些字段已经省略）：
+- en: '[PRE15]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Based on the *config.chunks* documents shown, here are a few examples of where
+    various documents would live:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据显示的*config.chunks*文档，以下是各种文档可能存放的几个示例位置：
+- en: '`{"_id" : 123, "age" : 50}`'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`{"_id" : 123, "age" : 50}`'
+- en: This document would live in the second chunk, as that chunk contains all documents
+    with `"age"` between `23` and `100`.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此文档将位于第二个块中，因为该块包含所有年龄在`23`和`100`之间的文档。
+- en: '`{"_id" : 456, "age" : 100}`'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`{"_id" : 456, "age" : 100}`'
+- en: 'This document would live in the third chunk, as lower bounds are inclusive.
+    The second chunk contains all documents up to `"age" : 100`, but not any documents
+    where `"age"` equals `100`.'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '此文档将位于第三个块中，因为下界是包含的。第二个块包含所有年龄在`"age" : 100`之前的文档，但不包含`"age"`等于`100`的文档。'
+- en: '`{"_id" : 789, "age" : -101}`'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`{"_id" : 789, "age" : -101}`'
+- en: This document would not be in any of these chunks. It would be in some chunk
+    with a range lower than the first chunk’s.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此文档将不属于任何这些块。它将属于某个范围低于第一个块的块中。
+- en: 'With a compound shard key, shard ranges work the same way that sorting by the
+    two keys would work. For example, suppose that we had a shard key on `{"username"
+    : 1, "age" : 1}`. Then we might have chunk ranges such as:'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '使用复合分片键时，块范围的工作方式与按两个键排序的方式相同。例如，假设我们使用`{"username" : 1, "age" : 1}`作为分片键。然后我们可能会有如下块范围：'
+- en: '[PRE16]'
+  id: totrans-99
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'Thus, *mongos* can easily find which chunk someone with a given username (or
+    a given username and age) lives in. However, given just an age, *mongos* would
+    have to check all, or almost all, of the chunks. If we wanted to be able to target
+    queries on age to the right chunk, we’d have to use the “opposite” shard key:
+    `{"age" : 1, "username" : 1}`. This is often a point of confusion: a range over
+    the second half of a shard key will cut across multiple chunks.'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '因此，*mongos*可以轻松找到居住在具有给定用户名（或给定用户名和年龄）的人的块。但是，只给出一个年龄，*mongos*必须检查所有或几乎所有的块。如果我们希望能够将年龄的查询定位到正确的块上，我们必须使用“相反的”分片键：`{"age"
+    : 1, "username" : 1}`。这常常是令人困惑的一点：在分片键的第二半范围内进行范围查询将跨越多个块。'
+- en: Splitting Chunks
+  id: totrans-101
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 分割块
+- en: Each shard primary *mongod* tracks their current chunks and, once they reach
+    a certain threshold, checks if the chunk needs to be split, as shown in Figures
+    [15-1](#splitstorm1) and [15-2](#splitstorm2). If the chunk does need to be split,
+    the *mongod* will request the global chunk size configuration value from the config
+    servers. It will then perform the chunk split and update the metadata on the config
+    servers. New chunk documents are created on the config servers and the old chunk’s
+    range (`"max"`) is modified. If the chunk is the top chunk of the shard, then
+    the *mongod* will request the balancer move this chunk to a different shard. The
+    idea is to prevent a shard from becoming “hot” where the shard key uses a monotonically
+    increasing key.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个分片主 *mongod* 跟踪其当前的块，并在达到一定阈值时检查是否需要分裂块，如图 [15-1](#splitstorm1) 和 [15-2](#splitstorm2)
+    所示。如果确实需要分裂块，则 *mongod* 将从配置服务器请求全局块大小配置值。然后执行块分裂并更新配置服务器上的元数据。新的块文档将在配置服务器上创建，旧块的范围
+    (`"max"`) 将被修改。如果块是分片的顶块，则 *mongod* 将请求平衡器将此块移动到另一个分片。其目的是防止分片变得“热”，其中分片键使用单调递增的键。
+- en: 'A shard may not be able to find any split points, though, even for a large
+    chunk, as there are a limited number of ways to legally split a chunk. Any two
+    documents with the same shard key must live in the same chunk, so chunks can only
+    be split between documents where the shard key’s value changes. For example, if
+    the shard key was `"age"`, the following chunk could be split at the points where
+    the shard key changed, as indicated:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于大块而言，有时分片可能无法找到任何分裂点，因为合法分裂块的方法有限。具有相同分片键的两个文档必须位于同一块中，因此块只能在分片键的值发生变化的文档之间进行分裂。例如，如果分片键是
+    `"age"`，则可以在分片键变化的点处分裂以下块，如下所示：
+- en: '[PRE17]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: The primary *mongod* for the shard only requests that the top chunk for a shard
+    when split be moved to the balancer. The other chunks will remain on the shard
+    unless manually moved.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 仅针对分片的主 *mongod* 请求在分片分裂时将顶部分片移动到平衡器。其他分片将保留在分片上，除非手动移动。
+- en: 'If, however, the chunk contained the following documents, it could not be split
+    (unless the application started inserting fractional ages):'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，如果块包含以下文档，则无法分裂（除非应用程序开始插入小数年龄）：
+- en: '[PRE18]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: Thus, having a variety of values for your shard key is important. Other important
+    properties will be covered in the next chapter.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，拥有多样化的分片键值对于您的分片键非常重要。其他重要属性将在下一章中介绍。
+- en: If one of the config servers is down when a *mongod* tries to do a split, the
+    *mongod* won’t be able to update the metadata (as shown in [Figure 15-3](#splitstorm4)).
+    All config servers must be up and reachable for splits to happen. If the *mongod*
+    continues to receive write requests for the chunk, it will keep trying to split
+    the chunk and fail. As long as the config servers are not healthy, splits will
+    continue not to work, and all the split attempts can slow down the *mongod* and
+    the shard involved (which repeats the process shown in Figures [15-1](#splitstorm1)
+    through [15-3](#splitstorm4) for each incoming write). This process of *mongod*
+    repeatedly attempting to split a chunk and being unable to is called a *split
+    storm*. The only way to prevent split storms is to ensure that your config servers
+    are up and healthy as much of the time as possible.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果配置服务器之一在 *mongod* 尝试执行分裂时宕机，则 *mongod* 将无法更新元数据（如 [图 15-3](#splitstorm4) 所示）。所有配置服务器必须处于运行状态并且可访问才能进行分裂操作。如果
+    *mongod* 继续接收分片的写请求，则会继续尝试并失败。只要配置服务器不健康，分裂将继续无法正常工作，并且所有分裂尝试都会使 *mongod* 和涉及的分片变慢（这与图
+    [15-1](#splitstorm1) 到 [15-3](#splitstorm4) 中显示的过程重复）。 *mongod* 反复尝试分裂分片且无法成功的过程称为
+    *split storm*。防止分裂风暴的唯一方法是确保您的配置服务器尽可能保持运行和健康。
+- en: '![](Images/mdb3_1501.png)'
+  id: totrans-110
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1501.png)'
+- en: Figure 15-1\. When a client writes to a chunk, the mongod will check its split
+    threshold for the chunk
+  id: totrans-111
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 15-1\. 当客户端写入块时，*mongod* 将检查其分裂阈值
+- en: '![](Images/mdb3_1502.png)'
+  id: totrans-112
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1502.png)'
+- en: Figure 15-2\. If the split threshold has been reached, the mongod will send
+    a request to the balancer to migrate the top chunk; otherwise the chunk remains
+    on the shard
+  id: totrans-113
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 15-2\. 如果达到分裂阈值，则 *mongod* 将发送请求到平衡器以迁移顶部块；否则块保留在分片上
+- en: '![](Images/mdb3_1503.png)'
+  id: totrans-114
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1503.png)'
+- en: Figure 15-3\. The mongod chooses a split point and attempts to inform the config
+    server, but cannot reach it; thus, it is still over its split threshold for the
+    chunk and any subsequent writes will trigger this process again
+  id: totrans-115
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图15-3. mongod选择一个拆分点并尝试通知配置服务器，但无法达到它；因此，它仍然超过其数据块的拆分阈值，并且任何后续写操作都将再次触发此过程。
+- en: The Balancer
+  id: totrans-116
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Balancer
+- en: The *balancer* is responsible for migrating data. It regularly checks for imbalances
+    between shards and, if it finds an imbalance, will begin migrating chunks. In
+    MongoDB version 3.4+, the balancer is located on the primary member of the config
+    server replica set; prior to this version, each *mongos* used to play the part
+    of “the balancer” occasionally.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*Balancer*负责数据迁移。它定期检查分片之间的不平衡，如果发现不平衡，将开始迁移数据块。在MongoDB 3.4+版本中，Balancer位于配置服务器副本集的主节点上；在此版本之前，每个*mongos*有时会扮演“Balancer”的角色。'
+- en: The balancer is a background process on the primary of the config server replica
+    set, which monitors the number of chunks on each shard. It becomes active only
+    when a shard’s number of chunks reaches a specific migration threshold.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Balancer是配置服务器副本集的主节点上的后台进程，监视每个分片上的数据块数量。仅当分片的数据块数量达到特定的迁移阈值时，它才会变为活动状态。
+- en: Note
+  id: totrans-119
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: In MongoDB 3.4+, the number of concurrent migrations increased to one migration
+    per shard with a maximum number of concurrent migrations being half the total
+    number of shards. In earlier versions only one concurrent migration in total was
+    supported.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在MongoDB 3.4+中，并发迁移的数量增加到每个分片一个迁移，最大并发迁移数量为总分片数的一半。在早期版本中，仅支持总共一个并发迁移。
+- en: Assuming that some collections have hit the threshold, the balancer will begin
+    migrating chunks. It chooses a chunk from the overloaded shard and asks the shard
+    if it should split the chunk before migrating. Once it does any necessary splits,
+    it migrates the chunk(s) to a machine with fewer chunks.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设某些集合已达到阈值，Balancer将开始迁移数据块。它从负载过多的分片中选择一个数据块，并询问该分片在迁移之前是否应拆分数据块。完成必要的拆分后，它将数据块迁移到拥有较少数据块的机器上。
+- en: 'An application using the cluster does not need be aware that the data is moving:
+    all reads and writes are routed to the old chunk until the move is complete. Once
+    the metadata is updated, any *mongos* process attempting to access the data in
+    the old location will get an error. These errors should not be visible to the
+    client: the *mongos* will silently handle the error and retry the operation on
+    the new shard.'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用集群的应用程序无需知道数据正在移动：所有读写操作都路由到旧的数据块，直到迁移完成。一旦元数据更新，任何尝试访问旧位置数据的*mongos*进程将收到错误。这些错误对客户端不可见：*mongos*会静默处理错误，并在新的分片上重试操作。
+- en: This is a common cause of errors you might see in *mongos* logs that relate
+    to being “unable to `setShardVersion`.” When a *mongos* gets this type of error,
+    it looks up the new location of the data from the config servers, updates its
+    chunk table, and attempts the request again. If it successfully retrieves the
+    data from the new location, it will return it to the client as though nothing
+    went wrong (but it will print a message in the log that the error occurred).
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是你可能在*mongos*日志中看到与“无法`setShardVersion`”相关的常见错误原因。当*mongos*收到此类错误时，它会从配置服务器查找数据的新位置，更新其数据块表，并再次尝试请求。如果成功从新位置检索数据，它将向客户端返回，就像什么都没有发生过一样（但会在日志中打印错误消息）。
+- en: If the *mongos* is unable to retrieve the new chunk location because the config
+    servers are unavailable, it will return an error to the client. This is another
+    reason why it is important to always have config servers up and healthy.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果*mongos*无法检索到新的数据块位置，因为配置服务器不可用，它将向客户端返回错误。这是始终保持配置服务器正常运行的另一个重要原因。
+- en: Collations
+  id: totrans-125
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Collations
+- en: '*Collations* in MongoDB allow for the specification of language-specific rules
+    for string comparison. Examples of these rules include how lettercase and accent
+    marks are compared. It is possible to shard a collection that is a default collation.
+    There are two requirements: the collection must have an index whose prefix is
+    the shard key, and the index must also have the collation `{ locale: "simple"
+    }`.'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'MongoDB中的*Collations*允许为字符串比较指定特定语言的规则。这些规则的示例包括如何比较大小写和重音符号。可以对具有默认排序规则的集合进行分片。有两个要求：集合必须有一个索引，其前缀是分片键，并且该索引还必须具有`{
+    locale: "simple" }`的排序规则。'
+- en: Change Streams
+  id: totrans-127
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 变更流
+- en: '*Change Streams* allow applications to track real-time changes to the data
+    in the database. Prior to MongoDB 3.6, this was only possible by tailing the oplog
+    and was a complex error-prone operation. Change streams provide a subscription
+    mechanism for all data changes on a collection, a set of collections, a database,
+    or across a full deployment. The aggregation framework is used by this feature.
+    It allows applications to filter for specific changes or to transform the change
+    notifications received. In a sharded cluster, all change stream operations must
+    be issued against a *mongos*.'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*更改流* 允许应用程序跟踪数据库中数据的实时更改。在 MongoDB 3.6 之前，只能通过尾随 oplog 进行，并且是一个复杂且容易出错的操作。更改流为集合、一组集合、数据库或整个部署中的所有数据更改提供了订阅机制。聚合框架被这一功能所使用。它允许应用程序过滤特定的更改或转换接收到的更改通知。在跨片群集中，所有更改流操作必须针对一个*mongos*进行。'
+- en: The changes across a sharded cluster are kept ordered through the use of a global
+    logical clock. This guarantees the order of changes, and stream notifications
+    can be safely interpreted by the order of their receipt. The *mongos* needs to
+    check with each shard upon receipt of a change notification, to ensure that no
+    shard has seen more recent changes. The activity level of the cluster and the
+    geographical distribution of the shards can both impact the response time for
+    this checking. The use of notification filters can improve the response time in
+    these situations.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 跨片群集上的更改通过全局逻辑时钟保持有序。这保证了更改的顺序，流通知可以安全地按照它们接收的顺序进行解释。*mongos* 在接收到更改通知时需要与每个片段进行核对，以确保没有片段看到更新的更改。群集的活动水平和片段的地理分布都可能影响此检查的响应时间。在这些情况下使用通知过滤器可以提高响应时间。
+- en: Note
+  id: totrans-130
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'There are a few notes and caveats when using change streams with a sharded
+    cluster. You open a change stream by issuing an open change stream operation.
+    In sharded deployments, this *must* be issued against a *mongos*. If an update
+    operation with `multi: true` is run against a sharded collection with an open
+    change stream, then it is possible for notifications to be sent for orphaned documents.
+    If a shard is removed, it may cause an open change stream cursor to close—furthermore,
+    that cursor may not be fully resumable.'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '在使用跨片群集的更改流时有几点注意事项和警告。通过发出打开更改流操作来打开更改流。在分片部署中，这必须针对一个*mongos*进行。如果对带有打开更改流的分片集合运行具有
+    `multi: true` 的更新操作，则可能会发送孤立文档的通知。如果删除了一个片段，则可能会导致打开的更改流游标关闭——此外，该游标可能无法完全恢复。'

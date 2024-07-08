@@ -1,0 +1,3474 @@
+- en: Chapter 7\. Working with Strings
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第7章。使用字符串
+- en: 7.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.0 Introduction
+- en: 'Like most types of data, string values can be compared for equality or inequality
+    or relative ordering. However, strings have additional properties to consider:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与大多数数据类型一样，字符串值可以进行相等性或不等性比较，或相对顺序比较。然而，字符串有额外的属性需要考虑：
+- en: A string can be binary or nonbinary. Binary strings are used for raw data such
+    as images, music files, or encrypted values. Nonbinary strings are used for character
+    data such as text and are associated with a character set and collation (sort
+    order).
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 字符串可以是二进制或非二进制的。二进制字符串用于原始数据，如图像、音乐文件或加密值。非二进制字符串用于字符数据，如文本，并与字符集和排序规则（排序顺序）相关联。
+- en: A character set determines which characters are legal in a string. You can choose
+    collations according to whether you need comparisons to be case sensitive or case
+    insensitive, or to use the rules of a particular language.
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 字符集确定字符串中合法的字符。根据是否需要比较大小写敏感或不敏感，或使用特定语言的规则，可以选择排序规则。
+- en: Data types for binary strings are `BINARY`, `VARBINARY`, and `BLOB`. Data types
+    for nonbinary strings are `CHAR`, `VARCHAR`, and `TEXT`, each of which permits
+    `CHARACTER` `SET` and `COLLATE` attributes.
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 二进制字符串的数据类型为`BINARY`、`VARBINARY`和`BLOB`。非二进制字符串的数据类型为`CHAR`、`VARCHAR`和`TEXT`，每种类型都允许使用`CHARACTER`
+    `SET`和`COLLATE`属性。
+- en: You can convert a binary string to a nonbinary string and vice versa, or convert
+    a nonbinary string from one character set or collation to another.
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以将二进制字符串转换为非二进制字符串，反之亦然，或将非二进制字符串从一个字符集或排序规则转换为另一个字符集或排序规则。
+- en: You can use a string in its entirety or extract substrings from it. Strings
+    can be combined with other strings.
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以使用字符串的全部内容或从中提取子字符串。字符串可以与其他字符串组合。
+- en: You can apply pattern-matching operations to strings.
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以对字符串应用模式匹配操作。
+- en: Full-text searching is available for efficient queries on large collections
+    of text.
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 可以对大量文本进行高效查询的全文搜索功能可用。
+- en: This chapter discusses how to use those properties, so that you can store, retrieve,
+    and manipulate strings according to any requirements your applications have.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章讨论如何利用这些属性，以便根据应用程序的任何要求存储、检索和操作字符串。
+- en: Scripts to create the tables used in this chapter are located in the *tables*
+    directory of the `recipes` distribution.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用于创建本章使用的表的脚本位于`recipes`发行版的*tables*目录中。
+- en: 7.1 String Properties
+  id: totrans-12
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.1 字符串属性
+- en: 'One string property is whether it is binary or nonbinary:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个字符串的属性是它是二进制的还是非二进制的：
+- en: A binary string is a sequence of bytes. It can contain any type of information,
+    such as images, MP3 files, or compressed or encrypted data. A binary string is
+    not associated with a character set, even if you store a value such as `abc` that
+    looks like ordinary text. Binary strings are compared byte by byte using numeric
+    byte values.
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 二进制字符串是字节序列。它可以包含任何类型的信息，如图像、MP3文件或压缩或加密数据。即使存储看起来像普通文本的值（例如`abc`），二进制字符串也不与字符集关联。二进制字符串按字节使用数值字节值进行逐字节比较。
+- en: A nonbinary string is a sequence of characters. It stores text that has a particular
+    character set and collation. The character set defines which characters can be
+    stored in the string. The collation defines the character ordering, which affects
+    comparison and sorting operations.
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 非二进制字符串是字符序列。它存储具有特定字符集和排序规则的文本。字符集定义了可以存储在字符串中的字符。排序规则定义了字符的排序顺序，影响比较和排序操作。
+- en: 'To see which character sets are available for nonbinary strings, use this statement:'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看非二进制字符串可用的字符集，请使用以下语句：
+- en: '[PRE0]'
+  id: totrans-17
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: The default character set in MySQL 8.0 is `utf8mb4` with collation of `utf8mb4_0900_ai_ci`.
+    If you must store characters from several languages in a single column, consider
+    using one of the Unicode character sets (such as `utf8mb4` or `utf16`) because
+    they can represent characters from multiple languages.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 8.0 中的默认字符集为`utf8mb4`，排序规则为`utf8mb4_0900_ai_ci`。如果必须在单个列中存储多种语言的字符，请考虑使用Unicode字符集之一（例如`utf8mb4`或`utf16`），因为它们可以表示多种语言的字符。
+- en: Some character sets contain only single-byte characters, whereas others permit
+    multibyte characters. Some multibyte character sets contain characters of varying
+    lengths. For others, all characters have a fixed length. For example, Unicode
+    data can be stored using the `utf8mb4` character set in which characters take
+    from one to four bytes or the `utf16` character set in which all characters take
+    two bytes.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些字符集只包含单字节字符，而其他字符集则允许多字节字符。一些多字节字符集中的字符长度各不相同，而另一些则所有字符长度固定。例如，Unicode 数据可以使用
+    `utf8mb4` 字符集存储，其中字符长度可以从一到四个字节不等，或者使用 `utf16` 字符集存储，其中所有字符长度均为两个字节。
+- en: Note
+  id: totrans-20
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: In MySQL, to use the full set of Unicode characters, including supplemental
+    characters that lie outside the Basic Multilingual Plane (BMP), use `utf8mb4`,
+    in which characters take from one to four bytes. Other Unicode character sets
+    that include supplemental characters are `utf16`, `utf16le`, and `utf32`.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 中，要使用包括基本多语言平面（BMP）之外的补充字符在内的完整 Unicode 字符集，请使用 `utf8mb4`。在 `utf8mb4`
+    中，字符的字节长度可以从一到四个字节不等。其他包括补充字符的 Unicode 字符集还有 `utf16`、`utf16le` 和 `utf32`。
+- en: 'To determine whether a given string contains multibyte characters, use the
+    `LENGTH()` and `CHAR_LENGTH()` functions, which return the length of a string
+    in bytes and characters, respectively. If `LENGTH()` is greater than `CHAR_LENGTH()`
+    for a given string, multibyte characters are present:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定给定字符串是否包含多字节字符，请使用 `LENGTH()` 和 `CHAR_LENGTH()` 函数，它们分别返回字符串的字节长度和字符长度。如果对于给定字符串，`LENGTH()`
+    大于 `CHAR_LENGTH()`，则表示存在多字节字符：
+- en: 'The `utf8` Unicode character set has multibyte characters, but a given `utf8`
+    string might contain only single-byte characters, as in the following example:'
+  id: totrans-23
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`utf8` Unicode 字符集包含多字节字符，但给定的 `utf8` 字符串可能只包含单字节字符，例如以下示例：'
+- en: '[PRE1]'
+  id: totrans-24
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'For the `utf16` Unicode character set, all characters are encoded using two
+    bytes, even if they are single-byte characters in another character set such as
+    `latin1`. Thus, every `utf16` string contains multibyte characters:'
+  id: totrans-25
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于 `utf16` Unicode 字符集，所有字符均使用两个字节编码，即使它们在其他字符集如 `latin1` 中是单字节字符。因此，每个 `utf16`
+    字符串都包含多字节字符：
+- en: '[PRE2]'
+  id: totrans-26
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Another property of nonbinary strings is collation, which determines the sort
+    order of characters in the character set. Use `SHOW` `COLLATION` to see all available
+    collations; add a `LIKE` clause to see the collations for a particular character
+    set:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 非二进制字符串的另一个属性是排序规则（collation），它确定字符集中字符的排序顺序。使用 `SHOW COLLATION` 查看所有可用的排序规则；添加
+    `LIKE` 子句以查看特定字符集的排序规则：
+- en: '[PRE3]'
+  id: totrans-28
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: In contexts where no collation is specified explicitly, strings in a given character
+    set use the collation with `Yes` in the `Default` column. As shown, the default
+    collation for `utf8mb4` is `utf8mb4_0900_ai_ci`. (Default collations are also
+    displayed by `SHOW` `CHARACTER` `SET`.)
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在没有明确指定排序规则的情况下，给定字符集中的字符串使用 `Default` 列中带有 `Yes` 的排序规则。如图所示，`utf8mb4` 的默认排序规则是
+    `utf8mb4_0900_ai_ci`。（默认排序规则也可以通过 `SHOW CHARACTER SET` 显示。）
+- en: A collation can be case sensitive (`a` and `A` are different), case insensitive
+    (`a` and `A` are the same), or binary (two characters are the same or different
+    based on whether their numeric values are equal). A collation name ending in `_ci`,
+    `_cs`, or `_bin` is case insensitive, case sensitive, or binary, respectively.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 排序规则可以是区分大小写的（`a` 和 `A` 是不同的）、不区分大小写的（`a` 和 `A` 是相同的）、或二进制的（两个字符根据它们的数值是否相等来判断是相同还是不同）。以
+    `_ci`、`_cs` 或 `_bin` 结尾的排序规则名分别表示不区分大小写、区分大小写或二进制。
+- en: Binary strings and binary collations both use numeric values. The difference
+    is that binary string comparisons are always based on single-byte units, whereas
+    a binary collation compares nonbinary strings using *character* numeric values;
+    depending on the character set, some of these might be multibyte values.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二进制字符串和二进制排序规则都使用数值。不同之处在于，二进制字符串比较总是基于单字节单位，而二进制排序规则使用*字符*数值比较非二进制字符串；根据字符集，其中一些可能是多字节值。
+- en: 'The following example illustrates how collation affects sort order. Suppose
+    that a table contains a `utf8mb4` string column and has the following rows:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面的示例说明了排序规则如何影响排序顺序。假设一个表包含一个 `utf8mb4` 字符串列，并具有以下行：
+- en: '[PRE4]'
+  id: totrans-33
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'By applying the `COLLATE` operator to the column, you can choose which collation
+    to use for sorting and thus affect the order of the result:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过在列上应用 `COLLATE` 运算符，可以选择用于排序的排序规则，从而影响结果的顺序：
+- en: 'A case-insensitive collation sorts `a` and `A` together, placing them before
+    `b` and `B`. However, for a given letter, it does not necessarily order one lettercase
+    before another, as shown by the following result:'
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 大小写不敏感排序将`a`和`A`放在一起，并将它们放在`b`和`B`之前。但是，对于给定的字母，它不一定将一个字母的大小写顺序排在另一个字母的前面，如下结果所示：
+- en: '[PRE5]'
+  id: totrans-36
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'A case-sensitive collation puts `A` and `a` before `B` and `b`, and sorts lowercase
+    before uppercase:'
+  id: totrans-37
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 大小写敏感排序将`A`和`a`放在`B`和`b`之前，并将小写字母排序在大写字母之前：
+- en: '[PRE6]'
+  id: totrans-38
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'A binary collation sorts characters using their numeric values. Assuming that
+    uppercase letters have numeric values less than those of lowercase letters, a
+    binary collation results in the following ordering:'
+  id: totrans-39
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 二进制排序使用字符的数字值进行排序。假设大写字母的数字值小于小写字母的数字值，则二进制排序结果如下：
+- en: '[PRE7]'
+  id: totrans-40
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Note that because characters in different lettercases have different numeric
+    values, a binary collation produces a case-sensitive ordering. However, the order
+    differs from that for the case-sensitive collation.
+  id: totrans-41
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 请注意，由于不同大小写字符具有不同的数字值，二进制排序会产生大小写敏感的顺序。但是，该顺序与大小写敏感排序不同。
+- en: 'If you require that comparison and sorting operations use the sorting rules
+    of a particular language, choose a language-specific collation. For example, if
+    you store strings using the `utf8mb4` character set, the default collation (`utf8mb4_0900_ai_ci`)
+    treats `ch` and `ll` as two-character strings. To use the traditional Spanish
+    ordering that treats `ch` and `ll` as single characters that follow `c` and `l`,
+    respectively, specify the `utf8mb4_spanish2_ci` collation. The two collations
+    produce different results, as shown here:'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您要求比较和排序操作使用特定语言的排序规则，请选择特定语言的排序。例如，如果您使用`utf8mb4`字符集存储字符串，则默认排序（`utf8mb4_0900_ai_ci`）将`ch`和`ll`视为两个字符的字符串。要使用传统的西班牙排序（将`ch`和`ll`视为跟随`c`和`l`的单个字符），请指定`utf8mb4_spanish2_ci`排序。这两种排序产生不同的结果，如下所示：
+- en: '[PRE8]'
+  id: totrans-43
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Ideally set the collation in the column definition in case you are not using
+    the default collation by following;
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您未使用默认排序，则最好在列定义中设置排序，方法如下；
+- en: '[PRE9]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: This will make sure to avoid possible query performance degradation during sort
+    operations by using wrong collation.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将确保在排序操作期间避免使用错误的排序时可能导致的查询性能下降。
+- en: 7.2 Choosing a String Data Type
+  id: totrans-47
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.2 选择字符串数据类型
+- en: Problem
+  id: totrans-48
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to store string data but aren’t sure which data type is the most appropriate.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望存储字符串数据，但不确定哪种数据类型最合适。
+- en: Solution
+  id: totrans-50
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: 'Choose the data type according to the characteristics of the information to
+    be stored and how you need to use it. Consider questions such as these:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据要存储的信息的特征和您需要使用它的方式选择数据类型。考虑以下问题：
+- en: Are the strings binary or nonbinary?
+  id: totrans-52
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 字符串是二进制还是非二进制？
+- en: Does case sensitivity matter?
+  id: totrans-53
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 大小写是否重要？
+- en: What is the maximum string length?
+  id: totrans-54
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 最大字符串长度是多少？
+- en: Do you want to store fixed- or variable-length values?
+  id: totrans-55
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您是否希望存储固定长度还是可变长度的值？
+- en: Do you need to retain trailing spaces?
+  id: totrans-56
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您是否需要保留尾随空格？
+- en: Is there a fixed set of permitted values?
+  id: totrans-57
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 是否有一组固定的允许值？
+- en: Discussion
+  id: totrans-58
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL provides several binary and nonbinary string data types. These types come
+    in pairs as shown in the following table. The maximum length is in bytes, whether
+    the type is binary or nonbinary. For nonbinary types, the maximum number of *characters*
+    is less for strings that contain multibyte characters as we show in the [Table 7-1](#nch-strings-strings-types-lenghts)
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL提供多种二进制和非二进制字符串数据类型。这些类型成对出现，如下表所示。最大长度以字节为单位，无论类型是二进制还是非二进制。对于非二进制类型，包含多字节字符的字符串的最大*字符*数较少，如我们在[表 7-1](#nch-strings-strings-types-lenghts)中所示
+- en: Table 7-1\. Maximum Number of Characters per Data Type
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 7-1\. 每种数据类型的最大字符数
+- en: '| Binary data type | Nonbinary data type | Maximum length |'
+  id: totrans-61
+  prefs: []
+  type: TYPE_TB
+  zh: '| 二进制数据类型 | 非二进制数据类型 | 最大长度 |'
+- en: '| --- | --- | --- |'
+  id: totrans-62
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- | --- |'
+- en: '| `BINARY` | `CHAR` | 255 |'
+  id: totrans-63
+  prefs: []
+  type: TYPE_TB
+  zh: '| `BINARY` | `CHAR` | 255 |'
+- en: '| `VARBINARY` | `VARCHAR` | 65,535 |'
+  id: totrans-64
+  prefs: []
+  type: TYPE_TB
+  zh: '| `VARBINARY` | `VARCHAR` | 65,535 |'
+- en: '| `TINYBLOB` | `TINYTEXT` | 255 |'
+  id: totrans-65
+  prefs: []
+  type: TYPE_TB
+  zh: '| `TINYBLOB` | `TINYTEXT` | 255 |'
+- en: '| `BLOB` | `TEXT` | 65,535 |'
+  id: totrans-66
+  prefs: []
+  type: TYPE_TB
+  zh: '| `BLOB` | `TEXT` | 65,535 |'
+- en: '| `MEDIUMBLOB` | `MEDIUMTEXT` | 16,777,215 |'
+  id: totrans-67
+  prefs: []
+  type: TYPE_TB
+  zh: '| `MEDIUMBLOB` | `MEDIUMTEXT` | 16,777,215 |'
+- en: '| `LONGBLOB` | `LONGTEXT` | 4,294,967,295 |'
+  id: totrans-68
+  prefs: []
+  type: TYPE_TB
+  zh: '| `LONGBLOB` | `LONGTEXT` | 4,294,967,295 |'
+- en: For the `BINARY` and `CHAR` data types, MySQL stores column values using a fixed
+    width. For example, values stored in a `BINARY(10)` or `CHAR(10)` column always
+    take 10 bytes or 10 characters, respectively. Shorter values are padded to the
+    required length as necessary when stored. For `BINARY`, the pad value is `0x00`
+    (the zero-valued byte, also known as ASCII NUL). `CHAR` values are padded with
+    spaces for storage and trailing spaces are stripped upon retrieval.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于`BINARY`和`CHAR`数据类型，MySQL使用固定宽度存储列值。例如，在`BINARY(10)`或`CHAR(10)`列中存储的值始终占据10个字节或10个字符。存储时必要时会将较短的值填充到所需长度。对于`BINARY`，填充值为`0x00`（零值字节，也称为ASCII
+    NUL）。`CHAR`值在存储时用空格填充，并且在检索时删除尾随空格。
+- en: For `VARBINARY`, `VARCHAR`, and the `BLOB` and `TEXT` types, MySQL stores values
+    using only as much storage as required, up to the maximum column length. No padding
+    is added or stripped when values are stored or retrieved.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于`VARBINARY`、`VARCHAR`以及`BLOB`和`TEXT`类型，MySQL仅使用所需的存储空间存储值，不超过最大列长度。在存储或检索值时不会添加或删除填充。
+- en: 'To preserve trailing pad values that are present in the original strings that
+    are stored, use a data type for which no stripping occurs. For example, if you
+    store character (nonbinary) strings that might end with spaces, and want to preserve
+    them, use `VARCHAR` or one of the `TEXT` data types. The following statements
+    illustrate the difference in trailing-space handling for `CHAR` and `VARCHAR`
+    columns:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要保留存储的原始字符串中存在的尾随填充值，请使用不会执行剥离的数据类型。例如，如果存储可能以空格结尾的字符（非二进制）字符串，并且希望保留它们，请使用`VARCHAR`或其中一个`TEXT`数据类型。以下语句说明了`CHAR`和`VARCHAR`列处理尾随空格的差异：
+- en: '[PRE10]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: This shows that if you store a string that contains trailing spaces into a `CHAR`
+    column, they’re removed when you retrieve the value.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这表明，如果将包含尾随空格的字符串存储到`CHAR`列中，检索该值时会删除这些空格。
+- en: 'A table can include a mix of binary and nonbinary string columns, and its nonbinary
+    columns can use different character sets and collations. When you declare a nonbinary
+    string column, use the `CHARACTER` `SET` and `COLLATE` attributes if you require
+    a particular character set and collation. For example, if you need to store `utf8mb4`
+    (Unicode) and `sjis` (Japanese) strings, you might define a table with two columns
+    like this:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表可以包含混合的二进制和非二进制字符串列，其非二进制列可以使用不同的字符集和排序规则。声明非二进制字符串列时，如果需要特定的字符集和排序规则，请使用`CHARACTER`
+    `SET`和`COLLATE`属性。例如，如果需要存储`utf8mb4`（Unicode）和`sjis`（日语）字符串，可以像这样定义包含两列的表：
+- en: '[PRE11]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'The `CHARACTER` `SET` and `COLLATE` clauses are each optional in a column definition:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在列定义中，`CHARACTER` `SET`和`COLLATE`子句都是可选的：
+- en: If you specify `CHARACTER` `SET` and omit `COLLATE`, the default collation for
+    the character set is used.
+  id: totrans-77
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果指定了`CHARACTER` `SET`并省略`COLLATE`，则使用字符集的默认排序规则。
+- en: If you specify `COLLATE` and omit `CHARACTER` `SET`, the character set implied
+    by the collation name (the first part of the name) is used. For example, `utf8mb4_danish_ci`
+    and `sjis_japanese_ci` imply `utf8mb4` and `sjis`, respectively. This means that
+    the `CHARACTER` `SET` attributes could have been omitted from the preceding `CREATE`
+    `TABLE` statement.
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果指定了`COLLATE`并省略`CHARACTER` `SET`，则使用排序规则名称隐含的字符集（名称的第一部分）。例如，`utf8mb4_danish_ci`和`sjis_japanese_ci`分别隐含`utf8mb4`和`sjis`。这意味着在前述`CREATE`
+    `TABLE`语句中可以省略`CHARACTER` `SET`属性。
+- en: If you omit both `CHARACTER` `SET` and `COLLATE`, the column is assigned the
+    table default character set and collation. A table definition can include those
+    attributes following the closing parenthesis at the end of the `CREATE` `TABLE`
+    statement. If present, they apply to columns that have no explicit character set
+    or collation of their own. If omitted, the table defaults are taken from the database
+    defaults. You can specify the database defaults when you create the database with
+    the `CREATE` `DATABASE` statement. The server defaults apply to the database if
+    they are omitted.
+  id: totrans-79
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果你同时省略`CHARACTER` `SET`和`COLLATE`，则该列将被赋予表的默认字符集和排序规则。表定义可以在`CREATE` `TABLE`语句的右括号后包含这些属性。如果存在这些属性，则它们适用于没有显式字符集或排序规则的列。如果省略，则表的默认值来自数据库的默认值。您可以在使用`CREATE`
+    `DATABASE`语句创建数据库时指定数据库的默认值。如果省略，则服务器默认值适用于数据库。
+- en: The server default character set and collation for MySQL 8.0 are `utf8mb4` and
+    `utf8mb4_0900_ai_ci`, so strings by default use the `utf8mb4` character set and
+    are not case sensitive. To change this, set the `character_set_server` and `collation_server`
+    system variables at server startup (see [Recipe 22.1](ch22.xhtml#nch-admin-server-config)).
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 8.0 的服务器默认字符集和排序规则分别为 `utf8mb4` 和 `utf8mb4_0900_ai_ci`，因此字符串默认使用 `utf8mb4`
+    字符集并且不区分大小写。要更改此设置，可以在服务器启动时设置 `character_set_server` 和 `collation_server` 系统变量（参见
+    [Recipe 22.1](ch22.xhtml#nch-admin-server-config)）。
+- en: MySQL also supports `ENUM` and `SET` string types, which are used for columns
+    that have a fixed set of permitted values. The `CHARACTER` `SET` and `COLLATE`
+    attributes apply to these data types as well.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 还支持 `ENUM` 和 `SET` 字符串类型，用于具有固定允许值集的列。这些数据类型也适用于 `CHARACTER` `SET` 和 `COLLATE`
+    属性。
+- en: 7.3 Setting the Client Connection Character Set
+  id: totrans-82
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.3 设置客户端连接字符集
+- en: Problem
+  id: totrans-83
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You’re executing SQL statements or producing query results that don’t use the
+    default character set.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你执行不使用默认字符集的 SQL 语句或生成查询结果时。
+- en: Solution
+  id: totrans-85
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use `SET` `NAMES` or an equivalent method to set your connection to the proper
+    character set.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `SET` `NAMES` 或其等效方法设置连接的适当字符集。
+- en: Discussion
+  id: totrans-87
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: When you send information back and forth between your application and the server,
+    you may need to tell MySQL the appropriate character set. For example, the default
+    character set is `latin1`, but that may not always be the proper character set
+    to use for connections to the server. If you have Greek data, displaying it using
+    `latin1` will result in gibberish on your screen. If you use Unicode strings in
+    the `utf8mb4` character set, `latin1` might not be sufficient to represent all
+    the characters that you might need.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你在应用程序和服务器之间发送信息时，可能需要告诉 MySQL 使用适当的字符集。例如，默认字符集是 `latin1`，但这可能不是连接到服务器的正确字符集。如果有希腊数据，使用
+    `latin1` 在屏幕上显示将会产生乱码。如果在 `utf8mb4` 字符集中使用 Unicode 字符串，`latin1` 可能无法表示所有你可能需要的字符。
+- en: 'To deal with this problem, configure your connection to use the appropriate
+    character set. You have several ways to do this:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要解决此问题，请配置连接以使用适当的字符集。有几种方法可以实现这一点：
+- en: 'Issue a `SET` `NAMES` statement after you connect:'
+  id: totrans-90
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在连接后执行 `SET` `NAMES` 语句：
+- en: '[PRE12]'
+  id: totrans-91
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: '`SET` `NAMES` permits the connection collation to be specified as well:'
+  id: totrans-92
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`SET` `NAMES` 允许指定连接排序规则：'
+- en: '[PRE13]'
+  id: totrans-93
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'If your client program supports the `--default-character-set` option, you can
+    use it to specify the character set at program invocation time. *mysql* is one
+    such program. Put the option in an option file so that it takes effect each time
+    you connect to the server:'
+  id: totrans-94
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果你的客户端程序支持 `--default-character-set` 选项，可以在程序调用时使用它指定字符集。*mysql* 就是这样的程序。将选项放入选项文件中，以便每次连接到服务器时生效：
+- en: '[PRE14]'
+  id: totrans-95
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: If you set the environment for your working environment using the `LANG` or
+    `LC_ALL` environment variable on Unix, or the code page setting on Windows, MySQL
+    client programs automatically detect which character set to use. For example,
+    setting `LC_ALL` to `en_US.UTF-8` causes programs such as *mysql* to use `utf8`.
+  id: totrans-96
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果你在 Unix 上使用 `LANG` 或 `LC_ALL` 环境变量或在 Windows 上设置代码页，则 MySQL 客户端程序会自动检测要使用的字符集。例如，将
+    `LC_ALL` 设置为 `en_US.UTF-8` 会导致诸如 *mysql* 的程序使用 `utf8`。
+- en: 'Some programming interfaces provide their own method of setting the character
+    set. For example, MySQL Connector/J for Java clients detects the character set
+    used on the server side automatically when you connect, but you can specify a
+    different set explicitly using the `characterEncoding` property in the connection
+    URL. The property value should be the Java-style character-set name. To select
+    `utf8mb4`, you might use a connection URL like this:'
+  id: totrans-97
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一些编程接口提供了它们自己设置字符集的方法。例如，MySQL Connector/J 用于 Java 客户端会在连接时自动检测服务器端使用的字符集，但你也可以在连接
+    URL 中明确指定不同的集合，使用 `characterEncoding` 属性。该属性的值应为 Java 风格的字符集名称。要选择 `utf8mb4`，你可以使用如下连接
+    URL：
+- en: '[PRE15]'
+  id: totrans-98
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'This is preferable to `SET` `NAMES` because Connector/J performs character-set
+    conversion on behalf of the application, but is unaware of which character set
+    applies if you use `SET` `NAMES`. Similar principles apply to programs written
+    for other APIs. For PHP Data Objects (PDO), use a `charset` option in your data
+    source name (DSN) string (this works in PHP 5.3.6 or later):'
+  id: totrans-99
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这比使用 `SET` `NAMES` 更可取，因为 Connector/J 会代表应用程序执行字符集转换，但如果使用 `SET` `NAMES`，它不知道适用哪个字符集。对于其他
+    API 编写的程序也适用类似原则。对于 PHP Data Objects (PDO)，在数据源名称 (DSN) 字符串中使用 `charset` 选项（在
+    PHP 5.3.6 或更高版本中有效）：
+- en: '[PRE16]'
+  id: totrans-100
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'For Connector/Python, specify a `charset` connection parameter:'
+  id: totrans-101
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 对于Connector/Python，请指定`charset`连接参数：
+- en: '[PRE17]'
+  id: totrans-102
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'For Go, specify a `charset` connection parameter:'
+  id: totrans-103
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 对于Go，请指定`charset`连接参数：
+- en: '[PRE18]'
+  id: totrans-104
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: Some APIs may also provide a parameter to specify the collation.
+  id: totrans-105
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 一些API也可以提供参数以指定校对顺序。
+- en: Note
+  id: totrans-106
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'Some character sets cannot be used as the connection character set: `utf16`,`utf16le`,
+    `utf32`.'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些字符集不能用作连接字符集：`utf16`，`utf16le`，`utf32`。
+- en: You should also ensure that the character set used by your display device matches
+    what you use for MySQL. Otherwise, even with MySQL handling the data properly,
+    it might display as garbage. Suppose that you use the *mysql* program in a terminal
+    window and that you configure MySQL to use `utf8mb4` and store `utf8mb4`-encoded
+    Turkish data. If you set your terminal window to use `euc-tr` encoding, that is
+    also Turkish, but its encoding for Turkish characters differs from `utf8mb4`,
+    so the data will not display as you expect. (If you use autodetection, this should
+    not be an issue.)
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还应确保显示设备使用的字符集与您用于MySQL的字符集匹配。否则，即使MySQL正确处理数据，它也可能显示为垃圾。假设您在终端窗口中使用*mysql*程序，并配置MySQL使用`utf8mb4`存储`utf8mb4`编码的土耳其数据。如果将终端窗口设置为使用`euc-tr`编码（也是土耳其语），但其土耳其字符的编码与`utf8mb4`不同，数据将不会按预期显示。（如果使用自动检测，这不应该是一个问题。）
+- en: In an example Turkish characters inserted in a table will show garbled in a
+    connection made with different character set.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在一个示例中，插入表中的土耳其字符将在使用不同字符集进行连接时显示为乱码。
+- en: '[PRE19]'
+  id: totrans-110
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: From another connection using `Latin1` client character set will result following.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`Latin1`客户端字符集从另一个连接将得到以下结果。
+- en: '[PRE20]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: To verify that you’re connected with correct character set to MySQL command
+    line interface issue following to show status.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要验证您是否连接到MySQL命令行界面并显示正确的字符集，请执行以下操作。
+- en: '[PRE21]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 7.4 Writing String Literals
+  id: totrans-115
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.4 编写字符串文字
+- en: Problem
+  id: totrans-116
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You need to write literal strings in SQL statements.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要在SQL语句中编写文字字符串。
+- en: Solution
+  id: totrans-118
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Learn the syntax rules that govern string values.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 学习规定字符串值的语法规则。
+- en: Discussion
+  id: totrans-120
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'You can write strings several ways:'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以按多种方式编写字符串：
+- en: 'Enclose the text of the string within single quotes or double quotes:'
+  id: totrans-122
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将字符串的文本放在单引号或双引号中：
+- en: '[PRE22]'
+  id: totrans-123
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'When the `ANSI_QUOTES` SQL mode is enabled, you cannot use double quotes for
+    quoting strings: the server interprets double quote as the quoting character for
+    identifiers such as table or column names, and not for strings (see [Recipe 4.6](ch04.xhtml#nch-api-api-ident-quoting)).
+    If you adopt the convention of always writing quoted strings using single quotes,
+    MySQL interprets them as strings and not as identifiers regardless of the `ANSI_QUOTES`
+    setting.'
+  id: totrans-124
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 当启用`ANSI_QUOTES` SQL 模式时，不能使用双引号引用字符串：服务器会将双引号解释为标识符（如表或列名）的引用字符，而不是字符串（见[Recipe
+    4.6](ch04.xhtml#nch-api-api-ident-quoting)）。如果采用始终使用单引号编写带引号的字符串的约定，MySQL会将它们解释为字符串，而不管`ANSI_QUOTES`设置如何。
+- en: 'Use hexadecimal notation. Each pair of hex digits produces one byte of the
+    string. `abcd` can be written using any of these formats:'
+  id: totrans-125
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用十六进制表示法。每对十六进制数字产生字符串的一个字节。`abcd`可以用以下任一格式写入：
+- en: '[PRE23]'
+  id: totrans-126
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'MySQL treats strings written using hex notation as binary strings. Not coincidentally,
+    it’s common for applications to use hex strings when constructing SQL statements
+    that refer to binary values:'
+  id: totrans-127
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: MySQL将使用十六进制表示法编写的字符串视为二进制字符串。不巧的是，应用程序在构造引用二进制值的SQL语句时通常使用十六进制字符串：
+- en: '[PRE24]'
+  id: totrans-128
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'To specify a character set for interpretation of a literal string, use an introducer
+    consisting of a character-set name preceded by an underscore:'
+  id: totrans-129
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要指定用于解释文字字符串的字符集，请使用由下划线引导的字符集名称：
+- en: '[PRE25]'
+  id: totrans-130
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: An introducer tells the server how to interpret the string that follows it.
+    For `_utf8mb4` `'abcd'`, the server produces a string consisting of four single-byte
+    characters. For `_ucs2` `'abcd'`, the server produces a string consisting of two
+    two-byte characters because `ucs2` is a double-byte character set.
+  id: totrans-131
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 引导符告诉服务器如何解释其后的字符串。对于 `_utf8mb4` `'abcd'`，服务器生成由四个单字节字符组成的字符串。对于 `_ucs2` `'abcd'`，服务器生成由两个双字节字符组成的字符串，因为`ucs2`是双字节字符集。
+- en: To ensure that a string is a binary string or that a nonbinary string has a
+    specific character set or collation, use the instructions for string conversion
+    given in [Recipe 7.5](#nch-strings-strings-charset-checking-changing).
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为确保字符串是二进制字符串或非二进制字符串具有特定字符集或校对顺序，请使用[Recipe 7.5](#nch-strings-strings-charset-checking-changing)中给出的字符串转换说明。
+- en: 'A quoted string that includes the same quote character produces a syntax error
+    if executed by an API or in the *mysql* batch mode:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当执行一个API或者在*mysql*批处理模式中运行时，包含相同引号字符的引用字符串会产生语法错误：
+- en: '[PRE26]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: If executed interactively by the *mysql* client, it waits for the closing quote.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果通过*mysql*客户端交互执行，则会等待闭合引号。
+- en: '[PRE27]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'You have several ways to deal with this:'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您有几种方法可以处理这个问题：
+- en: 'Enclose a string containing single quotes within double quotes (assuming that
+    `ANSI_QUOTES` is disabled), or enclose a string containing double quotes within
+    single quotes:'
+  id: totrans-138
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将包含单引号的字符串放在双引号内（假设未启用 `ANSI_QUOTES`），或将包含双引号的字符串放在单引号内。
+- en: '[PRE28]'
+  id: totrans-139
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'To include a quote character within a string quoted by the same kind of quote,
+    double the quote or precede it with a backslash. When MySQL reads the statement,
+    it strips the extra quote or the backslash:'
+  id: totrans-140
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要在同一种引号内的字符串中包含引号字符，可以将引号字符加倍或在其前面加上反斜杠。当MySQL读取语句时，它会剥离额外的引号或反斜杠：
+- en: '[PRE29]'
+  id: totrans-141
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'A backslash turns off any special meaning of the following character, including
+    itself. To write a literal backslash within a string, double it:'
+  id: totrans-142
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 反斜杠会关闭后续字符的任何特殊含义，包括它本身。要在字符串中写入文字反斜杠，请将其加倍：
+- en: '[PRE30]'
+  id: totrans-143
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: Backslash causes a temporary escape from normal string processing rules, so
+    sequences such as `\'`, `\"`, and `\\` are called escape sequences. Others recognized
+    by MySQL are `\b` (backspace), `\n` (newline, also called linefeed), `\r` (carriage
+    return), `\t` (tab), and `\0` (ASCII NUL).
+  id: totrans-144
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 反斜杠会暂时关闭正常字符串处理规则，因此称为转义序列的序列，例如 `\'`、`\"` 和 `\\`。MySQL还识别 `\b`（退格）、`\n`（换行，也称为换行符）、`\r`（回车）、`\t`（制表符）和
+    `\0`（ASCII NUL）等其他转义序列。
+- en: 'Write the string as a hex value:'
+  id: totrans-145
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将字符串写成十六进制值：
+- en: '[PRE31]'
+  id: totrans-146
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: Warning
+  id: totrans-147
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: 'Starting from version 8.0 *mysql* client is running with option `--binary-as-hex`
+    by default. If you do not disable this option you would get binary output as hex
+    values. For example, for the above command you will see:'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从8.0版本开始，默认情况下*mysql*客户端将使用选项 `--binary-as-hex` 运行。如果不禁用此选项，您将以十六进制值获取二进制输出。例如，对于上述命令，您将看到：
+- en: '[PRE32]'
+  id: totrans-149
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: To get human-readable output start the *mysql* client with option `--binary-as-hex=0`.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取可读的人类输出，请使用选项 `--binary-as-hex=0` 启动*mysql*客户端。
+- en: See Also
+  id: totrans-151
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 另请参阅
+- en: 'If you execute SQL statements from within a program, you can refer to strings
+    or binary values symbolically and let your programming interface take care of
+    quoting: use the placeholder mechanism provided by the language’s database-access
+    API (see [Recipe 4.5](ch04.xhtml#nch-api-api-quoting)). Alternatively, load binary
+    values such as images from files using the `LOAD_FILE()` function (see [MySQL
+    documentation](https://dev.mysql.com/doc/refman/8.0/en/string-functions.html#function_load-file)).'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您从程序内执行SQL语句，可以通过符号引用字符串或二进制值，并让编程接口处理引用：使用语言数据库访问API提供的占位符机制（参见 [Recipe 4.5](ch04.xhtml#nch-api-api-quoting)）。另外，可以使用
+    `LOAD_FILE()` 函数从文件中加载诸如图像之类的二进制值（参见 [MySQL documentation](https://dev.mysql.com/doc/refman/8.0/en/string-functions.html#function_load-file)）。
+- en: 7.5 Checking or Changing a String’s Character Set or Collation
+  id: totrans-153
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.5 检查或更改字符串的字符集或排序规则
+- en: Problem
+  id: totrans-154
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know the character set or collation of a string, or change a string
+    to some other character set or collation.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想了解字符串的字符集或排序规则，或者将一个字符串转换为其他字符集或排序规则。
+- en: Solution
+  id: totrans-156
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: To check a string’s character set or collation, use the `CHARSET()` or `COLLATION()`
+    function. To change its character set, use the `CONVERT()` function. To change
+    its collation, use the `COLLATE` operator.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要检查字符串的字符集或排序规则，请使用 `CHARSET()` 或 `COLLATION()` 函数。要更改其字符集，请使用 `CONVERT()` 函数。要更改其排序规则，请使用
+    `COLLATE` 操作符。
+- en: Discussion
+  id: totrans-158
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'For a table created as follows, you know that values stored in the column `c`
+    have a character set of `utf8` and a collation of `utf8_danish_ci`:'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于如下创建的表，您知道存储在列 `c` 中的值具有字符集 `utf8` 和排序规则 `utf8_danish_ci`：
+- en: '[PRE33]'
+  id: totrans-160
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: But sometimes it’s not so clear what character set or collation applies to a
+    string. Server configuration can affect literal strings and some string functions,
+    and other string functions return values in a specific character set. Symptoms
+    that you have the wrong character set or collation are that a collation-mismatch
+    error occurs for a comparison operation, or a lettercase conversion doesn’t work
+    properly.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但有时不太清楚哪个字符集或排序规则适用于字符串。服务器配置可能会影响字面字符串和某些字符串函数，而其他字符串函数则会以特定字符集返回值。当出现排序规则不匹配错误以及比较操作失败时，或者字母大小写转换无法正常工作时，表明您可能使用了错误的字符集或排序规则。
+- en: To determine a string’s character set or collation, use the `CHARSET()` or `COLLATION()`
+    function. For example, did you know that the `USER()` function returns a Unicode
+    string?
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定字符串的字符集或排序规则，请使用`CHARSET()`或`COLLATION()`函数。例如，您知道`USER()`函数返回一个Unicode字符串吗？
+- en: '[PRE34]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'String values that take their character set and collation from the current
+    client configuration may change properties if the configuration changes. This
+    is true for literal strings:'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果字符串值根据当前客户端配置获取其字符集和排序规则，则如果配置更改，则这些属性可能会改变。对于文字字符串，这是正确的：
+- en: '[PRE35]'
+  id: totrans-165
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: For a binary string, the `CHARSET()` or `COLLATION()` functions return a value
+    of `binary`, which means that the string is compared and sorted based on numeric
+    byte values, not character collation values.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于二进制字符串，`CHARSET()`或`COLLATION()`函数返回一个`binary`值，这意味着字符串是基于数字字节值而不是字符排序值进行比较和排序的。
+- en: 'To convert a string from one character set to another, use the `CONVERT()`
+    function:'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将一个字符集转换为另一个字符集，请使用`CONVERT()`函数：
+- en: '[PRE36]'
+  id: totrans-168
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'To change the collation of a string, use the `COLLATE` operator:'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要更改字符串的排序规则，请使用`COLLATE`运算符：
+- en: '[PRE37]'
+  id: totrans-170
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'The new collation must be legal for the character set of the string. For example,
+    you can use the `utf8_general_ci` collation with `utf8mb3` strings, but not with
+    `latin1` strings:'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 新的排序规则必须适合字符串的字符集。例如，您可以将`utf8_general_ci`排序规则与`utf8mb3`字符串一起使用，但不能与`latin1`字符串一起使用：
+- en: '[PRE38]'
+  id: totrans-172
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'To convert both the character set and collation of a string, use `CONVERT()`
+    to change the character set, and apply the `COLLATE` operator to the result:'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要同时转换字符串的字符集和排序规则，请使用`CONVERT()`来改变字符集，并对结果应用`COLLATE`运算符：
+- en: '[PRE39]'
+  id: totrans-174
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'The `CONVERT()` function can also convert binary strings to nonbinary strings
+    and vice versa. To produce a binary string, use `binary`; any other character-set
+    name produces a nonbinary string:'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`CONVERT()`函数还可以将二进制字符串转换为非二进制字符串，反之亦然。要生成一个二进制字符串，请使用`binary`；任何其他字符集名称都会生成一个非二进制字符串：'
+- en: '[PRE40]'
+  id: totrans-176
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'Alternatively, produce binary strings using the `CAST` function, which is equivalent
+    to `CONVERT(`*`str`* `USING` `binary)`:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，使用`CAST`函数生成二进制字符串，其等效于`CONVERT(`*`str`* `USING` `binary)`：
+- en: '[PRE41]'
+  id: totrans-178
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: See also [Recipe 7.3](#nch-strings-strings-set-names) for more information on
+    character sets.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另请参阅[Recipe 7.3](#nch-strings-strings-set-names)获取有关字符集的更多信息。
+- en: 7.6 Converting the Lettercase of a String
+  id: totrans-180
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.6 转换字符串的大小写
+- en: Problem
+  id: totrans-181
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to convert a string to uppercase or lowercase.
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要将一个字符串转换为大写或小写。
+- en: Solution
+  id: totrans-183
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the `UPPER()` or `LOWER()` function. If they don’t work, you’re probably
+    trying to convert a binary string. Convert it to a nonbinary string that has a
+    character set and collation and is subject to case mapping.
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`UPPER()`或`LOWER()`函数。如果它们不起作用，您可能正在尝试转换一个二进制字符串。将其转换为具有字符集和排序规则并且受大小写映射影响的非二进制字符串。
+- en: Discussion
+  id: totrans-185
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'The `UPPER()` and `LOWER()` functions convert the lettercase of a string:'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`UPPER()`和`LOWER()`函数可以转换字符串的大小写：'
+- en: '[PRE42]'
+  id: totrans-187
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: But some strings are <q>stubborn</q> and resist lettercase conversion. To get
+    human-readable output start the mysql client with option binary-as-hex=0.
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是有些字符串是<q>顽固的</q>，抵制大小写转换。要获取可读的输出，请使用选项`binary-as-hex=0`启动mysql客户端。
+- en: '[PRE43]'
+  id: totrans-189
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: This problem occurs for strings that have a `BINARY` or `BLOB` data type. These
+    are binary strings that have no character set or collation. Lettercase does not
+    apply, and `UPPER()` and `LOWER()` do nothing.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个问题发生在具有`BINARY`或`BLOB`数据类型的字符串上。这些是没有字符集或排序规则的二进制字符串。大小写不适用，`UPPER()`和`LOWER()`不起作用。
+- en: 'To map a binary string to a given lettercase, convert it to a nonbinary string,
+    choosing a character set that has uppercase and lowercase characters. The case-conversion
+    functions then work as you expect because the collation provides case mapping:'
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将二进制字符串映射到给定的大小写，将其转换为非二进制字符串，选择一个具有大写和小写字符的字符集。然后，大小写转换函数将按预期工作，因为排序规则提供了大小写映射：
+- en: '[PRE44]'
+  id: totrans-192
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: The example uses a table column, but the same principles apply to binary string
+    literals and string expressions.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例子使用了一个表列，但同样的原则适用于二进制字符串文字和字符串表达式。
+- en: If you’re not sure whether a string expression is binary or nonbinary, use the
+    `CHARSET()` function to find out; see [Recipe 7.5](#nch-strings-strings-charset-checking-changing).
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您不确定字符串表达式是二进制还是非二进制，请使用`CHARSET()`函数进行确认；参见[Recipe 7.5](#nch-strings-strings-charset-checking-changing)。
+- en: 'To convert the lettercase of only part of a string, break it into pieces, convert
+    the relevant piece, and put the pieces back together. Suppose that you want to
+    convert only the initial character of a string to uppercase. The following expression
+    accomplishes that:'
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要仅转换字符串的部分大小写，请将其分解为片段，转换相关片段，然后将片段组合在一起。假设您只想将字符串的初始字符转换为大写。以下表达式实现了这一点：
+- en: '[PRE45]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: 'But it’s ugly to write an expression like that each time you need it. For convenience,
+    define a stored function:'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但每次需要时写出这样的表达式是很麻烦的。为了方便起见，定义一个存储函数：
+- en: '[PRE46]'
+  id: totrans-198
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: 'Then you can capitalize initial characters more easily:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后您可以更容易地将初始字符大写：
+- en: '[PRE47]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: For more information about writing stored functions, see [Chapter 11](ch11.xhtml#nch-routines).
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关编写存储函数的更多信息，请参见[第11章](ch11.xhtml#nch-routines)。
+- en: 7.7 Comparing String Values
+  id: totrans-202
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.7 比较字符串值
+- en: Problem
+  id: totrans-203
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know whether strings are equal or unequal, or which appears first
+    in lexical order.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想知道字符串是否相等或不等，或者哪个在词法顺序中出现在前面。
+- en: Solution
+  id: totrans-205
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a comparison operator. But remember that strings have properties such as
+    case sensitivity that you must take into account. A string comparison might be
+    case sensitive when you don’t want it to be, or vice versa.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用比较运算符。但请记住，字符串具有大小写敏感等属性，您必须考虑这些属性。字符串比较可能是大小写敏感的，这不是您想要的，反之亦然。
+- en: 'As is the case with other data types, you can compare string values for equality,
+    inequality, or relative ordering:'
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与其他数据类型类似，您可以比较字符串的相等性、不等性或相对顺序：
+- en: '[PRE48]'
+  id: totrans-208
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: Discussion
+  id: totrans-209
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: However, comparison and sorting properties of strings are subject to complications
+    that don’t apply to other types of data. For example, sometimes you must ensure
+    that a string comparison is case sensitive that would not otherwise be, or vice
+    versa. This section describes how to do that.
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，字符串的比较和排序属性存在一些其他类型数据不适用的复杂情况。例如，有时您必须确保一个本来不区分大小写的字符串比较是区分大小写的，反之亦然。本节描述了如何做到这一点。
+- en: 'String comparison properties depend on whether the operands are binary or nonbinary
+    strings:'
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 字符串比较的属性取决于操作数是二进制还是非二进制字符串：
+- en: A binary string is a sequence of bytes and is compared using numeric byte values.
+    Lettercase has no meaning. However, because letters in different cases have different
+    byte values, comparisons of binary strings effectively are case sensitive. (That
+    is, `a` and `A` are unequal.) To compare binary strings such that lettercase does
+    not matter, convert them to nonbinary strings that have a case-insensitive collation.
+  id: totrans-212
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 二进制字符串是字节序列，并使用数字字节值进行比较。大小写没有意义。然而，因为不同大小写的字母具有不同的字节值，因此二进制字符串的比较实际上是大小写敏感的。（即，`a`和`A`是不相等的。）为了比较二进制字符串，使字母大小写无关紧要，请将它们转换为具有不区分大小写排序规则的非二进制字符串。
+- en: A nonbinary string is a sequence of characters and is compared in character
+    units. (Depending on the character set, some characters might have multiple bytes.)
+    The string has a character set that defines the legal characters and a collation
+    that defines their sort order. The collation also determines whether to consider
+    characters in different lettercases the same in comparisons. If the collation
+    is case sensitive, and you want a case-insensitive collation (or vice versa),
+    convert the strings to use a collation with the desired case-comparison properties.
+  id: totrans-213
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 非二进制字符串是字符序列，以字符单位进行比较。（根据字符集，某些字符可能有多个字节。）字符串具有定义法律字符和定义排序顺序的字符集，并由排序规则决定是否在比较中将不同大小写的字符视为相同。如果排序规则是大小写敏感的，并且您希望使用不区分大小写的排序规则（反之亦然），请将字符串转换为使用具有所需大小写比较属性的排序规则。
+- en: By default, strings have a character set of `utf8mb4` and a collation of `utf8mb4_0900_ai_ci`
+    unless you reconfigure the server (see [Recipe 22.1](ch22.xhtml#nch-admin-server-config)).
+    This results in case-insensitive string comparisons.
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，字符串的字符集为`utf8mb4`，排序规则为`utf8mb4_0900_ai_ci`，除非重新配置服务器（参见[第22.1节](ch22.xhtml#nch-admin-server-config)）。这导致字符串比较时不区分大小写。
+- en: 'The following example shows how two binary strings that compare as unequal
+    can be handled so that they are equal when compared as case-insensitive nonbinary
+    strings:'
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下示例显示如何处理两个二进制字符串，使它们在比较时相等，即使它们作为不区分大小写的非二进制字符串进行比较：
+- en: '[PRE49]'
+  id: totrans-216
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'In this case, because `utf8mb4_0900_ai_ci` is the default collation for `utf8mb4`,
+    you can omit the `COLLATE` operator:'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，因为`utf8mb4`的默认排序规则是`utf8mb4_0900_ai_ci`，你可以省略`COLLATE`运算符：
+- en: '[PRE50]'
+  id: totrans-218
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: 'The next example shows how to compare, in case-sensitive fashion, two strings
+    that are not case sensitive:'
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一个示例显示了如何以区分大小写的方式比较两个不区分大小写的字符串：
+- en: '[PRE51]'
+  id: totrans-220
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: 'If you compare a binary string with a nonbinary string, the comparison treats
+    both operands as binary strings:'
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果比较二进制字符串和非二进制字符串，则比较将两个操作数视为二进制字符串：
+- en: '[PRE52]'
+  id: totrans-222
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: 'Thus, to compare two nonbinary strings as binary strings, cast them to the
+    `BINARY` data type to either one when comparing them:'
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，为了将两个非二进制字符串作为二进制字符串进行比较，请在比较它们时将它们转换为`BINARY`数据类型中的其中一个：
+- en: '[PRE53]'
+  id: totrans-224
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 'If you find that you’ve declared a column using a type not suited to the kind
+    of comparisons for which you typically use it, use `ALTER` `TABLE` to change the
+    type. Suppose that this table stores news articles:'
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果发现使用不适合通常使用的比较类型声明了列，请使用`ALTER TABLE`更改类型。假设此表存储新闻文章：
+- en: '[PRE54]'
+  id: totrans-226
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: 'Here the `article` column is declared as a `BLOB`. That is a binary string
+    type, so comparisons of text stored in the column are made without regard to character
+    set. (In effect, they are case sensitive.) If that’s not what you want, use `ALTER`
+    `TABLE` to convert the column to a nonbinary type that has a case-insensitive
+    collation:'
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此处`article`列声明为`BLOB`。这是一种二进制字符串类型，因此列中存储的文本比较不考虑字符集。（实际上，它们是区分大小写的。）如果这不是您想要的，请使用`ALTER
+    TABLE`将列转换为具有不区分大小写排序规则的非二进制类型：
+- en: '[PRE55]'
+  id: totrans-228
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: 7.8 Converting Between Decimal, Octal and Hexadecimal Formats
+  id: totrans-229
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.8 十进制、八进制和十六进制格式之间的转换
+- en: Problem
+  id: totrans-230
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to convert between one numeric base to another.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要在不同的数值基之间进行转换。
+- en: Solution
+  id: totrans-232
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the `CONV()` function and SQL pattern described in this section.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用此部分描述的`CONV()`函数和SQL模式。
+- en: Discussion
+  id: totrans-234
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: It is difficult to operate literals as text strings in some formats such as
+    `HEX`. An alternative method is to convert them to binary values. This will produce
+    data type with a value of BINARY(16) that is 128 bits long. Using `BIN()`,`OCT()`,`HEX()`
+    functions to convert between decimal number to binary, octal and hexadecimal is
+    already possible. What if we you to do the reverse? This is where `CONV()` function
+    comes handy. With the `CONV()` function from we can convert from one numeric base
+    system to another.
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某些格式（如`HEX`）中，操作文本字符串作为文本字符串很困难。一种替代方法是将它们转换为二进制值。这将产生一个值为BINARY(16)且长度为128位的数据类型。使用`BIN()`、`OCT()`、`HEX()`函数在十进制数和二进制、八进制和十六进制之间进行转换已经是可能的。如果我们要做反向转换呢？这就是`CONV()`函数发挥作用的地方。使用`CONV()`函数，我们可以从一个数值基系统转换为另一个数值基系统。
+- en: 'Syntax to use `CONV()` function:'
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`CONV()`函数的语法：
+- en: '[PRE56]'
+  id: totrans-237
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: A `number` is a value which we want to convert from one numeric base to another.
+  id: totrans-238
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`number`是我们想要从一种数值基转换到另一种数值基的值。'
+- en: A `from_base` is original base value of the numeric base limited to value between
+    2 and 36.
+  id: totrans-239
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`from_base`是数字基数的原始基值，限制在2到36之间的值。'
+- en: A `to_base` is target value of the numeric base. This value can be between 2
+    and 36 or -2 and -36.
+  id: totrans-240
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`to_base`是数值基的目标值。此值可以介于2到36或-2到-36之间。'
+- en: '[PRE57]'
+  id: totrans-241
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: Similar to `BIN()` function we get same result. Although `BIN()` function returns
+    a string.
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 类似于`BIN()`函数，我们获得相同的结果。尽管`BIN()`函数返回一个字符串。
+- en: '[PRE58]'
+  id: totrans-243
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: 'Like wise we can convert values between each other in reverse:'
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同样，我们可以反向将值之间进行转换：
+- en: '[PRE59]'
+  id: totrans-245
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: 7.9 Converting Between ASCII,BIT and Hexadecimal Formats
+  id: totrans-246
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.9 ASCII、BIT和十六进制格式之间的转换
+- en: Problem
+  id: totrans-247
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to convert between one string format to another.
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要在一种字符串格式和另一种字符串格式之间进行转换。
+- en: Solution
+  id: totrans-249
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the MySQL `CHAR()`, `ASCII()` ,`BIT_LENGTH()` functions and SQL pattern
+    described in this section.
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用MySQL的`CHAR()`、`ASCII()`、`BIT_LENGTH()`函数和此部分描述的SQL模式。
+- en: Discussion
+  id: totrans-251
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: There are many powerful string functions to support MySQL’s string operations.
+    In different use cases we may have to convert them to have different results.
+    Using some of the string functions such as `ASCII()` we can convert between other
+    formats like `BIT` and `HEX`.
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL提供了许多强大的字符串函数来支持字符串操作。在不同的使用情况下，我们可能需要将它们转换为不同的结果。使用一些字符串函数如`ASCII()`，我们可以在`BIT`和`HEX`之间进行转换。
+- en: 'Syntax to use `ASCII()` function:'
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`ASCII()`函数的语法：
+- en: '[PRE60]'
+  id: totrans-254
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: Note
+  id: totrans-255
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The `ASCII()` function only returns left most character’s numeric value of the
+    string. This is similar to MySQL’s `ORD()` function.
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ASCII()`函数只返回字符串的最左字符的数字值。这类似于MySQL的`ORD()`函数。'
+- en: '[PRE61]'
+  id: totrans-257
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: '[PRE62]'
+  id: totrans-258
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: As you can see the result is same for both strings. The function only takes
+    the leftmost character of the string.
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如您所见，两个字符串的结果是相同的。该函数只取字符串的左侧字符。
+- en: 'In the following example, we will convert a string value to `HEX` format:'
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下示例中，我们将一个字符串值转换为`HEX`格式：
+- en: '[PRE63]'
+  id: totrans-261
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: 'Say we have table `name` and want to get all unique `last_name` from this table
+    in `HEX` format:'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们有一个名为`name`的表，并且想要以`HEX`格式获取此表中所有唯一的`last_name`：
+- en: '[PRE64]'
+  id: totrans-263
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: 'Bit operations before MySQL 8.0 handled on unsingned 64-bit integer values.
+    After MySQL 8.0 bit operations extended to handle binary string arguments. This
+    allowed strings that are not integers or binary strings to be converted. UUID
+    (Universal Unique Identifier) specified by [RFC 4122](https://datatracker.ietf.org/doc/html/rfc4122)
+    is a 128-bit unique value globally when complete uniqueness is required. UUIDs
+    also come in handy using for security purposes since it does not reveal any information
+    about data. It is represented in human readable format as `utf8mb4` with the string
+    of five hexadecimal numbers. A good example is converting `UUID` value to binary
+    by using `UUID_TO_BIN` function (we are running *mysql* with option `binary-as-hex`):'
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 8.0之前的位操作处理无符号64位整数值。MySQL 8.0之后，位操作扩展到处理二进制字符串参数。这允许非整数或二进制字符串被转换。根据[RFC
+    4122](https://datatracker.ietf.org/doc/html/rfc4122)，UUID（通用唯一标识符）是一个全局的128位唯一值，当需要完全的唯一性时非常有用。UUID还可以用于安全目的，因为它不会泄露任何关于数据的信息。它以人类可读的`utf8mb4`格式表示，由五个十六进制数字符串组成。一个很好的例子是使用`UUID_TO_BIN`函数将`UUID`值转换为二进制（我们使用
+    *mysql* 并选择了`binary-as-hex`选项）：
+- en: '[PRE65]'
+  id: totrans-265
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: '[PRE66]'
+  id: totrans-266
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: Later we can convert this value to compare bit count using `BIT_COUNT()` function.
+    This function mainly used to identify active bits in given input.
+  id: totrans-267
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 稍后我们可以将此值转换为使用`BIT_COUNT()`函数比较的值。此函数主要用于识别给定输入中的活动位。
+- en: '[PRE67]'
+  id: totrans-268
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: The purpose of the `BIT_COUNT()` function is to identify active bits in given
+    decimal value. For example if we were to find out active bits in number 18\. Binary
+    conversion of 18 is `10010` hence active bits are only two.
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`BIT_COUNT()`函数的目的是识别给定十进制值中的活动位。例如，如果我们想要找出数字18中的活动位。18的二进制转换为`10010`，因此活动位仅有两个。'
+- en: '[PRE68]'
+  id: totrans-270
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: '`BIT_COUNT()` function powered with `BIT_OR()` function can be combined to
+    calculate following problem. `BIT_OR()` function returns the bitwise OR all the
+    bits in an expression. Say we want to find number of Sundays in month of November.
+    We will create a table called `sundays`:'
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`BIT_COUNT()`函数与`BIT_OR()`函数结合使用可以用来计算以下问题。`BIT_OR()`函数返回表达式中所有位的按位OR运算结果。假设我们想要找出十一月份的星期日数量。我们将创建一个名为`sundays`的表：'
+- en: '[PRE69]'
+  id: totrans-272
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: '[PRE70]'
+  id: totrans-273
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: '[PRE71]'
+  id: totrans-274
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: This example can be extended to find number of holidays in a given calendar
+    year or date range.
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个例子可以扩展到查找给定日历年或日期范围内的假期数量。
+- en: Another use case is IPv6 and IPv4 network addresses are string values. In order
+    to return binary value to represent it in numeric `INET_ATON()` function can be
+    used. This function converts dotted quad IPv4 adress string represenation to numeric
+    value. While use cases for this function may vary it is widely used for storing
+    source and destionation of IP addresses for data as well as transactions mostly
+    logging purposes. Once the IPv4 address is stored in numeric value than it can
+    be indexed and processed faster.
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个用例是IPv6和IPv4网络地址是字符串值。为了返回表示它的二进制值以便在数值上使用，可以使用`INET_ATON()`函数。该函数将点分十进制IPv4地址字符串表示转换为数值。虽然此函数的用途可能各不相同，但它通常用于存储IP地址的来源和目标，主要是用于数据日志记录。一旦IPv4地址存储为数值，就可以更快地进行索引和处理。
+- en: '[PRE72]'
+  id: totrans-277
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: '[PRE73]'
+  id: totrans-278
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: 7.10 Pattern Matching with SQL Patterns
+  id: totrans-279
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.10 使用SQL模式进行模式匹配
+- en: Problem
+  id: totrans-280
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to perform a pattern match, not a literal comparison.
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望执行模式匹配，而不是字面比较。
+- en: Solution
+  id: totrans-282
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the `LIKE` operator and an SQL pattern, described in this section. Or use
+    a regular-expression pattern match, described in [Recipe 7.11](#nch-strings-strings-pat-regexp).
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`LIKE`运算符和SQL模式在本节中描述。或者使用正则表达式模式匹配，在[Recipe 7.11](#nch-strings-strings-pat-regexp)中描述。
+- en: Discussion
+  id: totrans-284
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Patterns are strings that contain special characters known as metacharacters
+    because they stand for something other than themselves. MySQL provides two kinds
+    of pattern matching. One is based on SQL patterns and the other on regular expressions.
+    SQL patterns are more standard among different database systems, but regular expressions
+    are more powerful. The two kinds of pattern match use different operators and
+    different metacharacters. This section describes SQL patterns. [Recipe 7.11](#nch-strings-strings-pat-regexp)
+    describes regular expressions.
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模式是包含特殊字符的字符串，称为元字符，因为它们代表的是其他东西而不是它们自己。MySQL提供两种模式匹配方法。一种基于SQL模式，另一种基于正则表达式。SQL模式在不同数据库系统中更为标准，但正则表达式更为强大。这节描述了SQL模式。[Recipe
+    7.11](#nch-strings-strings-pat-regexp)描述了正则表达式。
+- en: 'The example here uses a table named `metal` that contains the following rows:'
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此处的示例使用名为`metal`的表，其中包含以下行：
+- en: '[PRE74]'
+  id: totrans-287
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: 'SQL pattern matching uses the `LIKE` and `NOT` `LIKE` operators rather than
+    `=` and `<>` to perform matching against a pattern string. Patterns may contain
+    two special metacharacters: `_` matches any single character, and `%` matches
+    any sequence of characters, including the empty string. You can use these characters
+    to create patterns that match a variety of values:'
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQL模式匹配使用`LIKE`和`NOT LIKE`操作符，而不是`=和<>`来对模式字符串执行匹配。模式可以包含两个特殊元字符：`_`匹配任何单个字符，`%`匹配任何字符序列，包括空字符串。您可以使用这些字符来创建匹配各种值的模式：
+- en: 'Strings that begin with a particular substring:'
+  id: totrans-289
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 以特定子字符串开头的字符串：
+- en: '[PRE75]'
+  id: totrans-290
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: 'Strings that end with a particular substring:'
+  id: totrans-291
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 以特定子字符串结尾的字符串：
+- en: '[PRE76]'
+  id: totrans-292
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: 'Strings that contain a particular substring at any position:'
+  id: totrans-293
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 包含特定子字符串的字符串：
+- en: '[PRE77]'
+  id: totrans-294
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: 'Strings that contain a substring at a specific position (the pattern matches
+    only if `at` occurs at the third position of the `name` column):'
+  id: totrans-295
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 包含特定位置子字符串的字符串（只有在`name`列的第三个位置出现`at`时，模式才匹配成功）：
+- en: '[PRE78]'
+  id: totrans-296
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: 'An SQL pattern matches successfully only if it matches the entire comparison
+    value. Of the following two pattern matches, only the second succeeds:'
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 只有当SQL模式完全匹配比较值时才能成功匹配。在以下两个模式匹配中，只有第二个成功：
+- en: '[PRE79]'
+  id: totrans-298
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: 'To reverse the sense of a pattern match, use `NOT` `LIKE`. The following statement
+    finds strings that contain no `i` characters:'
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要反转模式匹配的意义，请使用`NOT LIKE`。以下语句找到不包含`i`字符的字符串：
+- en: '[PRE80]'
+  id: totrans-300
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: 'SQL patterns do not match `NULL` values. This is true both for `LIKE` and for
+    `NOT` `LIKE`:'
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQL模式不匹配`NULL`值。这对于`LIKE`和`NOT LIKE`操作都是真的：
+- en: '[PRE81]'
+  id: totrans-302
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: 'In some cases, pattern matches are equivalent to substring comparisons. For
+    example, using patterns to find strings at one end or the other of a string is
+    like using `LEFT()` or `RIGHT()`, as shown in the [Table 7-2](#nch-strings-strings-pat-sql-substr-comp):'
+  id: totrans-303
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某些情况下，模式匹配相当于子字符串比较。例如，使用模式在字符串的一端或另一端找到字符串，就像使用`LEFT()`或`RIGHT()`函数一样，如[Table 7-2](#nch-strings-strings-pat-sql-substr-comp)所示：
+- en: Table 7-2\. Patern Match versus Substring Comparison
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表7-2\. 模式匹配与子字符串比较
+- en: '| Pattern match | Substring comparison |'
+  id: totrans-305
+  prefs: []
+  type: TYPE_TB
+  zh: '| 模式匹配 | 子字符串比较 |'
+- en: '| --- | --- |'
+  id: totrans-306
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| *`str`* `LIKE ''abc%''` | `LEFT(`*`str`*`,3) = ''abc''` |'
+  id: totrans-307
+  prefs: []
+  type: TYPE_TB
+  zh: '| *`str`* `LIKE ''abc%''` | `LEFT(`*`str`*`,3) = ''abc''` |'
+- en: '| *`str`* `LIKE ''%abc''` | `RIGHT(`*`str`*`,3) = ''abc''` |'
+  id: totrans-308
+  prefs: []
+  type: TYPE_TB
+  zh: '| *`str`* `LIKE ''%abc''` | `RIGHT(`*`str`*`,3) = ''abc''` |'
+- en: If you’re matching against a column that is indexed and you have a choice of
+    using a pattern or an equivalent `LEFT()` exprlenghtession, you’ll likely find
+    the pattern match to be faster. MySQL can use the index to narrow the search for
+    a pattern that begins with a literal string. With `LEFT()`, it cannot. Also `LIKE`
+    comparison with a `%` in the beginning can be slow due to optimizer checking entire
+    content of the string.
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您要对一个索引列进行匹配，并且可以选择使用模式或等效的`LEFT()`表达式，您可能会发现模式匹配速度更快。MySQL可以使用索引来缩小搜索范围，以寻找以字面字符串开头的模式。而使用`LEFT()`则不能。此外，由于优化器需要检查字符串的整个内容，因此以`%`开头的`LIKE`比较可能会很慢。
+- en: Case sensitivity of a pattern match is like that of a string comparison. That
+    is, it depends on whether the operands are binary or nonbinary strings, and for
+    nonbinary strings, it depends on their collation. See [Recipe 7.7](#nch-strings-strings-compare)
+    for discussion of how these factors apply to comparisons.
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模式匹配的大小写敏感性与字符串比较类似。也就是说，它取决于操作数是二进制还是非二进制字符串，对于非二进制字符串，还取决于它们的排序规则。详细讨论请参见[Recipe
+    7.7](#nch-strings-strings-compare)。
+- en: 7.11 Pattern Matching with Regular Expressions
+  id: totrans-311
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.11 使用正则表达式进行模式匹配
+- en: Problem
+  id: totrans-312
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to perform a pattern match, not a literal comparison.
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望执行模式匹配，而不是字面上的比较。
+- en: Solution
+  id: totrans-314
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the `REGEXP` operator and a regular expression pattern, described in this
+    section. Or use an SQL pattern, described in [Recipe 7.10](#nch-strings-strings-pat-sql).
+  id: totrans-315
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`REGEXP`运算符和本节描述的正则表达式模式。或者使用在[Recipe 7.10](#nch-strings-strings-pat-sql)中描述的SQL模式。
+- en: Discussion
+  id: totrans-316
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'SQL patterns (see [Recipe 7.10](#nch-strings-strings-pat-sql)) are likely to
+    be implemented by other database systems, so they’re reasonably portable beyond
+    MySQL. On the other hand, they’re somewhat limited. For example, you can easily
+    write an SQL pattern `%abc%` to find strings that contain `abc`, but you cannot
+    write a single SQL pattern to identify strings that contain any of the characters
+    `a`, `b`, or `c`. Nor can you match string content based on character types such
+    as letters or digits. For such operations, MySQL supports another type of pattern-matching
+    operation based on regular expressions and the `REGEXP` operator (or `NOT` `REGEXP`
+    to reverse the sense of the match). `REGEXP` matching uses the pattern elements
+    shown in the [Table 7-4](#nch-strings-strings-pat-regexp-syntax):'
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQL 模式（参见 [Recipe 7.10](#nch-strings-strings-pat-sql)）可能由其他数据库系统实现，因此除了 MySQL
+    外，它们也具有一定的可移植性。然而，它们的功能有所限制。例如，您可以轻松地编写一个 SQL 模式 `%abc%` 来查找包含 `abc` 的字符串，但是您无法编写一个单独的
+    SQL 模式来识别包含字符 `a`、`b` 或 `c` 中任何一个的字符串。也不能基于字符类型（如字母或数字）匹配字符串内容。对于这些操作，MySQL 支持基于正则表达式和
+    `REGEXP` 运算符（或 `NOT` `REGEXP` 反转匹配的意义）的另一种模式匹配操作。`REGEXP` 匹配使用表 [7-4](#nch-strings-strings-pat-regexp-syntax)
+    中显示的模式元素：
+- en: Table 7-4\. Popular Regular Expressions Syntax
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 7-4\. 常用正则表达式语法
+- en: '| Pattern | What the pattern matches |'
+  id: totrans-319
+  prefs: []
+  type: TYPE_TB
+  zh: '| 模式 | 模式匹配的内容 |'
+- en: '| --- | --- |'
+  id: totrans-320
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `^` | Beginning of string |'
+  id: totrans-321
+  prefs: []
+  type: TYPE_TB
+  zh: '| `^` | 字符串开始位置 |'
+- en: '| `$` | End of string |'
+  id: totrans-322
+  prefs: []
+  type: TYPE_TB
+  zh: '| `$` | 字符串结束位置 |'
+- en: '| `.` | Any single character |'
+  id: totrans-323
+  prefs: []
+  type: TYPE_TB
+  zh: '| `.` | 任意单个字符 |'
+- en: '| `[...]` | Any character listed between the square brackets |'
+  id: totrans-324
+  prefs: []
+  type: TYPE_TB
+  zh: '| `[...]` | 方括号内列出的任何字符 |'
+- en: '| `[^...]` | Any character not listed between the square brackets |'
+  id: totrans-325
+  prefs: []
+  type: TYPE_TB
+  zh: '| `[^...]` | 方括号内未列出的任何字符 |'
+- en: '| *`p1`*`&#124;`*`p2`*`&#124;`*`p3`* | Alternation; matches any of the patterns
+    *`p1`*, *`p2`*, or *`p3`* |'
+  id: totrans-326
+  prefs: []
+  type: TYPE_TB
+  zh: '| *`p1`*`&#124;`*`p2`*`&#124;`*`p3`* | 替换；匹配模式 *`p1`*, *`p2`*, 或 *`p3`* 中的任何一个
+    |'
+- en: '| `*` | Zero or more instances of preceding element |'
+  id: totrans-327
+  prefs: []
+  type: TYPE_TB
+  zh: '| `*` | 前一元素的零个或多个实例 |'
+- en: '| `+` | One or more instances of preceding element |'
+  id: totrans-328
+  prefs: []
+  type: TYPE_TB
+  zh: '| `+` | 前一元素的一个或多个实例 |'
+- en: '| `{`*`n`*`}` | *`n`* instances of preceding element |'
+  id: totrans-329
+  prefs: []
+  type: TYPE_TB
+  zh: '| `{`*`n`*`}` | 前一元素的 *`n`* 次实例 |'
+- en: '| `{`*`m`*`,`*`n`*`}` | *`m`* through *`n`* instances of preceding element
+    |'
+  id: totrans-330
+  prefs: []
+  type: TYPE_TB
+  zh: '| `{`*`m`*`,`*`n`*`}` | 前一元素的 *`m`* 到 *`n`* 次实例 |'
+- en: You may already be familiar with these regular expression pattern characters;
+    many of them are the same as those used by *vi*, *grep*, *sed*, and other Unix
+    utilities that support regular expressions. Most of them are used also in the
+    regular expressions understood by programming languages. (For discussion of pattern
+    matching in programs for data validation and transformation, see [Chapter 14](ch14.xhtml#nch-format).)
+  id: totrans-331
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可能已经熟悉这些正则表达式模式字符；其中许多与 *vi*、*grep*、*sed* 和其他支持正则表达式的 Unix 实用工具使用的字符相同。大多数这些字符也用于编程语言理解的正则表达式中。（有关数据验证和转换程序中的模式匹配讨论，请参阅
+    [Chapter 14](ch14.xhtml#nch-format)。）
+- en: '[Recipe 7.10](#nch-strings-strings-pat-sql) shows how to use SQL patterns to
+    match substrings at the beginning or end of a string, or at an arbitrary or specific
+    position within a string. You can do the same things with regular expressions:'
+  id: totrans-332
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[Recipe 7.10](#nch-strings-strings-pat-sql) 显示如何使用 SQL 模式来匹配字符串的开头或结尾处的子字符串，或者在字符串的任意或特定位置。您可以使用正则表达式执行相同的操作：'
+- en: 'Strings that begin with a particular substring:'
+  id: totrans-333
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 以特定子字符串开头的字符串：
+- en: '[PRE82]'
+  id: totrans-334
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: 'Strings that end with a particular substring:'
+  id: totrans-335
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 以特定子字符串结尾的字符串：
+- en: '[PRE83]'
+  id: totrans-336
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: 'Strings that contain a particular substring at any position:'
+  id: totrans-337
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在任何位置包含特定子字符串的字符串：
+- en: '[PRE84]'
+  id: totrans-338
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE84]'
+- en: 'Strings that contain a particular substring at a specific position:'
+  id: totrans-339
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在特定位置包含特定子字符串的字符串：
+- en: '[PRE85]'
+  id: totrans-340
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE85]'
+- en: 'In addition, regular expressions have other capabilities and can perform matches
+    that SQL patterns cannot. For example, regular expressions can contain character
+    classes, which match any character in the class:'
+  id: totrans-341
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，正则表达式还具有其他功能，并且可以执行 SQL 模式无法完成的匹配。例如，正则表达式可以包含字符类，该类可以匹配类中的任何字符：
+- en: To write a character class, use square brackets and list the characters you
+    want the class to match inside the brackets. Thus, the pattern `[abc]` matches
+    `a`, `b`, or `c`.
+  id: totrans-342
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要编写字符类，请使用方括号并在括号内列出要匹配的字符。因此，模式 `[abc]` 可以匹配 `a`、`b` 或 `c`。
+- en: Classes can indicate ranges of characters; use a dash between the beginning
+    and end of the range. `[a-z]` matches any letter, `[0-9]` matches digits, and
+    `[a-z0-9]` matches letters or digits.
+  id: totrans-343
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 类可以指示字符范围；使用破折号表示范围的起始和结束。`[a-z]` 匹配任何字母，`[0-9]` 匹配数字，`[a-z0-9]` 匹配字母或数字。
+- en: To negate a character class (<q>match any character but these</q>), begin the
+    list with a `^` character. For example, `[^0-9]` matches anything but digits.
+  id: totrans-344
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要否定一个字符类（<q>匹配除了这些字符之外的任何字符</q>），请以 `^` 字符开始列表。例如，`[^0-9]` 匹配除了数字以外的任何内容。
+- en: 'MySQL’s regular-expression capabilities also support POSIX character classes.
+    These match specific character sets, as described in the [Table 7-5](#nch-strings-strings-pat-regexp-posix):'
+  id: totrans-345
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 的正则表达式功能也支持 POSIX 字符类。这些类匹配特定的字符集，如 [表 7-5](#nch-strings-strings-pat-regexp-posix)
+    中所述：
+- en: Table 7-5\. POSIX Regular Expressions Syntax
+  id: totrans-346
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 7-5\. POSIX 正则表达式语法
+- en: '| POSIX class | What the class matches |'
+  id: totrans-347
+  prefs: []
+  type: TYPE_TB
+  zh: '| POSIX 类 | 类匹配的内容 |'
+- en: '| --- | --- |'
+  id: totrans-348
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `[:alnum:]` | Alphabetic and numeric characters |'
+  id: totrans-349
+  prefs: []
+  type: TYPE_TB
+  zh: '| `[:alnum:]` | 字母和数字字符 |'
+- en: '| `[:alpha:]` | Alphabetic characters |'
+  id: totrans-350
+  prefs: []
+  type: TYPE_TB
+  zh: '| `[:alpha:]` | 字母字符 |'
+- en: '| `[:blank:]` | Whitespace (space or tab characters) |'
+  id: totrans-351
+  prefs: []
+  type: TYPE_TB
+  zh: '| `[:blank:]` | 空白字符（空格或制表符） |'
+- en: '| `[:cntrl:]` | Control characters |'
+  id: totrans-352
+  prefs: []
+  type: TYPE_TB
+  zh: '| `[:cntrl:]` | 控制字符 |'
+- en: '| `[:digit:]` | Digits |'
+  id: totrans-353
+  prefs: []
+  type: TYPE_TB
+  zh: '| `[:digit:]` | 数字 |'
+- en: '| `[:graph:]` | Graphic (nonblank) characters |'
+  id: totrans-354
+  prefs: []
+  type: TYPE_TB
+  zh: '| `[:graph:]` | 图形（非空白）字符 |'
+- en: '| `[:lower:]` | Lowercase alphabetic characters |'
+  id: totrans-355
+  prefs: []
+  type: TYPE_TB
+  zh: '| `[:lower:]` | 小写字母字符 |'
+- en: '| `[:print:]` | Graphic or space characters |'
+  id: totrans-356
+  prefs: []
+  type: TYPE_TB
+  zh: '| `[:print:]` | 图形或空格字符 |'
+- en: '| `[:punct:]` | Punctuation characters |'
+  id: totrans-357
+  prefs: []
+  type: TYPE_TB
+  zh: '| `[:punct:]` | 标点字符 |'
+- en: '| `[:space:]` | Space, tab, newline, carriage return |'
+  id: totrans-358
+  prefs: []
+  type: TYPE_TB
+  zh: '| `[:space:]` | 空格、制表符、换行符、回车符 |'
+- en: '| `[:upper:]` | Uppercase alphabetic characters |'
+  id: totrans-359
+  prefs: []
+  type: TYPE_TB
+  zh: '| `[:upper:]` | 大写字母字符 |'
+- en: '| `[:xdigit:]` | Hexadecimal digits (`0-9`, `a-f`, `A-F`) |'
+  id: totrans-360
+  prefs: []
+  type: TYPE_TB
+  zh: '| `[:xdigit:]` | 十六进制数字 (`0-9`, `a-f`, `A-F`) |'
+- en: 'POSIX classes are intended for use within character classes, so use them within
+    square brackets. The following expression matches values that contain any hexadecimal
+    digit character:'
+  id: totrans-361
+  prefs: []
+  type: TYPE_NORMAL
+  zh: POSIX 类用于字符类中，因此请在方括号内使用它们。以下表达式匹配包含任何十六进制数字字符的值：
+- en: '[PRE86]'
+  id: totrans-362
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE86]'
+- en: 'Regular expressions can specify alternations using this syntax:'
+  id: totrans-363
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正则表达式可以使用以下语法指定选择项：
+- en: '[PRE87]'
+  id: totrans-364
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE87]'
+- en: 'An alternation is similar to a character class in the sense that it matches
+    if any of the alternatives match. But unlike a character class, the alternatives
+    are not limited to single characters. They can be multiple-character strings or
+    even patterns. The following alternation matches strings that begin with a vowel
+    or end with `d`:'
+  id: totrans-365
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择项类似于字符类，因为如果任何选择项匹配，则选择项将匹配。但与字符类不同，选择项不限于单个字符。它们可以是多字符字符串甚至是模式。以下选择项匹配以元音字母开头或以
+    `d` 结尾的字符串：
+- en: '[PRE88]'
+  id: totrans-366
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE88]'
+- en: 'Parentheses can be used to group alternations. For example, to match strings
+    that consist entirely of digits or entirely of letters, you might try this pattern,
+    using an alternation:'
+  id: totrans-367
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 括号可用于分组选择项。例如，要匹配完全由数字或完全由字母组成的字符串，您可以尝试以下模式，使用一个选择项：
+- en: '[PRE89]'
+  id: totrans-368
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE89]'
+- en: 'However, as the query result shows, the pattern doesn’t work. That’s because
+    the `^` groups with the first alternative, and the `$` groups with the second
+    alternative. So the pattern actually matches strings that begin with one or more
+    digits, or strings that end with one or more letters. If you group the alternatives
+    within parentheses, the `^` and `$` apply to both of them, and the pattern acts
+    as you expect:'
+  id: totrans-369
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，查询结果显示，该模式不起作用。这是因为 `^` 与第一个选择项分组，而 `$` 与第二个选择项分组。因此，该模式实际上匹配以一个或多个数字开头的字符串，或以一个或多个字母结尾的字符串。如果在括号中分组选择项，则
+    `^` 和 `$` 将适用于它们两个，并且模式将按预期行事：
+- en: '[PRE90]'
+  id: totrans-370
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE90]'
+- en: 'Unlike SQL pattern matches, which are successful only if the pattern matches
+    the entire comparison value, regular expressions are successful if the pattern
+    matches anywhere within the value. The following two pattern matches are equivalent
+    in the sense that each one succeeds only for strings that contain a `b` character,
+    but the first is more efficient because the pattern is simpler:'
+  id: totrans-371
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与 SQL 模式匹配不同，正则表达式在值的任意位置成功匹配模式即可，而不必匹配整个比较值。以下两个模式匹配在某种意义上等效，即每个模式仅成功匹配包含字符
+    `b` 的字符串，但第一个模式更有效率，因为模式更简单：
+- en: '[PRE91]'
+  id: totrans-372
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE91]'
+- en: 'Regular expressions do not match `NULL` values. This is true both for `REGEXP`
+    and for `NOT` `REGEXP`:'
+  id: totrans-373
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正则表达式不匹配 `NULL` 值。对于 `REGEXP` 和 `NOT` `REGEXP` 都是如此：
+- en: '[PRE92]'
+  id: totrans-374
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE92]'
+- en: Because a regular expression matches a string if the pattern is found anywhere
+    in the string, you must take care not to inadvertently specify a pattern that
+    matches the empty string. If you do, it matches any non-`NULL` value. For example,
+    the pattern `a*` matches any number of `a` characters, even none. If your goal
+    is to match only strings containing nonempty sequences of `a` characters, use
+    `a+` instead. The `+` requires one or more instances of the preceding pattern
+    element for a match.
+  id: totrans-375
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为正则表达式如果在字符串中找到模式则匹配该字符串，所以必须小心不要无意中指定一个匹配空字符串的模式。如果这样做，它会匹配任何非`NULL`值。例如，模式`a*`匹配任意数量的`a`字符，甚至是零个。如果您的目标是仅匹配包含非空`a`字符序列的字符串，请改用`a+`。`+`要求前面的模式元素至少出现一次才能匹配。
+- en: 'As with SQL pattern matches performed using `LIKE`, regular-expression matches
+    performed with `REGEXP` sometimes are equivalent to substring comparisons. As
+    shown in the [Table 7-6](#nch-strings-strings-pat-regexp-substr-comp), the `^`
+    and `$` metacharacters serve much the same purpose as `LEFT()` or `RIGHT()`, at
+    least if you’re looking for literal strings:'
+  id: totrans-376
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 类似于使用`LIKE`执行的SQL模式匹配，使用`REGEXP`执行的正则表达式匹配有时等同于子字符串比较。如在[表 7-6](#nch-strings-strings-pat-regexp-substr-comp)中所示，`^`
+    和 `$` 元字符在寻找字面字符串时具有类似于 `LEFT()` 或 `RIGHT()` 的作用：
+- en: Table 7-6\. Regular Expressions versus Substring Comparison Functions
+  id: totrans-377
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 7-6\. 正则表达式与子字符串比较函数
+- en: '| Pattern match | Substring comparison |'
+  id: totrans-378
+  prefs: []
+  type: TYPE_TB
+  zh: '| 模式匹配 | 子字符串比较 |'
+- en: '| --- | --- |'
+  id: totrans-379
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| *`str`* `REGEXP ''^abc''` | `LEFT(`*`str`*`,3) = ''abc''` |'
+  id: totrans-380
+  prefs: []
+  type: TYPE_TB
+  zh: '| *`str`* `REGEXP ''^abc''` | `LEFT(`*`str`*`,3) = ''abc''` |'
+- en: '| *`str`* `REGEXP ''abc$''` | `RIGHT(`*`str`*`,3) = ''abc''` |'
+  id: totrans-381
+  prefs: []
+  type: TYPE_TB
+  zh: '| *`str`* `REGEXP ''abc$''` | `RIGHT(`*`str`*`,3) = ''abc''` |'
+- en: 'For nonliteral patterns, it’s typically not possible to construct an equivalent
+    substring comparison. For example, to match strings that begin with any nonempty
+    sequence of digits, use this pattern match:'
+  id: totrans-382
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于非字面模式，通常不可能构造一个等效的子字符串比较。例如，要匹配以任意非空数字序列开头的字符串，请使用以下模式匹配：
+- en: '[PRE93]'
+  id: totrans-383
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE93]'
+- en: That is something that `LEFT()` cannot do (and neither can `LIKE`, for that
+    matter).
+  id: totrans-384
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是`LEFT()`不能做到的（事实上，`LIKE`也不能做到）。
+- en: Case sensitivity of a regular-expression match is like that of a string comparison.
+    That is, it depends on whether the operands are binary or nonbinary strings, and
+    for nonbinary strings, it depends on their collation. See [Recipe 7.7](#nch-strings-strings-compare)
+    for discussion of how these factors apply to comparisons.
+  id: totrans-385
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正则表达式匹配的大小写敏感性与字符串比较类似。也就是说，它取决于操作数是二进制还是非二进制字符串，对于非二进制字符串，还取决于它们的排序规则。参见[7.7
+    节](#nch-strings-strings-compare)讨论这些因素如何适用于比较。
+- en: Note
+  id: totrans-386
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Prior version 8.0.4, regular expresisons worked only for single-byte character
+    sets. In MySQL 8.0.4 this limitation was removed and now you can use regular expressions
+    with multibyte character sets such as `utf8mb4` or `sjis`.
+  id: totrans-387
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 8.0.4 版本之前，正则表达式仅适用于单字节字符集。在 MySQL 8.0.4 中，这个限制被移除，现在您可以在诸如`utf8mb4`或`sjis`之类的多字节字符集中使用正则表达式。
+- en: 7.12 Reversing the string content
+  id: totrans-388
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.12 反转字符串内容
+- en: Problem
+  id: totrans-389
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to modify a string, and find its reverse form.
+  id: totrans-390
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想修改一个字符串，并找出它的反向形式。
+- en: Solution
+  id: totrans-391
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use function `REVERSE()`.
+  id: totrans-392
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`REVERSE()`函数。
+- en: Discussion
+  id: totrans-393
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: You can reverse a string or a sub-string by using `REVERSE()` function. This
+    function utilizes any string value into its reverse form by character. It’s also
+    often used in `SELECT` statements like many other functions in this chapter.
+  id: totrans-394
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过使用`REVERSE()`函数来反转字符串或子字符串。该函数通过字符将任何字符串值转换为其反向形式。它经常在像本章其他许多函数一样的`SELECT`语句中使用。
+- en: 'Syntax to use `REVERSE()` function:'
+  id: totrans-395
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`REVERSE()`函数的语法：
+- en: '[PRE94]'
+  id: totrans-396
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE94]'
+- en: 'Following examples are showing basic functionality of `REVERSE()` function:'
+  id: totrans-397
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下示例展示了`REVERSE()`函数的基本功能：
+- en: '[PRE95]'
+  id: totrans-398
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE95]'
+- en: '[PRE96]'
+  id: totrans-399
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE96]'
+- en: '[PRE97]'
+  id: totrans-400
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE97]'
+- en: The following example shows the when the expression is `numeric` value the zero
+    values is omitted by the function.
+  id: totrans-401
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面的示例显示了当表达式为`numeric`值时，函数会省略零值。
+- en: '[PRE98]'
+  id: totrans-402
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE98]'
+- en: 'While we can reverse any expression we also have some words returns exactly
+    the same written in reverse known as Palindrome. For such strings function `REVERSE`
+    will return string, equal to the original one. For example:'
+  id: totrans-403
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管我们可以反转任何表达式，但我们也有一些单词，它们反过来写时与原始单词相同，被称为回文。对于这样的字符串，函数`REVERSE`将返回与原始字符串相等的字符串。例如：
+- en: '[PRE99]'
+  id: totrans-404
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE99]'
+- en: The broader example uses table `top_names` from the *recipes* distribution,
+    that stores the most common used names. Among these names we will find out the
+    number of palindromatic names.
+  id: totrans-405
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更广泛的示例使用*recipes*发行版中的`top_names`表，该表存储了最常用的姓名。在这些姓名中，我们将找出回文姓名的数量。
+- en: '[PRE100]'
+  id: totrans-406
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE100]'
+- en: Just to get a sample from this count we can have a look names start with “U”.
+  id: totrans-407
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 仅仅为了从这个计数中获取一个样本，我们可以查看以“U”开头的名称。
+- en: '[PRE101]'
+  id: totrans-408
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE101]'
+- en: 7.13 Searching for Substrings
+  id: totrans-409
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.13 搜索子字符串
+- en: Problem
+  id: totrans-410
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know whether a given string occurs within another string.
+  id: totrans-411
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你想知道给定的字符串是否出现在另一个字符串中。
+- en: Solution
+  id: totrans-412
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use `LOCATE()` or a pattern match.
+  id: totrans-413
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `LOCATE()` 或模式匹配。
+- en: Discussion
+  id: totrans-414
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: The `LOCATE()` function takes two arguments representing the substring that
+    you’re looking for and the string in which to look for it. The return value is
+    the position at which the substring occurs, or `0` if it’s not present. An optional
+    third argument may be given to indicate the position within the string at which
+    to start looking.
+  id: totrans-415
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LOCATE()` 函数接受两个参数，分别表示要查找的子字符串和要在其中查找的字符串。返回值是子字符串出现的位置，如果不存在则返回 `0`。可选的第三个参数可以指定开始查找的位置。'
+- en: '[PRE102]'
+  id: totrans-416
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE102]'
+- en: 'To determine only whether the substring is present if you don’t care about
+    its position, an alternative is to use `LIKE` or `REGEXP`:'
+  id: totrans-417
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果只需确定子字符串是否存在且不关心其位置，则可以使用 `LIKE` 或 `REGEXP` 的替代方法：
+- en: '[PRE103]'
+  id: totrans-418
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE103]'
+- en: '`LOCATE()`, `LIKE`, and `REGEXP` use the collation of their arguments to determine
+    whether the search is case sensitive. [Recipe 7.5](#nch-strings-strings-charset-checking-changing)
+    and [Recipe 7.7](#nch-strings-strings-compare) discuss changing the argument comparison
+    properties if you want to change the search behavior.'
+  id: totrans-419
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LOCATE()`、`LIKE` 和 `REGEXP` 使用它们参数的排序规则来决定搜索是否区分大小写。[7.5 节](#nch-strings-strings-charset-checking-changing)
+    和 [7.7 节](#nch-strings-strings-compare) 讨论了如果需要改变搜索行为，则可以更改参数比较属性。'
+- en: 7.14 Breaking Apart or Combining Strings
+  id: totrans-420
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.14 分解或组合字符串
+- en: Problem
+  id: totrans-421
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to extract a piece of a string or combine strings to form a larger
+    string.
+  id: totrans-422
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你想要从字符串中提取一部分或者组合字符串以形成更大的字符串。
+- en: Solution
+  id: totrans-423
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: To obtain a piece of a string, use a substring-extraction function. To combine
+    strings, use `CONCAT()`.
+  id: totrans-424
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取字符串的一部分，请使用子字符串提取函数。要组合字符串，请使用 `CONCAT()`。
+- en: Discussion
+  id: totrans-425
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'You can break apart strings by using appropriate substring-extraction functions.
+    For example, `LEFT()`, `MID()`, and `RIGHT()` extract substrings from the left,
+    middle, or right part of a string:'
+  id: totrans-426
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以使用适当的子字符串提取函数来分解字符串。例如，`LEFT()`、`MID()` 和 `RIGHT()` 函数可以从字符串的左侧、中间或右侧提取子字符串：
+- en: '[PRE104]'
+  id: totrans-427
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE104]'
+- en: For `LEFT()` and `RIGHT()`, the second argument indicates how many characters
+    to return from the left or right end of the string. For `MID()`, the second argument
+    is the starting position of the substring you want (beginning from 1), and the
+    third argument indicates how many characters to return.
+  id: totrans-428
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 `LEFT()` 和 `RIGHT()`，第二个参数指示从字符串左侧或右侧返回多少个字符。对于 `MID()`，第二个参数是你想要的子字符串的起始位置（从
+    1 开始），第三个参数表示要返回的字符数。
+- en: 'The `SUBSTRING()` function takes a string and a starting position, returning
+    everything to the right of the position. `MID()` acts the same way if you omit
+    its third argument because `MID()` is actually a synonym for `SUBSTRING()`:'
+  id: totrans-429
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SUBSTRING()` 函数接受一个字符串和一个起始位置，并返回该位置右侧的所有内容。如果省略 `MID()` 的第三个参数，它的行为与 `SUBSTRING()`
+    相同，因为 `MID()` 实际上是 `SUBSTRING()` 的同义词：'
+- en: '[PRE105]'
+  id: totrans-430
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE105]'
+- en: 'Use `SUBSTRING_INDEX(`*`str`*`,`*`c`*`,`*`n`*`)` to return everything to the
+    right or left of a given character. It searches into a string *`str`* for the
+    *`n`*-th occurrence of the character *`c`* and returns everything to its left.
+    If *`n`* is negative, the search for *`c`* starts from the right and returns everything
+    to the right of the character:'
+  id: totrans-431
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `SUBSTRING_INDEX(`*`str`*`,`*`c`*`,`*`n`*`)` 来返回给定字符的右侧或左侧的所有内容。它会在字符串 *`str`*
+    中搜索第 *`n`* 次出现的字符 *`c`*，并返回其左侧的所有内容。如果 *`n`* 是负数，则从右侧开始搜索字符 *`c`* 并返回其右侧的所有内容：
+- en: '[PRE106]'
+  id: totrans-432
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE106]'
+- en: If there is no *`n`*-th occurrence of the character, `SUBSTRING_INDEX()` returns
+    the entire string. `SUBSTRING_INDEX()` is case sensitive.
+  id: totrans-433
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果没有字符的第 *`n`* 次出现，`SUBSTRING_INDEX()` 返回整个字符串。`SUBSTRING_INDEX()` 区分大小写。
+- en: 'You can use substrings for purposes other than display, such as to perform
+    comparisons. The following statement finds metal names having a first letter that
+    lies in the last half of the alphabet:'
+  id: totrans-434
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以使用子字符串来执行除了显示之外的其他目的，比如执行比较。以下语句查找第一个字母位于字母表后半部分的金属名称：
+- en: '[PRE107]'
+  id: totrans-435
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE107]'
+- en: 'To combine rather than pull apart strings, use the `CONCAT()` function. It
+    concatenates its arguments and returns the result:'
+  id: totrans-436
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要组合而不是分解字符串，请使用 `CONCAT()` 函数。它连接其参数并返回结果：
+- en: '[PRE108]'
+  id: totrans-437
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE108]'
+- en: 'Concatenation can be useful for modifying column values <q>in place.</q> For
+    example, the following `UPDATE` statement adds a string to the end of each `name`
+    value in the `metal` table:'
+  id: totrans-438
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 连接对于在原地修改列值 <q>非常有用。</q> 例如，以下`UPDATE`语句将字符串添加到`metal`表中每个`name`值的末尾：
+- en: '[PRE109]'
+  id: totrans-439
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE109]'
+- en: 'To undo the operation, strip the last three characters (the `CHAR_LENGTH()`
+    function returns the length of a string in characters):'
+  id: totrans-440
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要撤销操作，请去掉最后三个字符（`CHAR_LENGTH()`函数返回字符串的字符长度）：
+- en: '[PRE110]'
+  id: totrans-441
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE110]'
+- en: 'The concept of modifying a column in place can be applied to `ENUM` or `SET`
+    values as well, which usually can be treated as string values even though they
+    are stored internally as numbers. For example, to concatenate a `SET` element
+    to an existing `SET` column, use `CONCAT()` to add the new value to the existing
+    value, preceded by a comma. But remember to account for the possibility that the
+    existing value might be `NULL`. In that case, set the column value equal to the
+    new element, without the leading comma:'
+  id: totrans-442
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于`ENUM`或`SET`值，可以直接在原地修改列，尽管它们在内部存储为数字，但通常可以视为字符串值。例如，要将`SET`元素连接到现有的`SET`列中，使用`CONCAT()`将新值添加到现有值之前，并注意考虑现有值可能为`NULL`的情况。在这种情况下，将列值设置为新元素，而不带前导逗号：
+- en: '[PRE111]'
+  id: totrans-443
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE111]'
+- en: 7.15 Using Full-Text Searches
+  id: totrans-444
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.15 使用全文搜索
+- en: Problem
+  id: totrans-445
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to search long text columns.
+  id: totrans-446
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你想要搜索长文本列。
+- en: Solution
+  id: totrans-447
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a `FULLTEXT` index.
+  id: totrans-448
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`FULLTEXT`索引。
+- en: Discussion
+  id: totrans-449
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Pattern matches enable you to look through any number of rows, but as the amount
+    of text goes up, the match operation can become quite slow. It’s also a common
+    task to search for the same text in several string columns, but with pattern matching,
+    that results in unwieldy queries:'
+  id: totrans-450
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模式匹配使您能够查看任意数量的行，但随着文本量的增加，匹配操作可能会变得非常慢。在几个字符串列中搜索相同文本是常见任务，但使用模式匹配时，这会导致查询变得笨重：
+- en: '[PRE112]'
+  id: totrans-451
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE112]'
+- en: A useful alternative is full-text searching, which is designed for looking through
+    large amounts of text and can search multiple columns simultaneously. To use this
+    capability, add a `FULLTEXT` index to your table, and then use the `MATCH` operator
+    to look for strings in the indexed column or columns. `FULLTEXT` indexing can
+    be used with MyISAM tables or InnoDB tables for nonbinary string data types (`CHAR`,
+    `VARCHAR`, or `TEXT`).
+  id: totrans-452
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个有用的替代方案是全文搜索，专为搜索大量文本而设计，并可以同时搜索多个列。要使用此功能，需要在表上添加`FULLTEXT`索引，然后使用`MATCH`操作符在索引列或列中查找字符串。`FULLTEXT`索引可以用于MyISAM表或InnoDB表的非二进制字符串数据类型（`CHAR`、`VARCHAR`或`TEXT`）。
+- en: 'Full-text searching is best illustrated with a reasonably good-sized body of
+    text. If you don’t have a sample dataset, you can find several repositories of
+    freely available electronic text on the Internet. For the examples here, the one
+    we’ve chosen is the sample dump of the Amazon review data (2018), which is both
+    available for public to download and scrape from [Amazon Review Data (2018).](https://nijianmo.github.io/amazon/index.html)
+    Because of its size, this dataset is not included with the `recipes` distribution,
+    but is available separately as instructions at GitHub repository. The `Amazon`
+    distribution includes a file named *Appliances_5.json* that contains the product
+    reviews for each category. This is subset of larger datasets. As most text-based
+    data are found on the Internet, this data is only available in `JSON` data format.
+    Some sample records look like this:'
+  id: totrans-453
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 全文搜索最好用一个相当大的文本体来说明。如果没有样本数据集，可以在互联网上找到几个可自由获取的电子文本存储库。对于这里的示例，我们选择的是Amazon评论数据（2018年）的样本转储，公众可以从中下载和抓取[Amazon
+    Review Data (2018).](https://nijianmo.github.io/amazon/index.html) 由于其规模，这个数据集没有包含在`recipes`发行版中，但可以在GitHub仓库的说明中单独获取。`Amazon`分发包括一个名为*Appliances_5.json*的文件，其中包含每个类别的产品评论。这是更大数据集的子集。由于大多数基于文本的数据都可以在互联网上找到，因此这些数据仅以`JSON`数据格式提供。一些样本记录看起来像这样：
+- en: '[PRE113]'
+  id: totrans-454
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE113]'
+- en: What we are interested in here is `reviewText` field which has the large body
+    of text we are looking to examine.
+  id: totrans-455
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们感兴趣的是`reviewText`字段，它包含了我们想要检查的大量文本。
+- en: 'Each record contains the following fields:'
+  id: totrans-456
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个记录包含以下字段：
+- en: '`overall` rating of the product'
+  id: totrans-457
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`overall` - 产品的评分'
+- en: '`verified` purchase verification flag'
+  id: totrans-458
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`verified` - 购买验证标志'
+- en: '`reviewTime` date of the review'
+  id: totrans-459
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`reviewTime` - 评论日期'
+- en: '`reviewerID` - ID of the reviewer(`O` or `N`), e.g. A2SUAM1J3GNN3B'
+  id: totrans-460
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`reviewerID` - 评论者的ID（`O`或`N`），例如 A2SUAM1J3GNN3B'
+- en: '`asin` - ID of the product, e.g. 0000013714'
+  id: totrans-461
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`asin` - 产品的ID，例如 0000013714'
+- en: '`style` a discretionary of the product metadata'
+  id: totrans-462
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`style` - 产品元数据的自由选项'
+- en: '`reviewerName` name of the reviewer'
+  id: totrans-463
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`reviewerName` 评论者姓名。'
+- en: '`reviewText` text of the review'
+  id: totrans-464
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 评论的 `reviewText` 文本。
+- en: '`unixReviewTime` time of the review (unix time)'
+  id: totrans-465
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`unixReviewTime` 评论时间（Unix 时间）。'
+- en: 'To import the records into MySQL, create a table named `reviews` that looks
+    like this:'
+  id: totrans-466
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将记录导入到 MySQL 中，请创建名为 `reviews` 的表，如下所示：
+- en: '[PRE114]'
+  id: totrans-467
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE114]'
+- en: In order to load `json` data to this table we could have used MySQL built-in
+    json functions which is later covered in [Recipe 13.17](ch13.xhtml#nch-xfer-xfer-importjson).
+    On some cases of large text data can include escape characters such as end of
+    line `/n/n` which breaks the import functions to work. To overcome we’ll use simple
+    script to load the data which is provided in GitHub repository called `load_amazon_reviews.py`.
+  id: totrans-468
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了将 `json` 数据加载到此表中，我们可以使用 MySQL 内置的 json 函数，稍后将在 [Recipe 13.17](ch13.xhtml#nch-xfer-xfer-importjson)
+    中介绍。对于包含大量文本数据的某些情况，可能包含换行符 `/n/n` 等转义字符，这会导致导入函数无法正常工作。为了解决这个问题，我们将使用提供在 GitHub
+    仓库中的名为 `load_amazon_reviews.py` 的简单脚本来加载数据。
+- en: After loading the data we will convert the `reviewText` column as generated
+    column and add `FULLTEXT` index to enable its use in full-text searching.
+  id: totrans-469
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 加载数据后，我们将将 `reviewText` 列转换为生成列，并添加 `FULLTEXT` 索引以启用其在全文搜索中的使用。
+- en: '[PRE115]'
+  id: totrans-470
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE115]'
+- en: The table has now `FULLTEXT` index to enable its use in full-text searching.
+  id: totrans-471
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该表现在具有 `FULLTEXT` 索引以启用其在全文搜索中的使用。
+- en: 'After creating the `reviews` table, load the *Appliances_5.json* file into
+    it using this statement:'
+  id: totrans-472
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建 `reviews` 表后，请使用以下语句将 *Appliances_5.json* 文件加载到其中：
+- en: '[PRE116]'
+  id: totrans-473
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE116]'
+- en: You’ll notice that the `reviews` table contains columns both for complete `appliences_review`
+    data as well as `reviews_virtual` to demonstrate the `FULLTEXT` index.
+  id: totrans-474
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您会注意到 `reviews` 表包含完整的 `appliences_review` 数据列以及用于演示 `FULLTEXT` 索引的 `reviews_virtual`
+    列。
+- en: '[PRE117]'
+  id: totrans-475
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE117]'
+- en: 'To perform a search using the `FULLTEXT` index, use `MATCH()` to name the indexed
+    column and `AGAINST()` to specify what text to look for. For example, you might
+    wonder, <q>How many times does the word “awesome” occur?</q> To answer that question,
+    search the `reviews_virtual` column using this statement:'
+  id: totrans-476
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用 `FULLTEXT` 索引进行搜索，使用 `MATCH()` 命名索引列和 `AGAINST()` 指定要查找的文本。例如，您可能想知道：“‘awesome’
+    这个词出现了多少次？” 要回答这个问题，请使用以下语句搜索 `reviews_virtual` 列：
+- en: '[PRE118]'
+  id: totrans-477
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE118]'
+- en: To verify `FULLTEXT` index was used
+  id: totrans-478
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 验证 `FULLTEXT` 索引是否被使用。
+- en: '[PRE119]'
+  id: totrans-479
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE119]'
+- en: 'To find out which products had the keyword “excellent” in `reviews` are, select
+    the columns you want to see (the example here truncates the `reviews_virtual`
+    column and uses `\G` so the results better fit the page):'
+  id: totrans-480
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查找在 `reviews` 中含有关键字 “excellent” 的产品，选择您想要查看的列（这里的示例截断了 `reviews_virtual` 列并使用
+    `\G` 使结果更适合页面）：
+- en: '[PRE120]'
+  id: totrans-481
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE120]'
+- en: 'By default, full-text searches compute a relevance ranking and use it for sorting.
+    To make sure a search result is sorted the way you want, add an explicit `ORDER`
+    `BY` clause:'
+  id: totrans-482
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，全文搜索计算相关性排序并将其用于排序。为了确保搜索结果按您希望的方式排序，请添加显式的 `ORDER BY` 子句：
+- en: '[PRE121]'
+  id: totrans-483
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE121]'
+- en: To see the relevance ranking, repeat the `MATCH()` … `AGAINST()` expression
+    in the output column list.
+  id: totrans-484
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看相关性排序，请在输出列列表中重复使用 `MATCH()` … `AGAINST()` 表达式。
+- en: To narrow the search further, include additional criteria. To provide additional
+    fields in the search we’ll add the following virtual columns from `json` extract.
+  id: totrans-485
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要进一步缩小搜索范围，请包含额外的条件。为了在搜索中提供额外字段，我们将从 `json` 提取中添加以下虚拟列。
+- en: '[PRE122]'
+  id: totrans-486
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE122]'
+- en: '[PRE123]'
+  id: totrans-487
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE123]'
+- en: '[PRE124]'
+  id: totrans-488
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE124]'
+- en: The following queries perform progressively more specific searches to determine
+    how often each keyword occurs.
+  id: totrans-489
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下查询逐步执行更具体的搜索，以确定每个关键字的出现频率。
+- en: '[PRE125]'
+  id: totrans-490
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE125]'
+- en: 'If you expect to use search criteria frequently that include other non-`FULLTEXT`
+    columns, add regular indexes to those columns so that queries perform better.
+    For example, to index the vote, overall rating and verified columns, do this:'
+  id: totrans-491
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您经常使用包含其他非 `FULLTEXT` 列的搜索条件，请对这些列添加常规索引，以便查询性能更好。例如，要为投票、整体评分和已验证列创建索引，请执行以下操作：
+- en: '[PRE126]'
+  id: totrans-492
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE126]'
+- en: 'Search strings in full-text queries can include more than one word, and you
+    might suppose that adding words would make a search more specific. But in fact
+    that widens it because a full-text search returns rows that contain any of the
+    words. In effect, the query performs an `OR` search for any of the words. The
+    following queries illustrate this; they identify successively larger numbers of
+    reviews as additional search words are added:'
+  id: totrans-493
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 全文查询中的搜索字符串可以包含多个词，您可能认为添加词会使搜索更具体。但实际上，这会扩大搜索范围，因为全文搜索返回包含任何词的行。事实上，查询对任何词执行
+    `OR` 搜索。以下查询说明了这一点；随着添加更多搜索词，它们标识出越来越多的评论：
+- en: '[PRE127]'
+  id: totrans-494
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE127]'
+- en: To perform a search for which each word in the search string must be present,
+    see [Recipe 7.17](#nch-strings-strings-full-text-boolean).
+  id: totrans-495
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要执行搜索，搜索字符串中的每个单词必须存在，请参见[Recipe 7.17](#nch-strings-strings-full-text-boolean)。
+- en: 'To use full-text searches that look through multiple columns simultaneously,
+    name all the columns when you construct the `FULLTEXT` index:'
+  id: totrans-496
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要同时搜索多个列，请在构建`FULLTEXT`索引时命名所有列：
+- en: '[PRE128]'
+  id: totrans-497
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE128]'
+- en: 'To issue a search query that uses the index, name those same columns in the
+    `MATCH()` list:'
+  id: totrans-498
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要发出使用索引的搜索查询，请在`MATCH()`列表中命名相同的列：
+- en: '[PRE129]'
+  id: totrans-499
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE129]'
+- en: You need one such `FULLTEXT` index for each distinct combination of columns
+    that you want to search.
+  id: totrans-500
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要为要搜索的每个不同列组合创建一个`FULLTEXT`索引。
+- en: See Also
+  id: totrans-501
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: For further information on `FULLTEXT` indexing see [Recipe 21.9](ch21.xhtml#nch-queryperf-queryperf-fulltext).
+  id: totrans-502
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 获取有关`FULLTEXT`索引的进一步信息，请参阅[Recipe 21.9](ch21.xhtml#nch-queryperf-queryperf-fulltext)。
+- en: 7.16 Using a Full-Text Search with Short Words
+  id: totrans-503
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.16 使用全文搜索查找短词
+- en: Problem
+  id: totrans-504
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Your full-text searches for short words return no rows.
+  id: totrans-505
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您对短词的全文搜索未返回任何行。
+- en: Solution
+  id: totrans-506
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Change the indexing engine’s minimum word length parameter.
+  id: totrans-507
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更改索引引擎的最小词长参数。
+- en: Discussion
+  id: totrans-508
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: In a text like the `reviews`, certain words have special significance, such
+    as <q>ok</q> and <q>up</q>. You might want to check fulltext index server variables
+    first to make sure minimum length is satisfied by the engine.
+  id: totrans-509
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在像`reviews`这样的文本中，某些单词具有特殊意义，如<q>ok</q>和<q>up</q>。您可能需要首先检查全文索引服务器变量，以确保引擎满足最小长度要求。
+- en: '[PRE130]'
+  id: totrans-510
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE130]'
+- en: 'One property of the indexing engine is that it ignores words that are <q>too
+    common</q> (that is, words that occur in more than half the rows). This eliminates
+    words such as <q>the</q> or <q>and</q> from the index, but that’s not what is
+    going on here. You can verify that by counting the total number of rows, and by
+    using SQL pattern matches to count the number of rows containing each word (see
+    [Recipe 10.1](ch10.xhtml#nch-sum-sum-basic-count) regarding the use of `COUNT()`
+    to produce multiple counts from the same set of values):'
+  id: totrans-511
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引引擎的一个特性是忽略<q>太常见</q>的单词（即在超过半数行中出现的单词）。这会消除诸如<q>the</q>或<q>and</q>之类的词，但这里并非如此。您可以通过计算总行数并使用SQL模式匹配来计算包含每个单词的行数来验证（参见[Recipe
+    10.1](ch10.xhtml#nch-sum-sum-basic-count)关于使用`COUNT()`从相同值集合生成多个计数）：
+- en: '[PRE131]'
+  id: totrans-512
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE131]'
+- en: 'InnoDB full-text indexing engine doesn’t include words less than three characters
+    long. The minimum word length is a configurable parameter; to change it, set the
+    `ft_min_word_len` for MyISAM `innodb_ft_min_token_size` for InnoDB storage engine
+    system variable. For example, to tell the indexing engine to include words as
+    short as three characters, add a line to the `[mysqld]` group of the */etc/my.cnf*
+    file (or whatever option file you use for server settings):'
+  id: totrans-513
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB全文索引引擎不包括少于三个字符长的单词。最小词长是一个可配置参数；要更改它，请设置MyISAM的`ft_min_word_len`或InnoDB存储引擎的`innodb_ft_min_token_size`系统变量。例如，要告诉索引引擎包括三个字符长的单词，可以在*/etc/my.cnf*文件的`[mysqld]`组中添加一行（或者您用于服务器设置的任何选项文件）：
+- en: '[PRE132]'
+  id: totrans-514
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE132]'
+- en: After making this change, restart the server. Next, rebuild the `FULLTEXT` index
+    to take advantage of show the new setting first set the `innodb_optimize_fulltext_only`
+    parameter and run `OPTIMIZE` operation.
+  id: totrans-515
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 改变这个设置后，重新启动服务器。接下来，重建`FULLTEXT`索引以利用显示新设置，首先设置`innodb_optimize_fulltext_only`参数并运行`OPTIMIZE`操作。
+- en: '[PRE133]'
+  id: totrans-516
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE133]'
+- en: '[PRE134]'
+  id: totrans-517
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE134]'
+- en: 'For MyISAM, additionally run *REPAIR TABLE* command:'
+  id: totrans-518
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于MyISAM，此外运行*REPAIR TABLE*命令：
+- en: '[PRE135]'
+  id: totrans-519
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE135]'
+- en: You should also use `REPAIR` `TABLE` to rebuild the indexes for all other MyISAM
+    tables that have `FULLTEXT` indexes.
+  id: totrans-520
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还应使用`REPAIR TABLE`来重建所有其他具有`FULLTEXT`索引的MyISAM表的索引。
+- en: 'Finally, try the new index to verify that it includes shorter words:'
+  id: totrans-521
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，尝试新索引以验证它是否包括较短的单词：
+- en: '[PRE136]'
+  id: totrans-522
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE136]'
+- en: 7.17 Requiring or Prohibiting Full-Text Search Words
+  id: totrans-523
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.17 要求或禁止全文搜索词
+- en: Problem
+  id: totrans-524
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to require or prohibit specific words in a full-text search.
+  id: totrans-525
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要在全文搜索中要求或禁止特定单词。
+- en: Solution
+  id: totrans-526
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a Boolean mode search.
+  id: totrans-527
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用布尔模式搜索。
+- en: Discussion
+  id: totrans-528
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Normally, full-text searches return rows that contain any of the words in the
+    search string, even if some of them are missing. For example, the following statement
+    finds rows that contain either of the words <q>good</q> or <q>great</q>:'
+  id: totrans-529
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，全文搜索返回包含搜索字符串中任何单词的行，即使其中一些单词缺失也是如此。例如，以下语句查找包含单词<q>good</q>或<q>great</q>的行：
+- en: '[PRE137]'
+  id: totrans-530
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE137]'
+- en: 'This behavior is undesirable if you want only rows that contain both words.
+    One way to do this is to rewrite the statement to look for each word separately
+    and join the conditions with `AND`:'
+  id: totrans-531
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果要求只包含同时包含这两个单词的行，则此行为是不合适的。做法之一是重写语句，查找每个单词并使用`AND`连接条件：
+- en: '[PRE138]'
+  id: totrans-532
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE138]'
+- en: 'An easier way to require multiple words is with a Boolean mode search. To do
+    this, precede each word in the search string with a `+` character and add `IN`
+    `BOOLEAN` `MODE` after the string:'
+  id: totrans-533
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过布尔模式搜索是要求多个单词的更简单方法。为此，在搜索字符串中的每个单词前面加上`+`字符，并在字符串后添加`IN BOOLEAN MODE`：
+- en: '[PRE139]'
+  id: totrans-534
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE139]'
+- en: 'Boolean mode searches also permit you to exclude words by preceding each one
+    with a `-` character. The following queries select `reviews` rows containing the
+    name <q>good</q> but not <q>great</q>, and vice versa:'
+  id: totrans-535
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 布尔模式搜索还允许您通过在每个词前面加上`-`字符来排除词。以下查询选择包含名称为<q>good</q>但不包含<q>great</q>的`reviews`行，反之亦然：
+- en: '[PRE140]'
+  id: totrans-536
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE140]'
+- en: 'Another useful special character in Boolean searches is `*`; when appended
+    to a search word, it acts as a wildcard operator. The following statement finds
+    rows containing not only `use`, but also words such as `user`, `useful`, and `useless`:'
+  id: totrans-537
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在布尔搜索中，另一个有用的特殊字符是`*`；当附加到搜索词后面时，它作为通配符操作符。以下语句查找包含不仅`use`，还包括诸如`user`、`useful`和`useless`等单词的行：
+- en: '[PRE141]'
+  id: totrans-538
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE141]'
+- en: For the complete list of Boolean full-text operators, see the [MySQL Reference
+    Manual](https://dev.mysql.com/doc/refman/8.0/en/fulltext-boolean.html).
+  id: totrans-539
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于布尔全文操作符的完整列表，请参阅[MySQL参考手册](https://dev.mysql.com/doc/refman/8.0/en/fulltext-boolean.html)。
+- en: 7.18 Performing Full-Text Phrase Searches
+  id: totrans-540
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 7.18 执行全文短语搜索
+- en: Problem
+  id: totrans-541
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to perform a full-text search for a phrase; that is, for words that
+    occur adjacent to each other and in a specific order.
+  id: totrans-542
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望对短语执行全文搜索；即，搜索相邻且按指定顺序出现的单词。
+- en: Solution
+  id: totrans-543
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the full-text phrase-search capability.
+  id: totrans-544
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用全文短语搜索功能。
+- en: Discussion
+  id: totrans-545
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'To find rows that contain a particular phrase, a simple full-text search doesn’t
+    work:'
+  id: totrans-546
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查找包含特定短语的行，简单的全文搜索不起作用：
+- en: '[PRE142]'
+  id: totrans-547
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE142]'
+- en: The query returns a result, but not the one you’re looking for. A full-text
+    search computes a relevance ranking based on the presence of each word individually,
+    no matter where it occurs within the `reviews_virtual` column, and the ranking
+    is nonzero as long as any of the words are present. Consequently, that kind of
+    statement tends to find too many rows.
+  id: totrans-548
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询返回了结果，但不是您要查找的结果。全文搜索根据每个单词的存在情况计算相关性排名，不管它在`reviews_virtual`列中出现的位置，并且只要任何单词存在，排名就不为零。因此，这种语句往往会找到太多行。
+- en: 'Instead, use full-text Boolean mode, which supports phrase searching. Enclose
+    the phrase in double quotes within the search string:'
+  id: totrans-549
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相反，请使用全文布尔模式，它支持短语搜索。在搜索字符串内用双引号括起短语：
+- en: '[PRE143]'
+  id: totrans-550
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE143]'
+- en: A phrase match succeeds if a column contains the same words as in the phrase,
+    in the order specified.
+  id: totrans-551
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果列中包含与短语中相同的单词且顺序相同，则短语匹配成功。

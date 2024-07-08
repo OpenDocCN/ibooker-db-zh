@@ -1,0 +1,550 @@
+- en: Chapter 14\. Introduction to Sharding
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第14章。介绍分片
+- en: 'This chapter covers how to scale with MongoDB. We’ll look at:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章涵盖了如何使用MongoDB进行扩展。我们将看看：
+- en: What sharding is and the components of a cluster
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 什么是分片，以及集群的组件
+- en: How to configure sharding
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何配置分片
+- en: The basics of how sharding interacts with your application
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 分片与应用程序交互的基础知识
+- en: What Is Sharding?
+  id: totrans-5
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 什么是分片？
+- en: '*Sharding* refers to the process of splitting data up across machines; the
+    term *partitioning* is also sometimes used to describe this concept. By putting
+    a subset of data on each machine, it becomes possible to store more data and handle
+    more load without requiring larger or more powerful machines—just a larger quantity
+    of less-powerful machines. Sharding may be used for other purposes as well, including
+    placing more frequently accessed data on more performant hardware or splitting
+    a dataset based on geography to locate a subset of documents in a collection (e.g.,
+    for users based in a particular locale) close to the application servers from
+    which they are most commonly accessed.'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*分片*（Sharding）指的是将数据分散存储在多台机器上的过程；有时也会用术语*分区*（partitioning）来描述这个概念。将数据的子集放在每台机器上，可以在不需要更大或更强大的机器的情况下存储更多数据并处理更多负载，只需更多数量的性能较弱的机器。分片也可用于其他目的，包括将访问频率较高的数据放在性能更好的硬件上，或者基于地理位置将数据集分割，将集合中的一部分文档（例如针对特定地区用户的文档）放在最常访问它们的应用服务器附近。'
+- en: Manual sharding can be done with almost any database software. With this approach,
+    an application maintains connections to several different database servers, each
+    of which are completely independent. The application manages storing different
+    data on different servers and querying against the appropriate server to get data
+    back. This setup can work well but becomes difficult to maintain when adding or
+    removing nodes from the cluster or in the face of changing data distributions
+    or load patterns.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 几乎所有数据库软件都可以进行手动分片。使用这种方法，应用程序维护与多个不同的数据库服务器的连接，每个服务器都是完全独立的。应用程序管理将不同的数据存储在不同的服务器上，并针对合适的服务器进行查询以获取数据。这种设置可以很好地工作，但在向集群添加或移除节点、数据分布或负载模式发生变化时，维护变得困难。
+- en: MongoDB supports autosharding, which tries to both abstract the architecture
+    away from the application and simplify the administration of such a system. MongoDB
+    allows your application to ignore the fact that it isn’t talking to a standalone
+    MongoDB server, to some extent. On the operations side, MongoDB automates balancing
+    data across shards and makes it easier to add and remove capacity.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB支持自动分片，试图在某种程度上将架构与应用程序抽象化，并简化此类系统的管理。MongoDB允许您的应用程序在一定程度上忽略它并非在与独立的MongoDB服务器交互。在运维方面，MongoDB自动平衡数据跨分片，并简化增加和移除容量的操作。
+- en: Sharding is the most complex way of configuring MongoDB, both from a development
+    and an operational point of view. There are many components to configure and monitor,
+    and data moves around the cluster automatically. You should be comfortable with
+    standalone servers and replica sets before attempting to deploy or use a sharded
+    cluster. Also, as with replica sets, the recommended means of configuring and
+    deploying sharded clusters is through either MongoDB Ops Manager or MongoDB Atlas.
+    Ops Manager is recommended if you need to maintain control of your computing infrastructure.
+    MongoDB Atlas is recommended if you can leave the infrastructure management to
+    MongoDB (you have the option of running in Amazon AWS, Microsoft Azure, or Google
+    Compute Cloud).
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从开发和操作的角度看，分片是配置MongoDB最复杂的方式。需要配置和监控许多组件，并且数据在集群中自动移动。在尝试部署或使用分片集群之前，您应该对独立服务器和副本集感到满意。此外，与副本集一样，建议配置和部署分片集群的方法是通过MongoDB
+    Ops Manager或MongoDB Atlas。如果您需要维护对计算基础设施的控制，推荐使用Ops Manager。如果您可以将基础设施管理交给MongoDB，则推荐使用MongoDB
+    Atlas（您可以选择在Amazon AWS、Microsoft Azure或Google Compute Cloud上运行）。
+- en: Understanding the Components of a Cluster
+  id: totrans-10
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 理解集群的组件
+- en: MongoDB’s sharding allows you to create a cluster of many machines (shards)
+    and break up a collection across them, putting a subset of data on each shard.
+    This allows your application to grow beyond the resource limits of a standalone
+    server or replica set.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB的分片功能允许您创建一个由多台机器（分片）组成的集群，并在它们之间分割集合，将数据的子集放在每个分片上。这使得您的应用程序能够超越独立服务器或副本集的资源限制。
+- en: Note
+  id: totrans-12
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Many people are confused about the difference between replication and sharding.
+    Remember that replication creates an exact copy of your data on multiple servers,
+    so every server is a mirror image of every other server. Conversely, every shard
+    contains a different subset of data.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多人对复制和分片之间的区别感到困惑。请记住，复制在多个服务器上创建数据的精确副本，因此每个服务器都是其他服务器的镜像。相反，每个分片包含不同的数据子集。
+- en: One of the goals of sharding is to make a cluster of 2, 3, 10, or even hundreds
+    of shards look like a single machine to your application. To hide these details
+    from the application, we run one or more routing processes called a *mongos* in
+    front of the shards. A *mongos* keeps a “table of contents” that tells it which
+    shard contains which data. Applications can connect to this router and issue requests
+    normally, as shown in [Figure 14-1](#sharded_client_connection). The router, knowing
+    what data is on which shard, is able to forward the requests to the appropriate
+    shard(s). If there are responses to a request the router collects them and, if
+    necessary, merges them, and sends them back to the application. As far as the
+    application knows, it’s connected to a standalone *mongod*, as illustrated in
+    [Figure 14-2](#nonsharded_client_connection).
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分片的一个目标是使2、3、10甚至数百个分片看起来对应你的应用程序像是单一的机器。为了将这些细节隐藏在应用程序之外，我们在分片前面运行一个或多个路由进程，称为*mongos*。*mongos*维护一个“目录”，告诉它哪个分片包含哪些数据。应用程序可以连接到这个路由器并正常发出请求，就像在[图14-1](#sharded_client_connection)中展示的那样。路由器知道哪些数据在哪个分片上，能够将请求转发到适当的分片。如果请求有响应，路由器收集它们并在必要时合并它们，然后将它们发送回应用程序。对于应用程序而言，它连接的就像是一个独立的*mongod*，如[图14-2](#nonsharded_client_connection)所示。
+- en: '![](Images/mdb3_1401.png)'
+  id: totrans-15
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1401.png)'
+- en: Figure 14-1\. Sharded client connection
+  id: totrans-16
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图14-1\. 分片客户端连接
+- en: '![](Images/mdb3_1402.png)'
+  id: totrans-17
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1402.png)'
+- en: Figure 14-2\. Nonsharded client connection
+  id: totrans-18
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图14-2\. 非分片客户端连接
+- en: Sharding on a Single-Machine Cluster
+  id: totrans-19
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 单机集群上的分片
+- en: 'We’ll start by setting up a quick cluster on a single machine. First, start
+    a *mongo* shell with the `--nodb` and `--norc` options:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将在单台机器上快速设置一个集群。首先，使用`--nodb`和`--norc`选项启动一个*mongo* shell：
+- en: '[PRE0]'
+  id: totrans-21
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'To create a cluster, use the `ShardingTest` class. Run the following in the
+    *mongo* shell you just launched:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要创建一个集群，请使用`ShardingTest`类。在刚刚启动的*mongo* shell中运行以下命令：
+- en: '[PRE1]'
+  id: totrans-23
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: The `chunksize` option is covered in [Chapter 17](ch17.xhtml#chapter-sharding-admin).
+    For now, simply set it to `1`. As for the other options passed to `ShardingTest`
+    here, `name` simply provides a label for our sharded cluster, `shards` specifies
+    that our cluster will be composed of two shards (we do this to keep the resource
+    requirements low for this example), and `rs` defines each shard as a three-node
+    replica set with an `oplogSize` of 10 MiB (again, to keep resource shard as a
+    three-node replica set with an `oplogSize` of 10 MiB (again, to keep resource
+    utilization low). Though it is possible to run one standalone *mongod* for each
+    shard, it paints a clearer picture of the typical architecture of a sharded cluster
+    if we create each shard as a replica set. In the last option specified, we are
+    instructing `ShardingTest` to enable the balancer once the cluster is spun up.
+    This will ensure that data is evenly distributed across both shards.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`chunksize`选项在[第17章](ch17.xhtml#chapter-sharding-admin)中有详细说明。现在，简单地将其设置为`1`。至于这里传递给`ShardingTest`的其他选项，`name`仅提供我们分片集群的标签，`shards`指定我们的集群由两个分片组成（我们这样做是为了降低此示例的资源需求），而`rs`定义每个分片为三节点副本集，并设置了10
+    MiB的`oplogSize`（同样是为了保持资源利用率低）。尽管可以为每个分片运行一个独立的*mongod*，但如果我们将每个分片创建为副本集，这将更清晰地展示分片集群的典型架构。在指定的最后一个选项中，我们指示`ShardingTest`在集群启动后启用平衡器。这将确保数据均匀分布在两个分片之间。'
+- en: '`ShardingTest` is a class designed for internal use by MongoDB Engineering
+    and is therefore undocumented externally. However, because it ships with the MongoDB
+    server, it provides the most straightforward means of experimenting with a sharded
+    cluster. `ShardingTest` was originally designed to support server test suites
+    and is still used for this purpose. By default it provides a number of conveniences
+    that help in keeping resource utilization as small as possible and in setting
+    up the relatively complex architecture of a sharded cluster. It makes an assumption
+    about the presence of a `/data /db` directory on your machine; if `ShardingTest`
+    fails to run then create this directory and rerun the command again.'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ShardingTest`是MongoDB工程内部使用的类，因此在外部未记录文档。但是，因为它与MongoDB服务器一起提供，它提供了最直接的方法来实验分片集群。`ShardingTest`最初是为支持服务器测试套件而设计的，并且仍然用于此目的。默认情况下，它提供了许多便利功能，帮助尽可能减少资源利用，并设置分片集群的相对复杂的架构。它假设您的机器上存在`/data
+    /db`目录；如果`ShardingTest`运行失败，请创建此目录，然后重新运行命令。'
+- en: When you run this command, `ShardingTest` will do a lot for you automatically.
+    It will create a new cluster with two shards, each of which is a replica set.
+    It will configure the replica sets and launch each node with the necessary options
+    to establish replication protocols. It will launch a *mongos* to manage requests
+    across the shards so that clients can interact with the cluster as if communicating
+    with a standalone *mongod*, to some extent. Finally, it will launch an additional
+    replica set for the config servers that maintain the routing table information
+    necessary to ensure queries are directed to the correct shard. Remember that the
+    primary use cases for sharding are to split a dataset to address hardware and
+    cost constraints or to provide better performance to applications (e.g., geographical
+    partitioning). MongoDB sharding provides these capabilities in a way that is seamless
+    to the application in many respects.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 运行此命令时，`ShardingTest`将会自动为您完成许多工作。它将创建一个包含两个副本集的新集群。它将配置副本集，并使用必要的选项启动每个节点以建立复制协议。它将启动一个*mongos*来管理跨分片的请求，以便客户端可以与集群交互，就像与独立的*mongod*通信一样，在某种程度上。最后，它将启动一个额外的副本集，用于配置服务器，这些服务器维护了确保查询定向到正确分片的路由表信息。请记住，分片的主要用例是为了将数据集分割以解决硬件和成本约束，或者为应用程序提供更好的性能（例如，地理分区）。MongoDB的分片功能在许多方面以对应用程序无缝的方式提供这些能力。
+- en: 'Once `ShardingTest` has finished setting up your cluster, you will have 10
+    processes up and running to which you can connect: two replica sets of three nodes
+    each, one config server replica set of three nodes, and one *mongos*. By default,
+    these processes should begin at port 20000\. The *mongos* should be running at
+    port 20009\. Other processes you have running on your local machine and previous
+    calls to `ShardingTest` can have an effect on which ports `ShardingTest` uses,
+    but you should not have too much difficulty determining the ports on which your
+    cluster processes are running.'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦`ShardingTest`完成了集群的设置，您将有 10 个正在运行的进程可以连接：两个包含三个节点的副本集，一个包含三个节点的配置服务器副本集，以及一个*mongos*。默认情况下，这些进程应从端口
+    20000 开始。*mongos*应该在端口 20009 运行。您本地机器上运行的其他进程和之前对`ShardingTest`的调用可能会影响`ShardingTest`使用的端口，但您应该不会在确定集群进程运行的端口时遇到太多困难。
+- en: 'Next, you’ll connect to the *mongos* to play around with the cluster. Your
+    entire cluster will be dumping its logs to your current shell, so open up a second
+    terminal window and launch another *mongo* shell:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，您将连接到*mongos*以在集群中进行操作。整个集群将将其日志转储到当前 shell，因此请打开第二个终端窗口并启动另一个*mongo* shell：
+- en: '[PRE2]'
+  id: totrans-29
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Use this shell to connect to your cluster’s *mongos*. Again, your *mongos*
+    should be running on port 20009:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用此 shell 连接到您集群的*mongos*。再次提醒，您的*mongos*应该在端口 20009 上运行：
+- en: '[PRE3]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Note that the prompt in your *mongo* shell should change to reflect that you
+    are connected to a *mongos*. Now you are in the situation shown earlier, in [Figure 14-1](#sharded_client_connection):
+    the shell is the client and is connected to a *mongos*. You can start passing
+    requests to the *mongos* and it’ll route them to the shards. You don’t really
+    have to know anything about the shards, like how many there are or what their
+    addresses are. So long as there are some shards out there, you can pass the requests
+    to the *mongos* and allow it to forward them appropriately.'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，您的 *mongo* shell 提示符应更改以反映您已连接到 *mongos*。现在，您处于之前显示的情况，参见[图 14-1](#sharded_client_connection)：shell
+    是客户端，并连接到 *mongos*。您可以开始将请求传递给 *mongos*，它将适当地路由到分片。您实际上不需要了解分片的任何信息，例如它们有多少或其地址是什么。只要有一些分片存在，您就可以将请求传递给
+    *mongos*，并允许它适当地转发它们。
+- en: 'Start by inserting some data:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先插入一些数据：
+- en: '[PRE4]'
+  id: totrans-34
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: As you can see, interacting with *mongos* works the same way as interacting
+    with a standalone server does.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如您可以看到的，与 *mongos* 交互的方式与与独立服务器交互的方式相同。
+- en: 'You can get an overall view of your cluster by running `sh.status()`. It will
+    give you a summary of your shards, databases, and collections:'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过运行`sh.status()`来获取集群的整体视图。它会为您提供关于分片、数据库和集合的摘要：
+- en: '[PRE5]'
+  id: totrans-37
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: Note
+  id: totrans-38
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: '`sh` is similar to `rs`, but for sharding: it is a global variable that defines
+    a number of sharding helper functions, which you can see by running `sh.help()`.
+    As you can see from the `sh.status()` output, you have two shards and two databases
+    (*config* is created automatically).'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`sh`类似于`rs`，但用于分片：它是一个全局变量，定义了许多分片助手函数，您可以通过运行`sh.help()`查看这些函数。正如从`sh.status()`输出中可以看出的那样，您有两个分片和两个数据库（*config*将自动创建）。'
+- en: Your *accounts* database may have a different primary shard than the one shown
+    here. A primary shard is a “home base” shard that is randomly chosen for each
+    database. All of your data will be on this primary shard. MongoDB cannot automatically
+    distribute your data yet because it doesn’t know how (or if) you want it to be
+    distributed. You have to tell it, per collection, how you want it to distribute
+    data.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您的 *accounts* 数据库可能具有与此处显示的不同的主分片。主分片是随机为每个数据库选择的“主基地”分片。所有数据都将位于此主分片上。MongoDB
+    目前无法自动分配数据，因为它不知道（或不知道）您希望如何分配数据。您必须告诉它，对于每个集合，您希望如何分配数据。
+- en: Note
+  id: totrans-41
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: A primary shard is different from a replica set primary. A primary shard refers
+    to the entire replica set composing a shard. A primary in a replica set is the
+    single server in the set that can take writes.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 主分片与副本集的主服务器不同。主分片指的是组成一个分片的整个副本集。副本集中的主服务器是可以进行写操作的单个服务器。
+- en: 'To shard a particular collection, first enable sharding on the collection’s
+    database. To do so, run the `enableSharding` command:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要分片特定集合，首先在集合的数据库上启用分片。要执行此操作，请运行`enableSharding`命令：
+- en: '[PRE6]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Now sharding is enabled on the *accounts* database, which allows you to shard
+    collections within the database.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在 *accounts* 数据库已启用分片，这使您可以在数据库内分片集合。
+- en: 'When you shard a collection, you choose a shard key. This is a field or two
+    that MongoDB uses to break up data. For example, if you chose to shard on `"username"`,
+    MongoDB would break up the data into ranges of usernames: `"a1-steak-sauce"` through
+    `"defcon"`, `"defcon1"` through `"howie1998"`, and so on. Choosing a shard key
+    can be thought of as choosing an ordering for the data in the collection. This
+    is a similar concept to indexing, and for good reason: the shard key becomes the
+    most important index on your collection as it gets bigger. To even create a shard
+    key, the field(s) must be indexed.'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您分片一个集合时，您需要选择一个分片键。这是MongoDB用来拆分数据的一个字段或两个字段。例如，如果您选择在`"username"`上分片，MongoDB将根据用户名范围将数据分为几段：从`"a1-steak-sauce"`到`"defcon"`，从`"defcon1"`到`"howie1998"`等。选择分片键可以视为选择集合数据的排序方式。这与索引类似，并且有其道理：分片键成为集合中最重要的索引，特别是在集合变大时。要创建分片键，字段（们）必须被索引。
+- en: 'So, before enabling sharding, you have to create an index on the key you want
+    to shard by:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，在启用分片之前，您必须为要分片的关键字创建索引：
+- en: '[PRE7]'
+  id: totrans-48
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Now you can shard the collection by `"username"`:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，您可以通过`"username"`来分片集合：
+- en: '[PRE8]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Although we are choosing a shard key without much thought here, it is an important
+    decision that should be carefully considered in a real system. See [Chapter 16](ch16.xhtml#chapter-shardkey)
+    for more advice on choosing a shard key.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管我们在这里选择分片键并没有仔细考虑，但在实际系统中，这是一个需要仔细考虑的重要决定。请参阅[第16章](ch16.xhtml#chapter-shardkey)获取有关选择分片键的更多建议。
+- en: 'If you wait a few minutes and run `sh.status()` again, you’ll see that there’s
+    a lot more information displayed than there was before:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果等待几分钟然后再次运行`sh.status()`，你会发现显示的信息比之前多得多：
+- en: '[PRE9]'
+  id: totrans-53
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'The collection has been split up into 13 chunks, where each chunk is a subset
+    of your data. These are listed by shard key range (the ``{"username" : *`minValue`*}
+    -->> {"username" : *`maxValue`*}`` denotes the range of each chunk). Looking at
+    the ``"on" : *`shard`*`` part of the output, you can see that these chunks have
+    been evenly distributed between the shards.'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '这个集合已经分割成了13个块，每个块都是你的数据的一个子集。这些块按照分片键范围列出（`{"username" : *`minValue`*} -->>
+    {"username" : *`maxValue`*}`表示每个块的范围）。查看输出的`"on" : *`shard`*`部分，你可以看到这些块已经在分片之间均匀分布。'
+- en: This process of a collection being split into chunks is shown graphically in
+    Figures [14-3](#figure-unsplit-coll) through [14-5](#figure-dist-coll). Before
+    sharding, the collection is essentially a single chunk. Sharding splits it into
+    smaller chunks based on the shard key, as shown in [Figure 14-4](#figure-split-coll).
+    These chunks can then be distributed across the cluster, as [Figure 14-5](#figure-dist-coll)
+    shows.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个集合被分成块的过程在图 [14-3](#figure-unsplit-coll) 到 [14-5](#figure-dist-coll) 中以图形方式显示。在分片之前，集合本质上是一个单一的块。分片将其分成基于分片键的较小块，如
+    [图 14-4](#figure-split-coll) 所示。这些块然后可以分布在集群中，如 [图 14-5](#figure-dist-coll) 所示。
+- en: '![](Images/mdb3_1403.png)'
+  id: totrans-56
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1403.png)'
+- en: Figure 14-3\. Before a collection is sharded, it can be thought of as a single
+    chunk from the smallest value of the shard key to the largest
+  id: totrans-57
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图14-3\. 在集合分片之前，可以将其视为从分片键的最小值到最大值的单个块
+- en: '![](Images/mdb3_1404.png)'
+  id: totrans-58
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1404.png)'
+- en: Figure 14-4\. Sharding splits the collection into many chunks based on shard
+    key ranges
+  id: totrans-59
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图14-4\. Sharding根据分片键范围将集合分割成多个块
+- en: '![](Images/mdb3_1405.png)'
+  id: totrans-60
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1405.png)'
+- en: Figure 14-5\. Chunks are evenly distributed across the available shards
+  id: totrans-61
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图14-5\. 块均匀分布在可用分片之间
+- en: 'Notice the keys at the beginning and end of the chunk list: `$minKey` and `$maxKey`.
+    `$minKey` can be thought of as “negative infinity.” It is smaller than any other
+    value in MongoDB. Similarly, `$maxKey` is like “positive infinity.” It is greater
+    than any other value. Thus, you’ll always see these as the “caps” on your chunk
+    ranges. The values for your shard key will always be between `$minKey` and `$maxKey`.
+    These values are actually BSON types and should not be used in your application;
+    they are mainly for internal use. If you wish to refer to them in the shell, use
+    the `MinKey` and `MaxKey` constants.'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意块列表开头和结尾的键：`$minKey` 和 `$maxKey`。`$minKey` 可以被视为“负无穷”。它比MongoDB中的任何其他值都小。类似地，`$maxKey`
+    就像“正无穷”。它比任何其他值都大。因此，你会始终看到它们作为块范围的“上下限”。你的分片键的值将始终在`$minKey`和`$maxKey`之间。这些值实际上是BSON类型，不应在应用程序中使用；它们主要用于内部使用。如果你希望在shell中引用它们，请使用`MinKey`和`MaxKey`常量。
+- en: 'Now that the data is distributed across multiple shards, let’s try doing some
+    queries. First, try a query on a specific username:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在数据已分布在多个分片上，让我们尝试进行一些查询。首先，尝试查询特定用户名：
+- en: '[PRE10]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'As you can see, querying works normally. However, let’s run an `explain` to
+    see what MongoDB is doing under the covers:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你所见，查询正常工作。然而，让我们运行一个`explain`来查看MongoDB在幕后的操作：
+- en: '[PRE11]'
+  id: totrans-66
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: From the `"winningPlan"` field in the `explain` output, we can see that our
+    cluster satisfied this query using a single shard, *one-min-shards-rs0*. Based
+    on the output of `sh.status()` shown earlier, we can see that *user12345* does
+    fall within the key range for the first chunk listed for that shard in our cluster.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从`explain`输出中的`"winningPlan"`字段，我们可以看到我们的集群使用了单个分片*one-min-shards-rs0*来满足这个查询。根据之前显示的`sh.status()`输出，我们可以看到*user12345*确实落在我们集群中为该分片列出的第一个块的键范围内。
+- en: 'Because `"username"` is the shard key, *mongos* was able to route the query
+    directly to the correct shard. Contrast that with the results for querying for
+    all of the users:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为`"username"`是分片键，*mongos*能够直接将查询路由到正确的分片。与查询所有用户的结果相比，可以看到：
+- en: '[PRE12]'
+  id: totrans-69
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: As you can see from this `explain`, this query has to visit both shards to find
+    all the data. In general, if we are not using the shard key in the query, *mongos*
+    will have to send the query to every shard.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如你从这个`explain`中所见，这个查询必须访问两个分片来找到所有的数据。通常情况下，如果我们在查询中没有使用分片键，*mongos* 将不得不将查询发送到每个分片。
+- en: 'Queries that contain the shard key and can be sent to a single shard or a subset
+    of shards are called *targeted queries*. Queries that must be sent to all shards
+    are called *scatter-gather* (broadcast) queries: *mongos* scatters the query to
+    all the shards and then gathers up the results.'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 包含分片键并可以发送到单个分片或一组分片的查询称为*定向查询*。必须发送到所有分片的查询称为*分散-聚合*（广播）查询：*mongos*将查询分散到所有分片，然后收集结果。
+- en: 'Once you are finished experimenting, shut down the set. Switch back to your
+    original shell and hit Enter a few times to get back to the command line, then
+    run `st.stop()` to cleanly shut down all of the servers:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实验完成后，关闭集群。切换回原始Shell并按几次Enter返回命令行，然后运行`st.stop()`以干净地关闭所有服务器：
+- en: '[PRE13]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: If you are ever unsure of what an operation will do, it can be helpful to use
+    `ShardingTest` to spin up a quick local cluster and try it out.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你不确定一个操作会做什么，使用`ShardingTest`快速启动本地集群进行尝试会很有帮助。

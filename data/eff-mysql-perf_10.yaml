@@ -1,0 +1,880 @@
+- en: Chapter 10\. MySQL in the Cloud
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第 10 章 MySQL 在云中
+- en: 'MySQL in the cloud is fundamentally the same MySQL that you know and love (or
+    know and tolerate). In the cloud, the best practices and techniques detailed in
+    the previous nine chapters are not only true but *eminently* true because cloud
+    providers charge for every byte and millisecond of work. Performance is money
+    in the cloud. To recap the previous nine chapters:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 云中的 MySQL 本质上与您熟悉（或者说您了解并接受）的 MySQL 相同。在云中，前九章中详细介绍的最佳实践和技术不仅是真实的，而且是*极为*真实的，因为云服务提供商对每个字节和每毫秒工作时间都收费。在云中，性能就是金钱。对前九章的总结如下：
+- en: Performance is query response time ([Chapter 1](ch01.html#ch01)).
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 性能是查询响应时间（[第 1 章](ch01.html#ch01)）。
+- en: Indexes are the key to performance ([Chapter 2](ch02.html#ch02)).
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 索引是性能的关键（[第 2 章](ch02.html#ch02)）。
+- en: Less data is better—for both storing and accessing ([Chapter 3](ch03.html#ch03)).
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 少数据既能节省存储，也便于访问（[第 3 章](ch03.html#ch03)）。
+- en: Access patterns allow or inhibit performance ([Chapter 4](ch04.html#ch04)).
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 访问模式允许或抑制性能（[第 4 章](ch04.html#ch04)）。
+- en: Sharding is necessary to scale out writes and storage ([Chapter 5](ch05.html#ch05)).
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 分片是扩展写入和存储的必要手段（[第 5 章](ch05.html#ch05)）。
+- en: Server metrics reveal how the workload affects MySQL ([Chapter 6](ch06.html#ch06)).
+  id: totrans-7
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 服务器指标显示工作负载如何影响 MySQL（[第 6 章](ch06.html#ch06)）。
+- en: Replication lag is data loss and must be avoided ([Chapter 7](ch07.html#ch07)).
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 复制滞后是数据丢失，必须避免（[第 7 章](ch07.html#ch07)）。
+- en: Transactions affect row locking and undo logging ([Chapter 8](ch08.html#ch08)).
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 事务会影响行锁定和撤销日志（[第 8 章](ch08.html#ch08)）。
+- en: Other challenges exist—even in the cloud ([Chapter 9](ch09.html#ch09)).
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 即使在云中，还存在其他挑战（[第 9 章](ch09.html#ch09)）。
+- en: 'If you embrace and apply all those details, MySQL will execute the application
+    workload with remarkable performance regardless of location: in the cloud, on
+    premise, or anywhere.'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你接受并应用所有这些细节，MySQL 将在任何地方（云中、本地或其他任何地方）以显著的性能执行应用负载。
+- en: 'For the sake of saving you time, I wish it were that simple—optimize the workload
+    and you’re done—but MySQL in the cloud raises unique considerations. The goal
+    is to know and mitigate these cloud considerations so that you can focus on MySQL,
+    not the cloud. After all, the cloud is nothing special: behind the proverbial
+    curtain, it’s physical servers in a data center running programs like MySQL.'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了节省您的时间，我希望问题如此简单——优化工作负载，然后就万事大吉——但是，在云中使用 MySQL 提出了独特的考虑因素。目标是了解并减轻这些云计算中的考虑因素，以便您可以专注于
+    MySQL，而不是云计算。毕竟，云计算并不特别：在虚拟幕布背后，它是在数据中心运行像 MySQL 这样的物理服务器上运行程序。
+- en: 'This chapter highlights what to know when using MySQL in the cloud. There are
+    four major sections. The first cautions against compatibility: when MySQL is not
+    MySQL. The second is a quick discussion about varying levels of MySQL administration
+    in the cloud. The third discusses network latency and its relationship to storage
+    I/O. The fourth is about performance and money.'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章重点介绍在云中使用 MySQL 时需要注意的事项。有四个主要部分。第一个警告兼容性问题：当 MySQL 不再是 MySQL 时。第二部分是关于云中不同级别的
+    MySQL 管理的快速讨论。第三部分讨论网络延迟及其与存储 I/O 的关系。第四部分是关于性能和成本的讨论。
+- en: Compatibility
+  id: totrans-14
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 兼容性
+- en: 'MySQL in the cloud might not be MySQL, or it might be a highly modified (and
+    proprietary) version of MySQL. Compatibility of MySQL in the cloud has two sides:
+    code compatibility and feature compatibility.'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 云中的 MySQL 可能不是 MySQL，或者可能是高度修改过的（专有）版本的 MySQL。 MySQL 在云中的兼容性有两个方面：代码兼容性和功能兼容性。
+- en: Note
+  id: totrans-16
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'By *MySQL*, I mean MySQL published by Oracle: the official, open source MySQL
+    source code. I also mean Percona Server published by Percona, and MariaDB Server
+    published by the MariaDB Foundation: both are widely used, safe and stable, and
+    considered to be MySQL in general.'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*MySQL* 指的是由 Oracle 发布的 MySQL：官方的、开源的 MySQL 源代码。我也指的是由 Percona 发布的 Percona
+    Server，以及由 MariaDB 基金会发布的 MariaDB Server：它们都是广泛使用、安全稳定的，被视为通用的 MySQL。'
+- en: '*Code compatibility* is whether or not MySQL is the same open source code published
+    by Oracle, Percona, or MariaDB. The following nine words and phrases are commonly
+    used in product descriptions and documentation to allude to the fact that MySQL
+    is not code-compatible but, rather, something slightly (or significantly) different:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*代码兼容性* 涉及的是 MySQL 是否是由 Oracle、Percona 或 MariaDB 发布的相同开源代码。以下九个词语和短语通常用于产品描述和文档，以暗示
+    MySQL 并非代码兼容，而是稍微（或显著）不同的东西：'
+- en: Built on
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 基于
+- en: Emulates
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 模拟
+- en: Compatible
+  id: totrans-21
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 兼容
+- en: Client compatible
+  id: totrans-22
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 客户端兼容
+- en: Protocol compatible
+  id: totrans-23
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 协议兼容
+- en: Wire compatible
+  id: totrans-24
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 线兼容
+- en: Replacement
+  id: totrans-25
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 替代
+- en: Drop-in replacement
+  id: totrans-26
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 插拔兼容
+- en: Works with existing
+  id: totrans-27
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 与现有工作
+- en: 'Code compatibility is important because MySQL is complex and subtle, and we
+    entrust it to store invaluable data. In this book, I focus discussions to narrow
+    the scope of MySQL complexity, but sections like [“Page flushing”](ch06.html#metrics-page-flushing)
+    and [“Row Locking”](ch08.html#row-locking) hint at how deep the rabbit hole goes.
+    When any company alters MySQL source code, the risks are fourfold: data loss,
+    performance regressions, bugs, and incompatibilities. The greater the alterations,
+    the greater the risks. I have seen the latter three in the cloud; fortunately,
+    I have not seen a cloud provider lose data.'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 代码兼容性很重要，因为 MySQL 很复杂且微妙，我们委托它存储无价的数据。在本书中，我专注于讨论缩小 MySQL 复杂性的范围，但像 [“页面刷新”](ch06.html#metrics-page-flushing)
+    和 [“行锁定”](ch08.html#row-locking) 这样的章节暗示了问题的深度。当任何公司修改 MySQL 源代码时，风险是四倍的：数据丢失、性能退步、错误和不兼容性。修改越大，风险越大。在云端，我见过后三者；幸运的是，我没有看到云服务提供商丢失数据。
+- en: Tip
+  id: totrans-29
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: If you have any doubts whether or not MySQL in the cloud is code-compatible,
+    ask the cloud provider, “Is it the same open source MySQL published by Oracle?”
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你对 MySQL 在云端是否与代码兼容有任何疑问，请向云服务提供商询问，“这是否与由 Oracle 发布的开源 MySQL 相同？”
+- en: 'To present the whole argument, not just the negatives (the risks), cloud providers
+    alter MySQL to provide additional value: improve performance, fix bugs, and add
+    features that customers need. Some alterations are valuable and worth the risks.
+    But if you use MySQL in the cloud that is not code-compatible, you need to understand
+    the extent of the alterations. This is basic due diligence for professional engineers
+    using MySQL in the cloud.'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了全面呈现论点，而不仅仅是负面（风险），云服务提供商修改 MySQL 以提供额外的价值：改进性能，修复错误，并添加客户所需的功能。一些修改是有价值且值得风险的。但如果你在云中使用不与代码兼容的
+    MySQL，你需要了解修改的程度。对于在云中使用 MySQL 的专业工程师来说，这是基本的尽职调查。
+- en: Given enough eyeballs, all bugs are shallow.
+  id: totrans-32
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: 给出足够多的眼球，所有的 bug 都是浅显的。
+- en: ''
+  id: totrans-33
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+- en: Eric S. Raymond
+  id: totrans-34
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: Eric S. Raymond
+- en: '*Feature compatibility* is whether or not MySQL includes features not available
+    outside the cloud provider or the distribution of MySQL. For example, Oracle publishes
+    two distributions: MySQL Community Server and MySQL Enterprise Edition. The former
+    is open source; the latter includes proprietary features. [Oracle Cloud Infrastructure
+    (OCI)](https://www.oracle.com/cloud) uses the latter, which is good: more value
+    for the cloud money. But it also means that if you rely on features specific to
+    MySQL Enterprise Edition, you cannot directly migrate to another cloud provider
+    or distribution of MySQL. The same is true for Percona Server and MariaDB Server:
+    these distributions of MySQL have unique features, which is good, but it complicates
+    migration to another cloud provider or distribution of MySQL.'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*功能兼容性* 是 MySQL 是否包含在云提供商或 MySQL 发行版之外不可用的功能。例如，Oracle 发布了两个发行版：MySQL 社区版和
+    MySQL 企业版。前者是开源的；后者包含专有功能。[Oracle Cloud Infrastructure (OCI)](https://www.oracle.com/cloud)
+    使用后者，这是好事：为云服务的金钱提供更多价值。但这也意味着，如果你依赖于 MySQL 企业版特有的功能，你不能直接迁移到另一个云提供商或 MySQL 发行版。对于
+    Percona Server 和 MariaDB Server 也是如此：这些 MySQL 的发行版有独特的功能，这是好事，但它也使迁移到其他云提供商或 MySQL
+    发行版变得复杂。'
+- en: 'Feature compatibility is important for the same reason open source software
+    is important: freedom to change. Software—MySQL included—should empower engineers
+    and users, not lock us into specific cloud providers or vendors. That reasoning
+    is more philosophical than technical, which is why I’ll present the whole argument
+    again: some features are valuable and worth *not* changing to keep. But if you
+    choose to use a feature that’s not available outside the cloud provider or the
+    distribution of MySQL, you need to document why, so that future engineers can
+    understand what’s at stake (and what needs to be replaced) if they use another
+    cloud provider or distribution of MySQL. This, too, is basic due diligence for
+    professional engineers using MySQL in the cloud.'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 功能兼容性之所以重要，与开源软件重要的原因相同：自由更改。软件，包括 MySQL 在内，应该赋予工程师和用户权力，而不是将我们锁定在特定的云提供商或供应商中。这种推理比技术更具哲学意义，这也是为什么我将再次全面呈现整个论点：一些功能是有价值且不值得更改以保留的。但如果你选择使用在云服务提供商或
+    MySQL 发行版之外不可用的功能，你需要记录原因，以便未来的工程师可以理解其中的风险（以及需要替换的内容），如果他们使用其他云提供商或 MySQL 发行版。对于在云中使用
+    MySQL 的专业工程师来说，这也是基本的尽职调查。
+- en: Management (DBA)
+  id: totrans-37
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 管理（DBA）
+- en: 'We have successfully dodged MySQL administration (DBA work) from the very first
+    pages of this book, so we’re not about to fail now, but MySQL in the cloud raises
+    an issue that you need to know and address: who manages MySQL? Ostensibly, the
+    cloud provider manages MySQL, but it’s not that simple because managing MySQL
+    entails many operations. Brace yourself: I’m going steer this book dangerously
+    close to DBA work in order to explain.'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们从本书的第一页起就成功地避开了MySQL管理（DBA工作），所以我们现在也不会失败，但是云中的MySQL引发了一个你需要了解和解决的问题：谁来管理MySQL？表面上看，云提供商管理MySQL，但事实并不简单，因为管理MySQL涉及许多操作。做好准备：我将把本书引向接近DBA工作的危险领域，以便解释清楚。
+- en: '[Table 10-1](#dba-ops) is a partial list of DBA operations and who manages
+    them: you or the cloud.'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[表 10-1](#dba-ops) 是DBA操作的部分列表，指明了谁来管理它们：您还是云。'
+- en: Table 10-1\. DBA operations
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表10-1\. DBA操作列表
+- en: '| Operation | You | Cloud |'
+  id: totrans-41
+  prefs: []
+  type: TYPE_TB
+  zh: '| 操作 | 您 | 云 |'
+- en: '| --- | --- | --- |'
+  id: totrans-42
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- | --- |'
+- en: '| Provision |  | ✓ |'
+  id: totrans-43
+  prefs: []
+  type: TYPE_TB
+  zh: '| 配置 |  | ✓ |'
+- en: '| Configure |  | ✓ |'
+  id: totrans-44
+  prefs: []
+  type: TYPE_TB
+  zh: '| 配置 |  | ✓ |'
+- en: '| MySQL users | ✓ |  |'
+  id: totrans-45
+  prefs: []
+  type: TYPE_TB
+  zh: '| MySQL 用户 | ✓ |  |'
+- en: '| Server metrics | ✓ |  |'
+  id: totrans-46
+  prefs: []
+  type: TYPE_TB
+  zh: '| 服务器指标 | ✓ |  |'
+- en: '| Query metrics | ✓ |  |'
+  id: totrans-47
+  prefs: []
+  type: TYPE_TB
+  zh: '| 查询指标 | ✓ |  |'
+- en: '| Online schema change (OSC) | ✓ |  |'
+  id: totrans-48
+  prefs: []
+  type: TYPE_TB
+  zh: '| 在线架构变更（OSC） | ✓ |  |'
+- en: '| Failure recovery |  | ✓ |'
+  id: totrans-49
+  prefs: []
+  type: TYPE_TB
+  zh: '| 失败恢复 |  | ✓ |'
+- en: '| Disaster recovery (DR) | ✓ |  |'
+  id: totrans-50
+  prefs: []
+  type: TYPE_TB
+  zh: '| 灾难恢复（DR） | ✓ |  |'
+- en: '| High availability (HA) | ✓ | †^([a](ch10.html#idm45829096411712)) |'
+  id: totrans-51
+  prefs: []
+  type: TYPE_TB
+  zh: '| 高可用性（HA） | ✓ | †^([a](ch10.html#idm45829096411712)) |'
+- en: '| Upgrading |  | ✓ |'
+  id: totrans-52
+  prefs: []
+  type: TYPE_TB
+  zh: '| 升级 |  | ✓ |'
+- en: '| Backup and recovery |  | ✓ |'
+  id: totrans-53
+  prefs: []
+  type: TYPE_TB
+  zh: '| 备份和恢复 |  | ✓ |'
+- en: '| Change data capture (CDC) | ✓ |  |'
+  id: totrans-54
+  prefs: []
+  type: TYPE_TB
+  zh: '| 变更数据捕获（CDC） | ✓ |  |'
+- en: '| Security | ✓ |  |'
+  id: totrans-55
+  prefs: []
+  type: TYPE_TB
+  zh: '| 安全性 | ✓ |  |'
+- en: '| Help | ✓ |  |'
+  id: totrans-56
+  prefs: []
+  type: TYPE_TB
+  zh: '| 帮助 | ✓ |  |'
+- en: '| Cost | ✓ |  |'
+  id: totrans-57
+  prefs: []
+  type: TYPE_TB
+  zh: '| 成本 | ✓ |  |'
+- en: '| ^([a](ch10.html#idm45829096411712-marker)) Indicates some management. |'
+  id: totrans-58
+  prefs: []
+  type: TYPE_TB
+  zh: '| ^([a](ch10.html#idm45829096411712-marker)) 指示一些管理。 |'
+- en: 'Let me breeze through the 15 operations in [Table 10-1](#dba-ops) because being
+    aware of the full scope—even at a high level—helps you avoid gaps in MySQL management
+    that will become an issue if not addressed. Also known as *CYA*: cover your administration.'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我快速浏览一下[表 10-1](#dba-ops)中的15个操作，因为即使是在高层次上了解全部范围，也有助于避免MySQL管理中的漏洞，如果不加以解决将成为问题。也被称为*CYA*：保护你的管理工作。
+- en: 'Provisioning MySQL is, of course, what a cloud provider must provide: the lowest
+    level operation of running MySQL on a computer. Cloud providers use a decent MySQL
+    configuration, but double check because no default configuration can suit every
+    customer. Apart from a root user necessary to give you initial control of the
+    MySQL server, cloud providers do not manage MySQL users. Server and query metrics
+    are also your responsibility to collect and report. Granted, some cloud providers
+    expose basic sever metrics, but none are even remotely close to the full spectra
+    of metrics detailed in [Chapter 6](ch06.html#ch06). OSCs—running `ALTER` statements
+    without affecting the workload—are entirely your responsibility, and they tend
+    to be a little more difficult in the cloud for various technical reasons outside
+    the scope of this book. Cloud providers do handle failover: when hardware or MySQL
+    dies, the cloud provider will failover to restore availability. But cloud providers
+    do not handle *disaster recovery*: when an entire region fails and availability
+    must be restored by running MySQL from a different geographic location. Given
+    the previous two operations, high availability (HA) has mixed management (hence
+    † in the cloud column). The full discussion of MySQL high availability in the
+    cloud is too nuanced to cover here; let’s just say that the cloud provides some
+    amount of high availability. Cloud providers upgrade MySQL, which is really nice
+    because this operation is tedious at scale. Cloud providers backup MySQL, provide
+    long-term backup retention, and provide methods to restore backups—all of which
+    are incredibly important. You are responsible for change data capture (CDC), which
+    usually involves another tool or service acting like a replica to dump (or stream)
+    binary logs from MySQL to another data store (often a big data store or data lake).
+    Security of MySQL in the cloud is your responsibility—the cloud is *not* inherently
+    secure. Cloud providers help with running MySQL in general, but don’t expect much
+    (or any) help with MySQL performance unless your company pays for that level of
+    support. And finally, you must manage costs: the cloud is notorious for costing
+    more than engineers anticipate.'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 提供 MySQL 是云服务提供商必须提供的基本操作：在计算机上运行 MySQL 的最底层操作。云服务提供商使用了一个合理的 MySQL 配置，但请务必再次确认，因为没有默认配置能够适合每一个客户。除了一个根用户用来给你对
+    MySQL 服务器的初始控制权限外，云服务提供商不管理 MySQL 用户。服务器和查询指标也是你的责任来收集和报告。尽管一些云服务提供商暴露了基本的服务器指标，但没有一个能够接近[第
+    6 章](ch06.html#ch06)中详细介绍的所有指标。在云中运行 `ALTER` 语句而不影响工作负载完全是你的责任，并且由于书外技术原因，这些操作在云中通常会更加困难。云服务提供商会处理故障转移：当硬件或
+    MySQL 宕机时，云服务提供商将执行故障转移以恢复可用性。但是云服务提供商不处理*灾难恢复*：当整个区域发生故障时，必须通过在不同地理位置运行 MySQL
+    来恢复可用性。考虑到前两种操作，高可用性（HA）在云中的管理是混合的（因此†在云列中）。在这里涵盖 MySQL 在云中高可用性的全面讨论过于细致；我们只能说云提供了一定程度的高可用性。云服务提供商会升级
+    MySQL，这非常好，因为这一操作在大规模时非常繁琐。云服务提供商备份 MySQL，并提供长期备份保留以及恢复备份的方法——这些都非常重要。你负责变更数据捕获（CDC），通常需要另一个工具或服务来充当副本，从
+    MySQL 中转储（或流式传输）二进制日志到另一个数据存储（通常是大数据存储或数据湖）。在云中保护 MySQL 的安全性是你的责任——云本身*不*是安全的。云服务提供商会帮助你一般性地运行
+    MySQL，但不要期望得到太多（或任何）有关 MySQL 性能的帮助，除非你的公司为此支付了支持费用。最后，你必须管理成本：云因成本超出工程师预期而臭名昭著。
+- en: Warning
+  id: totrans-61
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: The three major cloud providers—Amazon, Google, and Microsoft—have a 99.95%
+    or 99.99% availability SLA for MySQL (as a managed service), but read the fine
+    print—the full legal details. For example, maintenance windows usually do not
+    count against the SLA. Or, the SLA might be voided if MySQL is not properly configured
+    *by you*. There are always details and caveats to cloud provider high availability
+    and SLAs.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 三大云服务提供商——亚马逊、谷歌和微软——为 MySQL（作为托管服务）提供了 99.95% 或 99.99% 的可用性 SLA，但请仔细阅读细则和法律详情。例如，维护窗口通常不计入
+    SLA。或者，如果 MySQL 没有由你正确配置，SLA 可能会失效。云服务提供商的高可用性和 SLA 总是有细节和注意事项。
+- en: '[Table 10-1](#dba-ops) is descriptive, not prescriptive, because different
+    cloud providers and third-party companies provide different levels of MySQL management
+    in the cloud. For example, some companies *fully* manage MySQL in the cloud (or
+    on-premise). As an engineer using MySQL, not managing it, you only need to know
+    that all the operations are managed—all the boxes are checked—so that none of
+    them interfere with your work. Once you know that, please forget everything you
+    read in this section, else you’ll wind up a MySQL DBA before you know it, twenty
+    years will pass, and the next engineer to join your team will have been a newborn
+    infant when—lo, the many years past—you were dealing with an inexplicable multi-range
+    read performance regression after an innocuous point release upgrade.'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[表10-1](#dba-ops) 是描述性的，而非规定性的，因为不同的云服务提供商和第三方公司在云中提供不同级别的MySQL管理。例如，一些公司在云中（或本地）*完全*管理MySQL。作为一个使用MySQL而不是管理MySQL的工程师，你只需要知道所有操作都是被管理的——所有的方框都是被勾选的，这样它们就不会干扰你的工作。一旦你知道了这一点，请忘记你在本节中读到的一切，否则你会在不知不觉中成为一个MySQL数据库管理员，二十年过去了，加入你团队的下一个工程师在你忙于解决一个无法解释的点版本升级后的性能回归问题时还是个婴儿。'
+- en: Network and Storage…Latency
+  id: totrans-64
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 网络和存储……延迟
+- en: 'When running MySQL on-premise (in data center space that your company leases),
+    the local network should never be a consideration or concern for you, presuming
+    it was designed and wired by competent professional network engineers. Local networks
+    are blazing fast and stable with submillisecond latency. The local network should
+    be more boring than the database (recall [“Normal and Stable: The Best Database
+    Is a Boring Database”](ch06.html#normal-and-stable)).'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当在本地（在公司租赁的数据中心空间内）运行MySQL时，本地网络永远不应该是你考虑或担心的问题，假设它是由胜任的专业网络工程师设计和布线的。本地网络具有亚毫秒级的延迟，速度快且稳定。本地网络应该比数据库更无聊（回想[“正常和稳定：最好的数据库是一种无聊的数据库”](ch06.html#normal-and-stable)）。
+- en: 'But the cloud is global, and wide-area networks have higher latency and lower
+    stability (greater fluctuations in latency and throughput). For example, the network
+    round-trip time (RTT) between San Francisco and New York City is approximately
+    60 milliseconds, plus or minus 10 milliseconds. If you run MySQL in San Francisco
+    (or anywhere on the U.S. west coast) and the application is in New York City (or
+    anywhere on the U.S. east cost), the minimum query response time is approximately
+    60 milliseconds. That is 60 times slower than a local network.^([1](ch10.html#idm45829096382992))
+    You will notice that slowness, but it will not show up in query response time
+    because the delay is outside MySQL. For example, a query profile (see [“Query
+    profile”](ch01.html#query-profile)) shows that a query takes 800 microseconds
+    to execute, but your application performance monitoring (APM) shows that the query
+    takes 60.8 milliseconds to execute: 800 µs for MySQL, and 60 ms for network latency
+    from sea to shining sea.'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是云是全球化的，广域网络具有较高的延迟和较低的稳定性（延迟和吞吐量波动较大）。例如，旧金山与纽约之间的网络往返时间（RTT）约为60毫秒，加减10毫秒。如果你在旧金山（或者美国西海岸的任何地方）运行MySQL，而应用程序在纽约市（或者美国东海岸的任何地方），最小的查询响应时间约为60毫秒。这比本地网络慢60倍。^([1](ch10.html#idm45829096382992))
+    你会注意到这种慢速，但它不会在查询响应时间中显示出来，因为延迟超出了MySQL的范围。例如，查询配置文件（参见[“查询配置文件”](ch01.html#query-profile)）显示一个查询执行需要800微秒，但你的应用程序性能监控（APM）显示查询执行需要60.8毫秒：MySQL需要800微秒，网络延迟需要60毫秒。
+- en: 'Network latency over long distances is physically limited by the speed of light
+    and exacerbated by intermediate routing. Consequently, you cannot overcome this
+    latency; you can only work around it. For example, refer to [“Enqueue Writes”](ch04.html#enqueue-writes):
+    enqueue locally, write remotely—where *remotely* is any process that incurs high
+    network latency.'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 长距离的网络延迟受到光速的物理限制和中间路由的恶化影响。因此，你无法克服这种延迟，只能绕过它。例如，参考[“写入入队”](ch04.html#enqueue-writes)：在本地进行入队，远程写入——其中*远程*是任何导致高网络延迟的进程。
+- en: 'Switching back to local networks, it’s a good thing they’re blazing fast and
+    stable because cloud providers typically store MySQL data on *network-attached
+    storage*: hard drives connected to the server through a local network. By contrast,
+    *locally-attached storage* (or *local storage*) is hard drives connected directly
+    to the server. Cloud providers use network-attached storage for various reasons
+    beyond the scope of this book. What’s important to know is that network-attached
+    storage is much slower and less stable than local storage. All three major cloud
+    providers—Amazon, Google, and Microsoft—publish “single-digit millisecond latency”
+    for network-attached storage (using SSD),^([2](ch10.html#idm45829096375248)) with
+    one exception: Amazon io2 Block Express has submillisecond latency. The bottom
+    line is, when using MySQL in the cloud, expect the storage to have single-digit
+    millisecond latency, which is equivalent to a spinning disk.'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 转回本地网络，幸好它们速度飞快且稳定，因为云提供商通常将MySQL数据存储在*网络附加存储*上：通过本地网络连接到服务器的硬盘驱动器。相比之下，*本地附加存储*（或*本地存储*）是直接连接到服务器的硬盘驱动器。云提供商出于本书范围之外的各种原因使用网络附加存储。重要的是要知道，网络附加存储比本地存储慢得多且不稳定。三大云提供商——亚马逊、谷歌和微软——发布了关于网络附加存储（使用SSD）的“单位时间内延迟为一位数毫秒”^([2](ch10.html#idm45829096375248))，除了亚马逊的io2
+    Block Express拥有亚毫秒级延迟。总之，在云中使用MySQL时，可以预期存储具有单位时间内延迟，这相当于旋转磁盘。
+- en: 'Network-attached storage is an order of magnitude slower than local storage
+    (with SSD; don’t use spinning disks), but is it a problem that you should address?
+    If you’re migrating MySQL to the cloud from bare metal hardware with high-end
+    local storage *and* the application heavily and consistently utilizes the local
+    storage IOPS (see [“IOPS”](ch06.html#metrics-iops)), then yes: verify that the
+    increased latency of network-attached storage does not cause a ripple effect of
+    performance degradation (because IOPS incur the latency). (Heavy and consistent
+    utilization of IOPS is a hallmark of a write-heavy workload: see [“Read/Write”](ch04.html#ap-read-write).)
+    But if you’re already in the cloud, or starting a new application in the cloud,
+    then no: don’t worry or think about storage latency in the cloud. Instead, lay
+    a foundation of highly optimized queries (indexes), data, and access patterns—as
+    covered in Chapters [2](ch02.html#ch02), [3](ch03.html#ch03), and [4](ch04.html#ch04),
+    respectively—and storage latency in the cloud may never be an issue.'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网络附加存储与本地存储（使用SSD；不使用旋转磁盘）的速度相差一个数量级，但这是你应该解决的问题吗？如果你从具有高端本地存储（SSD）的裸金属硬件迁移到云中的MySQL，并且应用程序大量且持续地利用本地存储的IOPS（见[“IOPS”](ch06.html#metrics-iops)），那么是的：验证网络附加存储的增加延迟是否导致性能下降的连锁反应（因为IOPS会产生延迟）。（IOPS的大量和持续利用是写入密集工作负载的标志：参见[“读/写”](ch04.html#ap-read-write)。）但如果你已经在云中，或者在云中启动新的应用程序，那么不用担心或考虑云中的存储延迟。相反，建立高度优化的查询（索引）、数据和访问模式的基础——分别在第[2](ch02.html#ch02)、[3](ch03.html#ch03)和[4](ch04.html#ch04)章中讨论——云中的存储延迟可能永远不会成为问题。
+- en: 'If storage latency in the cloud is a problem, then you need to optimize the
+    workload further, shard ([Chapter 5](ch05.html#ch05)), or purchase better (more
+    expensive) cloud storage. Remember: Netflix runs in the cloud, as do other very
+    large and successful companies. The performance potential for MySQL in the cloud
+    is virtually unlimited. The question is: can you afford it?'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果云中的存储延迟成为问题，则需要进一步优化工作负载、分片（[第5章](ch05.html#ch05)）或购买更好（更昂贵）的云存储。记住：Netflix以及其他非常大型和成功的公司都在云中运行。在云中，MySQL的性能潜力几乎是无限的。问题是：你能负担得起吗？
+- en: Performance Is Money
+  id: totrans-71
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 性能即金钱
+- en: 'Fittingly, the beginning of this book—[“A True Story of False Performance”](ch01.html#a-true-story)—mirrors
+    the end. But in the cloud, customers sell themselves more RAM to “fix” MySQL performance.
+    An engineer at one of the three major cloud providers told me that most MySQL
+    instances are over-provisioned: customers pay for more capacity than the application
+    needs or utilizes.^([3](ch10.html#idm45829096356448))'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与本书的开头——[“一个关于虚假性能的真实故事”](ch01.html#a-true-story)——形成了相似性。但在云中，客户会为了“修复”MySQL性能而购买更多的RAM。三大云提供商之一的工程师告诉我，大多数MySQL实例都被过度配置：客户为应用程序所需或利用的容量支付了更多费用^([3](ch10.html#idm45829096356448))。
+- en: 'Has the industry come full circle and now, with the ease of scalability in
+    the cloud, performance is simply a larger instance? No, definitely not: *performance
+    is query response time*; and in the cloud, every byte and millisecond of performance
+    is billed hourly, which makes all the best practices and techniques in this book
+    more important than ever.'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 行业是否已经完全回到云的可伸缩性，而性能只是更大的实例？不，绝对不是：*性能是查询响应时间*；在云中，每个字节和毫秒的性能都按小时计费，这使得本书中的所有最佳实践和技术比以往任何时候都更加重要。
+- en: 'If you have used any services in the cloud, then the following information
+    probably won’t surprise you. But if you’re new to the cloud, then let me be the
+    first to tell you: cloud pricing is complex, nearly intractable, and frequently
+    underestimated (which means over budget). That’s true when engineers make a concerted
+    effort to estimate and control cloud costs; when they don’t, I have seen six-figure
+    surprises: more than $100,000 over budget. Following are the three most important
+    things to know to avoid billing surprises when using MySQL in the cloud.'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您曾使用过云服务，下面的信息可能不会让您感到意外。但如果您是云计算新手，那么请让我第一个告诉您：云计算定价复杂，几乎难以掌控，并且经常低估（这意味着超出预算）。即使工程师们竭力估算和控制云计算成本，这一点仍然如此；当他们不这样做时，我曾见过六位数的惊喜：超过预算的10万美元。以下是在云中使用
+    MySQL 时避免计费意外的三个最重要的事项。
+- en: The first thing to know is that *the price doubles* for each level of the underlying
+    compute (the virtual server that runs MySQL) because the resources (vCPU count
+    and memory size) at each level double. For example, if the minimum level of compute
+    is 2 vCPU and 8 GB RAM, the next level up is 4 vCPU and 16 GB RAM—and the price
+    doubles, too. There are a few exceptions, but expect doubling. As a result, you
+    cannot gradually increase costs; you double costs for each level of compute that
+    you scale up. From an engineering point of view, scaling up from 2 vCPU to 8 vCPU
+    is still a very small compute, but the price quadruples. To put this in perspective,
+    imagine if your monthly mortgage or rent payment doubled, or your car payment
+    doubled, or your student loan payment doubled. You would probably be upset—and
+    rightly so.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一件要知道的事情是，*价格每升一级都会翻倍*，因为底层计算资源（运行 MySQL 的虚拟服务器）的资源（虚拟 CPU 计数和内存大小）在每个级别上都会翻倍。例如，如果最低级别的计算是2个虚拟
+    CPU 和8 GB RAM，则上一级是4个虚拟 CPU 和16 GB RAM——价格也会翻倍。有几个例外，但期望翻倍。因此，您无法逐步增加成本；每个您扩展的计算级别的成本都会翻倍。从工程角度来看，从2个虚拟
+    CPU 扩展到8个虚拟 CPU 仍然是非常小的计算量，但价格却会翻倍。为了形象化地描述，想象一下，如果您的每月抵押贷款或租金翻倍，或者您的汽车贷款翻倍，或者您的学生贷款翻倍。您可能会感到不安，这是理所当然的。
+- en: 'The second thing to know is that everything in the cloud costs money. Compute
+    costs are just the beginning. The following list includes common charges for MySQL
+    in the cloud in addition to compute costs:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二件要知道的事情是，在云中，一切都是需要花钱的。计算成本只是开始。以下列表包括在云中 MySQL 的常见费用，除了计算成本外：
+- en: Storage type (IOPS)
+  id: totrans-77
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 存储类型（IOPS）
+- en: Data storage (size)
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据存储（大小）
+- en: Backups (size and retention)
+  id: totrans-79
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 备份（大小和保留时间）
+- en: Logs (size and retention)
+  id: totrans-80
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 日志（大小和保留时间）
+- en: High availability (replicas)
+  id: totrans-81
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 高可用性（副本）
+- en: Cross-region data transfer (size)
+  id: totrans-82
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 跨区域数据传输（大小）
+- en: Encryption keys (to encrypt data)
+  id: totrans-83
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 加密密钥（用于加密数据）
+- en: Secrets (to store passwords)
+  id: totrans-84
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 保密（存储密码）
+- en: 'Moreover, those charges are per-instance. For example, if you create five read
+    replicas, each replica is billed for data store, backups, and so forth. I wish
+    it were simpler, but this is the reality: you need to investigate, understand,
+    and estimate all costs when using MySQL in the cloud.'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，这些费用是按实例计费的。例如，如果您创建了五个读取副本，则每个副本都将计费用于数据存储、备份等。我希望事情能更简单些，但这是现实：在使用云中的 MySQL
+    时，您需要调查、理解和估算所有成本。
+- en: Warning
+  id: totrans-86
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Some proprietary versions of MySQL in the cloud (see [“Compatibility”](#cloud-compat))
+    have additional costs, or a completely different pricing model.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些云中的 MySQL 的专有版本（参见[“兼容性”](#cloud-compat)）具有额外的费用，或者完全不同的定价模型。
+- en: 'The third and final thing to know is that cloud providers offer discounts.
+    Don’t pay full price. At at minimum, costs can be significantly reduced with a
+    one or three year commitment, rather than paying month to month. Other discounts
+    vary by cloud provider: look for (or ask about) reserved instances, committed
+    usage, and volume discounts. If your company relies on the cloud, then it has
+    most likely negotiated a contract with the cloud provider. Find out if that’s
+    the case and whether any of the contract pricing details affect costs for MySQL
+    in the cloud. If you’re lucky, the contract might reduce *and* simplify costs,
+    which allows you to focus on the fun details of using MySQL.'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第三个也是最后一个要了解的是，云服务提供商提供折扣。不要付全价。至少，通过一年或三年的承诺，可以显著降低成本，而不是按月支付。其他折扣因云服务提供商而异：寻找（或询问）保留实例、承诺使用和批量折扣。如果您的公司依赖云，那么它很可能已经与云服务提供商签订了合同。找出是否是这种情况，以及合同定价细节是否影响云中MySQL的成本。如果幸运的话，合同可能会减少*并且*简化成本，从而让您专注于使用MySQL的有趣细节。
+- en: Summary
+  id: totrans-89
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 摘要
+- en: 'This chapter highlighted what to know when using MySQL in the cloud. The substantial
+    takeaway points are:'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章强调了在云中使用MySQL时需要了解的内容。重要的要点是：
+- en: Code and feature compatibility of MySQL varies in the cloud.
+  id: totrans-91
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在云中，MySQL的代码和功能兼容性各不相同。
+- en: Your due diligence is to know any code or feature incompatibilities compared
+    to open source MySQL.
+  id: totrans-92
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您的尽职调查是了解与开源MySQL相比的任何代码或功能不兼容性。
+- en: MySQL can be partially or fully managed, depending on cloud provider or third-party
+    company.
+  id: totrans-93
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL可以由云服务提供商或第三方公司部分或完全管理。
+- en: Network latency over wide-area networks increases query response time by tens
+    or hundreds of milliseconds.
+  id: totrans-94
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在广域网上的网络延迟会增加查询响应时间数十至数百毫秒。
+- en: Data for MySQL in the cloud is usually stored on network-attached storage.
+  id: totrans-95
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 云中的MySQL数据通常存储在网络附加存储上。
+- en: Network-attached storage has single-digit millisecond latency, which is equivalent
+    to a spinning disk.
+  id: totrans-96
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 网络附加存储的延迟为个位数毫秒，相当于旋转磁盘。
+- en: The cloud charges for everything, and costs can (and often do) go over budget.
+  id: totrans-97
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 云服务对所有内容收费，成本可能（而且经常）超出预算。
+- en: Cloud providers offer discounts; don’t pay full price.
+  id: totrans-98
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 云服务提供商提供折扣；不要付全价。
+- en: Performance is query response time in the cloud.
+  id: totrans-99
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在云中的性能是查询响应时间。
+- en: 'This is the last chapter, but don’t `\q` yet: there’s one more practice.'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是最后一章，但不要`\q`：还有一个练习。
+- en: 'Practice: Try MySQL in the Cloud'
+  id: totrans-101
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实践：尝试云中的MySQL
+- en: 'The goal of this practice is to try MySQL in the cloud—just to see how it works,
+    no DBA work required. On the one hand, I don’t want to provide any of the following
+    five cloud providers free marketing—this book is strictly technical. But on the
+    other hand, using MySQL in the cloud is increasingly common, so I want you to
+    be prepared and successful. Plus, this is a *free trial*: the following five cloud
+    providers have a free tier or an initial account credit. Don’t pay for anything
+    yet: cloud providers must earn your business and money by proving the value of
+    their services to you.'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个实践的目标是在云中尝试MySQL——只是为了看看它是如何运作的，不需要进行任何DBA工作。一方面，我不想为以下五个云服务提供商做免费营销——本书严格是技术性的。但另一方面，使用云中的MySQL越来越普遍，因此我希望你能做好准备并取得成功。此外，这是一次*免费试用*：以下五个云服务提供商都有免费层或初始账户信用额。暂时不要支付任何费用：云服务提供商必须通过向您证明其服务的价值来赢得您的业务和资金。
+- en: 'Try creating and using MySQL with any one (or several) of these cloud providers:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尝试使用任意一个（或多个）云服务提供商创建和使用MySQL：
+- en: '[MySQL Database Service](https://oreil.ly/Z7ZA8) by Oracle'
+  id: totrans-104
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[MySQL数据库服务](https://oreil.ly/Z7ZA8) by Oracle'
+- en: '[SkySQL](https://oreil.ly/tn1KY) by MariaDB'
+  id: totrans-105
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[SkySQL](https://oreil.ly/tn1KY) by MariaDB'
+- en: '[Relational Database Service (RDS)](https://oreil.ly/yNPfc) by Amazon'
+  id: totrans-106
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[关系型数据库服务(RDS)](https://oreil.ly/yNPfc) by Amazon'
+- en: '[Azure Database for MySQL](https://oreil.ly/Tj3Y1) by Microsoft'
+  id: totrans-107
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[Azure数据库服务MySQL版](https://oreil.ly/Tj3Y1) by Microsoft'
+- en: '[Cloud SQL](https://oreil.ly/pnsVt) by Google'
+  id: totrans-108
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[Cloud SQL](https://oreil.ly/pnsVt) by Google'
+- en: 'If you find that one is easy to use and potentially valuable, investigate its
+    pricing model and additional costs. I specifically use the verb *investigate*
+    because, as I mention in [“Performance Is Money”](#cloud-money): cloud pricing
+    is complex, nearly intractable, and frequently underestimated (which means over
+    budget).'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果发现其中一个易于使用且可能有价值，请调查其定价模型和额外成本。我特意使用动词*调查*，因为正如我在[“性能即金钱”](#cloud-money)中提到的：云定价是复杂的，几乎难以解决，并经常被低估（这意味着超出预算）。
+- en: Note
+  id: totrans-110
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Don’t forget to destroy your MySQL instance in the cloud before the free trial
+    ends or the initial account credit reaches zero.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在免费试用期结束或初始账户余额耗尽之前，请不要忘记销毁您的云中MySQL实例。
+- en: 'This is the last practice in this book, but I encourage you to keep learning
+    and practicing because MySQL continues to evolve—so does the cloud. For this reason,
+    even MySQL experts must continue to learn and practice, and that reminds me of
+    a Zen proverb on which I end this book:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是本书中的最后一个实践，但我鼓励你继续学习和实践，因为MySQL不断发展，云服务也是如此。因此，即使是MySQL专家也必须继续学习和实践，这让我想起了一句禅宗谚语，正是以此结束本书：
+- en: Chop wood. Carry water.
+  id: totrans-113
+  prefs:
+  - PREF_BQ
+  type: TYPE_NORMAL
+  zh: 砍柴。挑水。
+- en: '^([1](ch10.html#idm45829096382992-marker)) Technically, all networks are equally
+    fast: the speed of light. The problem is physical distance and intermediate routing
+    over long distances.'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch10.html#idm45829096382992-marker)) 从技术上讲，所有网络的速度都是一样的：光速。问题在于物理距离和长距离中间路由。
+- en: ^([2](ch10.html#idm45829096375248-marker)) See [Amazon EBS features](https://oreil.ly/NIly1),
+    [block storage performance on Google](https://oreil.ly/7Zxaj), and [premium storage
+    with Microsoft Azure](https://oreil.ly/LMg03).
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch10.html#idm45829096375248-marker)) 参见[Amazon EBS功能](https://oreil.ly/NIly1)，[Google的块存储性能](https://oreil.ly/7Zxaj)，以及[Microsoft
+    Azure的高级存储](https://oreil.ly/LMg03)。
+- en: ^([3](ch10.html#idm45829096356448-marker)) Due to nondisclosure agreements,
+    I cannot cite the source.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([3](ch10.html#idm45829096356448-marker)) 由于保密协议，我无法引用来源。

@@ -1,0 +1,896 @@
+- en: Chapter 14\. MySQL in the Cloud
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第 14 章\. 云中的 MySQL
+- en: “No need to worry, it’s in the cloud” is a phrase we often hear. It reminds
+    us of a story about a woman who was worried that, after her iPhone drowned in
+    the toilet, she’d lost all her years’ worth of family and travel photos. To her
+    surprise, when she bought a new phone, the device “recovered” all the photos.
+    She was using the iCloud backup solution from Apple to back up her device content
+    to the cloud. (The other surprise may have been the service subscription bill
+    she hadn’t realized she was paying.)
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: “不用担心，这都在云端”是我们经常听到的一句话。这让我们想起一个关于一位女士的故事，她担心她的 iPhone 在马桶里淹没后丢失了多年的家庭和旅行照片。令她惊讶的是，当她买了新手机时，设备“恢复”了所有照片。她正在使用苹果的
+    iCloud 备份解决方案将设备内容备份到云端。（她可能另一个惊讶是她没意识到自己在支付服务订阅账单。）
+- en: As computer engineers, we don’t have the luxury of taking risks with regard
+    to whether our data will be recovered or not. Cloud storage is a scalable and
+    reliable solution. In this chapter, we will look at a few options that companies
+    have for using MySQL in the cloud. These range from database-as-a-service (DBaaS)
+    options that are easily scalable and provide automatic backup and high availability
+    features to more traditional choices like EC2 instances, which provide more fine-grained
+    control. In general, startup companies, where the core business is not technology,
+    prefer to use DBaaS options since they are easier to implement and work with.
+    On the other hand, companies that need more strict control over their data might
+    prefer to use an EC2 instance or their own cloud infrastructure.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为计算机工程师，我们不能冒险是否能够恢复数据。云存储是一种可扩展和可靠的解决方案。在本章中，我们将讨论公司在云中使用 MySQL 的几种选择。这些选择从易于扩展并提供自动备份和高可用性功能的数据库即服务（DBaaS）选项到提供更精细控制的传统选择，如
+    EC2 实例。一般来说，初创公司，其核心业务不是技术，更倾向于使用 DBaaS 选项，因为这些选项更易于实施和使用。另一方面，那些需要更严格控制其数据的公司可能更喜欢使用
+    EC2 实例或自己的云基础设施。
+- en: Database-as-a-Service (DBaaS)
+  id: totrans-3
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据库即服务（DBaaS）
+- en: DBaaS is an outsourcing option where companies pay a cloud provider to launch
+    and maintain a cloud database for them. Payment is usually per-usage, and the
+    data owners can access their application data as they please. A DBaaS provides
+    the same functionalities as a standard relational or non-relational database.
+    It’s often a good solution for companies trying to avoid configuring, maintaining,
+    and upgrading their databases and servers (although this is not always true).
+    DBaaS lives in the realm of software-as-a-service (SaaS), like platform-as-a-service
+    (PaaS) and infrastructure-as-a-service (IaaS), where products like databases become
+    services.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DBaaS 是一种外包选项，公司支付云提供商来为他们启动和维护云数据库。付款通常是按使用量计算，数据所有者可以随意访问他们的应用数据。DBaaS 提供与标准关系型或非关系型数据库相同的功能。对于那些试图避免配置、维护和升级数据库和服务器的公司来说，它通常是一个不错的解决方案（尽管这并不总是正确的）。DBaaS
+    属于软件即服务（SaaS）的范畴，类似于平台即服务（PaaS）和基础设施即服务（IaaS），在这些服务中，像数据库这样的产品成为服务。
+- en: Amazon RDS for MySQL/MariaDB
+  id: totrans-5
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Amazon RDS for MySQL/MariaDB
+- en: The most popular DBaaS is Amazon RDS for MySQL. Getting started with RDS is
+    almost like configuring a new car on a website. You choose the main product and
+    add the options you want until it looks the way you like and then launch. [Figure 14-1](#FIG-RDS-PRODUCT)
+    shows the products available. In this case, we will go for MySQL (the MariaDB
+    version has similar settings for deployment).
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最受欢迎的 DBaaS 是 Amazon RDS for MySQL。开始使用 RDS 几乎就像在网站上配置新车一样。您选择主产品，并添加您想要的选项，直到它看起来您喜欢的样子，然后启动。[图 14-1](#FIG-RDS-PRODUCT)
+    展示了可用的产品。在本例中，我们将选择 MySQL（MariaDB 版本的部署设置类似）。
+- en: '![lm2e 1401](Images/lm2e_1401.png)'
+  id: totrans-7
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1401](Images/lm2e_1401.png)'
+- en: Figure 14-1\. Choosing the product
+  id: totrans-8
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-1\. 选择产品
+- en: We can also choose the version—here, we’ve selected 8.0.21\. Next, we need to
+    set the master user (similar to `root`) and its password. Make sure to pick a
+    strong password, especially if you will expose your database to the world. [Figure 14-2](#FIG-RDS-ROOT)
+    shows how to define the username and the password for the master user.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还可以选择版本——在这里，我们选择了 8.0.21\. 接下来，我们需要设置主用户（类似于 `root`）及其密码。确保选择一个强密码，特别是如果您将数据库暴露给公众。[图 14-2](#FIG-RDS-ROOT)
+    展示了如何定义主用户的用户名和密码。
+- en: '![lm2e 1402](Images/lm2e_1402.png)'
+  id: totrans-10
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1402](Images/lm2e_1402.png)'
+- en: Figure 14-2\. Configuring the master user’s username and password
+  id: totrans-11
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-2\. 配置主用户的用户名和密码
+- en: Next is the instance size, which will impact directly on the final price. We
+    will pick a top-level configuration to give you an idea of how costly using a
+    DBaaS can be. [Figure 14-3](#FIG-RDS-INSTACE-SIZE) shows the instance classes
+    that are available; there are several options, with varying costs.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来是实例大小，这将直接影响最终价格。我们将选择一个顶级配置，以便让您了解使用DBaaS可能会有多昂贵。[图 14-3](#FIG-RDS-INSTACE-SIZE)展示了可用的实例类别；有多种选择，成本各异。
+- en: '![lm2e 1403](Images/lm2e_1403.png)'
+  id: totrans-13
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1403](Images/lm2e_1403.png)'
+- en: Figure 14-3\. Choosing an instance class
+  id: totrans-14
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-3\. 选择实例类别
+- en: Another option that can directly affect the billing is the storage options.
+    Naturally, higher performance (more IOPS) and more storage lead to a higher cost.
+    [Figure 14-4](#FIG-RDS-STORAGE) illustrates the choices. You can also select whether
+    to enable autoscaling.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个可能直接影响计费的选项是存储选项。自然而然，更高的性能（更多的IOPS）和更大的存储空间会导致更高的成本。[图 14-4](#FIG-RDS-STORAGE)展示了选择的内容。您还可以选择是否启用自动扩展。
+- en: 'The next option is an important choice: do you want to use multi-AZ deployment
+    or not? The multi-AZ option is all about high availability. When you provision
+    a multi-AZ DB instance, Amazon RDS automatically creates a primary DB instance
+    and synchronously replicates the data to a standby instance in a different Availability
+    Zone (AZ). The AZs are physically distinct and have independent infrastructure,
+    which increases overall availability.'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一个选项是一个重要的选择：您是否要使用多可用区部署？多可用区选项关乎高可用性。当您提供一个多可用区的DB实例时，Amazon RDS会自动创建一个主DB实例，并同步将数据复制到不同可用区的备用实例中。这些可用区在物理上是独立的，并且具有独立的基础设施，这增加了整体可用性。
+- en: If you don’t want to use multi-AZ deployment, RDS will install a single instance.
+    In the event of failure, it will spin up a new one and remount its data volume.
+    This process takes some time, during which your database will not be available.
+    Even big cloud providers are not bulletproof, and disasters can happen, so having
+    a standby server is always recommended. [Figure 14-5](#FIG-RDS-AZ) shows how to
+    configure the replica.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您不想使用多可用区部署，RDS将安装单个实例。在发生故障时，它将启动一个新实例并重新挂载其数据卷。此过程需要一些时间，在此期间您的数据库将不可用。即使是大型云提供商也无法保证绝对安全，灾难也可能发生，因此建议始终配置备用服务器。[图 14-5](#FIG-RDS-AZ)展示了如何配置复制实例。
+- en: '![lm2e 1404](Images/lm2e_1404.png)'
+  id: totrans-18
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1404](Images/lm2e_1404.png)'
+- en: Figure 14-4\. Configuring storage size and its IOPS performance
+  id: totrans-19
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-4\. 配置存储大小及其IOPS性能
+- en: '![lm2e 1405](Images/lm2e_1405.png)'
+  id: totrans-20
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1405](Images/lm2e_1405.png)'
+- en: Figure 14-5\. Configuring a standby replica
+  id: totrans-21
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-5\. 配置备用复制
+- en: The next part is setting up a general networking configuration. We recommend
+    configuring RDS to use a private network, which only the application servers and
+    developers’ IPs can access. [Figure 14-6](#FIG-RDS-NETWORK) shows the network
+    options.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来是设置一般的网络配置。我们建议配置RDS使用私有网络，只有应用服务器和开发人员的IP可以访问。[图 14-6](#FIG-RDS-NETWORK)展示了网络选项。
+- en: '![lm2e 1406](Images/lm2e_1406.png)'
+  id: totrans-23
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1406](Images/lm2e_1406.png)'
+- en: Figure 14-6\. Configuring the network settings
+  id: totrans-24
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-6\. 配置网络设置
+- en: Finally, alas, come the estimated costs. [Figure 14-7](#FIG-RDS-COSTS) shows
+    how much you will pay per month for your configured choices.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，不可避免地是估算成本。[图 14-7](#FIG-RDS-COSTS)展示了您为配置选择每月支付的金额。
+- en: '![lm2e 1407](Images/lm2e_1407.png)'
+  id: totrans-26
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1407](Images/lm2e_1407.png)'
+- en: Figure 14-7\. The bill can reach the stars under certain configurations!
+  id: totrans-27
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-7\. 在特定配置下，账单可能飙升至天文数字！
+- en: Google Cloud SQL for MySQL
+  id: totrans-28
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Google Cloud SQL for MySQL
+- en: Google Cloud SQL offers managed database services comparable to Amazon RDS (and
+    Azure), but with slight differences. The Google Cloud options for MySQL are more
+    straightforward because there are fewer options to choose from. For example, you
+    cannot choose between MySQL and MariaDB, or choose the MySQL minor version (only
+    the major version). As shown in Figure 14-8, you can get started by either creating
+    a new instance or migrating an existing database to Google Cloud.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Google Cloud SQL提供了与Amazon RDS（和Azure）类似的托管数据库服务，但存在细微差异。Google Cloud针对MySQL的选项更为简单，因为可选择的选项较少。例如，您不能在MySQL和MariaDB之间进行选择，也不能选择MySQL的小版本（只能选择主版本）。如图
+    14-8所示，您可以通过创建新实例或将现有数据库迁移到Google Cloud来开始使用。
+- en: '![lm2e 1408](Images/lm2e_1408.png)'
+  id: totrans-30
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1408](Images/lm2e_1408.png)'
+- en: Figure 14-8\. Google Cloud SQL
+  id: totrans-31
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-8\. Google Cloud SQL
+- en: When creating a new instance, you have to fill in a few options. The first step
+    is to choose the product. [Figure 14-9](#FIG-GOOGLE-PRODUCT) show the options
+    available for MySQL.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在创建新实例时，您需要填写几个选项。第一步是选择产品。[图 14-9](#FIG-GOOGLE-PRODUCT) 展示了MySQL可用的选项。
+- en: '![lm2e 1409](Images/lm2e_1409.png)'
+  id: totrans-33
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1409](Images/lm2e_1409.png)'
+- en: Figure 14-9\. Choosing the product
+  id: totrans-34
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-9\. 选择产品
+- en: After picking MySQL, you’ll need to specify the instance name, `root` password,
+    database version, and location. [Figure 14-10](#FIG-GOOGLE-SQL-OPTION1) shows
+    how to configure these settings.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在选择MySQL之后，您需要指定实例名称、`root`密码、数据库版本和位置。[图 14-10](#FIG-GOOGLE-SQL-OPTION1) 显示了如何配置这些设置。
+- en: '![lm2e 1410](Images/lm2e_1410.png)'
+  id: totrans-36
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1410](Images/lm2e_1410.png)'
+- en: Figure 14-10\. Setting basic configuration
+  id: totrans-37
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-10\. 设置基本配置
+- en: Next are the settings that can impact the performance, and of course, the cost—it’s
+    crucial to find the right balance here. [Figure 14-11](#FIG-GOOGLE-SQL-OPTION2)
+    shows the storage, memory, and CPU options available.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来是可能影响性能和成本的设置——在这里找到正确的平衡非常关键。[图 14-11](#FIG-GOOGLE-SQL-OPTION2) 显示了可用的存储、内存和CPU选项。
+- en: '![lm2e 1411](Images/lm2e_1411.png)'
+  id: totrans-39
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1411](Images/lm2e_1411.png)'
+- en: Figure 14-11\. Configuring the machine type and storage
+  id: totrans-40
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-11\. 配置机器类型和存储
+- en: Now the instance is ready to launch in the Google Cloud.
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在实例已准备在Google Cloud中启动。
+- en: Azure SQL
+  id: totrans-42
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Azure SQL
+- en: The last of the top three cloud service providers is Azure SQL. [Figure 14-12](#FIG-AZURE-INTRO)
+    shows the database products available in Azure. You’ll want to select “Azure Database
+    for MySQL servers.”
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前三大云服务提供商之一是Azure SQL。[图 14-12](#FIG-AZURE-INTRO) 显示了Azure中可用的数据库产品。您会想选择“Azure
+    Database for MySQL servers”。
+- en: '![lm2e 1412](Images/lm2e_1412.png)'
+  id: totrans-44
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1412](Images/lm2e_1412.png)'
+- en: Figure 14-12\. Choosing MySQL in Azure
+  id: totrans-45
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-12\. 在Azure中选择MySQL
+- en: Azure offers two options, to go with a simple server or a more robust solution
+    with high availability in the setup. [Figure 14-13](#FIG-AZURE-OPTION) shows the
+    difference between the two options.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Azure提供两个选项，可以选择简单服务器或更强大的高可用性设置。[图 14-13](#FIG-AZURE-OPTION) 显示了这两个选项之间的区别。
+- en: '![lm2e 1413](Images/lm2e_1413.png)'
+  id: totrans-47
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1413](Images/lm2e_1413.png)'
+- en: Figure 14-13\. Choosing a single server or a flexible server
+  id: totrans-48
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-13\. 选择单一服务器或灵活服务器
+- en: Those choices are followed by similar configurations regarding the service performance
+    and costs. [Figure 14-14](#FIG-AZURE-MYSQLCONFIG) shows the MySQL managed services
+    options.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择后续与服务性能和成本相关的类似配置。[图 14-14](#FIG-AZURE-MYSQLCONFIG) 显示了MySQL托管服务的选项。
+- en: '![lm2e 1414](Images/lm2e_1414.png)'
+  id: totrans-50
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1414](Images/lm2e_1414.png)'
+- en: Figure 14-14\. Configuring our MySQL managed service instance
+  id: totrans-51
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-14\. 配置我们的MySQL托管服务实例
+- en: Amazon Aurora
+  id: totrans-52
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 亚马逊极光
+- en: Amazon Aurora is a MySQL- and PostgreSQL-compatible relational database solution
+    provided by Amazon under a commercial license. It offers similar features to MySQL,
+    plus a few extra features developed by Amazon.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 亚马逊极光是亚马逊提供的一个与MySQL和PostgreSQL兼容的关系数据库解决方案，使用商业许可提供。它提供类似于MySQL的功能，并且还包括一些亚马逊开发的额外功能。
+- en: Two of these features are worth mentioning. First is Aurora Parallel Query (PQ),
+    a feature that parallelizes some of the I/O and computation involved in processing
+    data-intensive queries.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其中两个功能值得一提。首先是Aurora Parallel Query（PQ），这是一项能够并行处理数据密集型查询中涉及的部分I/O和计算的功能。
+- en: Aurora PQ works by doing a full table scan (the storage level performs the parallel
+    reads). When we use a parallel query, the query does not use the InnoDB buffer
+    pool. Instead, it pushes query processing down to the storage layer and parallelizes
+    it.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 极光 PQ 通过进行全表扫描（存储级别执行并行读取）来工作。当我们使用并行查询时，查询不使用InnoDB缓冲池。相反，它将查询处理推送到存储层并进行并行化。
+- en: The advantage is that moving the processing closer to the data reduces network
+    traffic and latency. However, the feature is not a silver bullet and does not
+    work well for all cases—it works best for analytical queries that need to run
+    over large portions of data.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 优点在于将处理过程移到数据附近可以减少网络流量和延迟。然而，这个功能并非银弹，对所有情况都不适用——它最适合需要在大量数据上运行的分析查询。
+- en: 'The PQ feature is not available for all AWS instances. For instances that support
+    this feature, their instance class determines the number of parallel queries that
+    can be active at a given time. The following instances are the ones that support
+    the PQ feature:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PQ 功能并非适用于所有AWS实例。对于支持此功能的实例，它们的实例类别决定了可以同时处于活动状态的并行查询数量。以下是支持PQ功能的实例：
+- en: '`db.r*.large`: 1 concurrent parallel query session'
+  id: totrans-58
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`db.r*.large`: 1 个并发并行查询会话'
+- en: '`db.r*.xlarge`: 2 concurrent parallel query sessions'
+  id: totrans-59
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`db.r*.xlarge`: 2 个并发并行查询会话'
+- en: '`db.r*.2xlarge`: 4 concurrent parallel query sessions'
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`db.r*.2xlarge`: 4 个并发并行查询会话'
+- en: '`db.r*.4xlarge`: 8 concurrent parallel query sessions'
+  id: totrans-61
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`db.r*.4xlarge`: 8 个并发并行查询会话'
+- en: '`db.r*.8xlarge`: 16 concurrent parallel query sessions'
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`db.r*.8xlarge`: 16 个并发并行查询会话'
+- en: '`db.r4.16xlarge`: 16 concurrent parallel query sessions'
+  id: totrans-63
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`db.r4.16xlarge`: 16 个并发并行查询会话'
+- en: The other notable feature is the Amazon Aurora Global Database, designed for
+    applications with a global footprint. It allows a single Aurora database to span
+    multiple AWS regions, with fast replication to enable low-latency global reads
+    and disaster recovery from region-wide outages. The Aurora Global Database uses
+    storage-based replication using the dedicated Amazon infrastructure across its
+    data centers worldwide.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个显著特点是 Amazon Aurora 全局数据库，专为具有全球足迹的应用程序设计。它允许单个 Aurora 数据库跨多个 AWS 区域，快速复制以实现低延迟全球读取，并从区域范围内的故障中进行灾难恢复。Aurora
+    全局数据库使用基于存储的复制，在其全球数据中心的专用 Amazon 基础设施中进行复制。
+- en: MySQL Cloud Instances
+  id: totrans-65
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MySQL 云实例
+- en: 'A *cloud instance* is nothing but a virtual server. The different cloud providers
+    have different names for these: Amazon Elastic Compute Cloud (EC2) instances,
+    Google Compute Engine instances, and Azure Virtual Machines.'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个 *云实例* 就是一个虚拟服务器。不同的云服务提供商有不同的名称：Amazon Elastic Compute Cloud (EC2) 实例、Google
+    Compute Engine 实例和 Azure 虚拟机。
+- en: All of them offer different instance types according to the user’s business
+    needs, varying from shallow, basic configurations to astounding limits. For example,
+    the Compute Engine `m2-megamem-416` machine type is a monster that has 416 CPUs
+    and 5,888 GB of RAM.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据用户的业务需求，它们提供不同类型的实例，从浅显基本的配置到惊人的限制。例如，Compute Engine `m2-megamem-416` 机型拥有
+    416 个 CPU 和 5,888 GB 的 RAM。
+- en: The MySQL installation process for these instances is the standard one described
+    in [Chapter 1](ch01.xhtml#CH1_INSTALL). In this case, the most significant advantage
+    of using cloud instances compared to DBaaS solutions is the freedom of customizing
+    MySQL and the operating system according to your needs without the limitations
+    that managed databases have.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些实例的 MySQL 安装过程与 [第 1 章](ch01.xhtml#CH1_INSTALL) 中描述的标准过程相同。在这种情况下，与 DBaaS
+    解决方案相比，使用云实例的最大优势在于根据您的需求自定义 MySQL 和操作系统，而无需受到托管数据库的限制。
+- en: MySQL in Kubernetes
+  id: totrans-69
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: Kubernetes 中的 MySQL
+- en: The most recent option available to deploy MySQL instances is Kubernetes. Kubernetes
+    and the OpenShift platform have added a way to manage containerized systems, including
+    database clusters. The management is achieved by controllers declared in configuration
+    files. These controllers provide automation to create objects, such as a container
+    or a group of containers called a *pod*, to listen for a specific event and perform
+    a task.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 部署 MySQL 实例的最新选项是 Kubernetes。Kubernetes 和 OpenShift 平台增加了一种管理容器化系统（包括数据库集群）的方式。通过在配置文件中声明的控制器实现管理。这些控制器提供自动化功能，用于创建对象，如容器或称为
+    *pod* 的一组容器，以监听特定事件并执行任务。
+- en: This automation adds complexity to the container-based architecture and stateful
+    applications, such as databases. A Kubernetes *operator* is a particular type
+    of controller introduced to simplify complex deployments. The operator extends
+    the Kubernetes API with custom resources.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种自动化增加了基于容器的架构和状态应用程序（如数据库）的复杂性。Kubernetes *operator* 是一种特殊类型的控制器，旨在简化复杂的部署。该
+    operator 通过自定义资源扩展 Kubernetes API。
+- en: There are many good books written on how Kubernetes works. To keep this section
+    as concise as possible, we will discuss the significant components relevant to
+    the Percona Kubernetes Operator. For a quick introduction to Kubernetes, you can
+    check out the [documentation](https://oreil.ly/WdWsD) from the Linux Foundation.
+    [Figure 14-15](#FIG-PXB-COMPONENT) shows the Percona XtraDB Cluster components
+    in Kubernetes.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有许多关于 Kubernetes 工作原理的好书。为了尽可能简洁，我们将讨论与 Percona Kubernetes Operator 相关的重要组件。要快速了解
+    Kubernetes，请查看 Linux 基金会的 [文档](https://oreil.ly/WdWsD)。[图 14-15](#FIG-PXB-COMPONENT)
+    展示了 Kubernetes 中 Percona XtraDB Cluster 的组件。
+- en: '![lm2e 1415](Images/lm2e_1415.png)'
+  id: totrans-73
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1415](Images/lm2e_1415.png)'
+- en: Figure 14-15\. The Percona XtraDB Cluster components in Kubernetes
+  id: totrans-74
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-15\. Kubernetes 中的 Percona XtraDB Cluster 组件
+- en: 'The following section describes how to deploy the Percona Kubernetes Operator
+    for Percona XtraDB Cluster, which is considered production-ready. Other operators
+    are also available. For example:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一节描述如何为 Percona XtraDB Cluster 部署 Percona Kubernetes Operator，该方案被认为是生产就绪的。还有其他
+    operator 可用。例如：
+- en: '[Oracle](https://oreil.ly/wOjgy) provides a Kubernetes Operator for MySQL InnoDB
+    Cluster. At the time of this writing, the operator is in a preview state, so it
+    is not recommended for production.'
+  id: totrans-76
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[Oracle](https://oreil.ly/wOjgy)为MySQL InnoDB Cluster提供了一个Kubernetes操作器。在撰写本文时，该操作器处于预览状态，不建议用于生产环境。'
+- en: '[MariaDB](https://oreil.ly/BkCF9) has an operator, but at the time of writing
+    it is in the alpha stage, so please check its maturity before using it in production.'
+  id: totrans-77
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[MariaDB](https://oreil.ly/BkCF9)有一个操作器，但目前还处于Alpha阶段，请在生产环境使用之前检查其成熟度。'
+- en: '[Presslabs](https://oreil.ly/pgAdN) has released an operator that deploys MySQL
+    instances along with orchestrator and backup functionalities. This operator is
+    production-ready.'
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[Presslabs](https://oreil.ly/pgAdN)已发布了一个操作器，可以部署MySQL实例以及编排器和备份功能。这个操作器已经可以投入生产使用。'
+- en: Deploying Percona XtraDB Cluster in Kubernetes
+  id: totrans-79
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 在Kubernetes中部署Percona XtraDB Cluster
+- en: 'This section will walk you through the steps of deploying a Kubernetes cluster
+    in the Google Cloud using the Google Cloud SDK and the [Percona Kubernetes Operator
+    for PXC](https://oreil.ly/olzY9):'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节将指导您使用Google Cloud SDK和[Percona Kubernetes Operator for PXC](https://oreil.ly/olzY9)部署Kubernetes集群的步骤。
+- en: Install the Google Cloud SDK.
+  id: totrans-81
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 安装Google Cloud SDK。
+- en: 'The SDK provides tools and libraries for interacting with Google Cloud products
+    and services. [Download the binary appropriate for your platform](https://oreil.ly/czdsU)
+    and install it. Here’s an example for macOS:'
+  id: totrans-82
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: SDK提供了与Google Cloud产品和服务进行交互所需的工具和库。[下载适合您平台的二进制文件](https://oreil.ly/czdsU)并安装它。这里是macOS的一个示例：
+- en: '[PRE0]'
+  id: totrans-83
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Install `kubectl` with `gcloud`.
+  id: totrans-84
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用`gcloud`安装`kubectl`。
+- en: 'With `gcloud` installed, install the `kubectl` component using the following
+    command:'
+  id: totrans-85
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 安装了`gcloud`之后，使用以下命令安装`kubectl`组件：
+- en: '[PRE1]'
+  id: totrans-86
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: Create the Kubernetes cluster.
+  id: totrans-87
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建Kubernetes集群。
+- en: 'To create the Kubernetes cluster, first you need to authenticate in the Google
+    Cloud service:'
+  id: totrans-88
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 要创建Kubernetes集群，首先需要在Google Cloud服务中进行身份验证：
+- en: '[PRE2]'
+  id: totrans-89
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Once authenticated, create the cluster. The command accepts a lot of parameters,
+    but in this case, we will go with the basics to create a Kubernetes cluster:'
+  id: totrans-90
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 认证通过后，创建集群。该命令接受许多参数，但在这种情况下，我们将使用基本选项来创建一个Kubernetes集群：
+- en: '[PRE3]'
+  id: totrans-91
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Note
+  id: totrans-92
+  prefs:
+  - PREF_IND
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The account needs to have the necessary privileges to create the cluster. Also,
+    you need to replace the project and cluster names used here with your own names.
+    You may also be required to edit the zone location, set to `us-central1-b` in
+    this example.
+  id: totrans-93
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 帐户需要具有创建集群所需的必要权限。此外，您需要用自己的名称替换此处使用的项目和集群名称。您可能还需要编辑区域位置，在此示例中设置为`us-central1-b`。
+- en: The parameters used here are just a small subset of everything available—you
+    can see all the options by running `gcloud container clusters --help`. For this
+    case, we’ve just requested a cluster with three nodes of `*n1-standard-4*` type
+    instances.
+  id: totrans-94
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 此处使用的参数仅是可用选项的一个小子集——您可以通过运行`gcloud container clusters --help`来查看所有选项。在这种情况下，我们只请求了一个由三个`*n1-standard-4*`类型实例节点组成的集群。
+- en: 'This process may take a while, especially if there are a lot of nodes. The
+    output will look like this:'
+  id: totrans-95
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这个过程可能需要一段时间，特别是如果有很多节点。输出将如下所示：
+- en: '[PRE4]'
+  id: totrans-96
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'And we can check the pods of our Kubernetes cluster in the Google Cloud:'
+  id: totrans-97
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 我们还可以在Google Cloud中检查我们的Kubernetes集群的Pod：
+- en: '[PRE5]'
+  id: totrans-98
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: '[PRE6]'
+  id: totrans-99
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: It is also possible to use the Google Cloud interface to deploy the cluster,
+    as shown in [Figure 14-16](#GCLOUD-INTERFACE).
+  id: totrans-100
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 也可以使用Google Cloud界面来部署集群，如[图 14-16](#GCLOUD-INTERFACE)所示。
+- en: '![lm2e 1416](Images/lm2e_1416.png)'
+  id: totrans-101
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![lm2e 1416](Images/lm2e_1416.png)'
+- en: Figure 14-16\. From the main menu, select Kubernetes Engine, then Clusters
+  id: totrans-102
+  prefs:
+  - PREF_IND
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-16。从主菜单选择Kubernetes Engine，然后选择Clusters
+- en: To create a new cluster, choose the CREATE option shown at the top of [Figure 14-17](#GCLOUD-CREATE-K8).
+  id: totrans-103
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 要创建一个新的集群，请在[图 14-17](#GCLOUD-CREATE-K8)顶部选择CREATE选项。
+- en: '![lm2e 1417](Images/lm2e_1417.png)'
+  id: totrans-104
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+  zh: '![lm2e 1417](Images/lm2e_1417.png)'
+- en: Figure 14-17\. Create the Kubernetes cluster by clicking CREATE
+  id: totrans-105
+  prefs:
+  - PREF_IND
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 14-17。通过点击CREATE来创建Kubernetes集群
+- en: The final step is to install the PXC operator. The [documentation](https://oreil.ly/fBJq3)
+    for deploying the operator has very detailed instructions. We’ll follow the recommended
+    steps here.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后一步是安装PXC操作器。部署操作器的[文档](https://oreil.ly/fBJq3)提供了非常详细的说明。我们将按照推荐步骤进行操作。
+- en: 'First, configure Cloud Identity and Access Management (Cloud IAM) to control
+    access to the cluster. The following command will give you the ability to create
+    Roles and RoleBindings:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，配置Cloud Identity和Access Management（Cloud IAM）以控制对集群的访问。以下命令将允许您创建角色和角色绑定：
+- en: '[PRE7]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'The return statement confirms the creation:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 返回语句确认了创建：
+- en: '[PRE8]'
+  id: totrans-110
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Next, create a namespace and set the context for the namespace:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来，创建一个命名空间并设置命名空间的上下文：
+- en: '[PRE9]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Now, clone the repository and change to the directory:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，克隆存储库并切换到目录：
+- en: '[PRE10]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Deploy the operator with the following command:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用以下命令部署操作员：
+- en: '[PRE11]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'This should return the following confirmation:'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 应该返回以下确认信息：
+- en: '[PRE12]'
+  id: totrans-118
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'The operator has been started, and you can confirm this by running:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 操作员已启动，您可以通过运行以下命令进行确认：
+- en: '[PRE13]'
+  id: totrans-120
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'Now, create the Percona XtraDB Cluster:'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，创建Percona XtraDB集群：
+- en: '[PRE14]'
+  id: totrans-122
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'This step can take some time. After that, you will see all the pods running:'
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此步骤可能需要一些时间。之后，您将看到所有的Pod都在运行：
+- en: '[PRE15]'
+  id: totrans-124
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'During the previous steps, the operator has generated several secrets, including
+    the password for the `root` user, which you will need to access the cluster. To
+    get the generated secrets, run the following command:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的步骤中，操作员已生成多个密钥，包括用于访问集群的`root`用户密码。要获取生成的密钥，请运行以下命令：
+- en: '[PRE16]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'You will see output like this:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你将会看到如下输出：
+- en: '[PRE17]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'The actual password is base64-encoded, so you’ll need to run the following
+    command to get the `root` password:'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 实际密码是base64编码的，因此您需要运行以下命令获取`root`密码：
+- en: '[PRE18]'
+  id: totrans-130
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Now that you have the password, to check connectivity with the cluster you
+    can create a client pod:'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在您有了密码，为了检查与集群的连接性，您可以创建一个客户端Pod：
+- en: '[PRE19]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'Then connect to MySQL:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后连接到MySQL：
+- en: '[PRE20]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: Note that the operator comes with HAProxy, which is a load balancer (we will
+    discuss load balancing in the next chapter).
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意操作员与HAProxy一起提供，HAProxy是一个负载均衡器（我们将在下一章讨论负载均衡）。

@@ -1,0 +1,1435 @@
+- en: Chapter 11\. Configuring and Tuning the Server
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第11章。配置和调优服务器
+- en: The MySQL installation process (see [Chapter 1](ch01.xhtml#CH1_INSTALL)) provides
+    everything necessary to install the MySQL process and start using it. However,
+    it is required for production systems to do some fine-tuning, adjusting MySQL
+    parameters and the operating system to optimize MySQL Server’s performance. This
+    chapter will cover the recommended best practices for different installations
+    and show you the parameters that need to be adjusted based on the expected or
+    current workload. As you’ll see, it is not necessary to memorize all the MySQL
+    parameters. Based on the [*Pareto principle*](https://oreil.ly/1d58s), which states
+    that, for many events, roughly 80% of the effects come from 20% of the causes,
+    we will concentrate on the MySQL and operating system parameters that are responsible
+    for most of the performance issues. There are some advanced topics in this chapter
+    related to computer architecture (such as NUMA); the intent here is to introduce
+    you to a few components that can affect MySQL performance that you will need to
+    interact with sooner or later in your career.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 安装过程（参见[第1章](ch01.xhtml#CH1_INSTALL)）提供了安装 MySQL 进程并开始使用所需的一切。但是，对于生产系统，需要进行一些微调，调整
+    MySQL 参数和操作系统以优化 MySQL 服务器的性能。本章将涵盖不同安装的推荐最佳实践，并展示需要根据预期或当前工作负载调整的参数。正如您将看到的那样，不需要记忆所有
+    MySQL 参数。基于[*帕累托原则*](https://oreil.ly/1d58s)，该原则表明，对于许多事件，大约80%的效果来自20%的原因，我们将集中关注大多数性能问题的
+    MySQL 和操作系统参数。本章还涉及与计算机体系结构相关的一些高级主题（如NUMA）；这里的目的是向您介绍一些可能影响 MySQL 性能的组件，这些组件在您的职业生涯中迟早需要与之互动。
+- en: The MySQL Server Daemon
+  id: totrans-2
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MySQL 服务器守护程序
+- en: Since 2015, the majority of Linux distributions have adopted `systemd`. Because
+    of that, Linux operating systems do not use the `mysqld_safe` process to start
+    MySQL anymore. `mysqld_safe` is called an *angel process*, because it adds some
+    safety features, such as restarting the server when an error occurs and logging
+    runtime information to the MySQL error log. For operating systems that use `systemd`
+    (controlled and configured with the `systemctl` command), these functionalities
+    have been incorporated into `systemd` and the `mysqld` process.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自2015年以来，大多数 Linux 发行版已经采用了 `systemd`。因此，Linux 操作系统不再使用 `mysqld_safe` 进程来启动
+    MySQL。`mysqld_safe` 被称为*天使进程*，因为它增加了一些安全功能，例如在发生错误时重新启动服务器，并将运行时信息记录到 MySQL 错误日志中。对于使用
+    `systemd`（通过 `systemctl` 命令进行控制和配置）的操作系统，这些功能已经集成到 `systemd` 和 `mysqld` 进程中。
+- en: '`mysqld` is the core process of MySQL Server. It is a single multithreaded
+    program that does most of the work in the server. It does not spawn additional
+    processes—we’re talking about a single process with multiple threads, making MySQL
+    a *multithreaded process*.'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`mysqld` 是 MySQL 服务器的核心进程。它是一个单一的多线程程序，负责服务器的大部分工作。它不会生成额外的进程——我们谈论的是一个带有多个线程的单一进程，这使得
+    MySQL 成为一个*多线程进程*。'
+- en: Let’s take a closer look at some of those terms. A *program* is code that is
+    designed to accomplish a specific objective. There are many types of programs,
+    including ones to assist parts of the operating system and others that are designed
+    for user needs, such as web browsing.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们仔细看看一些术语。*程序*是设计用来完成特定目标的代码。有许多类型的程序，包括用于辅助操作系统部分以及设计用于用户需求（如网页浏览）的程序。
+- en: A *process* is what we call a program that has been loaded into memory along
+    with all the resources it needs to operate. The operating system allocates memory
+    and other resources for it.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*进程*是我们称之为加载到内存中并具有所有运行所需资源的程序。操作系统为其分配内存和其他资源。'
+- en: A *thread* is the unit of execution within a process. A process can have just
+    one thread or many threads. In single-threaded processes, the process contains
+    one thread, so only one command is executed at a time.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*线程*是进程内的执行单元。一个进程可以有一个线程或多个线程。在单线程进程中，进程包含一个线程，因此一次只能执行一个命令。'
+- en: Because modern CPUs have multiple cores, they can execute multiple threads at
+    the same time, so multithreaded processes are widespread nowadays. It’s important
+    to be aware of this concept to understand some of the proposed settings in the
+    following sections.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为现代 CPU 拥有多个核心，它们可以同时执行多个线程，因此多线程进程现在非常普遍。了解这一概念对理解以下几节中提议的设置非常重要。
+- en: To conclude, MySQL is single-process software that spawns multiple threads for
+    various purposes, such as serving user activities and executing background tasks.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总之，MySQL 是单进程软件，为了执行用户活动和执行后台任务等各种目的，生成多个线程。
+- en: MySQL Server Variables
+  id: totrans-10
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MySQL 服务器变量
+- en: MySQL Server has many variables that allow tuning its operation. For example,
+    MySQL Server 8.0.25 has an impressive *588* server variables!
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 服务器有许多变量允许调整其操作。例如，MySQL 服务器 8.0.25 有令人印象深刻的 *588* 个服务器变量！
+- en: Each system variable has a default value. Also, we can adjust most system variables
+    dynamically (or “on the fly”); however, a few of them are static, which means
+    that we need to change the *my.cnf* file and restart the MySQL process so they
+    can take effect (as discussed in [Chapter 9](ch09.xhtml#CH9_OPTIONS_FILE)).
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个系统变量都有一个默认值。此外，我们可以动态调整大多数系统变量（或者“即时”调整）；然而，有些是静态的，这意味着我们需要修改 *my.cnf* 文件并重新启动
+    MySQL 进程，以便它们生效（如 [第9章](ch09.xhtml#CH9_OPTIONS_FILE) 中所讨论的）。
+- en: 'The system variables can have two different scopes: `SESSION` and `GLOBAL`.
+    That is, a system variable can have a global value that affects server operation
+    as a whole, like the `innodb_log_file_size`, or a session value that affects only
+    a specific session, like the `sql_mode`.'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 系统变量可以有两种不同的作用域：`SESSION` 和 `GLOBAL`。也就是说，系统变量可以有一个全局值，影响整个服务器的操作，比如 `innodb_log_file_size`，或者一个会话值，仅影响特定会话，比如
+    `sql_mode`。
+- en: Checking Server Settings
+  id: totrans-14
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 检查服务器设置
+- en: 'Databases are not static entities; on the contrary, their workload is dynamic
+    and changes over time, with a tendency to growth. This organic behavior requires
+    constant monitoring, analysis, and adjustment. The command to show the MySQL settings
+    is:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库不是静态实体；相反，它们的工作负载是动态的，并随着时间的推移而变化，有增长的趋势。这种有机行为需要不断的监控、分析和调整。显示 MySQL 设置的命令是：
+- en: '[PRE0]'
+  id: totrans-16
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: When you use the `GLOBAL` modifier, the statement displays global system variable
+    values. When you use `SESSION`, it displays the system variable values that affect
+    the current connection. Observe that different connections can have different
+    values.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您使用 `GLOBAL` 修饰符时，该语句显示全局系统变量值。当您使用 `SESSION` 时，它显示影响当前连接的系统变量值。请注意，不同的连接可以具有不同的值。
+- en: If no modifier is present, the default is `SESSION`.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果没有修饰符出现，默认为 `SESSION`。
+- en: Best Practices
+  id: totrans-19
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 最佳实践
+- en: There are many aspects to optimize in a database. If the database runs on *bare
+    metal* (a physical host), we can control hardware and operating system resources.
+    When we move to virtualized machines, we have reduced control over these resources
+    because we can’t control what happens with the underlying host. The last option
+    is managed databases in the cloud, like those provided by Amazon Relational Database
+    Service (RDS), where only a few database settings are available. There’s a trade-off
+    between being able to perform fine-grained tuning to extract the most performance
+    and the comfort of having most of the tasks automated (at the cost of a few extra
+    dollars).
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库中有许多优化方面。如果数据库运行在 *裸金属*（物理主机）上，我们可以控制硬件和操作系统资源。当我们转移到虚拟化机器时，由于无法控制底层主机的发生情况，我们对这些资源的控制能力会减少。最后一个选项是云中的托管数据库，例如亚马逊关系数据库服务（RDS），那里只有少量的数据库设置可用。在能够进行细粒度调整以提取最佳性能和享受自动化大部分任务（代价是额外花费）之间存在权衡。
+- en: Let’s start by reviewing some settings at the operating system level. After
+    that, we will check out the MySQL parameters.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们首先审查一些操作系统级别的设置。之后，我们将检查 MySQL 参数。
+- en: Operating system best practices
+  id: totrans-22
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 操作系统最佳实践
+- en: There are several operating system settings that can affect the performance
+    of MySQL. We’ll run through some of the most important ones here.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有几个操作系统设置可能会影响 MySQL 的性能。我们将在这里列出其中一些最重要的。
+- en: The swappiness setting and swap usage
+  id: totrans-24
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: '`swappiness` 设置和交换使用'
+- en: The `swappiness` parameter controls the behavior of the Linux operating system
+    in the swap area. Swapping is the process of transferring data between memory
+    and the disk. This can have a significant effect on performance, because disk
+    access (even with NVMe disks) is at least an order of magnitude slower than memory
+    access.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`swappiness` 参数控制 Linux 操作系统在交换区域中的行为。交换是在内存和磁盘之间传输数据的过程。这可能对性能产生显著影响，因为即使使用
+    NVMe 磁盘，磁盘访问速度至少比内存访问慢一个数量级。'
+- en: 'The default setting (`60`) encourages the server to swap. You will want your
+    MySQL server to keep swapping to a minimum for performance reasons. The recommended
+    value is `1`, which means do not swap until it is absolutely necessary for the
+    OS to be functional. To adjust this parameter, execute the following command as
+    root:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认设置为 `60` 会促使服务器进行交换。出于性能原因，您希望 MySQL 服务器尽可能减少交换。建议的值是 `1`，这意味着在操作系统必须功能正常之前不进行交换。要调整此参数，请以
+    root 用户身份执行以下命令：
+- en: '[PRE1]'
+  id: totrans-27
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Note that this is a nonpersistent change; the setting will revert to its original
+    value when you reboot the OS. To make this change persistent after an operating
+    system reboot, adjust the setting in *sysctl.conf*:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意这是一个非持久性更改；在重新启动操作系统后，设置将恢复到其原始值。要在操作系统重新启动后使此更改持久化，请在 *sysctl.conf* 中调整设置：
+- en: '[PRE2]'
+  id: totrans-29
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'You can get information on swap space usage using the following command:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用以下命令获取交换空间使用信息：
+- en: '[PRE3]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Or, if you want more detailed information, you can run the following snippet
+    in the shell:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，如果您想要更详细的信息，可以在 shell 中运行以下代码段：
+- en: '[PRE4]'
+  id: totrans-33
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: Note
+  id: totrans-34
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The difference between setting `vm.swappiness` to `1` and `0` is negligible.
+    We chose the value of `1` because in some kernels there is a bug that can lead
+    the Out of Memory (OOM) Killer to terminate MySQL when it’s set to `0`.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将 `vm.swappiness` 设置为 `1` 和 `0` 之间的差异微乎其微。我们选择了值 `1`，因为在一些内核中存在一个 bug，可能会导致当设置为
+    `0` 时，内存不足（OOM）杀手终止 MySQL。
+- en: I/O scheduler
+  id: totrans-36
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: I/O 调度器
+- en: The I/O scheduler is an algorithm the kernel uses to commit reads and writes
+    to disk. By default, most Linux installs use the Completely Fair Queuing (`cfq`)
+    scheduler. This works well for many general use cases, but offers few latency
+    guarantees. Two other schedulers are `deadline` and `noop`. The `deadline` scheduler
+    excels at latency-sensitive use cases (like databases), and `noop` is closer to
+    no scheduling at all. For bare-metal installations, either `deadline` or `noop`
+    (the performance difference between them is imperceptible) will be better than
+    `cfq`.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: I/O 调度器是内核用于将读取和写入提交到磁盘的算法。默认情况下，大多数 Linux 安装使用完全公平排队 (`cfq`) 调度器。这对许多一般用途情况效果良好，但提供的延迟保证较少。另外两个调度器是
+    `deadline` 和 `noop`。`deadline` 调度器在延迟敏感的用例（如数据库）中表现优异，而 `noop` 则接近于没有调度。对于裸金属安装，无论是
+    `deadline` 还是 `noop`（它们之间的性能差异不可感知），都比 `cfq` 更好。
+- en: If you are running MySQL in a VM (which has its own I/O scheduler), it is best
+    to use `noop` and let the virtualization layer take care of the I/O scheduling
+    itself.
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您在虚拟机中运行 MySQL（其具有自己的 I/O 调度器），最好使用 `noop` 并让虚拟化层自行处理 I/O 调度。
+- en: 'First, verify which algorithm is currently in use by Linux:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，验证 Linux 当前正在使用的算法：
+- en: '[PRE5]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: '[PRE6]'
+  id: totrans-41
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'To change it dynamically, run this command as root:'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要动态更改它，请以 root 用户身份运行以下命令：
+- en: '[PRE7]'
+  id: totrans-43
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'In  order  to  make  this  change  persistent,  you  need  to  edit  the  GRUB 
+    configuration file (usually */etc/sysconfig/grub*) and add the `elevator` option
+    to `GRUB_CMDLINE_LINUX_DEFAULT`. For example, you would replace this line:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使这种更改持久化，您需要编辑 GRUB 配置文件（通常为 */etc/sysconfig/grub*），并将 `elevator` 选项添加到 `GRUB_CMDLINE_LINUX_DEFAULT`。例如，您将替换此行：
+- en: '[PRE8]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'with this line:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有这行：
+- en: '[PRE9]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: It is essential to take extra care when editing the GRUB config. Errors or incorrect
+    settings can make the server unusable and require installing the operating system
+    again.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在编辑 GRUB 配置时要格外小心。错误或不正确的设置可能使服务器无法使用，需要重新安装操作系统。
+- en: Note
+  id: totrans-49
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: There are cases where the I/O scheduler has a value of `none`—most notably in
+    AWS VM instance types where EBS volumes are exposed as NVMe block devices. This
+    is because the setting has no use in modern PCIe/NVMe devices, which have a substantial
+    internal queue and bypass the I/O scheduler altogether. The `none` setting is
+    optimal in such disks.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某些情况下，I/O 调度器的值为 `none` —— 最明显的是在 AWS VM 实例类型中，EBS 卷作为 NVMe 块设备公开。这是因为在现代 PCIe/NVMe
+    设备中，具有大量内部队列并完全绕过 I/O 调度器的情况下，设置没有用处。在这些磁盘中，`none` 设置是最优的。
+- en: Filesystems and mount options
+  id: totrans-51
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 文件系统和挂载选项
+- en: 'Choosing the filesystem appropriate for your database is an important decision
+    due to the many options available and the trade-offs involved. It is worth mentioning
+    two important ones that are frequently used: *XFS* and *ext4*.'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择适合您的数据库的文件系统是一个重要的决策，因为有许多选项可供选择，涉及到的权衡。值得一提的是两个经常使用的重要选项：*XFS* 和 *ext4*。
+- en: XFS is a high-performance journaling filesystem designed for high scalability.
+    It provides near-native I/O performance even when the filesystem spans multiple
+    storage devices. XFS has features that make it suitable for very large filesystems,
+    supporting files up to 8 EiB in size. Other features include fast recovery, fast
+    transactions, delayed allocation for reduced fragmentation, and near-raw I/O performance
+    with direct I/O.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: XFS是设计用于高扩展性的高性能日志文件系统。即使文件系统跨多个存储设备，它也提供接近原生的I/O性能。XFS具有使其适合非常大的文件系统的功能，支持高达8
+    EiB大小的文件。其他功能包括快速恢复、快速事务、延迟分配以减少碎片化，以及直接I/O时几乎原始I/O性能。
+- en: 'The [make filesystem XFS command](https://oreil.ly/IJ9em) (`mkfs.xfs`) has
+    several options to configure the filesystem. However, the default options for
+    `mkfs.xfs` are good for optimal speed, so the default command to create the filesystem
+    will provide good performance while ensuring data integrity:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[创建 XFS 文件系统命令](https://oreil.ly/IJ9em) (`mkfs.xfs`) 有几个选项可以配置文件系统。但是，默认的 `mkfs.xfs`
+    选项适合最佳速度，因此使用默认命令创建文件系统将提供良好的性能，同时确保数据完整性：'
+- en: '[PRE10]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Regarding the filesystem mount options, the defaults again should fit most
+    cases. You may see a performance increase on some filesystems by adding the `noatime`
+    mount option to the */etc/fstab* file. For XFS filesystems, the default `atime`
+    behavior is `relatime`, which has almost no overhead compared to `noatime` and
+    still maintains sane `atime` values. If you create an XFS filesystem on a logical
+    unit number (LUN) that has a battery-backed, nonvolatile cache, you can further
+    increase the filesystem’s performance by disabling the write barrier with the
+    mount option `nobarrier`. These settings help you avoid flushing data more often
+    than necessary. If a backup battery unit (BBU) is not present, however, or you
+    are unsure about it, leave barriers on; otherwise, you may jeopardize data consistency.
+    The example below shows two imaginary mountpoints with these options:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于文件系统挂载选项，再次默认值应该适合大多数情况。在某些文件系统上，通过向 */etc/fstab* 文件添加 `noatime` 挂载选项可以提高性能。对于XFS文件系统，默认的
+    `atime` 行为是 `relatime`，与 `noatime` 相比几乎没有开销，仍保持理智的 `atime` 值。如果在具有电池备份的非易失性缓存的逻辑单元号（LUN）上创建XFS文件系统，则可以通过使用挂载选项
+    `nobarrier` 来进一步增加文件系统的性能。这些设置有助于避免过于频繁地刷新数据。但是，如果不存在备份电池单元（BBU），或者您对此不确定，请保留屏障；否则可能会危及数据一致性。以下示例显示了具有这些选项的两个虚构挂载点：
+- en: '[PRE11]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'The other popular option is ext4, developed as the successor to ext3 with added
+    performance improvements. It is a solid option that will fit most workloads. We
+    should note here that it supports files up to 16 TB in size, a smaller limit than
+    XFS. This is something you should consider if excessive tablespace size/growth
+    is a requirement. Regarding mount options, the same considerations apply. We recommend
+    the defaults for a robust filesystem without risks to data consistency. However,
+    if an enterprise storage controller with a BBU cache is present, the following
+    mount options will provide the best performance:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个流行的选择是ext4，作为ext3的后继者，添加了性能改进。这是一个适合大多数工作负载的可靠选择。我们应该注意，它支持最大16 TB大小的文件，比XFS的限制小。如果过多的表空间大小/增长是要求的话，这是需要考虑的事项。关于挂载选项，相同的考虑适用。我们建议使用默认值来获得稳健的文件系统，而无需担心数据一致性的风险。但是，如果存在带有BBU缓存的企业存储控制器，以下挂载选项将提供最佳性能：
+- en: '[PRE12]'
+  id: totrans-59
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: Transparent Huge Pages
+  id: totrans-60
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 透明巨大页面
+- en: 'The operating system manages memory in blocks known as *pages*. A page has
+    a size of 4,096 bytes (or 4 KB); 1 MB of memory is equal to 256 pages, 1 GB of
+    memory is equivalent to 256,000 pages, etc. CPUs have a built-in memory management
+    unit that contains a list of these pages, with each page referenced through a
+    *page table entry*. It is common to see servers nowadays with hundreds or terabytes
+    of memory. There are two ways to enable the system to manage large amounts of
+    memory:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 操作系统以称为*页*的块管理内存。每页的大小为4,096字节（或4 KB）；1 MB的内存相当于256页，1 GB的内存等于256,000页，以此类推。CPU具有内置的内存管理单元，其中包含这些页的列表，每个页通过*页表项*引用。如今，常见的服务器通常具有数百或数千兆字节的内存。使系统能够管理大量内存有两种方法：
+- en: Increase the number of page table entries in the hardware memory management
+    unit.
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 增加硬件内存管理单元中的页表项数。
+- en: Increase the page size.
+  id: totrans-63
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 增加页大小。
+- en: The first method is expensive since the hardware memory management unit in a
+    modern processor only supports hundreds or thousands of page table entries. Besides,
+    hardware and memory management algorithms that work well with thousands of pages
+    (megabytes of memory) may have problems performing well with millions (or even
+    billions) of pages. To address the scalability issue, operating systems started
+    using huge pages. Simply put, huge pages are blocks of memory that can come in
+    sizes of 2 MB, 4 MB, 1 GB size, etc. Using huge page memory increases the CPU
+    cache hits against the transaction lookaside buffer (TLB).
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一种方法很昂贵，因为现代处理器中的硬件内存管理单元只支持数百或数千个页表项。此外，那些在处理数千页（数兆字节内存）时表现良好的硬件和内存管理算法可能在处理数百万（甚至数十亿）页时表现不佳。为了解决可伸缩性问题，操作系统开始使用大页。简单来说，大页是可以为2
+    MB、4 MB、1 GB等大小的内存块。使用大页内存可以增加CPU高速缓存击中事务查找缓冲区（TLB）的次数。
+- en: 'You can run `cpuid` to verify the processor cache and TLB:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以运行`cpuid`来验证处理器的高速缓存和TLB：
+- en: '[PRE13]'
+  id: totrans-66
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: Transparent Huge Pages (THP), as the name suggests, is intended to bring huge
+    page support automatically to applications without requiring custom configuration.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 透明大页（THP）如其名称所示，旨在自动为应用程序引入大页支持，无需自定义配置。
+- en: For MySQL in particular, using THP is not recommended, for a couple of reasons.
+    First, MySQL databases use small memory pages (16 KB), and using THP can cause
+    excessive I/O because MySQL believes it is accessing 16 KB while THP is scanning
+    a page larger than that. Also, the huge pages tend to become fragmented and impact
+    performance. There have also been some cases reported over the years where using
+    THP can result in memory leaking, eventually crashing MySQL.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 特别对于MySQL，不推荐使用THP，原因有几个。首先，MySQL数据库使用小内存页（16 KB），使用THP可能导致过多的I/O，因为MySQL认为正在访问16
+    KB，而THP正在扫描一个比此大的页面。此外，大页往往会变得碎片化并影响性能。多年来也报告过使用THP可能导致内存泄漏，最终导致MySQL崩溃。
+- en: 'To disable THP for RHEL/CentOS 6 and RHEL/CentOS 7, execute the following commands:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要禁用RHEL/CentOS 6和RHEL/CentOS 7的THP，请执行以下命令：
+- en: '[PRE14]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'To ensure that this change will survive a server restart, you’ll have to add
+    the flag `transparent_hugepage=never` to your kernel options (*/etc/sysconfig/grub*):'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确保此更改在服务器重新启动后仍然有效，您需要将标志`transparent_hugepage=never`添加到内核选项（*/etc/sysconfig/grub*）中：
+- en: '[PRE15]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Back up the existing GRUB2 configuration file (*/boot/grub2/grub.cfg*), and
+    then rebuild it. On BIOS-based machines, you can do this with the following command:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 备份现有的GRUB2配置文件（*/boot/grub2/grub.cfg*），然后重新构建它。在基于BIOS的机器上，您可以使用以下命令执行此操作：
+- en: '[PRE16]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'If THP is still not disabled, it may be necessary to disable the `tuned` services:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果THP仍未禁用，可能需要禁用`tuned`服务：
+- en: '[PRE17]'
+  id: totrans-76
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'To disable THP for Ubuntu 20.04 (Focal Fossa), we recommend you use the `sysfsutils`
+    package. To install it, execute the following command:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要禁用Ubuntu 20.04（Focal Fossa）的THP，建议使用`sysfsutils`包。要安装它，请执行以下命令：
+- en: '[PRE18]'
+  id: totrans-78
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Then append the following lines to the */etc/sysfs.conf* file:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后将以下行追加到*/etc/sysfs.conf*文件中：
+- en: '[PRE19]'
+  id: totrans-80
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'Reboot the server and check if the settings are in place:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重新启动服务器并检查是否已设置：
+- en: '[PRE20]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: jemalloc
+  id: totrans-83
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: jemalloc
+- en: MySQL Server uses dynamic memory allocation, so a good memory allocator is important
+    for proper CPU and RAM resource utilization. An efficient memory allocator should
+    improve scalability, increase throughput, and keep the memory footprint under
+    control.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL服务器使用动态内存分配，因此良好的内存分配器对于正确利用CPU和RAM资源至关重要。高效的内存分配器应该能够提高可伸缩性、增加吞吐量，并控制内存占用。
+- en: It is important to mention a characteristic of InnoDB here. InnoDB creates a
+    read view for every transaction and allocates memory for this structure from the
+    `heap` area. The problem is that MySQL deallocates the heap on each commit, and
+    thus the read view memory is reallocated on the next transaction, leading to memory
+    fragmentation.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里需要提及InnoDB的一个特性。InnoDB为每个事务创建一个读视图，并从`heap`区域分配内存以用于此结构。问题在于MySQL在每次提交时释放堆，因此读视图内存在下一个事务时重新分配，导致内存碎片化。
+- en: '`jemalloc` is a memory allocator that emphasizes fragmentation avoidance and
+    scalable concurrency support.'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`jemalloc`是一个强调碎片避免和可扩展并发支持的内存分配器。'
+- en: Using `jemalloc` (with THP disabled), you have less memory fragmentation and
+    more efficient resource management of the available server memory. You can install
+    the `jemalloc` package from the [`jemalloc` repository](https://oreil.ly/NZMtb)
+    or the Percona *yum* or *apt* repository. We prefer to use the Percona repository
+    because we consider it simpler to install and manage. We describe the steps to
+    install the *yum* repository in [“Installing Percona Server 8.0”](ch01.xhtml#PERCONA-YUM-REPO-INSTALL)
+    and the *apt* repository in [“Installing Percona Server 8”](ch01.xhtml#INSTALL-APT-PERCONA-REPO).
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `jemalloc`（禁用 THP），您可以减少内存碎片化并更有效地管理服务器可用内存资源。您可以从 [`jemalloc` 仓库](https://oreil.ly/NZMtb)
+    或 Percona 的 *yum* 或 *apt* 软件库安装 `jemalloc` 软件包。我们更喜欢使用 Percona 软件库，因为我们认为它更简单安装和管理。我们在
+    [“安装 Percona Server 8.0”](ch01.xhtml#PERCONA-YUM-REPO-INSTALL) 和 [“安装 Percona
+    Server 8”](ch01.xhtml#INSTALL-APT-PERCONA-REPO) 中描述了安装 *yum* 软件库和 *apt* 软件库的步骤。
+- en: Once you have the repo, you run the install command for your operating system.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦您有了软件库，您可以为您的操作系统运行安装命令。
+- en: Tip
+  id: totrans-89
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: 'In CentOS, if the server has the Extra Packages for Enterprise Linux (EPEL)
+    repository installed, it is possible to install `jemalloc` from this repo with
+    `yum`. To install the EPEL package, use:'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 CentOS 中，如果服务器安装了 Extra Packages for Enterprise Linux (EPEL) 软件库，则可以使用 `yum`
+    从该软件库安装 `jemalloc`。要安装 EPEL 软件包，请使用：
+- en: '[PRE21]'
+  id: totrans-91
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'If you are using Ubuntu 20.04, then you need to execute the following steps
+    to enable `jemalloc`:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您使用 Ubuntu 20.04，则需要执行以下步骤以启用 `jemalloc`：
+- en: 'Install `jemalloc`:'
+  id: totrans-93
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 安装 `jemalloc`：
+- en: '[PRE22]'
+  id: totrans-94
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'The `dpkg` command will show the location of the `jemalloc` library:'
+  id: totrans-95
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`dpkg` 命令将显示 `jemalloc` 库的位置：'
+- en: '[PRE23]'
+  id: totrans-96
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'Override the default configuration of the service with the command:'
+  id: totrans-97
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过以下命令覆盖服务的默认配置：
+- en: '[PRE24]'
+  id: totrans-98
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: which will create the */etc/systemd/system/mysql.service.d/override.conf* file.
+  id: totrans-99
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 将创建 */etc/systemd/system/mysql.service.d/override.conf* 文件。
+- en: 'Add the following configuration to the file:'
+  id: totrans-100
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将以下配置添加到文件中：
+- en: '[PRE25]'
+  id: totrans-101
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'Restart the MySQL service to enable the `jemalloc` library:'
+  id: totrans-102
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 重新启动 MySQL 服务以启用 `jemalloc` 库：
+- en: '[PRE26]'
+  id: totrans-103
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'To verify if it worked, with the `mysqld` process running, execute the following
+    command:'
+  id: totrans-104
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 要验证是否成功，确保 `mysqld` 进程在运行，执行以下命令：
+- en: '[PRE27]'
+  id: totrans-105
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'You should see similar output to the following:'
+  id: totrans-106
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 您应该看到类似以下的输出：
+- en: '[PRE28]'
+  id: totrans-107
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'If you are using CentOS/RHEL, you need to execute the following steps:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您使用 CentOS/RHEL，需要执行以下步骤：
+- en: 'Install the `jemalloc` package:'
+  id: totrans-109
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 安装 `jemalloc` 软件包：
+- en: '[PRE29]'
+  id: totrans-110
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'The `rpm -ql` command will show the library location:'
+  id: totrans-111
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: '`rpm -ql` 命令将显示库的位置：'
+- en: '[PRE30]'
+  id: totrans-112
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'Override the default configuration of the service with the command:'
+  id: totrans-113
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过以下命令覆盖服务的默认配置：
+- en: '[PRE31]'
+  id: totrans-114
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: which will create the */etc/systemd/system/mysqld.service.d/override.conf* file.
+  id: totrans-115
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 将创建 */etc/systemd/system/mysqld.service.d/override.conf* 文件。
+- en: 'Add the following configuration to the file:'
+  id: totrans-116
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将以下配置添加到文件中：
+- en: '[PRE32]'
+  id: totrans-117
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'Restart the MySQL service to enable the `jemalloc` library:'
+  id: totrans-118
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 重新启动 MySQL 服务以启用 `jemalloc` 库：
+- en: '[PRE33]'
+  id: totrans-119
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'To verify if it worked, with the `mysqld` process running, execute the following
+    command:'
+  id: totrans-120
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 要验证是否成功，确保 `mysqld` 进程在运行，执行以下命令：
+- en: '[PRE34]'
+  id: totrans-121
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'You should see similar output to the following:'
+  id: totrans-122
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 您应该看到类似以下的输出：
+- en: '[PRE35]'
+  id: totrans-123
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: CPU governor
+  id: totrans-124
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: CPU 调度器
+- en: One of the most effective ways to reduce the power consumption and heat output
+    on your system is to use CPUfreq. CPUfreq, also referred to as CPU frequency scaling
+    or CPU speed scaling, allows the processor’s clock speed to be adjusted on the
+    fly. This feature enables the system to run at a reduced clock speed to save power.
+    The rules for shifting frequencies—whether and when to shift to a faster or slower
+    clock speed—are defined by the CPUfreq *governor*. The governor defines the power
+    characteristics of the system CPU, which in turn affects CPU performance. Each
+    governor has its own unique behavior, purpose, and suitability in terms of workload.
+    However, for MySQL databases, we recommend using the maximum performance setting
+    to achieve the best throughput.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在系统上减少功耗和热量输出的最有效方法之一是使用 CPUfreq。CPUfreq，也称为 CPU 频率调整或 CPU 速度调整，允许在运行时调整处理器的时钟速度。此功能使系统能够以降低的时钟速度运行以节省功耗。关于何时以及何时转移到更快或更慢的时钟速度的转换规则由
+    CPUfreq *governor* 定义。这个调度器定义了系统 CPU 的功耗特性，进而影响 CPU 的性能。每个调度器都有其独特的行为、目的和适用于工作负载的适合性。然而，对于
+    MySQL 数据库，我们建议使用最大性能设置以获得最佳吞吐量。
+- en: 'For CentOS, you can view which CPU governor is currently being used by executing:'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 CentOS，您可以通过执行以下命令查看当前使用的 CPU 调度器：
+- en: '[PRE36]'
+  id: totrans-127
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'You can enable performance mode by running:'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过运行以下命令启用性能模式：
+- en: '[PRE37]'
+  id: totrans-129
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'For Ubuntu, we recommend installing the `linux-tools-common` package so you
+    have access to the `cpupower` utility:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 Ubuntu，我们建议安装 `linux-tools-common` 包，这样您就可以使用 `cpupower` 实用程序：
+- en: '[PRE38]'
+  id: totrans-131
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'Once you’ve installed it, you can change the governor to performance mode with
+    the following command:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 安装完成后，您可以使用以下命令将管理器设置为性能模式：
+- en: '[PRE39]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: MySQL best practices
+  id: totrans-134
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: MySQL 最佳实践
+- en: Now let’s look at MySQL Server settings. This section proposes recommended values
+    for the main MySQL parameters that have a direct impact on performance. You’ll
+    see that it’s not necessary to change the default values for the majority of the
+    parameters.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们来看看 MySQL 服务器设置。本节提出了对主要影响性能的主要 MySQL 参数推荐的值。您会看到对于大多数参数来说，不需要更改默认值。
+- en: Buffer pool size
+  id: totrans-136
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 缓冲池大小
+- en: The `innodb_buffer_pool_size` parameter controls the size in bytes of the InnoDB
+    buffer pool, the memory area where InnoDB caches table and index data. There’s
+    no question that for tuning InnoDB, this is the most important parameter. The
+    typical rule of thumb is to set it to around 70% of the total available RAM for
+    a MySQL dedicated server.
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`innodb_buffer_pool_size` 参数控制 InnoDB 缓冲池的大小（以字节为单位），这是 InnoDB 缓存表和索引数据的内存区域。毫无疑问，对于调整
+    InnoDB，这是最重要的参数。通常的经验法则是将其设置为 MySQL 专用服务器可用总内存的约 70%。'
+- en: However, the larger the server is, the more likely it is that this will end
+    up wasting RAM. For a server with 512 GB of RAM, for example, this would leave
+    153 GB of RAM for the operating system, which is more than it needs.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，服务器越大，这样做可能会浪费更多的 RAM。例如，对于具有 512 GB RAM 的服务器，这将使得操作系统有 153 GB 的多余内存，这比其需要的要多得多。
+- en: So what’s a better rule of thumb? Set the `innodb_buffer_pool_size` as large
+    as possible, without causing swapping when the system is running the production
+    workload. This will require some tuning.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那么什么是更好的经验法则？将 `innodb_buffer_pool_size` 设置得尽可能大，而不会在系统运行生产工作负载时引起交换。这将需要一些调整。
+- en: 'In MySQL 5.7 and later this is a dynamic parameter, so you can change it on
+    the fly without the need to restart the database. For example, to set it to 1
+    GB, use this command:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 5.7 及更高版本中，这是一个动态参数，因此您可以在不重启数据库的情况下即时更改它。例如，要将其设置为 1 GB，请使用以下命令：
+- en: '[PRE40]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: '[PRE41]'
+  id: totrans-142
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'To make the change persistent across restarts, you’ll need to add this parameter
+    to *my.cnf*, under the `[mysqld]` section:'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使更改在重启后生效，您需要将此参数添加到 *my.cnf* 文件的 `[mysqld]` 部分下：
+- en: '[PRE42]'
+  id: totrans-144
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: The innodb_buffer_pool_instances parameter
+  id: totrans-145
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: '`innodb_buffer_pool_instances` 参数'
+- en: One of the more obscure MySQL parameters is `innodb_buffer_pool_instances`.
+    This parameter defines the number of instances that InnoDB will split the buffer
+    pool into. For systems with buffer pools in the multigigabyte range, dividing
+    the buffer pool into separate instances can improve concurrency by reducing contention
+    as different threads read and write to cached pages.
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 中较为隐晦的一个参数是 `innodb_buffer_pool_instances`。此参数定义了 InnoDB 将缓冲池分割为多少个实例。对于具有多个千兆字节缓冲池的系统，将缓冲池分割为单独的实例可以通过减少不同线程对缓存页面的读写而提高并发性能。
+- en: However, in our experience, setting a high value for this parameter may also
+    introduce additional overhead. The reason is that each buffer pool instance manages
+    its own free list, flush list, LRU list, and all other data structures connected
+    to a buffer pool, and is protected by its own buffer pool mutex.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，根据我们的经验，为此参数设置较高的值可能也会引入额外的开销。原因在于每个缓冲池实例管理其自己的空闲列表、刷新列表、LRU 列表和所有其他与缓冲池相关的数据结构，并由其自己的缓冲池互斥量保护。
+- en: Unless you run benchmarks that prove performance gains, we suggest using the
+    default value (`8`).
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除非您运行基准测试证明性能增益，否则建议使用默认值 (`8`)。
+- en: Note
+  id: totrans-149
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The `innodb_buffer_pool_instances` parameter was deprecated in MariaDB 10.5.1
+    and removed in MariaDB 10.6\. According to MariaDB architect Marko Makela, this
+    is because the original reasons for splitting the buffer pool have mostly gone
+    away nowadays. You can find more details in the [MariaDB Jira ticket](https://oreil.ly/HOCNA).
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`innodb_buffer_pool_instances` 参数在 MariaDB 10.5.1 中已弃用，并在 MariaDB 10.6 中移除。根据
+    MariaDB 架构师 Marko Makela 的说法，这是因为现在大部分需要分割缓冲池的原因已经消失。您可以在 [MariaDB Jira ticket](https://oreil.ly/HOCNA)
+    中找到更多详细信息。'
+- en: Redo log size
+  id: totrans-151
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 重做日志大小
+- en: The redo log is a structure used during crash recovery to correct data written
+    by incomplete transactions. The main goal is to guarantee the durability (D) property
+    of ACID transactions by providing redo recovery for committed transactions. Because
+    the redo file logs all data written to MySQL even before the commit, having the
+    right redo log size is fundamental for MySQL to run smoothly without struggling.
+    An undersized redo log can even lead to errors in operations!
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重做日志是在崩溃恢复期间使用的结构，用于纠正由不完整事务写入的数据。其主要目标是通过为已提交事务提供重做恢复来保证ACID事务的持久性（D）属性。因为重做文件记录了甚至在提交之前所有写入MySQL的数据，所以拥有合适的重做日志大小对于MySQL顺利运行至关重要。过小的重做日志甚至可能导致操作中出现错误！
+- en: 'Here’s an example of the kind of error you might see if using a small redo
+    log file:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是使用小的重做日志文件可能出现的错误示例：
+- en: '[PRE43]'
+  id: totrans-154
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'In this case MySQL was using the default value for the `innodb_log_file_size`
+    parameter, which is 48 MB. To estimate the optimal redo log size, there is a formula
+    that we can use in the majority of cases. Take a look at the following commands:'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，MySQL使用了`innodb_log_file_size`参数的默认值，即48 MB。为了估算最佳的重做日志大小，在大多数情况下我们可以使用以下公式。看一下以下命令：
+- en: '[PRE44]'
+  id: totrans-156
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: '[PRE45]'
+  id: totrans-157
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: 'The log sequence number is the total number of bytes written to the redo log.
+    Using the `SLEEP()` command, we can calculate the delta for that period. Then,
+    using the following formula, we can reach an estimated value for the amount of
+    space needed to hold an hour or so of logs (a good rule of thumb):'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 日志序列号是写入重做日志的总字节数。通过使用`SLEEP()`命令，我们可以计算该时间段的增量。然后，使用以下公式，我们可以得出一个估计值，用于存储大约一小时的日志所需的空间量（一个经验法则）。
+- en: '[PRE46]'
+  id: totrans-159
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: '[PRE47]'
+  id: totrans-160
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: 'We usually round up, so the final number will be 56 MB. This is the value that
+    needs to be added to *my.cnf* under the `[mysqld]` section:'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们通常会向上取整，因此最终的数字将是56 MB。这是需要添加到`my.cnf`文件的值，在`[mysqld]`部分下：
+- en: '[PRE48]'
+  id: totrans-162
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: The sync_binlog parameter
+  id: totrans-163
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: '`sync_binlog`参数'
+- en: The binary log is a set of log files that contain information about data modifications
+    made to a MySQL server instance. They are different from the redo files and have
+    other uses. For example, they are used to create replicas and InnoDB Clusters,
+    and are helpful for performing PITR.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二进制日志是一组日志文件，包含对MySQL服务器实例进行的数据修改的信息。它们与重做文件不同，并且有其他用途。例如，它们用于创建副本和InnoDB集群，并有助于执行PITR。
+- en: 'By default, the MySQL server synchronizes its binary log to disk (using `fdatasync()`)
+    before transactions are committed. The advantage is that in the event of a power
+    failure or operating system crash, transactions that are missing from the binary
+    log are only in a prepared state; this allows the automatic recovery routine to
+    roll back the transactions, guaranteeing that no transaction is lost from the
+    binary log. However, the default value (`sync_binlog = 1`) brings a penalty in
+    performance. As this is a dynamic option, you can change it while the server is
+    running with the following command:'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，MySQL服务器在提交事务之前将其二进制日志同步到磁盘（使用`fdatasync()`）。其优点在于，如果发生停电或操作系统崩溃，从二进制日志丢失的事务仅处于准备状态；这允许自动恢复例程回滚事务，确保不会丢失任何事务。然而，默认值（`sync_binlog
+    = 1`）会带来性能损失。由于这是一个动态选项，您可以在服务器运行时使用以下命令进行更改：
+- en: '[PRE49]'
+  id: totrans-166
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'For the change to persist after a restart, add the parameter to your *my.cnf*
+    file under the `[mysqld]` section:'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使更改在重新启动后持久化，请将参数添加到`my.cnf`文件的`[mysqld]`部分下：
+- en: '[PRE50]'
+  id: totrans-168
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: Note
+  id: totrans-169
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Most of the time, using `sync_binlog=0` will provide good performance (when
+    binary logs are enabled). However, the performance variance can be significant
+    because MySQL will rely on the OS flushing to flush the binary logs. Depending
+    on the workload, using `sync_binlog=1000` or higher will provide better performance
+    than `sync_binlog=1` and less variance than `sync_binlog=0`.
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数情况下，当启用二进制日志时，使用`sync_binlog=0`会提供良好的性能。然而，性能变化可能会很大，因为MySQL将依赖于操作系统的刷新来刷新二进制日志。根据工作负载的不同，使用`sync_binlog=1000`或更高的值将比`sync_binlog=1`提供更好的性能，并且比`sync_binlog=0`具有更少的差异。
+- en: The binlog_expire_logs_seconds and expire_logs_days parameters
+  id: totrans-171
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: '`binlog_expire_logs_seconds`和`expire_logs_days`参数'
+- en: To avoid MySQL filling the entire disk with binary logs, you can adjust the
+    settings of the parameters `binlog_expire_logs_seconds` and `expire_logs_days`.
+    `expire_logs_days` specifies the number of days before automatic removal of binary
+    log files. However, this parameter is deprecated in MySQL 8.0, and you should
+    expect it to be removed in a future release.
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了避免 MySQL 用二进制日志填满整个磁盘，您可以调整参数 `binlog_expire_logs_seconds` 和 `expire_logs_days`
+    的设置。`expire_logs_days` 指定在自动删除二进制日志文件之前的天数。然而，在 MySQL 8.0 中，此参数已被弃用，预计在将来的版本中将被移除。
+- en: Consequently, a better option is to use `binlog_expire_logs_seconds`, which
+    sets the binary log expiration period in seconds. The default value for this parameter
+    is `2592000` (30 days). MySQL can automatically remove the binary log files after
+    this expiration period ends, either at startup or the next time the binary log
+    is flushed.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，更好的选择是使用 `binlog_expire_logs_seconds`，该参数设置二进制日志的过期时间（以秒为单位）。此参数的默认值为 `2592000`（30
+    天）。MySQL 可以在到期后自动删除二进制日志文件，无论是在启动时还是在下次刷新二进制日志时。
+- en: Note
+  id: totrans-174
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'If you want to flush the binary log manually, you can execute the following
+    command:'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您想手动刷新二进制日志，可以执行以下命令：
+- en: '[PRE51]'
+  id: totrans-176
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: The innodb_flush_log_at_trx_commit parameter
+  id: totrans-177
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: '`innodb_flush_log_at_trx_commit` 参数'
+- en: '`innodb_flush_log_at_trx_commit` controls the balance between strict ACID compliance
+    for commit operations and the higher performance possible when commit-related
+    I/O operations are rearranged and done in batches. It is a delicate option, and
+    many prefer to use the default value (`innodb_flush_log_at_trx_commit=1`) in the
+    source servers, while for replicas they use a value of `0` or `2`. The value `2`
+    instructs InnoDB to write to the log files after each transaction commit, but
+    to flush them to disk only once per second. This means you can lose up to a second
+    of updates if the OS crashes, which, with modern hardware that supports up to
+    one million inserts per second, is not negligible. The value `0` is even worse:
+    logs are written and flushed to disk just once per second, so you may lose up
+    to a second’s worth of transactions even if the `mysqld` process crashes.'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`innodb_flush_log_at_trx_commit` 控制提交操作的严格 ACID 兼容性与在重新排列并批量执行提交相关 I/O 操作时可能实现的更高性能之间的平衡。这是一个微妙的选项，许多人更喜欢在源服务器上使用默认值（`innodb_flush_log_at_trx_commit=1`），而在副本上使用值
+    `0` 或 `2`。值 `2` 指示 InnoDB 在每个事务提交后写入日志文件，但每秒仅刷新一次到磁盘。这意味着如果操作系统崩溃，您最多可能会丢失一秒的更新，对于支持每秒达到一百万次插入的现代硬件来说，这并不可忽视。值
+    `0` 更糟：日志每秒仅写入并刷新到磁盘一次，因此即使 `mysqld` 进程崩溃，您也可能会丢失一秒的事务。'
+- en: Warning
+  id: totrans-179
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Many operating systems, and some disk hardware, “fool” the flush-to-disk operation.
+    They may tell `mysqld` that the flush has taken place, even though it has not.
+    In this case, the durability of transactions is not guaranteed even with the recommended
+    settings, and in the worst case, a power outage can corrupt InnoDB data. Using
+    a battery-backed disk cache in the SCSI disk controller or in the disk itself
+    speeds up file flushes and makes the operation safer. You can also disable the
+    caching of disk writes in hardware caches if the battery is not working correctly.
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多操作系统和一些磁盘硬件在“刷入磁盘”的操作上表现得不可靠。它们可能会告诉 `mysqld` 刷入已完成，但实际上并未刷入。在这种情况下，即使使用推荐的设置，事务的耐久性也无法得到保证，最坏的情况下，断电可能会损坏
+    InnoDB 数据。在 SCSI 磁盘控制器或磁盘本身使用带电池后备的磁盘缓存可以加快文件刷入速度，并使操作更安全。如果电池工作不正常，还可以禁用硬件缓存中的磁盘写入缓存。
+- en: The innodb_thread_concurrency parameter
+  id: totrans-181
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: '`innodb_thread_concurrency` 参数'
+- en: '`innodb_thread_concurrency` is set to `0` by default, which means that an infinite
+    number (up to the hardware limit) of threads can be opened and executed inside
+    MySQL. The usual recommendation is to leave this parameter with its default value
+    and only change it to solve contention problems.'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`innodb_thread_concurrency` 默认设置为 `0`，这意味着 MySQL 内可以打开和执行无限数量（最多达到硬件限制）的线程。通常的建议是将此参数保持默认值，并仅在解决争用问题时进行更改。'
+- en: 'If your workload is consistently heavy or has occasional spikes, you can set
+    the value of `innodb_thread_concurrency` using the following formula:'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的工作负载始终很重或偶尔会有高峰，可以使用以下公式设置 `innodb_thread_concurrency` 的值：
+- en: '[PRE52]'
+  id: totrans-184
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: Because MySQL does not use multiple cores to execute a single query (it is a
+    1:1 relation), each core will run one query per single unit of time. Based on
+    our experience, because modern CPUs are fast in general, setting the maximum number
+    of executing threads to double the CPUs available is a good start.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为 MySQL 不使用多个核心来执行单个查询（它是一对一的关系），每个核心在单个时间单位内运行一个查询。根据我们的经验，因为现代 CPU 性能通常较快，设置执行线程的最大数目为可用
+    CPU 数量的两倍是一个不错的起点。
+- en: Once the number of executing threads reaches this limit, additional threads
+    sleep for a number of microseconds, set by the configuration parameter `innodb_​​thread_sleep_delay`,
+    before being placed into the queue.
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当执行线程数达到此限制时，额外的线程会休眠一段由配置参数 `innodb_thread_sleep_delay` 设置的微秒数，然后被放入队列。
+- en: '`innodb_thread_concurrency` is a dynamic variable, and we can change it at
+    runtime:'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`innodb_thread_concurrency` 是一个动态变量，我们可以在运行时更改它：'
+- en: '[PRE53]'
+  id: totrans-188
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 'To make the change persistent, you’ll also need to add this to *my.cnf*, under
+    the `[mysqld]` section:'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使更改持久化，您还需要将其添加到 *my.cnf* 文件中的 `[mysqld]` 部分：
+- en: '[PRE54]'
+  id: totrans-190
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: 'You can validate that MySQL applied the setting with this command:'
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用以下命令验证 MySQL 是否应用了该设置：
+- en: '[PRE55]'
+  id: totrans-192
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: Note
+  id: totrans-193
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'The MySQL 8.0.14 [release notes](https://oreil.ly/EqPrG) state: “As of MySQL
+    8.0.14, InnoDB supports parallel clustered index reads, which can improve `CHECK
+    TABLE` performance.” Parallel clustered index reads also work for a simple `COUNT(*)`
+    (without a `WHERE` condition). You can control the number of parallel threads
+    with the `innodb_parallel_read_threads` parameter.'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 8.0.14 的 [发布说明](https://oreil.ly/EqPrG) 表示：“从 MySQL 8.0.14 开始，InnoDB 支持并行聚簇索引读取，这可以改善
+    `CHECK TABLE` 的性能。” 并行聚簇索引读取也适用于简单的 `COUNT(*)`（没有 `WHERE` 条件）。您可以通过 `innodb_parallel_read_threads`
+    参数来控制并行线程的数量。
+- en: This feature is currently limited and available only for queries without a `WHERE`
+    condition (full scans). However, it is a great start for MySQL and opens the road
+    to real parallel query execution.
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此功能目前仅限于没有 `WHERE` 条件的查询（全表扫描）。然而，这对 MySQL 是一个很好的起点，为实现真正的并行查询打开了道路。
+- en: NUMA architecture
+  id: totrans-196
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: NUMA 架构
+- en: Non-uniform memory access (NUMA) is a shared memory architecture that describes
+    the placement of main memory modules relative to processors in a multiprocessor
+    system. In the NUMA shared memory architecture, each processor has its own local
+    memory module, leading to a distinct performance advantage because the memory
+    and the processor are physically closer. At the same time, it can also access
+    any memory module belonging to another processor using a shared bus (or some other
+    type of interconnect), as shown in [Figure 11-1](#FIG-NUMA).
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 非统一内存访问（NUMA）是一种描述多处理器系统中主存储器模块相对于处理器放置方式的共享存储架构。在 NUMA 共享存储架构中，每个处理器都有自己的本地存储器模块，这带来了明显的性能优势，因为内存和处理器物理上更接近。同时，它还可以通过共享总线（或其他类型的互连）访问属于另一个处理器的任何存储器模块，如图 [11-1](#FIG-NUMA)
+    所示。
+- en: Note
+  id: totrans-198
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'A nice alternative that can show memory usage across NUMA nodes is the `numastat`
+    command. You can get a more detailed memory usage per node by executing:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个很好的替代方法，可以显示跨 NUMA 节点的内存使用情况，是使用 `numastat` 命令。您可以通过执行以下命令来获取每个节点的更详细的内存使用情况：
+- en: '[PRE56]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: 'Another way to visualize this is by specific process. For example, to check
+    the memory usage in NUMA nodes of the mysqld process:'
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种可视化方法是通过特定进程。例如，要检查 mysqld 进程在 NUMA 节点中的内存使用情况：
+- en: '[PRE57]'
+  id: totrans-202
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: '![lm2e 1101](Images/lm2e_1101.png)'
+  id: totrans-203
+  prefs: []
+  type: TYPE_IMG
+  zh: '![lm2e 1101](Images/lm2e_1101.png)'
+- en: Figure 11-1\. NUMA architecture overview
+  id: totrans-204
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 11-1\. NUMA 架构概述
+- en: 'The following command shows an example of the available nodes on a server that
+    has NUMA enabled:'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下命令显示了启用 NUMA 的服务器上可用节点的示例：
+- en: '[PRE58]'
+  id: totrans-206
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: As we can see, node 0 has more free memory than node 1\. There is an issue with
+    this that causes the OS to swap even with memory available, as explained in the
+    excellent article [“The MySQL *Swap Insanity* Problem and the Effects of the NUMA
+    Architecture”](https://oreil.ly/lBRSk) by Jeremy Cole.
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如我们所见，节点 0 比节点 1 有更多的空闲内存。由于这一点导致操作系统即使有可用内存也进行交换，详细解释可以参考 Jeremy Cole 的优秀文章
+    [“MySQL *交换疯狂* 问题与 NUMA 架构的影响”](https://oreil.ly/lBRSk)。
+- en: In MySQL 5.7 the `innodb_buffer_pool_populate` and `numa_interleave` parameters
+    were removed, and their functions are now controlled by the `innodb_numa_interleave`
+    parameter. When we enable it, we balance memory allocation across nodes in a NUMA
+    system, avoiding the swap insanity problem.
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 5.7 中，移除了 `innodb_buffer_pool_populate` 和 `numa_interleave` 参数，它们的功能现在由
+    `innodb_numa_interleave` 参数控制。启用后，我们可以在 NUMA 系统中平衡内存分配，避免交换内存的问题。
+- en: 'This parameter is not dynamic, so to enable it we need to add it to the *my.cnf*
+    file, under the `[mysqld]` section, and restart MySQL:'
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个参数不是动态的，因此要启用它，我们需要将它添加到 *my.cnf* 文件的 `[mysqld]` 部分，并重新启动 MySQL：
+- en: '[PRE59]'
+  id: totrans-210
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'

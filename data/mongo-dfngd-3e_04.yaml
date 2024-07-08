@@ -1,0 +1,1337 @@
+- en: Chapter 3\. Creating, Updating, and Deleting Documents
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第3章。 创建、更新和删除文档
+- en: 'This chapter covers the basics of moving data into and out of the database,
+    including the following:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章介绍了将数据移入和移出数据库的基础知识，包括以下内容：
+- en: Adding new documents to a collection
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 向集合添加新文档
+- en: Removing documents from a collection
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从集合中删除文档
+- en: Updating existing documents
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 更新现有文档
+- en: Choosing the correct level of safety versus speed for all of these operations
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在所有这些操作中选择正确的安全性与速度级别
+- en: Inserting Documents
+  id: totrans-6
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 插入文档
+- en: 'Inserts are the basic method for adding data to MongoDB. To insert a single
+    document, use the collection’s `insertOne` method:'
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 插入是向MongoDB添加数据的基本方法。 要插入单个文档，请使用集合的`insertOne`方法：
+- en: '[PRE0]'
+  id: totrans-8
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: '`insertOne` will add an `"_id"` key to the document (if you do not supply one)
+    and store the document in MongoDB.'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`insertOne`会为文档添加一个`"_id"`键（如果您没有提供），并将文档存储在MongoDB中。'
+- en: insertMany
+  id: totrans-10
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: insertMany
+- en: If you need to insert multiple documents into a collection, you can use `insertMany`.
+    This method enables you to pass an array of documents to the database. This is
+    far more efficient because your code will not make a round trip to the database
+    for each document inserted, but will insert them in bulk.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您需要将多个文档插入集合，可以使用`insertMany`。 此方法使您可以将文档数组传递到数据库。 这样做效率更高，因为您的代码不会为每个插入的文档进行往返数据库，而是会批量插入。
+- en: 'In the shell, you can try this out as follows:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在shell中，您可以按如下方式尝试：
+- en: '[PRE1]'
+  id: totrans-13
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: Sending dozens, hundreds, or even thousands of documents at a time can make
+    inserts significantly faster.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一次性发送几十、几百甚至上千个文档可以显著加快插入速度。
+- en: '`insertMany` is useful if you are inserting multiple documents into a single
+    collection. If you are just importing raw data (e.g., from a data feed or MySQL),
+    there are command-line tools like *mongoimport* that can be used instead of a
+    batch insert. On the other hand, it is often handy to munge data before saving
+    it to MongoDB (converting dates to the date type or adding a custom `"_id"`, for
+    example). In such cases `insertMany` can be used for importing data, as well.'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果要将多个文档插入单个集合，则`insertMany`非常有用。 如果仅导入原始数据（例如来自数据源或MySQL），则可以使用像* mongoimport
+    *这样的命令行工具，而不是批量插入。 另一方面，在将数据保存到MongoDB之前对数据进行处理（例如将日期转换为日期类型或添加自定义`"_id"`）通常很方便。
+    在这种情况下，可以使用`insertMany`来导入数据。
+- en: Current versions of MongoDB do not accept messages longer than 48 MB, so there
+    is a limit to how much can be inserted in a single batch insert. If you attempt
+    to insert more than 48 MB, many drivers will split up the batch insert into multiple
+    48 MB batch inserts. Check your driver documentation for details.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当前版本的MongoDB不接受超过48 MB的消息，因此一次批量插入中可以插入的数据量有限。 如果尝试插入超过48 MB，则许多驱动程序将批量插入拆分为多个48
+    MB的批量插入。 有关详细信息，请查阅您的驱动程序文档。
+- en: When performing a bulk insert using `insertMany`, if a document halfway through
+    the array produces an error of some type, what happens depends on whether you
+    have opted for ordered or unordered operations. As the second parameter to `insertMany`
+    you may specify an options document. Specify `true` for the key `"ordered"` in
+    the options document to ensure documents are inserted in the order they are provided.
+    Specify `false` and MongoDB may reorder the inserts to increase performance. Ordered
+    inserts is the default if no ordering is specified. For ordered inserts, the array
+    passed to `insertMany` defines the insertion order. If a document produces an
+    insertion error, no documents beyond that point in the array will be inserted.
+    For unordered inserts, MongoDB will attempt to insert all documents, regardless
+    of whether some insertions produce errors.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`insertMany`执行批量插入时，如果数组中间的某个文档产生某种类型的错误，发生的情况取决于您是否选择了有序或无序操作。 作为`insertMany`的第二个参数，您可以指定一个选项文档。
+    在选项文档中为键`"ordered"`指定`true`，以确保按提供顺序插入文档。 指定`false`，MongoDB可以重新排序插入以提高性能。 如果未指定排序，则默认为有序插入。
+    对于有序插入，传递给`insertMany`的数组定义了插入顺序。 如果文档产生插入错误，则不会插入数组中该点之后的任何文档。 对于无序插入，MongoDB将尝试插入所有文档，而不管某些插入是否产生错误。
+- en: 'In this example, because ordered inserts is the default, only the first two
+    documents will be inserted. The third document will produce an error, because
+    you cannot insert two documents with the same `"_id"`:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本示例中，由于有序插入是默认的，只会插入前两个文档。 第三个文档会产生错误，因为您不能插入具有相同`"_id"`的两个文档：
+- en: '[PRE2]'
+  id: totrans-19
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'If instead we specify unordered inserts, the first, second, and fourth documents
+    in the array are inserted. The only insert that fails is the third document, again
+    because of a duplicate `"_id"` error:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们指定无序插入，数组中的第一、第二和第四个文档将被插入。唯一失败的插入是第三个文档，同样是因为重复的`"_id"`错误。
+- en: '[PRE3]'
+  id: totrans-21
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: If you study these examples closely, you might note that the output of these
+    two calls to `insertMany` hints that other operations besides simply inserts might
+    be supported for bulk writes. While `insertMany` does not support operations other
+    than insert, MongoDB does support a Bulk Write API that enables you to batch together
+    a number of operations of different types in one call. While that is beyond the
+    scope of this chapter, you can read about the [Bulk Write API](https://docs.mongodb.org/manual/core/bulk-write-operations/)
+    in the MongoDB documentation.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您仔细研究这些示例，您可能会注意到`insertMany`的这两次调用的输出暗示了除了简单插入之外可能支持的其他操作。虽然`insertMany`不支持除插入之外的操作，但MongoDB支持Bulk
+    Write API，使您能够在一次调用中批量处理多种类型的操作。虽然这超出了本章的范围，您可以在MongoDB文档中阅读有关[批量写入API](https://docs.mongodb.org/manual/core/bulk-write-operations/)的信息。
+- en: Insert Validation
+  id: totrans-23
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 插入验证
+- en: 'MongoDB does minimal checks on data being inserted: it checks the document’s
+    basic structure and adds an `"_id"` field if one does not exist. One of the basic
+    structure checks is size: all documents must be smaller than 16 MB. This is a
+    somewhat arbitrary limit (and may be raised in the future); it is mostly intended
+    to prevent bad schema design and ensure consistent performance. To see the Binary
+    JSON (BSON) size, in bytes, of the document *`doc`*, run ``Object.bsonsize(*`doc`*)``
+    from the shell.'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB对插入的数据进行最小的检查：它检查文档的基本结构，并在不存在时添加一个`"_id"`字段。基本结构检查之一是大小：所有文档的大小必须小于16
+    MB。这是一个相对任意的限制（可能在未来会提高）；主要用于防止糟糕的模式设计，并确保一致的性能。要查看文档*`doc`*的二进制JSON（BSON）大小（以字节为单位），请在shell中运行``Object.bsonsize(*`doc`*)``。
+- en: To give you an idea of how much data 16 MB is, the entire text of *War and Peace*
+    is just 3.14 MB.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了给您一个16 MB数据的概念，整个《战争与和平》的文本只有3.14 MB。
+- en: These minimal checks also mean that it is fairly easy to insert invalid data
+    (if you are trying to). Thus, you should only allow trusted sources, such as your
+    application servers, to connect to the database. All of the MongoDB drivers for
+    major languages (and most of the minor ones, too) do check for a variety of invalid
+    data (documents that are too large, contain non-UTF-8 strings, or use unrecognized
+    types) before sending anything to the database.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些最小的检查也意味着相对容易插入无效数据（如果你试图这样做）。因此，您应该只允许信任的来源（如您的应用程序服务器）连接到数据库。所有主要语言的MongoDB驱动程序（以及大多数次要语言的驱动程序）在发送任何内容到数据库之前都会检查各种无效数据（例如文档过大、包含非UTF-8字符串或使用未识别的类型）。
+- en: insert
+  id: totrans-27
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: insert
+- en: In versions of MongoDB prior to 3.0, `insert` was the primary method for inserting
+    documents into MongoDB. MongoDB drivers introduced a new CRUD API at the same
+    time as the MongoDB 3.0 server release. As of MongoDB 3.2 the *mongo* shell also
+    supports this API, which includes `insertOne` and `insertMany` as well as several
+    other methods. The goal of the current CRUD API is to make the semantics of all
+    CRUD operations consistent and clear across the drivers and the shell. While methods
+    such as `insert` are still supported for backward compatibility, they should not
+    be used in applications going forward. You should instead prefer `insertOne` and
+    `insertMany` for creating documents.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在MongoDB 3.0之前的版本中，`insert`是将文档插入MongoDB的主要方法。MongoDB驱动程序在MongoDB 3.0服务器发布时引入了一个新的CRUD
+    API。截至MongoDB 3.2，*mongo* shell也支持此API，其中包括`insertOne`和`insertMany`以及其他几种方法。当前CRUD
+    API的目标是使所有CRUD操作在驱动程序和shell中的语义一致和清晰。虽然诸如`insert`之类的方法仍然支持向后兼容性，但不应在今后的应用程序中使用。您应该优先考虑使用`insertOne`和`insertMany`来创建文档。
+- en: Removing Documents
+  id: totrans-29
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 删除文档
+- en: 'Now that there’s data in our database, let’s delete it. The CRUD API provides
+    `deleteOne` and `deleteMany` for this purpose. Both of these methods take a filter
+    document as their first parameter. The filter specifies a set of criteria to match
+    against in removing documents. To delete the document with the `` `"_id"` `` value
+    of `4`, we use `deleteOne` in the *mongo* shell as illustrated here:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在我们的数据库中有数据了，让我们删除它。CRUD API提供了`deleteOne`和`deleteMany`来实现此目的。这两种方法的第一个参数都是一个过滤文档。过滤器指定要匹配以删除文档的一组条件。要删除`"_id"`值为`4`的文档，我们在*mongo*
+    shell中使用`deleteOne`，如下所示：
+- en: '[PRE4]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: In this example, we used a filter that could only match one document since `"_id"`
+    values are unique in a collection. However, we can also specify a filter that
+    matches multiple documents in a collection. In this case, `deleteOne` will delete
+    the first document found that matches the filter. Which document is found first
+    depends on several factors, including the order in which the documents were inserted,
+    what updates were made to the documents (for some storage engines), and what indexes
+    are specified. As with any database operation, be sure you know what effect your
+    use of `deleteOne` will have on your data.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本例中，我们使用了一个过滤器，该过滤器只能匹配集合中的一个文档，因为 `"_id"` 值在集合中是唯一的。但是，我们也可以指定一个可以匹配集合中多个文档的过滤器。在这种情况下，`deleteOne`
+    将删除首个与过滤器匹配的文档。首先找到哪个文档取决于几个因素，包括文档插入的顺序，对文档的更新（对于某些存储引擎），以及指定的索引。与任何数据库操作一样，确保你知道使用
+    `deleteOne` 将对数据产生什么影响。
+- en: 'To delete all the documents that match a filter, use `deleteMany`:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要删除匹配过滤器的所有文档，请使用 `deleteMany`：
+- en: '[PRE5]'
+  id: totrans-34
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'As a more realistic use case, suppose you want to remove every user from the
+    *mailing.list* collection where the value for `"opt-out"` is `true`:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为更实际的用例，假设你想删除 *mailing.list* 集合中每个 `"opt-out"` 值为 `true` 的用户：
+- en: '[PRE6]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: In versions of MongoDB prior to 3.0, `remove` was the primary method for deleting
+    documents. MongoDB drivers introduced the `deleteOne` and `deleteMany` methods
+    at the same time as the MongoDB 3.0 server release, and the shell began supporting
+    these methods in MongoDB 3.2\. While `remove` is still supported for backward
+    compatibility, you should use `deleteOne` and `deleteMany` in your applications.
+    The current CRUD API provides a cleaner set of semantics and, especially for multidocument
+    operations, helps application developers avoid a couple of common pitfalls with
+    the previous API.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MongoDB 3.0 之前的版本中，`remove` 是删除文档的主要方法。MongoDB 驱动程序在 MongoDB 3.0 服务器发布时同时引入了
+    `deleteOne` 和 `deleteMany` 方法，而 shell 在 MongoDB 3.2 开始支持这些方法。虽然为了向后兼容仍支持 `remove`
+    方法，但在你的应用程序中应该使用 `deleteOne` 和 `deleteMany`。当前的 CRUD API 提供了更清晰的语义集，特别是对于多文档操作，帮助应用程序开发人员避免以前
+    API 的一些常见陷阱。
+- en: drop
+  id: totrans-38
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: drop
+- en: 'It is possible to use `deleteMany` to remove all documents in a collection:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以使用 `deleteMany` 来删除集合中的所有文档：
+- en: '[PRE7]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Removing documents is usually a fairly quick operation. However, if you want
+    to clear an entire collection, it is faster to `drop` it:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 删除文档通常是一个相当快速的操作。但是，如果要清空整个集合，最快的方法是使用 `drop`：
+- en: '[PRE8]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: and then recreate any indexes on the empty collection.
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后在空集合上重新创建任何索引。
+- en: Once data has been removed, it is gone forever. There is no way to undo a delete
+    or drop operation or recover deleted documents, except, of course, by restoring
+    a previously backed up version of the data. See [Chapter 23](ch23.xhtml#chapter-backup)
+    for a detailed discussion of MongoDB backup and restore.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦数据被删除，就永远消失了。除非恢复先前备份版本的数据，否则无法撤消删除或删除文档。详细讨论 MongoDB 备份和恢复，请参阅 [第 23 章](ch23.xhtml#chapter-backup)。
+- en: Updating Documents
+  id: totrans-45
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 更新文档
+- en: 'Once a document is stored in the database, it can be changed using one of several
+    update methods: `updateOne`, `updateMany`, and `replaceOne`. `updateOne` and `updateMany`
+    each take a filter document as their first parameter and a modifier document,
+    which describes changes to make, as the second parameter. `replaceOne` also takes
+    a filter as the first parameter, but as the second parameter `replaceOne` expects
+    a document with which it will replace the document matching the filter.'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦文档存储在数据库中，就可以使用几种更新方法进行更改：`updateOne`、`updateMany` 和 `replaceOne`。`updateOne`
+    和 `updateMany` 各自将一个过滤器文档作为其第一个参数，并将描述要进行的更改的修改器文档作为第二个参数。`replaceOne` 也接受一个过滤器作为第一个参数，但是作为第二个参数，`replaceOne`
+    期望一个用于替换与过滤器匹配的文档的文档。
+- en: 'Updating a document is atomic: if two updates happen at the same time, whichever
+    one reaches the server first will be applied, and then the next one will be applied.
+    Thus, conflicting updates can safely be sent in rapid-fire succession without
+    any documents being corrupted: the last update will “win.” The Document Versioning
+    pattern (see [“Schema Design Patterns”](ch09.xhtml#schemeDesignPatterns)) is worth
+    considering if you don’t want the default behavior.'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更新文档是原子性的：如果同时发生两个更新，首先到达服务器的那一个将被应用，然后将应用下一个。因此，可以安全地连续发送冲突的更新而不会损坏任何文档：最后一个更新将“获胜”。如果不想使用默认行为，可以考虑文档版本模式（参见
+    [“模式设计模式”](ch09.xhtml#schemeDesignPatterns)）。
+- en: Document Replacement
+  id: totrans-48
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 文档替换
+- en: '`replaceOne` fully replaces a matching document with a new one. This can be
+    useful to do a dramatic schema migration (see [Chapter 9](ch09.xhtml#chapter-app-design)
+    for scheme migration strategies). For example, suppose we are making major changes
+    to a user document, which looks like the following:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`replaceOne`完全用新文档替换匹配的文档。这对于进行重大的模式迁移非常有用（参见[第9章](ch09.xhtml#chapter-app-design)中的模式迁移策略）。例如，假设我们正在对用户文档进行重大更改，其格式如下：'
+- en: '[PRE9]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'We want to move the `"friends"` and `"enemies"` fields to a `"relationships"`
+    subdocument. We can change the structure of the document in the shell and then
+    replace the database’s version with a `replaceOne`:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们希望将`"friends"`和`"enemies"`字段移动到`"relationships"`子文档中。我们可以在Shell中更改文档的结构，然后用`replaceOne`替换数据库的版本：
+- en: '[PRE10]'
+  id: totrans-52
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Now, doing a `findOne` shows that the structure of the document has been updated:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，执行`findOne`显示文档的结构已更新：
+- en: '[PRE11]'
+  id: totrans-54
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: A common mistake is matching more than one document with the criteria and then
+    creating a duplicate `"_id"` value with the second parameter. The database will
+    throw an error for this, and no documents will be updated.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个常见的错误是根据条件匹配多个文档，然后使用第二个参数创建一个重复的`"_id"`值。数据库会因此抛出错误，并且不会更新任何文档。
+- en: 'For example, suppose we create several documents with the same value for `"name"`,
+    but we don’t realize it:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设我们创建了几个具有相同`"name"`值的文档，但我们没有意识到：
+- en: '[PRE12]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Now, if it’s Joe #2’s birthday, we want to increment the value of his `"age"`
+    key, so we might say this:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '现在，如果是Joe #2的生日，我们想增加他的`"age"`键的值，我们可能会这样说：'
+- en: '[PRE13]'
+  id: totrans-59
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'What happened? When you do the update, the database will look for a document
+    matching `{"name" : "joe"}`. The first one it finds will be the 65-year-old Joe.
+    It will attempt to replace that document with the one in the `joe` variable, but
+    there’s already a document in this collection with the same `"_id"`. Thus, the
+    update will fail, because `"_id"` values must be unique. The best way to avoid
+    this situation is to make sure that your update always specifies a unique document,
+    perhaps by matching on a key like `"_id"`. For the preceding example, this would
+    be the correct update to use:'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '发生了什么？当您进行更新时，数据库将寻找匹配`{"name" : "joe"}`的文档。它找到的第一个将是65岁的Joe。它将尝试用`joe`变量中的文档替换该文档，但在这个集合中已经有一个具有相同`"_id"`的文档。因此，更新将失败，因为`"_id"`值必须是唯一的。避免这种情况的最佳方法是确保您的更新始终指定一个唯一的文档，可能是通过匹配`"_id"`之类的键。对于前面的例子，这将是正确的更新使用方法：'
+- en: '[PRE14]'
+  id: totrans-61
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Using `"_id"` for the filter will also be efficient since`"_id"` values form
+    the basis for the primary index of a collection. We’ll cover primary and secondary
+    indexes and how indexing affects updates and other operations more in [Chapter 5](ch05.xhtml#chapter_d1e5128).
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`"_id"`作为过滤器也是高效的，因为`"_id"`值形成了集合的主索引的基础。我们将在[第5章](ch05.xhtml#chapter_d1e5128)更详细地讨论主索引和次要索引以及索引如何影响更新和其他操作。
+- en: Using Update Operators
+  id: totrans-63
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用更新操作符
+- en: Usually only certain portions of a document need to be updated. You can update
+    specific fields in a document using atomic *update operators*. Update operators
+    are special keys that can be used to specify complex update operations, such as
+    altering, adding, or removing keys, and even manipulating arrays and embedded
+    documents.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常只需更新文档的某些部分。您可以使用原子*更新操作符*来更新文档中的特定字段。更新操作符是特殊的键，可用于指定复杂的更新操作，如更改、添加或删除键，甚至操作数组和嵌入式文档。
+- en: 'Suppose we’re keeping website analytics in a collection and want to increment
+    a counter each time someone visits a page. We can use update operators to do this
+    increment atomically. Each URL and its number of page views is stored in a document
+    that looks like this:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们将网站分析保存在一个集合中，并且希望每次有人访问页面时都增加计数器。我们可以使用更新操作符来原子地进行增量操作。每个URL及其页面浏览次数存储在如下格式的文档中：
+- en: '[PRE15]'
+  id: totrans-66
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Every time someone visits a page, we can find the page by its URL and use the
+    `"$inc"` modifier to increment the value of the `"pageviews"` key:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每当有人访问页面时，我们可以根据其URL找到页面，并使用`"$inc"`修饰符增加`"pageviews"`键的值：
+- en: '[PRE16]'
+  id: totrans-68
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'Now, if we do a `findOne`, we see that `"pageviews"` has increased by one:'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，如果我们执行`findOne`，会发现`"pageviews"`已增加了一次：
+- en: '[PRE17]'
+  id: totrans-70
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: When using operators, the value of `"_id"` cannot be changed. (Note that `"_id"`
+    *can* be changed by using whole-document replacement.) Values for any other key,
+    including other uniquely indexed keys, can be modified.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用操作符时，`"_id"`的值不能被更改。（请注意，通过使用整个文档替换，`"_id"`*可以*被更改。）任何其他键的值，包括其他唯一索引键，都可以被修改。
+- en: Getting started with the “$set” modifier
+  id: totrans-72
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 入门“$set”修饰符
+- en: '`"$set"` sets the value of a field. If the field does not yet exist, it will
+    be created. This can be handy for updating schemas or adding user-defined keys.
+    For example, suppose you have a simple user profile stored as a document that
+    looks something like the following:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"$set"` 用于设置字段的值。如果字段尚不存在，它将被创建。这对于更新模式或添加用户定义的键非常方便。例如，假设您有一个简单的用户配置文件，存储为以下形式的文档：'
+- en: '[PRE18]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'This is a pretty bare-bones user profile. If the user wanted to store his favorite
+    book in his profile, he could add it using `"$set"`:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个相当简单的用户配置文件。如果用户想要在其配置文件中存储他喜欢的书籍，可以使用 `"$set"` 添加它：
+- en: '[PRE19]'
+  id: totrans-76
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'Now the document will have a `"favorite book"` key:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在文档将有一个 `"favorite book"` 键：
+- en: '[PRE20]'
+  id: totrans-78
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'If the user decides that he actually enjoys a different book, `"$set"` can
+    be used again to change the value:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果用户决定他实际上喜欢不同的书籍，可以再次使用 `"$set"` 更改值：
+- en: '[PRE21]'
+  id: totrans-80
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: '`"$set"` can even change the type of the key it modifies. For instance, if
+    our fickle user decides that he actually likes quite a few books, he can change
+    the value of the `"favorite book"` key into an array:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"$set"` 甚至可以更改它修改的键的类型。例如，如果我们善变的用户决定他实际上喜欢很多书籍，可以将 `"favorite book"` 键的值更改为数组：'
+- en: '[PRE22]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'If the user realizes that he actually doesn’t like reading, he can remove the
+    key altogether with `"$unset"`:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果用户意识到他实际上并不喜欢阅读，可以使用 `"$unset"` 完全删除该键：
+- en: '[PRE23]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: Now the document will be the same as it was at the beginning of this example.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在文档将与本例开始时的文档相同。
+- en: 'You can also use `"$set"` to reach in and change embedded documents:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以使用 `"$set"` 进行嵌入式文档的更改：
+- en: '[PRE24]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'You must always use a `$`-modifier for adding, changing, or removing keys.
+    A common error people make when starting out is to try to set the value of a key
+    to some other value by doing an update that resembles this:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您必须始终使用 `$` 修饰符来添加、更改或移除键。初学者开始时常见的错误是尝试通过类似于以下更新来将键的值设置为其他值：
+- en: '[PRE25]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: This will result in an error. The update document must contain update operators.
+    Previous versions of the CRUD API did not catch this type of error. Earlier update
+    methods would simply complete a whole document replacement in such situations.
+    It is this type of pitfall that led to the creation of a new CRUD API.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将导致错误。更新文档必须包含更新操作符。之前的CRUD API版本没有捕获这种类型的错误。在早期的更新方法中，在这种情况下通常会简单地完成整个文档的替换。正是这种陷阱导致了新的CRUD
+    API的创建。
+- en: Incrementing and decrementing
+  id: totrans-91
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 自增和自减
+- en: The `"$inc"` operator can be used to change the value for an existing key or
+    to create a new key if it does not already exist. It’s useful for updating analytics,
+    karma, votes, or anything else that has a changeable, numeric value.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"$inc"` 操作符可用于更改现有键的值或在尚不存在时创建新键。用于更新分析、声望、投票或任何具有可变数值的内容非常有用。'
+- en: 'Suppose we are creating a game collection where we want to save games and update
+    scores as they change. When a user starts playing, say, a game of pinball, we
+    can insert a document that identifies the game by name and the user playing it:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们正在创建一个游戏集合，我们希望保存游戏并在其变化时更新分数。当用户开始玩，比如说弹球游戏时，我们可以插入一个文档，其中包含游戏名称和正在玩游戏的用户：
+- en: '[PRE26]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'When the ball hits a bumper, the game should increment the player’s score.
+    Since points in pinball are given out pretty freely, let’s say that the base unit
+    of points a player can earn is 50\. We can use the `"$inc"` modifier to add 50
+    to the player’s score:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当球撞到保险杠时，游戏应增加玩家的分数。由于弹球中的分数很容易获得，让我们假设玩家可以获得的基本单位分数是50。我们可以使用 `"$inc"` 修饰符将50添加到玩家的分数中：
+- en: '[PRE27]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'If we look at the document after this update, we’ll see the following:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们在此更新之后查看文档，我们将看到以下内容：
+- en: '[PRE28]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'The `"score"` key did not already exist, so it was created by `"$inc"` and
+    set to the increment amount: `50`.'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"score"` 键尚不存在，因此 `"$inc"` 创建了它，并设置为增量金额：`50`。'
+- en: 'If the ball lands in a “bonus” slot, we want to add 10,000 to the score. We
+    can do this by passing a different value to `"$inc"`:'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果球落入“奖励”槽中，我们希望在分数上增加10,000。我们可以通过向 `"$inc"` 传递不同的值来实现这一点：
+- en: '[PRE29]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'Now if we look at the game, we’ll see the following:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在如果我们查看游戏，我们将看到以下内容：
+- en: '[PRE30]'
+  id: totrans-103
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: The `"score"` key existed and had a numeric value, so the server added 10,000
+    to it.
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"score"` 键存在且具有数值，因此服务器向其添加了10,000。'
+- en: '`"$inc"` is similar to `"$set"`, but it is designed for incrementing (and decrementing)
+    numbers. `"$inc"` can be used only on values of type integer, long, double, or
+    decimal. If it is used on any other type of value, it will fail. This includes
+    types that many languages will automatically cast into numbers, like nulls, booleans,
+    or strings of numeric characters:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"$inc"`类似于`"$set"`，但设计用于增加（和减少）数字。`"$inc"`只能用于整数、长整数、双精度浮点数或十进制数值类型的值。如果用于其他类型的值，操作将失败。这包括许多语言会自动转换为数字的类型，如空值、布尔值或数值字符的字符串：'
+- en: '[PRE31]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: Also, the value of the `"$inc"` key must be a number. You cannot increment by
+    a string, array, or other nonnumeric value. Doing so will give a “Modifier `"$inc"`
+    allowed for numbers only” error message. To modify other types, use `"$set"` or
+    one of the following array operators.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此外，`"$inc"`键的值必须是一个数字。不能按字符串、数组或其他非数值值增加。这样做将导致“Modifier `"$inc"` allowed for
+    numbers only”错误消息。要修改其他类型，请使用`"$set"`或以下数组操作符之一。
+- en: Array operators
+  id: totrans-108
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 数组操作符
+- en: 'An extensive class of update operators exists for manipulating arrays. Arrays
+    are common and powerful data structures: not only are they lists that can be referenced
+    by index, but they can also double as sets.'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存在大量的更新操作符用于操作数组。数组是常见且功能强大的数据结构：它们不仅可以作为可以通过索引引用的列表，还可以充当集合。
+- en: Adding elements
+  id: totrans-110
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 添加元素
+- en: '`"$push"` adds elements to the end of an array if the array exists and creates
+    a new array if it does not. For example, suppose that we are storing blog posts
+    and want to add a `"comments"` key containing an array. We can push a comment
+    onto the nonexistent `"comments"` array, which will create the array and add the
+    comment:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"$push"`会将元素添加到数组末尾（如果数组存在）或创建一个新数组（如果不存在）。例如，假设我们正在存储博客文章，并希望添加一个包含数组的`"comments"`键。我们可以将评论推入不存在的`"comments"`数组中，这将创建数组并添加评论：'
+- en: '[PRE32]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'Now, if we want to add another comment, we can simply use `"$push"` again:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，如果我们想再添加一个评论，只需再次使用`"$push"`即可：
+- en: '[PRE33]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'This is the “simple” form of `"push"`, but you can use it for more complex
+    array operations as well. The MongoDB query language provides modifiers for some
+    operators, including `"$push"`. You can push multiple values in one operation
+    using the `"$each"` modifer for `"$push"`:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是`"push"`的“简单”形式，但你也可以用它进行更复杂的数组操作。MongoDB查询语言为某些操作符提供了修饰符，包括`"$push"`。你可以使用`"$each"`修饰符一次推送多个值到数组中的`"$push"`操作中：
+- en: '[PRE34]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: This would push three new elements onto the array.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将向数组推入三个新元素。
+- en: 'If you only want the array to grow to a certain length, you can use the `"$slice"`
+    modifier with `"$push"` to prevent an array from growing beyond a certain size,
+    effectively making a “top N” list of items:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你只希望数组增长到特定长度，可以使用`"$slice"`修饰符和`"$push"`一起防止数组超出某个大小，有效地创建一个“前N”项列表：
+- en: '[PRE35]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: This example limits the array to the last 10 elements pushed.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此示例将数组限制为最后推入的10个元素。
+- en: If the array is smaller than 10 elements (after the push), all elements will
+    be kept. If the array is larger than 10 elements, only the last 10 elements will
+    be kept. Thus, `"$slice"` can be used to create a queue in a document.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果数组在推入后少于10个元素，则保留所有元素。如果数组大于10个元素，则只保留最后10个元素。因此，`"$slice"`可用于在文档中创建队列。
+- en: 'Finally, you can apply the `"$sort"` modifier to `"$push"` operations before
+    trimming:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，你可以在裁剪之前对`"$push"`操作应用`"$sort"`修饰符：
+- en: '[PRE36]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: This will sort all of the objects in the array by their `"rating"` field and
+    then keep the first 10\. Note that you must include `"$each"`; you cannot just
+    `"$slice"` or `"$sort"` an array with `"$push"`.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这会按照数组中的`"rating"`字段对所有对象进行排序，然后保留前10个。请注意，你必须包含`"$each"`；不能仅使用`"$slice"`或`"$sort"`来对带有`"$push"`的数组进行操作。
+- en: Using arrays as sets
+  id: totrans-125
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 使用数组作为集合
+- en: 'You might want to treat an array as a set, only adding values if they are not
+    present. This can be done using `"$ne"` in the query document. For example, to
+    push an author onto a list of citations, but only if they aren’t already there,
+    use the following:'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果希望将数组视为集合，只在值不存在时添加，可以在查询文档中使用`"$ne"`来实现。例如，要将作者推入引文列表，但仅在其不存在时才添加，使用以下方法：
+- en: '[PRE37]'
+  id: totrans-127
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: This can also be done with `"$addToSet"`, which is useful for cases where `"$ne"`
+    won’t work or where `"$addToSet"` describes what is happening better.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这也可以通过`"$addToSet"`完成，对于`"$ne"`不适用或`"$addToSet"`描述更准确的情况非常有用。
+- en: 'For example, suppose you have a document that represents a user. You might
+    have a set of email addresses that they have added:'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设你有一个代表用户的文档。你可能有一组用户添加的电子邮件地址：
+- en: '[PRE38]'
+  id: totrans-130
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'When adding another address, you can use “`$addToSet"` to prevent duplicates:'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在添加另一个地址时，可以使用“`$addToSet"`来防止重复：
+- en: '[PRE39]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'You can also use `"$addToSet"` in conjunction with `"$each"` to add multiple
+    unique values, which cannot be done with the `"$ne"`/`"$push"` combination. For
+    instance, you could use these operators if the user wanted to add more than one
+    email address:'
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以将`"$addToSet"`与`"$each"`结合使用，以添加多个唯一值，这是无法通过`"$ne"`/`"$push"`组合实现的。例如，如果用户想要添加多个电子邮件地址，可以使用这些运算符：
+- en: '[PRE40]'
+  id: totrans-134
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: Removing elements
+  id: totrans-135
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 删除元素
+- en: 'There are a few ways to remove elements from an array. If you want to treat
+    the array like a queue or a stack, you can use `"$pop"`, which can remove elements
+    from either end. ``{"$pop" : {"*`key`*" : 1}}`` removes an element from the end
+    of the array. ``{"$pop" : {"*`key`*" : -1}}`` removes it from the beginning.'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '有几种方法可以从数组中删除元素。如果您想要像队列或堆栈一样处理数组，可以使用`"$pop"`，它可以从任一端删除元素。`{"$pop" : {"*`key`*"
+    : 1}}`从数组末尾移除一个元素。`{"$pop" : {"*`key`*" : -1}}`从开头移除一个元素。'
+- en: 'Sometimes an element should be removed based on specific criteria, rather than
+    its position in the array. `"$pull"` is used to remove elements of an array that
+    match the given criteria. For example, suppose we have a list of things that need
+    to be done, but not in any specific order:'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时应根据特定标准删除元素，而不是其在数组中的位置。`"$pull"`用于删除与给定标准匹配的数组元素。例如，假设我们有一个不需要按特定顺序完成的任务清单：
+- en: '[PRE41]'
+  id: totrans-138
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'If we do the laundry first, we can remove it from the list with the following:'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们首先洗衣服，可以使用以下方法将其从列表中移除：
+- en: '[PRE42]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: 'Now if we do a find, we’ll see that there are only two elements remaining in
+    the array:'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，如果我们进行查找，我们会看到数组中只剩下两个元素：
+- en: '[PRE43]'
+  id: totrans-142
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: Pulling removes all matching documents, not just a single match. If you have
+    an array that looks like `[1, 1, 2, 1]` and pull `1`, you’ll end up with a single-element
+    array, `[2]`.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"$pull"`删除所有匹配的文档，而不仅仅是单个匹配。如果您有一个看起来像`[1, 1, 2, 1]`的数组，并且使用`pull 1`，您将得到一个单元素数组`[2]`。'
+- en: Array operators can be used only on keys with array values. For example, you
+    cannot push onto an integer or pop off of a string. Use `"$set"` or `"$inc"` to
+    modify scalar values.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数组运算符只能用于具有数组值的键。例如，您不能将整数推入栈或从字符串中弹出。使用`"$set"`或`"$inc"`来修改标量值。
+- en: Positional array modifications
+  id: totrans-145
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 数组位置修改
+- en: 'Array manipulation becomes a little trickier when you have multiple values
+    in an array and want to modify some of them. There are two ways to manipulate
+    values in arrays: by position or by using the position operator (the `$` character).'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当数组中有多个值且希望修改其中一些时，数组操作变得有些棘手。有两种方式可以操作数组中的值：按位置或使用位置运算符（`$`字符）。
+- en: 'Arrays use 0-based indexing, and elements can be selected as though their index
+    were a document key. For example, suppose we have a document containing an array
+    with a few embedded documents, such as a blog post with comments:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数组使用基于0的索引，可以选择元素，就像它们的索引是文档键一样。例如，假设我们有一个包含几个嵌入文档的文档，如带有评论的博客文章：
+- en: '[PRE44]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: 'If we want to increment the number of votes for the first comment, we can say
+    the following:'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们要增加第一条评论的投票数，我们可以这样说：
+- en: '[PRE45]'
+  id: totrans-150
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: 'In many cases, though, we don’t know what index of the array to modify without
+    querying for the document first and examining it. To get around this, MongoDB
+    has a positional operator, `$`, that figures out which element of the array the
+    query document matched and updates that element. For example, if we have a user
+    named John who updates his name to Jim, we can replace it in the comments by using
+    the positional operator:'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，在许多情况下，我们不知道要修改的数组的索引，除非首先查询文档并检查它。为了解决这个问题，MongoDB引入了位置运算符`$`，它可以确定查询文档匹配的数组元素，并更新该元素。例如，如果我们有一个名为John的用户，他将他的名字更新为Jim，我们可以使用位置运算符在评论中替换它：
+- en: '[PRE46]'
+  id: totrans-152
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: The positional operator updates only the first match. Thus, if John had left
+    more than one comment, his name would be changed only for the first comment he
+    left.
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 位置运算符仅更新第一个匹配项。因此，如果John留下了多条评论，他的名字只会在第一条评论中更改。
+- en: Updates using array filters
+  id: totrans-154
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+  zh: 使用数组过滤器进行更新
+- en: 'MongoDB 3.6 introduced another option for updating individual array elements:
+    `arrayFilters`. This option enables us to modify array elements matching particular
+    critera. For example, if we want to hide all comments with five or more down votes,
+    we can do something like the following:'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 3.6引入了另一种更新单个数组元素的选项：`arrayFilters`。此选项使我们能够修改与特定条件匹配的数组元素。例如，如果我们想要隐藏所有具有五个或更多负面评价的评论，我们可以做如下操作：
+- en: '[PRE47]'
+  id: totrans-156
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: This command defines `elem` as the identifier for each matching element in the
+    `"comments"` array. If the `votes` value for the comment identified by `elem`
+    is less than or equal to `-5`, we will add a field called `"hidden"` to the `"comments"`
+    document and set its value to `true`.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此命令将`elem`定义为`"comments"`数组中每个匹配元素的标识符。如果由`elem`标识的评论的`votes`值小于或等于`-5`，我们将向`"comments"`文档添加一个名为`"hidden"`的字段，并将其值设置为`true`。
+- en: Upserts
+  id: totrans-158
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Upserts
+- en: 'An *upsert* is a special type of update. If no document is found that matches
+    the filter, a new document will be created by combining the criteria and updated
+    documents. If a matching document is found, it will be updated normally. Upserts
+    can be handy because they can eliminate the need to “seed” your collection: you
+    can often have the same code create and update documents.'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*Upsert* 是一种特殊类型的更新。如果未找到与过滤器匹配的文档，将创建一个新文档，通过组合条件和更新文档。如果找到匹配的文档，则正常更新。Upserts
+    很方便，因为它们可以消除“播种”集合的需要：通常可以使用相同的代码创建和更新文档。'
+- en: 'Let’s go back to our example that records the number of views for each page
+    of a website. Without an upsert, we might try to find the URL and increment the
+    number of views or create a new document if the URL doesn’t exist. If we were
+    to write this out as a JavaScript program it might look something like the following:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们回到记录网站每个页面访问量的示例。如果没有 upsert，我们可能会尝试查找 URL 并增加访问量，或者在 URL 不存在时创建新文档。如果将其编写为
+    JavaScript 程序，它可能看起来像以下内容：
+- en: '[PRE48]'
+  id: totrans-161
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: This means we are making a round trip to the database, plus sending an update
+    or insert, every time someone visits a page. If we are running this code in multiple
+    processes, we are also subject to a race condition where more than one document
+    can be inserted for a given URL.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这意味着每当有人访问页面时，我们都会对数据库进行一次往返，并发送更新或插入操作。如果在多个进程中运行此代码，我们还可能会遇到竞争条件，其中多个文档可能会插入给定的
+    URL。
+- en: 'We can eliminate the race condition and cut down the amount of code by just
+    sending an upsert to the database (the third parameter to `updateOne` and `updateMany`
+    is an options document that enables us to specify this):'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以通过仅向数据库发送 upsert（`updateOne`和`updateMany`的第三个参数是一个选项文档，允许我们指定此操作）来消除竞争条件并减少代码量：
+- en: '[PRE49]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: This line does exactly what the previous code block does, except it’s faster
+    and atomic! The new document is created by using the criteria document as a base
+    and applying any modifier documents to it.
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此行代码与前一个代码块完全相同，只是速度更快且原子化！通过使用条件文档作为基础并应用任何修改文档来创建新文档。
+- en: 'For example, if you do an upsert that matches a key and increments to the value
+    of that key, the increment will be applied to the match:'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，如果您执行一个 upsert，该 upsert 匹配一个键并增加到该键的值，则增量将应用于匹配：
+- en: '[PRE50]'
+  id: totrans-167
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: 'The upsert creates a new document with a `"rep"` of `25` and then increments
+    that by 3, giving us a document where `"rep"` is `28`. If the upsert option were
+    not specified, `{"rep" : 25}` would not match any documents, so nothing would
+    happen.'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'Upsert 创建一个具有`"rep"`为`25`的新文档，然后将其增加`3`，得到一个`"rep"`为`28`的文档。如果未指定 upsert 选项，则`{"rep":
+    25}`不会匹配任何文档，因此不会发生任何操作。'
+- en: 'If we run the upsert again (with the criterion `{"rep" : 25}`), it will create
+    another new document. This is because the criterion does not match the only document
+    in the collection. (Its `"rep"` is `28`.)'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '如果我们再次运行 upsert（使用条件`{"rep": 25}`），它将创建另一个新文档。这是因为条件与集合中唯一文档不匹配（其`"rep"`为`28`）。'
+- en: 'Sometimes a field needs to be set when a document is created, but not changed
+    on subsequent updates. This is what `"$setOnInsert"` is for. `"$setOnInsert"`
+    is an operator that only sets the value of a field when the document is being
+    inserted. Thus, we could do something like this:'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时，在创建文档时需要设置字段，但在后续更新时不更改。这就是`"$setOnInsert"`的用途。`"$setOnInsert"`是一个运算符，只在插入文档时设置字段的值。因此，我们可以像这样做：
+- en: '[PRE51]'
+  id: totrans-171
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: 'If we run this update again, it will match the existing document, nothing will
+    be inserted, and so the `"createdAt"` field will not be changed:'
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们再次运行此更新，它将匹配现有文档，不会插入任何内容，因此`"createdAt"`字段不会更改：
+- en: '[PRE52]'
+  id: totrans-173
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: Note that you generally do not need to keep a `"createdAt"` field, as `ObjectId`s
+    contain a timestamp of when the document was created. However, `"$setOnInsert"`
+    can be useful for creating padding, initializing counters, and for collections
+    that do not use `ObjectId`s.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，通常不需要保留`"createdAt"`字段，因为`ObjectId`包含文档创建时的时间戳。但是，对于不使用`ObjectId`的集合，`"$setOnInsert"`可用于创建填充、初始化计数器等情况。
+- en: The save shell helper
+  id: totrans-175
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 保存 shell 辅助程序
+- en: '`save` is a shell function that lets you insert a document if it doesn’t exist
+    and update it if it does. It takes one argument: a document. If the document contains
+    an `"_id"` key, `save` will do an upsert. Otherwise, it will do an insert. `save`
+    is really just a convenience function so that programmers can quickly modify documents
+    in the shell:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`save`是一个shell函数，允许您在文档不存在时插入它，并在存在时更新它。它接受一个参数：一个文档。如果文档包含`"_id"`键，`save`将执行upsert操作。否则，它将执行插入操作。`save`实际上只是一个便利函数，使程序员可以快速在shell中修改文档：'
+- en: '[PRE53]'
+  id: totrans-177
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 'Without `save`, the last line would have been more cumbersome:'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果没有`save`，最后一行将会更加繁琐：
+- en: '[PRE54]'
+  id: totrans-179
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: Updating Multiple Documents
+  id: totrans-180
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 更新多个文档
+- en: So far in this chapter we have used `updateOne` to illustrate update operations.
+    `updateOne` updates only the first document found that matches the filter criteria.
+    If there are more matching documents, they will remain unchanged. To modify all
+    of the documents matching a filter, use `updateMany`. `updateMany` follows the
+    same semantics as `updateOne` and takes the same parameters. The key difference
+    is in the number of documents that might be changed.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本章中，我们迄今为止使用了`updateOne`来说明更新操作。`updateOne`只会更新符合过滤条件的第一个找到的文档。如果有更多匹配的文档，它们将保持不变。要修改所有匹配过滤条件的文档，请使用`updateMany`。`updateMany`遵循与`updateOne`相同的语义并接受相同的参数。主要区别在于可能被更改的文档数量。
+- en: '`updateMany` provides a powerful tool for performing schema migrations or rolling
+    out new features to certain users. Suppose, for example, we want to give a gift
+    to every user who has a birthday on a certain day. We can use `updateMany` to
+    add a `"gift"` to their accounts. For example:'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`updateMany`为执行架构迁移或向特定用户推出新功能提供了强大的工具。例如，假设我们想要给每个生日在某一天的用户送礼物。我们可以使用`updateMany`向他们的账户添加一个`"gift"`。例如：'
+- en: '[PRE55]'
+  id: totrans-183
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: The call to `updateMany` adds a `"gift"` field to each of the three documents
+    we inserted into the *users* collection immediately before.
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 调用`updateMany`方法，为我们刚刚插入到*users*集合中的三个文档添加了一个`"gift"`字段。
+- en: Returning Updated Documents
+  id: totrans-185
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 返回更新后的文档
+- en: 'For some use cases it is important to return the document modified. In earlier
+    versions of MongoDB, `findAndModify` was the method of choice in such situations.
+    It is handy for manipulating queues and performing other operations that need
+    get-and-set−style atomicity. However, `findAndModify` is prone to user error because
+    it’s a complex method combining the functionality of three different types of
+    operations: delete, replace, and update (including upserts).'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于某些用例，返回修改后的文档非常重要。在MongoDB的早期版本中，`findAndModify`是这种情况下的首选方法。它非常适合操作队列和执行其他需要获取并设置样式原子性的操作。但是，`findAndModify`容易出现用户错误，因为它是一个复杂的方法，结合了删除、替换和更新（包括upsert）的功能。
+- en: 'MongoDB 3.2 introduced three new collection methods to the shell to accommodate
+    the functionality of `findAndModify`, but with semantics that are easier to learn
+    and remember: `findOneAndDelete`, `findOneAndReplace`, and `findOneAndUpdate`.
+    The primary difference between these methods and, for example, `updateOne` is
+    that they enable you to atomically get the value of a modified document. MongoDB
+    4.2 extended `findOneAndUpdate` to accept an aggregation pipeline for the update.
+    The pipeline can consist of the following stages: `$addFields` and its alias `$set`,
+    `$project` and its alias `$unset`, and `$replaceRoot` and its alias `$replaceWith`.'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 3.2引入了三种新的集合方法到shell中，以适应`findAndModify`的功能，但其语义更易学习和记忆：`findOneAndDelete`、`findOneAndReplace`和`findOneAndUpdate`。这些方法与例如`updateOne`之间的主要区别在于它们使您能够原子地获取修改后的文档的值。MongoDB
+    4.2扩展了`findOneAndUpdate`以接受用于更新的聚合管道。该管道可以包括以下阶段：`$addFields`及其别名`$set`，`$project`及其别名`$unset`，以及`$replaceRoot`及其别名`$replaceWith`。
+- en: 'Suppose we have a collection of processes run in a certain order. Each is represented
+    with a document that has the following form:'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们有一系列按特定顺序运行的进程。每个进程用一个具有以下形式的文档表示：
+- en: '[PRE56]'
+  id: totrans-189
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: '`"status"` is a string that can be `"READY"`, `"RUNNING"`, or `"DONE"`. We
+    need to find the job with the highest priority in the `"READY"` state, run the
+    process function, and then update the status to `"DONE"`. We might try querying
+    for the ready processes, sorting by priority, and updating the status of the highest-priority
+    process to mark it as `"RUNNING"`. Once we have processed it, we update the status
+    to `"DONE"`. This looks something like the following:'
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"status"`是一个字符串，可以是`"READY"`、`"RUNNING"`或`"DONE"`。我们需要找到处于`"READY"`状态且具有最高优先级的作业，运行处理函数，然后将状态更新为`"DONE"`。我们可以尝试查询准备好的进程，按优先级排序，并将最高优先级进程的状态更新为`"RUNNING"`。一旦处理完毕，我们将状态更新为`"DONE"`。这看起来像下面这样：'
+- en: '[PRE57]'
+  id: totrans-191
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: 'This algorithm isn’t great because it is subject to a race condition. Suppose
+    we have two threads running. If one thread (call it A) retrieved the document
+    and another thread (call it B) retrieved the same document before A had updated
+    its status to `"RUNNING"`, then both threads would be running the same process.
+    We can avoid this by checking the result as part of the update query, but this
+    becomes complex:'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此算法并不优秀，因为它存在竞态条件。假设有两个线程在运行。如果一个线程（称为A）在更新其状态为`"RUNNING"`之前检索了文档，并且另一个线程（称为B）在A更新状态之前也检索了同一个文档，那么这两个线程将运行相同的进程。我们可以通过在更新查询中检查结果来避免这种情况，但这会变得复杂：
+- en: '[PRE58]'
+  id: totrans-193
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: Also, depending on timing, one thread may end up doing all the work while another
+    thread uselessly trails it. Thread A could always grab the process, and then B
+    would try to get the same process, fail, and leave A to do all the work.
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另外，根据时间的不同，一个线程可能会完成所有工作，而另一个线程则无用地跟随其后。线程A可能总是抢占进程，然后B尝试获取相同的进程，失败后留给A来完成所有工作。
+- en: 'Situations like this are perfect for `findOneAndUpdate`. `findOneAndUpdate`
+    can return the item and update it in a single operation. In this case, it looks
+    like the following:'
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种情况非常适合使用`findOneAndUpdate`。`findOneAndUpdate`可以在单个操作中返回项目并更新它。在这种情况下，看起来像下面这样：
+- en: '[PRE59]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: 'Notice that the status is still `"READY"` in the returned document because
+    the `findOneAndUpdate` method defaults to returning the state of the document
+    before it was modified. It will return the updated document if we set the `"returnNewDocument"`
+    field in the options document to `true`. An options document is passed as the
+    third parameter to `findOneAndUpdate`:'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，在返回的文档中状态仍然为`"READY"`，因为`findOneAndUpdate`方法默认返回修改之前的文档状态。如果我们将选项文档中的`"returnNewDocument"`字段设置为`true`，它将返回更新后的文档。选项文档作为`findOneAndUpdate`的第三个参数传递：
+- en: '[PRE60]'
+  id: totrans-198
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: 'Thus, the program becomes the following:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，程序变成了以下内容：
+- en: '[PRE61]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: In addition to this one, there are two other methods you should be aware of.
+    `findOneAndReplace` takes the same parameters and returns the document matching
+    the filter either before or after the replacement, depending on the value of `returnNewDocument`.
+    `findOneAndDelete` is similar except it does not take an update document as a
+    parameter and has a subset of the options of the other two methods. `findOneAndDelete`
+    returns the deleted document.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除此之外，还有另外两种你应该知道的方法。`findOneAndReplace`接受相同的参数，并返回与过滤器匹配的文档，无论替换前还是替换后，这取决于`returnNewDocument`的值。`findOneAndDelete`类似，但它不接受更新文档作为参数，并且具有另外两种方法的子集选项。`findOneAndDelete`返回被删除的文档。

@@ -1,0 +1,3036 @@
+- en: Chapter 15\. Generating and Using Sequences
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第15章 生成和使用序列
+- en: 15.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.0 引言
+- en: 'A sequence is a set of integers (1, 2, 3, …) generated in order on demand.
+    Sequences see frequent use in databases because many applications require each
+    row in a table to contain a unique value, and sequences provide an easy way to
+    generate them. This chapter describes how to use sequences in MySQL in the following
+    five ways:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 序列是按需生成的整数集合（1、2、3、...）。由于许多应用程序要求表中的每行包含唯一值，因此序列在数据库中经常使用，它们为生成这些值提供了一种简便方法。本章描述了如何在MySQL中以以下五种方式使用序列：
+- en: Using `AUTO_INCREMENT` columns
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`AUTO_INCREMENT`列
+- en: The `AUTO_INCREMENT` column is MySQL’s mechanism for generating a sequence over
+    a set of rows. Each time you create a row in a table that contains an `AUTO_INCREMENT`
+    column, MySQL automatically generates the next value in the sequence as the column’s
+    value. This value serves as a unique identifier, making sequences an easy way
+    to create items such as customer ID numbers, shipping package waybill numbers,
+    invoice or purchase order numbers, bug report IDs, ticket numbers, or product
+    serial numbers.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`AUTO_INCREMENT`列是MySQL生成一系列行的机制。每次在包含`AUTO_INCREMENT`列的表中创建行时，MySQL自动将序列中的下一个值生成为该列的值。该值作为唯一标识符，使序列成为创建项目（如客户ID号码、发货包裹运单号、发票或采购订单号、错误报告ID、票号或产品序列号等）的简便方法。'
+- en: Retrieving sequence values
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 检索序列值
+- en: For many applications, it’s not enough just to create sequence values. It’s
+    also necessary to determine the sequence value for a just-inserted row. A web
+    application may need to redisplay to a user the contents of a row created from
+    the contents of a form just submitted by the user. The value may need to be retrieved
+    so it can be stored in rows of a related table.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于许多应用程序，仅创建序列值是不够的。还必须确定刚插入行的序列值。Web应用程序可能需要重新显示用户刚刚提交的表单内容创建的行的内容。可能需要检索该值，以便将其存储在相关表的行中。
+- en: Resequencing techniques
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重新排序技术
+- en: It’s possible to renumber a sequence that has holes in it due to row deletions,
+    reuse deleted values at the top of a sequence, or add a sequence column to a table
+    that has none.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于行删除而导致序列中存在空缺，可以重新编号序列，将删除的值重新使用到序列顶部，或者向表中没有序列列的情况下添加序列列。
+- en: Managing multiple simultaneous sequences
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 管理多个同时进行的序列
+- en: Special care is necessary when you need to keep track of multiple sequence values,
+    such as when you create rows in multiple tables that each have an `AUTO_INCREMENT`
+    column.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在需要跟踪多个序列值（例如在创建具有`AUTO_INCREMENT`列的多个表行时）时，需要特别小心。
+- en: Using single-row sequence generators
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用单行序列生成器
+- en: Sequences can be used as counters. For example, to count votes in a poll, you
+    might increment a counter each time a candidate receives a vote. The counts for
+    a given candidate form a sequence, but because the count itself is the only value
+    of interest, there is no need to generate a new row to record each vote. MySQL
+    provides a solution for this problem using a mechanism that enables a sequence
+    to be easily generated within a single table row over time. To store multiple
+    counters in the table, use a column that identifies each counter uniquely. The
+    same mechanism also enables creation of sequences that increase by values other
+    than one or by nonuniform values.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 序列可用作计数器。例如，在投票中计算投票时，每当候选人获得一票，您可能会递增计数器。给定候选人的计数形成一个序列，但因为计数本身是唯一感兴趣的值，所以无需生成新行以记录每次投票。MySQL提供了一种解决此问题的机制，使用此机制可以在单个表行内轻松生成序列。要在表中存储多个计数器，请使用标识每个计数器的列。相同的机制还可以使序列以非一或非均匀值递增。
+- en: The engines for most database systems provide sequence-generation capabilities,
+    although the implementations tend to be engine-dependent. That’s true for MySQL
+    as well, so the material in this section is almost completely MySQL-specific,
+    even at the SQL level. In other words, the SQL for generating sequences is itself
+    nonportable, even if you use an API such as DBI or JDBC that provides an abstraction
+    layer. Abstract interfaces may help you process SQL statements portably, but they
+    don’t make nonportable SQL portable.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数数据库系统的引擎提供序列生成功能，尽管实现方式可能依赖于引擎。MySQL也是如此，因此即使在SQL层面上，本节中的材料几乎完全是特定于MySQL的。换句话说，生成序列的SQL本身是不可移植的，即使您使用像DBI或JDBC这样的API提供了一个抽象层。抽象接口可能帮助您可移植地处理SQL语句，但它们并不能使不可移植的SQL变得可移植。
+- en: Scripts related to the examples shown in this chapter are located in the *sequences*
+    directory of the `recipes` distribution. For scripts that create tables used here,
+    look in the *tables* directory.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章示例相关的脚本位于`recipes`发行版的*sequences*目录中。对于在此处使用的创建表的脚本，请查看*tables*目录。
+- en: 15.1 Generating a Sequence with AUTO_INCREMENT Columns
+  id: totrans-15
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.1 使用自增列生成序列
+- en: Problem
+  id: totrans-16
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Your table includes a column that should contain only unique IDs, and you need
+    to insert values into this column, insuring they are part of the sequence.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你的表包含一个只能包含唯一ID的列，你需要插入值到这列中，确保它们是序列的一部分。
+- en: Solution
+  id: totrans-18
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use an `AUTO_INCREMENT` column to generate a sequence.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`AUTO_INCREMENT`列生成一个序列。
+- en: Discussion
+  id: totrans-20
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'This recipe provides the essential background on using `AUTO_INCREMENT` columns,
+    beginning with an example that demonstrates the sequence-generation mechanism.
+    The example centers around a bug-collection scenario: your eight-year-old son
+    Junior is assigned the task of collecting insects for a class project at school.
+    For each insect, Junior is to record its name (<q>ant,</q> <q>bee,</q> and so
+    forth), and its date and location of collection. You have expounded the benefits
+    of MySQL for record-keeping to Junior since his early days, so upon your arrival
+    home from work that day, he immediately announces the necessity of completing
+    this project and then, looking you straight in the eye, declares that it’s clearly
+    a task for which MySQL is well-suited. Who are you to argue? So the two of you
+    get to work. Junior already collected some specimens after school while waiting
+    for you to come home and has recorded the following information in his notebook:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个配方提供了使用`AUTO_INCREMENT`列的基本背景，从展示序列生成机制的示例开始。这个示例围绕一个收集昆虫的场景展开：你的八岁儿子朱尼尔被分配了在学校的一个班级项目中收集昆虫的任务。对于每只昆虫，朱尼尔都要记录其名称（如“蚂蚁”，“蜜蜂”等），以及其收集的日期和位置。从朱尼尔还是个孩子的时候起，你就向他解释了MySQL在记录方面的优势，因此当你那天下班回家时，他立即宣布完成这个项目的必要性，然后直视你的眼睛，断言这显然是MySQL非常适合的任务。你又有什么好争论的呢？于是你们俩开始工作。小朱尼尔放学后在等你回家的时候已经收集了一些标本，并在他的笔记本中记录了以下信息：
+- en: '| Name | Date | Origin |'
+  id: totrans-22
+  prefs: []
+  type: TYPE_TB
+  zh: '| 名称 | 日期 | 来源 |'
+- en: '| --- | --- | --- |'
+  id: totrans-23
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- | --- |'
+- en: '| millipede | 2014-09-10 | driveway |'
+  id: totrans-24
+  prefs: []
+  type: TYPE_TB
+  zh: '| 马陆 | 2014-09-10 | 车道 |'
+- en: '| housefly | 2014-09-10 | kitchen |'
+  id: totrans-25
+  prefs: []
+  type: TYPE_TB
+  zh: '| 家蝇 | 2014-09-10 | 厨房 |'
+- en: '| grasshopper | 2014-09-10 | front yard |'
+  id: totrans-26
+  prefs: []
+  type: TYPE_TB
+  zh: '| 蚱蜢 | 2014-09-10 | 前院 |'
+- en: '| stink bug | 2014-09-10 | front yard |'
+  id: totrans-27
+  prefs: []
+  type: TYPE_TB
+  zh: '| 臭虫 | 2014-09-10 | 前院 |'
+- en: '| cabbage butterfly | 2014-09-10 | garden |'
+  id: totrans-28
+  prefs: []
+  type: TYPE_TB
+  zh: '| 甘蓝蝴蝶 | 2014-09-10 | 菜园 |'
+- en: '| ant | 2014-09-10 | back yard |'
+  id: totrans-29
+  prefs: []
+  type: TYPE_TB
+  zh: '| 蚂蚁 | 2014-09-10 | 后院 |'
+- en: '| ant | 2014-09-10 | back yard |'
+  id: totrans-30
+  prefs: []
+  type: TYPE_TB
+  zh: '| 蚂蚁 | 2014-09-10 | 后院 |'
+- en: '| termite | 2014-09-10 | kitchen woodwork |'
+  id: totrans-31
+  prefs: []
+  type: TYPE_TB
+  zh: '| 白蚁 | 2014-09-10 | 厨房木制品 |'
+- en: Looking over Junior’s notes, you’re pleased to see that even at his tender age,
+    he has learned to write dates in ISO format. However, you also notice that he’s
+    collected a millipede and a termite, neither of which actually are insects. You
+    decide to let this pass for the moment; Junior forgot to bring home the written
+    instructions for the project, so at this point it’s unclear whether these specimens
+    are acceptable. (You also note with some alarm Junior’s discovery of termites
+    in the house and make a mental note to call the exterminator.)
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 看着小朱尼尔的笔记，你高兴地发现，即使在他年幼的时候，他也已经学会了用ISO格式写日期。然而，你也注意到他收集了一只马陆和一只白蚁，但实际上它们都不是昆虫。你决定暂且放过他；小朱尼尔忘记带回家项目的书面说明，所以目前尚不清楚这些标本是否合适。
+    （你还有点惊讶地注意到小朱尼尔在家里发现了白蚁，并在心里做了个记号，准备找灭虫工处理。）
+- en: 'As you consider how to create a table to store this information, it’s apparent
+    that you need at least `name`, `date`, and `origin` columns corresponding to the
+    types of information that Junior is required to record:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你考虑如何创建一个表来存储这些信息时，显然你需要至少`名称`，`日期`和`来源`列，这些信息对应小朱尼尔需要记录的类型：
+- en: '[PRE0]'
+  id: totrans-34
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'However, those columns are insufficient to make the table easy to use. Note
+    that the records collected thus far are not unique; both ants were collected at
+    the same time and place. If you put the information into an `insect` table that
+    has the structure just shown, neither ant row can be referred to individually
+    because there’s nothing to distinguish one from another. Unique IDs would be helpful
+    to make the rows distinct and to provide values that make each row easy to refer
+    to. An `AUTO_INCREMENT` column is good for this purpose, so a better `insect`
+    table has a structure like this:'
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，这些列还不足以使表易于使用。请注意，迄今收集的记录并不唯一；两只蚂蚁是同时和地点采集的。如果将信息放入具有刚显示结构的`insect`表中，则无法单独引用任何蚂蚁行，因为没有什么可以区分一个蚂蚁和另一个蚂蚁。为了使行不同且提供使每行易于引用的值，唯一的ID将非常有帮助。`AUTO_INCREMENT`列非常适合此目的，因此更好的`insect`表的结构如下所示：
+- en: '[PRE1]'
+  id: totrans-36
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: Go ahead and create the `insect` table using this second `CREATE` `TABLE` statement.
+    ([Recipe 15.2](#nch-sequences-seq-type) discusses the particulars of the `id`
+    column definition.)
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 继续使用这第二个`CREATE` `TABLE`语句创建`insect`表。([Recipe 15.2](#nch-sequences-seq-type)讨论了`id`列定义的详细信息。)
+- en: 'Now that you have an `AUTO_INCREMENT` column, use it to generate new sequence
+    values. One of the useful properties of an `AUTO_INCREMENT` column is that you
+    need not assign its values yourself: MySQL does so for you. There are two ways
+    to generate new `AUTO_INCREMENT` values in the `id` column. One is to explicitly
+    set the `id` column to `NULL`. The following statement inserts the first four
+    of Junior’s specimens into the `insect` table that way:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，您有了一个`AUTO_INCREMENT`列，可以用它来生成新的序列值。`AUTO_INCREMENT`列的一个有用属性是，您无需自己分配其值：MySQL会为您做这件事。有两种方法可以在`id`列中生成新的`AUTO_INCREMENT`值。一种方法是将`id`列明确设置为`NULL`。以下语句以这种方式将Junior的前四个标本插入`insect`表中：
+- en: '[PRE2]'
+  id: totrans-39
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'Alternatively, omit the `id` column from the `INSERT` statement entirely. MySQL
+    permits creating rows without explicitly specifying values for columns that have
+    a default value. MySQL assigns each missing column its default value, and the
+    default for an `AUTO_INCREMENT` column is its next sequence number. Thus, this
+    statement adds Junior’s other four specimens to the `insect` table and generates
+    sequence values without naming the `id` column at all:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，完全省略`INSERT`语句中的`id`列。MySQL允许创建行，而无需为具有默认值的列明确指定值。MySQL为每个缺失的列分配其默认值，而`AUTO_INCREMENT`列的默认值是其下一个序列号。因此，此语句将Junior的其他四个标本添加到`insect`表中，并在根本不命名`id`列的情况下生成序列值：
+- en: '[PRE3]'
+  id: totrans-41
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'Whichever method you use, MySQL determines the sequence number for each row
+    and assigns it to the `id` column, as you can verify:'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 无论您使用哪种方法，MySQL都会确定每行的序列号并将其分配给`id`列，您可以进行验证：
+- en: '[PRE4]'
+  id: totrans-43
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: As Junior collects more specimens, add more rows to the table and they’ll be
+    assigned the next values in the sequence (9, 10, …).
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着Junior收集更多标本，向表中添加更多行，它们将被分配为序列中的下一个值（9、10、…）。
+- en: 'The concept underlying `AUTO_INCREMENT` columns is simple enough in principle:
+    each time you create a new row, MySQL generates the next number in the sequence
+    and assigns it to the row. But there are certain subtleties to know about, as
+    well as differences in how different storage engines handle `AUTO_INCREMENT` sequences.
+    Awareness of these issues enables you to use sequences more effectively and avoid
+    surprises. For example, if you explicitly set the `id` column to a non-`NULL`
+    value, one of two things happens:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`AUTO_INCREMENT`列背后的概念原则上非常简单：每次创建新行时，MySQL生成序列中的下一个数字并将其分配给行。但是，有一些关于这些列需要了解的微妙之处，以及不同存储引擎处理`AUTO_INCREMENT`序列的差异。了解这些问题可以更有效地使用序列并避免意外。例如，如果将`id`列明确设置为非`NULL`值，则可能会发生以下两种情况之一：'
+- en: 'If the value is already present in the table, an error occurs if the column
+    cannot contain duplicates. For the `insect` table, the `id` column is a `PRIMARY`
+    `KEY`, which prohibits duplicates:'
+  id: totrans-46
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果该值已存在于表中，且该列不能包含重复项，则会出现错误。对于`insect`表，`id`列是`PRIMARY` `KEY`，禁止重复：
+- en: '[PRE5]'
+  id: totrans-47
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: If the value is not present in the table, MySQL inserts the row using that value.
+    In addition, if the value is larger than the current sequence counter, the table’s
+    counter is reset to the value plus one. The `insect` table at this point has sequence
+    values 1 through 8\. If you insert a new row with the `id` column set to 20, that
+    becomes the new maximum value. Subsequent inserts that automatically generate
+    `id` values will begin at 21\. The values 9 through 19 become unused, resulting
+    in a gap in the sequence.
+  id: totrans-48
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果表中不存在该值，MySQL将使用该值插入行。此外，如果该值大于当前序列计数器，表的计数器将重置为该值加一。在此时的`insect`表中，序列值为1到8。如果插入`id`列设为20的新行，则该值将成为新的最大值。随后自动生成`id`值的插入将从21开始。值9到19变为未使用，导致序列中出现间隔。
+- en: The next recipe looks in more detail at how to define `AUTO_INCREMENT` columns
+    and how they behave.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一个示例将更详细地讨论如何定义`AUTO_INCREMENT`列及其行为。
+- en: 15.2 Choosing the Data Type for a Sequence Column
+  id: totrans-50
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.2 选择序列列的数据类型
+- en: Problem
+  id: totrans-51
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to choose correct data type to define a sequence column.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望选择正确的数据类型来定义序列列。
+- en: Solution
+  id: totrans-53
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Consider how many unique values your sequence should hold and choose the data
+    type accordingly.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 考虑序列应包含多少个唯一值，并相应选择数据类型。
+- en: Discussion
+  id: totrans-55
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'You should follow certain principles when creating `AUTO_INCREMENT` columns.
+    As an illustration, consider how [Recipe 15.1](#nch-sequences-seq-create-col)
+    declared the `id` column in the `insect` table:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在创建`AUTO_INCREMENT`列时，您应遵循特定的原则。例如，考虑一下[Recipe 15.1](#nch-sequences-seq-create-col)如何声明`insect`表中的`id`列：
+- en: '[PRE6]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'The `AUTO_INCREMENT` keyword informs MySQL that it should generate successive
+    sequence numbers for the column’s values, but the other information is important,
+    too:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`AUTO_INCREMENT`关键字告知MySQL应为列的值生成连续的序列号，但其他信息同样重要：'
+- en: '`INT` is the column’s base data type. You need not necessarily use `INT`, but
+    the column should be one of the integer types: `TINYINT`, `SMALLINT`, `MEDIUMINT`,
+    `INT`, or `BIGINT`.'
+  id: totrans-59
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`INT`是列的基本数据类型。您不一定要使用`INT`，但列应为整数类型之一：`TINYINT`、`SMALLINT`、`MEDIUMINT`、`INT`或`BIGINT`。'
+- en: '`UNSIGNED` prohibits negative column values. This is not a required attribute
+    for `AUTO_INCREMENT` columns, but sequences consist only of positive integers
+    (normally beginning at 1), so there is no reason to permit negative values. Furthermore,
+    *not* declaring the column to be `UNSIGNED` cuts the range of your sequence in
+    half. For example, `TINYINT` has a range of –128 to 127. Because sequences include
+    only positive values, the effective range of a `TINYINT` sequence is 1 to 127\.
+    `TINYINT` `UNSIGNED` has a range of 0 to 255, which increases the upper end of
+    the sequence to 255\. The specific integer type determines the maximum sequence
+    value. The following table shows the maximum unsigned value of each type; use
+    this information to choose a type big enough to hold the largest value you’ll
+    need:'
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`UNSIGNED`禁止负列值。这不是`AUTO_INCREMENT`列的必需属性，但序列仅包含正整数（通常从1开始），因此无需允许负值。此外，*不*声明列为`UNSIGNED`会将序列范围减半。例如，`TINYINT`的范围是-128到127。因为序列仅包含正值，`TINYINT`序列的有效范围是1到127。`TINYINT
+    UNSIGNED`的范围是0到255，这将序列的上限增加到255。具体的整数类型决定了最大序列值。以下表显示了每种类型的最大无符号值；使用这些信息选择足够大以容纳您所需的最大值的类型：'
+- en: '| Data type | Maximum unsigned value |'
+  id: totrans-61
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+  zh: '| 数据类型 | 最大无符号值 |'
+- en: '| --- | --- |'
+  id: totrans-62
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `TINYINT` | 255 |'
+  id: totrans-63
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+  zh: '| `TINYINT` | 255 |'
+- en: '| `SMALLINT` | 65,535 |'
+  id: totrans-64
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+  zh: '| `SMALLINT` | 65,535 |'
+- en: '| `MEDIUMINT` | 16,777,215 |'
+  id: totrans-65
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+  zh: '| `MEDIUMINT` | 16,777,215 |'
+- en: '| `INT` | 4,294,967,295 |'
+  id: totrans-66
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+  zh: '| `INT` | 4,294,967,295 |'
+- en: '| `BIGINT` | 18,446,744,073,709,551,615 |'
+  id: totrans-67
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+  zh: '| `BIGINT` | 18,446,744,073,709,551,615 |'
+- en: Sometimes people omit `UNSIGNED` so that they can create rows that contain negative
+    numbers in the sequence column (using –1 to signify <q>has no ID,</q> for example.)
+    This is a bad idea. MySQL makes no guarantees about how negative numbers will
+    be treated in an `AUTO_INCREMENT` column, so by using them you’re playing with
+    fire. For example, if you resequence the column, all your negative values get
+    turned into positive sequence numbers.
+  id: totrans-68
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 有时人们会省略`UNSIGNED`，以便在序列列中创建包含负数的行（例如使用-1表示<q>没有ID</q>）。这是一个坏主意。MySQL不保证如何处理`AUTO_INCREMENT`列中的负数，因此使用它们相当于玩火。例如，如果重新排序列，所有负值都会变成正序列号。
+- en: '`AUTO_INCREMENT` columns cannot contain `NULL` values, so `id` is declared
+    as `NOT` `NULL`. (It’s true that you can specify `NULL` as the column value when
+    you insert a new row, but for an `AUTO_INCREMENT` column, that really means <q>generate
+    the next sequence value.</q>) MySQL automatically defines `AUTO_INCREMENT` columns
+    as `NOT` `NULL` if you forget.'
+  id: totrans-69
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`AUTO_INCREMENT`列不能包含`NULL`值，因此`id`被声明为`NOT` `NULL`。（确实，当您插入新行时，可以指定`NULL`作为列值，但对于`AUTO_INCREMENT`列，这实际上意味着<q>生成下一个序列值。</q>）如果您忘记，MySQL会自动将`AUTO_INCREMENT`列定义为`NOT`
+    `NULL`。'
+- en: '`AUTO_INCREMENT` columns must be indexed. Normally, because a sequence column
+    exists to provide unique identifiers, you use a `PRIMARY` `KEY` or `UNIQUE` index
+    to enforce uniqueness. Tables can have only one `PRIMARY` `KEY`, so if the table
+    already has some other `PRIMARY` `KEY` column, you can declare an `AUTO_INCREMENT`
+    column to have a `UNIQUE` index instead:'
+  id: totrans-70
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`AUTO_INCREMENT`列必须被索引。通常情况下，由于存在顺序列来提供唯一标识符，您可以使用`PRIMARY` `KEY`或`UNIQUE`索引来确保唯一性。表只能有一个`PRIMARY`
+    `KEY`，因此，如果表已经有其他`PRIMARY` `KEY`列，您可以声明`AUTO_INCREMENT`列为`UNIQUE`索引：'
+- en: '[PRE7]'
+  id: totrans-71
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: When you create a table that contains an `AUTO_INCREMENT` column, it’s also
+    important to consider which storage engine to use (InnoDB, MyISAM, and so forth).
+    The engine affects behaviors such as reuse of values deleted from the top of the
+    sequence (see [Recipe 15.3](#nch-sequences-seq-delete)).
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您创建包含`AUTO_INCREMENT`列的表时，还重要考虑使用哪种存储引擎（如InnoDB、MyISAM等）。引擎会影响诸如重用从顺序顶部删除的值等行为（见[Recipe
+    15.3](#nch-sequences-seq-delete)）。
+- en: 15.3 Deleting Rows Without Changing a Sequence
+  id: totrans-73
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.3 删除行而不更改序列
+- en: Problem
+  id: totrans-74
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to delete few rows from the table that contains an `AUTO_INCREMENT`
+    column.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望从包含`AUTO_INCREMENT`列的表中删除少数行。
+- en: Solution
+  id: totrans-76
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use regular `DELETE` statement. MySQL would not change generated sequence numbers
+    for the existing rows.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用常规`DELETE`语句。MySQL不会更改现有行的生成序列号。
+- en: Discussion
+  id: totrans-78
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: We have thus far considered how MySQL generates sequence values in an `AUTO_INCREMENT`
+    column under circumstances where rows are only added to a table. But it’s unrealistic
+    to assume that rows will never be deleted. What happens to the sequence then?
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们考虑了MySQL在仅向表中添加行的情况下如何生成`AUTO_INCREMENT`列的序列值。但是假设永远不会删除行是不现实的。那么序列会发生什么变化？
+- en: 'Refer again to Junior’s bug-collection project, for which you currently have
+    an `insect` table that looks like this:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 再次参考Junior的昆虫收集项目，目前您拥有一个看起来像这样的`insect`表：
+- en: '[PRE8]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'That’s about to change because after Junior remembers to bring home the written
+    instructions for the project, you read through them and discover two things that
+    affect the table contents:'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将要发生变化，因为Junior记得带回项目的书面说明后，您阅读并发现两件影响表内容的事情：
+- en: Specimens should include only insects, not insect-like creatures such as millipedes
+    and termites.
+  id: totrans-83
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 标本应包括只有昆虫，而不是类似昆虫的生物，如千足虫和白蚁。
+- en: The purpose of the project is to collect as many *different* specimens as possible,
+    not just as *many* specimens as possible. This means that only one ant row is
+    permitted.
+  id: totrans-84
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 项目的目的是尽可能收集*不同*的标本，而不仅仅是尽可能多的标本。这意味着只允许一行蚂蚁。
+- en: 'These instructions dictate that a few rows be removed from table—specifically
+    those with `id` values 2 (millipede), 8 (termite), and 7 (duplicate ant). Thus,
+    despite Junior’s evident disappointment at the reduction in the size of his collection,
+    you instruct him to remove those rows by issuing a `DELETE` statement:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些指令要求从表中删除几行——具体来说，是`id`值为2（千足虫）、8（白蚁）和7（重复的蚂蚁）。因此，尽管Junior显然对他的收藏减少感到失望，你指示他通过发出`DELETE`语句来删除这些行：
+- en: '[PRE9]'
+  id: totrans-86
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'This statement illustrates why it’s useful to have unique ID values: they enable
+    you to specify any row unambiguously. The ant rows are identical except for the
+    `id` value. Without that column in the table, it would be more difficult to delete
+    just one of them (though not impossible; see [Recipe 18.5](ch18.xhtml#nch-dups-dups-elim-table)).'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个声明说明为什么具有唯一ID值很有用：它们使您能够明确指定任何一行。蚂蚁行除了`id`值外完全相同。如果表中没有这一列，将更难删除其中的一行（虽然不是不可能；参见[Recipe
+    18.5](ch18.xhtml#nch-dups-dups-elim-table)）。
+- en: 'After removing the unsuitable rows, the table has these remaining:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在移除不适当的行后，表中剩余的行如下：
+- en: '[PRE10]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: The `id` column sequence now has a hole (row 2 is missing) and the values 7
+    and 8 at the top of the sequence are no longer present. How do these deletions
+    affect future insert operations? What sequence number will the next new row get?
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`id` 列现在有一个空隙（第2行缺失），顶部的值7和8也不再存在。这些删除操作会如何影响未来的插入操作？下一个新行会得到哪个序列号？'
+- en: Removing row 2 creates a gap in the middle of the sequence. This has no effect
+    on subsequent inserts, because MySQL makes no attempt to fill in holes in a sequence.
+    On the other hand, deleting rows 7 and 8 removes values at the top of the sequence.
+    For InnoDB or MyISAM tables, values are not reused. The next sequence number is
+    the smallest positive integer that has not previously been used. (For a sequence
+    that stands at 8, the next row gets a value of 9 even if you delete rows 7 and
+    8 first.) If you require strictly monotonic sequences, you can use one of these
+    storage engines. For other storage engines, values removed at the top of the sequence
+    may or may not be reused. Check the properties of the engine before using it.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 删除第2行会在序列中间创建一个空隙。这不会对后续的插入操作产生影响，因为MySQL不会尝试填补序列中的空隙。另一方面，删除第7和第8行会移除序列顶部的值。对于InnoDB或MyISAM表，这些值不会被重用。下一个序列号是未曾使用过的最小正整数。（例如，序列当前为8，即使先删除第7和第8行，下一个行得到的值仍然是9。）如果需要严格单调递增的序列，可以使用这些存储引擎。对于其他存储引擎，移除序列顶部的值可能会或者可能不会被重用。在使用之前，请检查引擎的属性。
+- en: 'If a table uses an engine that differs in value-reuse behavior from the behavior
+    you require, use `ALTER` `TABLE` to change the table to a more appropriate engine.
+    For example, to change a table to use InnoDB (to prevent sequence values from
+    being reused after rows are deleted), do this:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果表使用的引擎与您需要的值重用行为不同，请使用`ALTER TABLE`将表更改为更合适的引擎。例如，要更改表以使用InnoDB（以防止在删除行后重新使用序列值），请执行以下操作：
+- en: '[PRE11]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'If you don’t know what engine a table uses, consult `INFORMATION_SCHEMA` or
+    use `SHOW` `TABLE` `STATUS` or `SHOW` `CREATE` `TABLE` to find out. For example,
+    the following statement indicates that `insect` is an InnoDB table:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果不知道表使用的是哪种引擎，请查询`INFORMATION_SCHEMA`或使用`SHOW TABLE STATUS`或`SHOW CREATE TABLE`进行查询。例如，以下语句指示`insect`是一个InnoDB表：
+- en: '[PRE12]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'To empty a table and reset the sequence counter (even for engines that normally
+    do not reuse values), use `TRUNCATE` `TABLE`:'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要清空表并重置序列计数器（即使对于通常不重新使用值的引擎也是如此），请使用`TRUNCATE TABLE`：
+- en: '[PRE13]'
+  id: totrans-97
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 15.4 Retrieving Sequence Values
+  id: totrans-98
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.4 检索序列值
+- en: Problem
+  id: totrans-99
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: After creating a row that includes a new sequence number, you want to know what
+    that number is.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建包含新序列号的行后，您希望知道该数字是多少。
+- en: Solution
+  id: totrans-101
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Invoke the `LAST_INSERT_ID()` function. If you’re writing a program, your MySQL
+    API may provide a way to get the value directly without issuing an SQL statement.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 调用`LAST_INSERT_ID()`函数。如果您正在编写程序，MySQL API可能提供一种直接获取值的方法，而无需发出SQL语句。
+- en: Discussion
+  id: totrans-103
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'It’s common for applications to need to know the `AUTO_INCREMENT` value of
+    a newly created row. For example, if you write a web-based frontend for entering
+    rows into Junior’s `insect` table, you might have the application display each
+    new row nicely formatted in a new page immediately after you hit the Submit button.
+    To do this, you must know the new `id` value so that you can retrieve the proper
+    row. Another situation in which the `AUTO_INCREMENT` value is needed occurs when
+    you use multiple tables: after inserting a row in a main table, you need its ID
+    to create rows in other related tables that refer to the row in the main table.
+    ([Recipe 15.11](#nch-sequences-seq-relate) shows how to do this.)'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 应用程序通常需要知道新创建行的`AUTO_INCREMENT`值。例如，如果您为Junior的`insect`表编写一个基于Web的前端用于输入行，可能会在按下提交按钮后立即在新页面上格式化显示每个新行。为了实现这一点，您必须知道新的`id`值，以便可以检索到正确的行。还有一种情况需要`AUTO_INCREMENT`值，即在使用多个表时：在主表中插入行后，需要其ID来创建与主表中行相关的其他相关表中的行。（[Recipe
+    15.11](#nch-sequences-seq-relate) 展示了如何实现这一点。）
+- en: When you generate a new `AUTO_INCREMENT` value, one way to get the value from
+    the server is to execute a statement that invokes the `LAST_INSERT_ID()` function.
+    In addition, many MySQL APIs provide a client-side mechanism for making the value
+    available without issuing another statement. This recipe discusses both methods
+    and compares their characteristics.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当生成新的`AUTO_INCREMENT`值时，从服务器获取值的一种方法是执行调用`LAST_INSERT_ID()`函数的语句。此外，许多MySQL
+    API提供了客户端机制，以使值在不发出其他语句的情况下可用。本篇讨论了这两种方法并比较了它们的特性。
+- en: Using LAST_INSERT_ID() to obtain AUTO_INCREMENT values
+  id: totrans-106
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用 LAST_INSERT_ID() 获取 AUTO_INCREMENT 值
+- en: 'The obvious (but incorrect) way to determine a new row’s `AUTO_INCREMENT` value
+    uses the fact that when MySQL generates the value, it becomes the largest sequence
+    number in the column. Thus, you might try using the `MAX()` function to retrieve
+    it:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确定新行的 `AUTO_INCREMENT` 值的显而易见（但不正确）方法利用了 MySQL 生成值时成为列中最大序列号的事实。因此，您可能会尝试使用
+    `MAX()` 函数来检索它：
+- en: '[PRE14]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'This is unreliable; if another client inserts a row before you issue the `SELECT`
+    statement, `MAX(id)` returns that client’s ID, not yours. It’s possible to solve
+    this problem by grouping the `INSERT` and `SELECT` statements as a transaction
+    or locking the table, but MySQL provides a simpler way to obtain the proper value:
+    invoke the `LAST_INSERT_ID()` function. It returns the most recent `AUTO_INCREMENT`
+    value generated within your session, regardless of what other clients are doing.
+    For example, to insert a row into the `insect` table and retrieve its `id` value,
+    do this:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是不可靠的；如果另一个客户端在您发出 `SELECT` 语句之前插入一行，则 `MAX(id)` 返回该客户端的 ID，而不是您的。可以通过将 `INSERT`
+    和 `SELECT` 语句分组为事务或锁定表来解决此问题，但 MySQL 提供了一种更简单的方法来获取正确的值：调用 `LAST_INSERT_ID()`
+    函数。它返回在您的会话中生成的最近的 `AUTO_INCREMENT` 值，而不管其他客户端在做什么。例如，要将一行插入 `insect` 表并检索其 `id`
+    值，执行以下操作：
+- en: '[PRE15]'
+  id: totrans-110
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Or you can use the new value to retrieve the entire row, without even knowing
+    what it is:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者您可以使用新值检索整行，甚至不知道它是什么：
+- en: '[PRE16]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: The server maintains the value returned by `LAST_INSERT_ID()` on a session-specific
+    basis. This property is by design, and it’s important because it prevents clients
+    from interfering with each other. When you generate an `AUTO_INCREMENT` value,
+    `LAST_INSERT_ID()` returns that specific value, even when other clients generate
+    new rows in the same table in the meantime.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务器基于会话特定方式维护由 `LAST_INSERT_ID()` 返回的值。这一属性是有意设计的，因为它防止客户端相互干扰。当您生成 `AUTO_INCREMENT`
+    值时，`LAST_INSERT_ID()` 返回该特定值，即使其他客户端在此期间向同一表中生成新行。
+- en: Using API-specific methods to obtain AUTO_INCREMENT values
+  id: totrans-114
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用特定 API 方法获取 AUTO_INCREMENT 值
+- en: '`LAST_INSERT_ID()` is an SQL function, so you can use it from within any client
+    that can execute SQL statements. On the other hand, you do have to execute a separate
+    statement to get its value. When you write your own programs, you may have another
+    choice. Many MySQL interfaces include an API-specific extension that returns the
+    `AUTO_INCREMENT` value without executing an additional statement. Most of our
+    APIs have this capability.'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`LAST_INSERT_ID()` 是一个 SQL 函数，因此您可以在能够执行 SQL 语句的任何客户端中使用它。另一方面，您必须执行单独的语句以获取其值。当您编写自己的程序时，可能会有另一种选择。许多
+    MySQL 接口包含一个 API 特定扩展，该扩展可以返回 `AUTO_INCREMENT` 值，而无需执行额外的语句。我们大多数的 API 都具备此功能。'
+- en: Perl
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Perl
+- en: 'Use the `mysql_insertid` attribute to obtain the `AUTO_INCREMENT` value generated
+    by a statement. This attribute is accessed through either a database handle or
+    a statement handle, depending on how you issue the statement. The following example
+    references it through the database handle:'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `mysql_insertid` 属性获取语句生成的 `AUTO_INCREMENT` 值。此属性通过数据库句柄或语句句柄访问，具体取决于您如何发出语句。以下示例通过数据库句柄引用它：
+- en: '[PRE17]'
+  id: totrans-118
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'To access `mysql_insertid` as a statement-handle attribute, use `prepare()`
+    and `execute()`:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将 `mysql_insertid` 作为语句句柄属性访问，请使用 `prepare()` 和 `execute()`：
+- en: '[PRE18]'
+  id: totrans-120
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: Ruby
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Ruby
+- en: 'The Ruby Mysql2 gem exposes the client-side `AUTO_INCREMENT` value using the
+    `last_id` method:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Ruby Mysql2 gem 使用 `last_id` 方法公开客户端端 `AUTO_INCREMENT` 值：
+- en: '[PRE19]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: PHP
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PHP
+- en: 'The PDO interface for MySQL has a `lastInsertId()` database-handle method that
+    returns the most recent `AUTO_INCREMENT` value:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PDO 接口为 MySQL 提供了 `lastInsertId()` 数据库句柄方法，返回最近的 `AUTO_INCREMENT` 值：
+- en: '[PRE20]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: Python
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Python
+- en: 'The Connector/Python driver for DB API provides a `lastrowid` cursor object
+    attribute that returns the most recent `AUTO_INCREMENT` value:'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DB API 提供的 Connector/Python 驱动程序提供了 `lastrowid` 游标对象属性，返回最近的 `AUTO_INCREMENT`
+    值：
+- en: '[PRE21]'
+  id: totrans-129
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: Java
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Java
+- en: The Connector/J JDBC driver `getGeneratedKeys()` method returns `AUTO_INCREMENT`
+    values. It can be used with a `Statement` or `PreparedStatement` object if you
+    supply an additional `Statement.RETURN_GENERATED_KEYS` argument during the statement-execution
+    process to indicate that you want to retrieve the sequence value.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Connector/J JDBC 驱动程序 `getGeneratedKeys()` 方法返回 `AUTO_INCREMENT` 值。如果在语句执行过程中提供额外的
+    `Statement.RETURN_GENERATED_KEYS` 参数以指示您要检索序列值，则它可以与 `Statement` 或 `PreparedStatement`
+    对象一起使用。
+- en: 'For a `Statement`:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 `Statement`：
+- en: '[PRE22]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 'For a `PreparedStatement`:'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 `PreparedStatement`：
+- en: '[PRE23]'
+  id: totrans-135
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'Then generate a new result set from `getGeneratedKeys()` to access the sequence
+    value:'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，从`getGeneratedKeys()`生成一个新的结果集以访问序列值：
+- en: '[PRE24]'
+  id: totrans-137
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: Go
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Go
+- en: The Go MySQL driver provides method `LastInsertId` of the `Result` interface
+    that returns the latest `AUTO_INCREMENT` value.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Go MySQL 驱动程序提供了`Result`接口的`LastInsertId`方法，返回最新的`AUTO_INCREMENT`值。
+- en: '[PRE25]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: Server-side and client-side sequence value retrieval compared
+  id: totrans-141
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 与服务器端和客户端端比较序列值检索
+- en: As mentioned earlier, the server maintains the value of `LAST_INSERT_ID()` on
+    a session-specific basis. By contrast, the API-specific methods for accessing
+    `AUTO_INCREMENT` values directly are implemented on the client side. Server-side
+    and client-side sequence value retrieval methods have some similarities, but also
+    some differences.
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，服务器在会话特定基础上维护`LAST_INSERT_ID()`的值。相比之下，用于直接访问`AUTO_INCREMENT`值的 API 特定方法在客户端上实现。服务器端和客户端端序列值检索方法有一些相似之处，但也有一些不同之处。
+- en: 'All methods, both server-side and client-side, require that you access an `AUTO_INCREMENT`
+    value within the same MySQL session that generated it. If you generate an `AUTO_INCREMENT`
+    value, then disconnect from the server and reconnect before attempting to access
+    the value, you’ll get zero. Within a given session, the persistence of `AUTO_INCREMENT`
+    values can be much longer on the server side of the session:'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有方法，无论是服务器端还是客户端，都要求你在生成它的同一个 MySQL 会话中访问`AUTO_INCREMENT`值。如果生成了`AUTO_INCREMENT`值，然后在尝试访问该值之前断开与服务器的连接并重新连接，你将得到零值。在给定的会话中，服务器端的`AUTO_INCREMENT`值的持久性可能会更长：
+- en: After you execute a statement that generates an `AUTO_INCREMENT` value, the
+    value remains available through `LAST_INSERT_ID()` even if you execute other statements,
+    as long as none of those statements generate an `AUTO_INCREMENT` value.
+  id: totrans-144
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在执行生成`AUTO_INCREMENT`值的语句后，只要没有其他语句生成`AUTO_INCREMENT`值，该值仍然可通过`LAST_INSERT_ID()`访问。
+- en: 'The sequence value available using client-side API methods typically is set
+    for *every* statement, not only those that generate `AUTO_INCREMENT` values. If
+    you execute an `INSERT` statement that generates a new value and then execute
+    some other statement before accessing the client-side sequence value, it probably
+    will have been set to zero. The precise behavior varies among APIs, but to be
+    safe, you can do this: when a statement generates a sequence value that you won’t
+    use immediately, save the value in a variable that you can refer to later. Otherwise,
+    you may find the sequence value wiped out by the time you try to access it. (For
+    more on this topic, see [Recipe 15.10](#nch-sequences-seq-simultaneous).)'
+  id: totrans-145
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用客户端 API 方法可获得的序列值通常适用于*每个*语句，而不仅仅是生成`AUTO_INCREMENT`值的语句。如果你执行生成新值的`INSERT`语句，然后在访问客户端序列值之前执行其他语句，那么它可能已经被设置为零。具体行为在不同的
+    API 之间有所不同，但为了安全起见，你可以这样做：当语句生成一个你暂时不会使用的序列值时，将该值保存在一个变量中，以便稍后引用。否则，当你尝试访问时，可能会发现序列值已被清除。（更多信息，请参见[食谱
+    15.10](#nch-sequences-seq-simultaneous)。）
+- en: 15.5 Renumbering an Existing Sequence
+  id: totrans-146
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.5 重新编号现有序列
+- en: Problem
+  id: totrans-147
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You have gaps in a sequence column, and you want to resequence it.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你的序列列中有间隙，你想重新排序它。
+- en: Solution
+  id: totrans-149
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: First, consider whether resequencing is necessary. In many cases it is not.
+    But if you have to, resequence the AUTO_INCREMENT columns periodically.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，考虑是否需要重新排序。在许多情况下，这是不必要的。但如果必须这样做，请定期重新排序`AUTO_INCREMENT`列。
+- en: Discussion
+  id: totrans-151
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'If you insert rows into a table that has an `AUTO_INCREMENT` column and never
+    delete any of them, values in the column form an unbroken sequence. If you delete
+    rows, the sequence begins to have holes in it. For example, Junior’s `insect`
+    table currently looks something like this, with gaps in the sequence (assuming
+    that you’ve inserted the cricket and moth rows shown in [Recipe 15.4](#nch-sequences-seq-retrieve)):'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你向具有`AUTO_INCREMENT`列的表插入行，并且从不删除任何行，则列中的值形成一个连续的序列。如果删除行，则序列开始出现间隙。例如，Junior
+    的`insect`表目前看起来像是这样，序列中有间隙（假设你已经插入了[食谱 15.4](#nch-sequences-seq-retrieve)中显示的蟋蟀和蛾行）。
+- en: '[PRE26]'
+  id: totrans-153
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: MySQL won’t attempt to eliminate these gaps by filling in the unused values
+    when you insert new rows. People who dislike this behavior tend to resequence
+    `AUTO_INCREMENT` columns periodically to eliminate the holes. The examples in
+    this recipe show how to do that. It’s also possible to extend the range of an
+    existing sequence (see [Recipe 15.6](#nch-sequences-seq-range)), force deleted
+    values at the top of a sequence to be reused (see [Recipe 15.7](#nch-sequences-seq-reuse-top)),
+    number rows in a particular order (see [Recipe 15.8](#nch-sequences-seq-order)),
+    or add a sequence column to a table that doesn’t currently have one (see [Recipe
+    15.9](#nch-sequences-seq-add-seq)).
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL不会尝试通过填充未使用的值来消除这些间隙，当插入新行时。不喜欢这种行为的人倾向于定期重新排序`AUTO_INCREMENT`列以消除这些间隙。本文档中的示例展示了如何做到这一点。还可以扩展现有序列的范围（参见[配方
+    15.6](#nch-sequences-seq-range)），强制顶部序列中删除的值被重复使用（参见[配方 15.7](#nch-sequences-seq-reuse-top)），按特定顺序编号行（参见[配方
+    15.8](#nch-sequences-seq-order)），或者向当前没有序列列的表添加序列列（参见[配方 15.9](#nch-sequences-seq-add-seq)）。
+- en: Before you decide to resequence an `AUTO_INCREMENT` column, consider whether
+    that’s really necessary. It usually isn’t, and in some cases can cause you real
+    problems. For example, you should *not* resequence a column containing values
+    that are referenced by another table. Renumbering the values destroys their correspondence
+    to values in the other table, making it impossible to properly relate rows in
+    the two tables to each other.
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在决定重新排序`AUTO_INCREMENT`列之前，请考虑是否真的有必要。通常情况下并不需要，而且在某些情况下可能会导致实际问题。例如，不应该重新排序包含其他表引用值的列。重新编号这些值会破坏它们与其他表中值的对应关系，从而无法正确地将两个表中的行关联起来。
+- en: 'Here are reasons we have seen advanced for resequencing a column:'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是一些推进重新排序列的高级原因：
+- en: Aesthetics
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 美学
+- en: Some people prefer unbroken sequences to sequences with holes in them. If this
+    is why you want to resequence, there’s probably not much we can say to convince
+    you otherwise. Nevertheless, it’s not a particularly good reason.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有些人更喜欢不间断的序列，而不是有间隙的序列。如果这是你想要重新排序的原因，我们可能无法说服你改变想法。尽管如此，这并不是一个特别好的理由。
+- en: Performance
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能
+- en: The impetus for resequencing may stem from the notion that doing so <q>compacts</q>
+    a sequence column by removing gaps and enables MySQL to run statements more quickly.
+    This is not true. MySQL doesn’t care whether there are holes, and there is no
+    performance gain to be had by renumbering an `AUTO_INCREMENT` column. In fact,
+    resequencing affects performance negatively in the sense that the table remains
+    locked while MySQL performs the operation—which may take a nontrivial amount of
+    time for a large table. Other clients can read from the table while this is happening,
+    but clients trying to insert new rows block until the operation is complete.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重新排序的动机可能源于这样的观念，即这样做可以通过移除间隙来“压缩”一个序列列，并使MySQL运行语句更快。这是不正确的。MySQL并不关心是否有空白，而且通过重新编号`AUTO_INCREMENT`列并不会带来性能上的提升。事实上，重新排序会在某种意义上对性能产生负面影响，因为在MySQL执行此操作时表会保持锁定状态——对于大表来说可能需要相当长的时间。其他客户端在此过程中可以读取表中的数据，但试图插入新行的客户端会被阻塞，直到操作完成。
+- en: Running out of numbers
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 编号耗尽
+- en: The sequence column’s data type and signedness determine its upper limit (see
+    [Recipe 15.2](#nch-sequences-seq-type)). If an `AUTO_INCREMENT` sequence is approaching
+    the upper limit of its data type, renumbering packs the sequence and frees up
+    more values at the top. This may be a legitimate reason to resequence a column,
+    but it is still unnecessary in many cases. You may be able to change the column
+    data type to increase its upper limit without changing the values stored in the
+    column; see [Recipe 15.6](#nch-sequences-seq-range).
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 序列列的数据类型和有符号性确定了其上限（参见[配方 15.2](#nch-sequences-seq-type)）。如果一个`AUTO_INCREMENT`序列接近其数据类型的上限，重新编号会压缩序列并释放更多顶部的值。这可能是重新排序列的正当理由，但在许多情况下仍然是不必要的。您可以尝试更改列数据类型以增加其上限，而不改变列中存储的值；参见[配方
+    15.6](#nch-sequences-seq-range)。
+- en: 'If you’re still determined to resequence a column, it’s easy to do: drop the
+    column from the table; then put it back. MySQL renumbers the values in the column
+    in unbroken sequence. The following example shows how to renumber the `id` values
+    in the `insect` table using this technique:'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你仍然决定重新排序某列，这很容易做到：从表中删除该列，然后再放回。MySQL会按照不间断的顺序重新编号列中的值。以下示例展示了如何使用这种技术来重新编号`insect`表中的`id`值：
+- en: '[PRE27]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: The first `ALTER` `TABLE` statement gets rid of the `id` column (and as a result
+    also drops the `PRIMARY` `KEY`, because the column to which it refers is no longer
+    present). The second statement restores the column to the table and establishes
+    it as the `PRIMARY` `KEY`. (The `FIRST` keyword places the column first in the
+    table, which is where it was originally. Normally, `ADD` puts columns at the end
+    of the table.)
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一个`ALTER TABLE`语句删除了`id`列（因此也删除了`PRIMARY KEY`，因为它所引用的列不再存在）。第二个语句将列恢复到表中，并将其设为`PRIMARY
+    KEY`。（`FIRST`关键字将列放在表中的第一位，这就是它最初的位置。通常情况下，`ADD`会将列放在表的末尾。）
+- en: 'When you add an `AUTO_INCREMENT` column to a table, MySQL automatically numbers
+    all the rows consecutively, so the resulting contents of the `insect` table look
+    like this:'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您向表中添加一个`AUTO_INCREMENT`列时，MySQL会自动对所有行进行连续编号，因此`insect`表的内容如下所示：
+- en: '[PRE28]'
+  id: totrans-167
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'One problem with resequencing a column using separate `ALTER` `TABLE` statements
+    is that the table is without that column for the interval between the two operations.
+    This might cause difficulties for other clients that try to access the table during
+    that time. To prevent this from happening, perform both operations with a single
+    `ALTER` `TABLE` statement:'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用单独的`ALTER TABLE`语句对列进行重新排序的一个问题是，在两次操作之间，表中将没有该列。这可能会导致其他客户端在此期间尝试访问表时遇到困难。为了防止这种情况发生，请使用单个`ALTER
+    TABLE`语句执行这两个操作：
+- en: '[PRE29]'
+  id: totrans-169
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'MySQL permits multiple actions to be done with `ALTER` `TABLE` (something not
+    true for all database systems). However, notice that this multiple-action statement
+    is not simply a concatenation of the two single-action `ALTER` `TABLE` statements.
+    The difference is that it is unnecessary to reestablish the `PRIMARY` `KEY`: MySQL
+    doesn’t drop it unless the indexed column is missing after all the actions specified
+    in the `ALTER` `TABLE` statement have been performed.'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL允许使用`ALTER TABLE`执行多个操作（并非所有数据库系统都支持）。但请注意，这种多操作语句并不简单地将两个单操作`ALTER TABLE`语句连接起来。不同之处在于，不需要重新建立`PRIMARY
+    KEY`：除非在执行`ALTER TABLE`语句中指定的所有操作后，索引列已经丢失，否则MySQL不会删除它。
+- en: 15.6 Extending the Range of a Sequence Column
+  id: totrans-171
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.6 扩展序列列的范围
+- en: Problem
+  id: totrans-172
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to avoid resequencing a column, but you’re running out of room for
+    new sequence numbers.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望避免重新对列进行排序，但是您的新序列号已经用完了。
+- en: Solution
+  id: totrans-174
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Check whether you can make the column `UNSIGNED` or change it to use a larger
+    integer type.
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 检查您是否可以将列设置为`UNSIGNED`或更改为使用更大的整数类型。
+- en: Discussion
+  id: totrans-176
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Resequencing an `AUTO_INCREMENT` column changes the contents of potentially
+    every row in the table. It’s often possible to avoid this by extending the range
+    of the column, which changes the table’s structure rather than its contents:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过扩展列的范围而不是其内容，可以避免重新排序`AUTO_INCREMENT`列的影响，这会改变表的结构而不是其内容：
+- en: 'If the data type is signed, make it `UNSIGNED` to double the range of available
+    values. Suppose that an `id` column currently is defined like this:'
+  id: totrans-178
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果数据类型为有符号的，请将其设置为`UNSIGNED`，以加倍可用值的范围。假设当前一个`id`列被定义如下：
+- en: '[PRE30]'
+  id: totrans-179
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'The upper range of a signed `MEDIUMINT` column is 8,388,607\. To increase this
+    to 16,777,215, make the column `UNSIGNED` with `ALTER` `TABLE`:'
+  id: totrans-180
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 有符号`MEDIUMINT`列的上限范围为8,388,607。要将其增加到16,777,215，请使用`ALTER TABLE`使该列为`UNSIGNED`：
+- en: '[PRE31]'
+  id: totrans-181
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'If your column is already `UNSIGNED` and it is not already the largest integer
+    type (`BIGINT`), converting it to a larger type increases its range. Use `ALTER`
+    `TABLE` for this, too. Convert the `id` column in the previous example from `MEDIUMINT`
+    to `BIGINT` like so:'
+  id: totrans-182
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果您的列已经是`UNSIGNED`，并且还不是最大的整数类型（`BIGINT`），将其转换为更大的类型会增加其范围。对于前面例子中的`id`列，也要使用`ALTER
+    TABLE`进行转换，从`MEDIUMINT`转换为`BIGINT`，如下所示：
+- en: '[PRE32]'
+  id: totrans-183
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: '[Recipe 15.2](#nch-sequences-seq-type) shows the ranges for each integer data
+    type, which can help you choose an appropriate type.'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[15.2章节的配方](#nch-sequences-seq-type)展示了每种整数数据类型的范围，这可以帮助您选择合适的类型。'
+- en: 15.7 Reusing Values at the Top of a Sequence
+  id: totrans-185
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.7 重新使用序列顶部的值
+- en: Problem
+  id: totrans-186
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You’ve deleted rows at the top end of your sequence, and you want to avoid resequencing
+    the column, but still reuse the values.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您已删除了序列顶端的行，并且希望避免重新对列进行排序，但仍然要重用这些值。
+- en: Solution
+  id: totrans-188
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Yes. Use `ALTER` `TABLE` to reset the sequence counter. New sequence numbers
+    will begin with the value one larger than the current maximum in the table.
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 是的。使用`ALTER TABLE`重置序列计数器。新的序列号将从表中当前最大值加一开始。
+- en: Discussion
+  id: totrans-190
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'If you have removed rows only from the top of the sequence, those that remain
+    are still in order with no gaps. (For example, if you have rows numbered 1 to
+    100 and you remove the rows with numbers 91 to 100, the remaining rows are still
+    in unbroken sequence from 1 to 90.) In this special case, it’s unnecessary to
+    renumber the column. Instead, tell MySQL to resume the sequence beginning with
+    the value one larger than the highest existing sequence number by executing this
+    statement, which causes MySQL to reset the sequence counter down as far as it
+    can for new rows:'
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您只从顺序的顶部删除了行，则剩余的行仍然按顺序排列而无间隙。（例如，如果您有从1到100编号的行，并删除了编号为91到100的行，则剩余的行仍然从1到90连续编号。）在这种特殊情况下，重新编号列是不必要的。而是告诉MySQL通过执行此语句恢复从最高现有序列号大一的值开始的序列计数器向下重置新行：
+- en: '[PRE33]'
+  id: totrans-192
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: You can use `ALTER` `TABLE` to reset the sequence counter if a sequence column
+    contains gaps in the middle, but doing so still reuses only values deleted from
+    the top of the sequence. It does not eliminate the gaps. Suppose that a table
+    contains sequence values from 1 to 10, from which you delete the rows for values
+    3, 4, 5, 9, and 10\. The maximum remaining value is 8, so if you use `ALTER` `TABLE`
+    to reset the sequence counter, the next row is given a value of 9, not 3\. To
+    resequence a table to eliminate the gaps, see [Recipe 15.5](#nch-sequences-seq-reseq).
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果一个序列列中间存在间隙，则可以使用`ALTER` `TABLE`重置序列计数器，但仍然只重用从顺序的顶部删除的值。它不会消除间隙。假设表包含从1到10的序列值，您删除了值为3、4、5、9和10的行。最大剩余值为8，因此如果您使用`ALTER`
+    `TABLE`重置序列计数器，则下一行将被赋值为9，而不是3。要重新排序表以消除间隙，请参见[食谱 15.5](#nch-sequences-seq-reseq)。
+- en: 15.8 Ensuring That Rows Are Renumbered in a Particular Order
+  id: totrans-194
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.8 确保行按特定顺序重新编号
+- en: Problem
+  id: totrans-195
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You resequenced a column, but MySQL didn’t number the rows the way you want.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您重新排序了一列，但MySQL没有按您想要的方式对行进行编号。
+- en: Solution
+  id: totrans-197
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Select the rows into another table, using an `ORDER` `BY` clause to place them
+    in the order you want, and let MySQL number them according to the sort order as
+    it performs the operation.
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`ORDER` `BY`子句将行选择到另一张表中，按您想要的顺序排列，并让MySQL根据排序顺序对它们编号，同时执行操作。
+- en: Discussion
+  id: totrans-199
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'When you resequence an `AUTO_INCREMENT` column, MySQL is free to pick the rows
+    from the table in any order, so it doesn’t necessarily renumber them in the order
+    that you expect. This doesn’t matter at all if your only requirement is that each
+    row have a unique identifier. But you might have an application for which it’s
+    important that the rows be assigned sequence numbers in a particular order. For
+    example, you may want the sequence to correspond to the order in which rows were
+    created, as indicated by a `TIMESTAMP` column. To assign numbers in a particular
+    order, use this procedure:'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您重新排序`AUTO_INCREMENT`列时，MySQL可以自由地从表中选择行，因此它不一定会按您期望的顺序重新编号它们。如果您唯一的要求是每行有唯一的标识符，则这一点无关紧要。但是您可能有一个应用程序，其中重要的是按特定顺序为行分配序列号。例如，您可能希望序列与创建行的顺序对应，如由`TIMESTAMP`列指示。要按特定顺序分配编号，请使用以下程序：
+- en: Create an empty clone of the table (see [Recipe 6.1](ch06.xhtml#nch-tblmgmt-tblmgmt-clone)).
+  id: totrans-201
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建一个空表的克隆（参见[食谱 6.1](ch06.xhtml#nch-tblmgmt-tblmgmt-clone)）。
+- en: Copy rows from the original into the clone using `INSERT` `INTO` … `SELECT`.
+    Copy all columns except the `AUTO_INCREMENT` column, using an `ORDER` `BY` clause
+    to specify the order in which rows are copied (and thus the order in which MySQL
+    assigns numbers to the `AUTO_INCREMENT` column).
+  id: totrans-202
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用`INSERT` `INTO` … `SELECT`将行从原表复制到克隆表。除了`AUTO_INCREMENT`列外，复制所有列，使用`ORDER`
+    `BY`子句指定复制行的顺序（从而指定MySQL分配`AUTO_INCREMENT`列号的顺序）。
+- en: Drop the original table and rename the clone to have the original table’s name.
+  id: totrans-203
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 删除原始表并将克隆重命名为原始表的名称。
+- en: If the table is a large MyISAM table and has multiple indexes, it is more efficient
+    to create the new table initially with no indexes except the one on the `AUTO_INCREMENT`
+    column. Then copy the original table into the new table and use `ALTER` `TABLE`
+    to add the remaining indexes afterward.
+  id: totrans-204
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果表是一个大的MyISAM表并且具有多个索引，则最好最初创建新表时没有索引，除了`AUTO_INCREMENT`列上的索引。然后将原表复制到新表中，并使用`ALTER`
+    `TABLE`在之后添加其余索引。
+- en: This applies to InnoDB as well. But InnoDB [Change Buffer](https://dev.mysql.com/doc/refman/8.0/en/innodb-change-buffer.html)
+    caches changes to the secondary indexes in memory and flushes then them to the
+    disk in background. This allows to keep insert performance at the good speed.
+  id: totrans-205
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这也适用于InnoDB。但是，InnoDB的[Change Buffer](https://dev.mysql.com/doc/refman/8.0/en/innodb-change-buffer.html)在内存中缓存对二级索引的更改，并在后台将其刷新到磁盘，从而保持插入性能良好。
+- en: 'An alternative procedure:'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种方法：
+- en: Create a new table that contains all the columns of the original table except
+    the `AUTO_INCREMENT` column.
+  id: totrans-207
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建一个新表，其中包含原始表的所有列，除了`AUTO_INCREMENT`列。
+- en: Use `INSERT` `INTO` … `SELECT` to copy the non-`AUTO_INCREMENT` columns from
+    the original table into the new table.
+  id: totrans-208
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用`INSERT INTO ... SELECT`将原表的非`AUTO_INCREMENT`列复制到新表中。
+- en: Use `TRUNCATE` `TABLE` on the original table to empty it; this also resets the
+    sequence counter to 1.
+  id: totrans-209
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用`TRUNCATE TABLE`在原表上清空它；这也将重置序列计数器为1。
+- en: Copy rows from the new table back to the original table, using an `ORDER` `BY`
+    clause to sort rows into the order in which you want sequence numbers assigned.
+    MySQL assigns sequence values to the `AUTO_INCREMENT` column.
+  id: totrans-210
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用`ORDER` `BY`子句将行从新表复制回原始表，以便按照所需顺序为行分配序列号。MySQL为`AUTO_INCREMENT`列分配序列值。
+- en: 15.9 Sequencing an Unsequenced Table
+  id: totrans-211
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.9 对未排序表进行排序
+- en: Problem
+  id: totrans-212
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You forgot to include a sequence column when you created a table. Is it too
+    late to sequence the table rows?
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您创建表时忘记包含序列列时，已经太晚了吗？可以对表行进行排序吗？
+- en: Solution
+  id: totrans-214
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: No. Add an `AUTO_INCREMENT` column using `ALTER` `TABLE`; MySQL creates the
+    column and numbers its rows.
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不。使用`ALTER TABLE`添加`AUTO_INCREMENT`列；MySQL将创建该列并对其行进行编号。
+- en: Discussion
+  id: totrans-216
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Suppose that a table contains `name` and `age` columns, but no sequence column:'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设表包含`name`和`age`列，但没有序列列：
+- en: '[PRE34]'
+  id: totrans-218
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'Add a sequence column named `id` to the table as follows:'
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 按以下方式向表添加名为`id`的序列列：
+- en: '[PRE35]'
+  id: totrans-220
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: MySQL numbers the rows for you; it’s unnecessary to assign the values yourself.
+    Very handy.
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL为您编号行；您无需自行分配值。非常方便。
+- en: 'By default, `ALTER` `TABLE` adds new columns to the end of the table. To place
+    a column at a specific position, use `FIRST` or `AFTER` at the end of the `ADD`
+    clause. The following `ALTER` `TABLE` statements are similar to the one just shown,
+    but place the `id` column first in the table or after the `name` column, respectively:'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，`ALTER TABLE`将新列添加到表的末尾。要将列放置在特定位置，请在`ADD`子句的末尾使用`FIRST`或`AFTER`。以下`ALTER
+    TABLE`语句类似于刚刚显示的语句，但是将`id`列放在表中的第一位置或在`name`列之后。
+- en: '[PRE36]'
+  id: totrans-223
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: '[PRE37]'
+  id: totrans-224
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 15.10 Managing Multiple Auto-Increment Values Simultaneously
+  id: totrans-225
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.10 同时管理多个自增值
+- en: Problem
+  id: totrans-226
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You’re executing multiple statements that generate `AUTO_INCREMENT` values,
+    and it’s necessary to keep track of them independently. For example, you’re inserting
+    rows into multiple tables, each of which has its own `AUTO_INCREMENT` column.
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您正在执行多个生成`AUTO_INCREMENT`值的语句，并且有必要独立跟踪它们。例如，您正在将行插入到具有各自`AUTO_INCREMENT`列的多个表中。
+- en: Solution
+  id: totrans-228
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Save the sequence values in variables for later use. Alternatively, if you execute
+    sequence-generating statements from within a program, you might be able to issue
+    the statements using separate connection or statement objects to keep them from
+    getting mixed up.
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将序列值保存在变量中以备后用。或者，如果您从程序内执行生成序列的语句，可能可以使用单独的连接或语句对象来发出语句，以避免混淆。
+- en: Discussion
+  id: totrans-230
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'As described in [Recipe 15.4](#nch-sequences-seq-retrieve), the `LAST_INSERT_ID()`
+    server-side sequence value function is set each time a statement generates an
+    `AUTO_INCREMENT` value, whereas client-side sequence indicators may be reset for
+    every statement. What if you issue a statement that generates an `AUTO_INCREMENT`
+    value, but you don’t want to refer to that value until after issuing a second
+    statement that also generates an `AUTO_INCREMENT` value? In this case, the original
+    value is no longer accessible, either through `LAST_INSERT_ID()` or as a client-side
+    value. To retain access to it, save the value first before issuing the second
+    statement. There are several ways to do this:'
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如[Recipe 15.4](#nch-sequences-seq-retrieve)所述，`LAST_INSERT_ID()`服务器端序列值函数在每次语句生成`AUTO_INCREMENT`值时设置，而客户端序列指示器可能会在每个语句后重置。假设您发出生成`AUTO_INCREMENT`值的语句，但在发出第二个生成`AUTO_INCREMENT`值的语句之前不想引用该值呢？在这种情况下，原始值将不再可访问，无论是通过`LAST_INSERT_ID()`还是作为客户端值。为了保留对其的访问权，请在发出第二个语句之前先保存该值。有几种方法可以做到这一点：
+- en: 'At the SQL level, save the value in a user-defined variable after issuing a
+    statement that generates an `AUTO_INCREMENT` value:'
+  id: totrans-232
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在SQL级别，在生成`AUTO_INCREMENT`值的语句后，将该值保存在用户定义的变量中：
+- en: '[PRE38]'
+  id: totrans-233
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: Then you can issue other statements without regard to their effect on `LAST_INSERT_ID()`.
+    To use the original `AUTO_INCREMENT` value in a subsequent statement, refer to
+    the `@saved_id` variable.
+  id: totrans-234
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 然后，您可以发布其他语句，而不考虑它们对`LAST_INSERT_ID()`的影响。要在后续语句中使用原始的`AUTO_INCREMENT`值，请参考`@saved_id`变量。
+- en: At the API level, save the `AUTO_INCREMENT` value in an API language variable.
+    This can be done by saving the value returned from either `LAST_INSERT_ID()` or
+    any API-specific extension that is available.
+  id: totrans-235
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在API级别，将`AUTO_INCREMENT`值保存在API语言变量中。可以通过保存从`LAST_INSERT_ID()`或任何可用的API特定扩展返回的值来实现。
+- en: Some APIs enable you to maintain separate client-side `AUTO_INCREMENT` values.
+    For example, Perl DBI statement handles have a `mysql_insertid` attribute, and
+    the attribute value for one handle is unaffected by activity on another. In Java,
+    use separate `Statement` or `PreparedStatement` objects.
+  id: totrans-236
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一些API允许您维护单独的客户端`AUTO_INCREMENT`值。例如，Perl DBI语句处理有一个`mysql_insertid`属性，一个处理的属性值不受另一个活动的影响。在Java中，使用单独的`Statement`或`PreparedStatement`对象。
+- en: See [Recipe 15.11](#nch-sequences-seq-relate) for application of these techniques
+    to situations in which you must insert rows into multiple tables that each contain
+    an `AUTO_INCREMENT` column.
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 参见[Recipe 15.11](#nch-sequences-seq-relate)以将这些技术应用于必须向包含`AUTO_INCREMENT`列的多个表中插入行的情况。
+- en: 15.11 Using Auto-Increment Values to Associate Tables
+  id: totrans-238
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.11 使用自增值关联表
+- en: Problem
+  id: totrans-239
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You use sequence values from one table as keys in a second table so that you
+    can associate rows in the two tables with each other. But the associations aren’t
+    being set up properly.
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以从一张表中使用序列值作为第二张表中的键，以便将两张表中的行关联起来。但是这些关联没有正确设置。
+- en: Solution
+  id: totrans-241
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: You’re probably not inserting rows in the proper order, or you’re losing track
+    of the sequence values. Change the insertion order, or save the sequence values
+    so that you can refer to them when you need them.
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可能没有按正确顺序插入行，或者丢失了序列值的跟踪。更改插入顺序，或保存序列值以便在需要时引用它们。
+- en: Discussion
+  id: totrans-243
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Be careful with an `AUTO_INCREMENT` value used as an ID value in a master table
+    if you also store the value in detail table rows for the purpose of linking the
+    detail rows to the proper master table row. Suppose that an `invoice` table lists
+    invoice information for customer orders, and an `inv_item` table lists the individual
+    items associated with each invoice. Here, `invoice` is the master table and `inv_item`
+    is the detail table. To uniquely identify each order, include an `AUTO_INCREMENT`
+    column `inv_id` in the `invoice` table. You’d also store the appropriate invoice
+    number in each `inv_item` table row so that you can tell which invoice it goes
+    with. The tables might look something like this:'
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您还将`AUTO_INCREMENT`值用作主表中的ID值，并且还将该值存储在详细表行中以便将详细行链接到适当的主表行，则需要小心。假设`invoice`表列出了客户订单的发票信息，而`inv_item`表列出了与每个发票关联的各个项目。在这里，`invoice`是主表，`inv_item`是详细表。为了唯一标识每个订单，在`invoice`表中包括一个`AUTO_INCREMENT`列`inv_id`。还应在每个`inv_item`表行中存储适当的发票号码，以便确定其属于哪个发票。这些表可能如下所示：
+- en: '[PRE39]'
+  id: totrans-245
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'For this kind of table relationship, it’s typical to insert a row into the
+    master table first (to generate the `AUTO_INCREMENT` value that identifies the
+    row), and then insert the detail rows using `LAST_INSERT_ID()` to obtain the master
+    row ID. If a customer buys a hammer, three boxes of nails, and (in anticipation
+    of finger-bashing with the hammer) a dozen bandages, the rows pertaining to the
+    order can be inserted into the two tables like so:'
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于这种表关系，通常首先向主表插入一行（以生成标识该行的`AUTO_INCREMENT`值），然后使用`LAST_INSERT_ID()`插入详细行以获取主行ID。如果客户购买了一把锤子、三盒钉子以及（为了防止用锤子时砸伤手指）一打绷带，与订单相关的行可以像这样插入两张表：
+- en: '[PRE40]'
+  id: totrans-247
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: The first `INSERT` adds a row to the `invoice` master table and generates a
+    new `AUTO_INCREMENT` value for its `inv_id` column. The following `INSERT` statements
+    each add a row to the `inv_item` detail table, using `LAST_INSERT_ID()` to get
+    the invoice number. This associates the detail rows with the proper master row.
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一个`INSERT`将一行添加到`invoice`主表中，并为其`inv_id`列生成新的`AUTO_INCREMENT`值。随后的`INSERT`语句每个都向`inv_item`详细表中添加一行，并使用`LAST_INSERT_ID()`获取发票号码。这样可以将详细行与适当的主行关联起来。
+- en: What if you have multiple invoices to process? There’s a right way and a wrong
+    way to enter the information. The right way is to insert all the information for
+    the first invoice, then proceed to the next. The wrong way is to add all the master
+    rows into the `invoice` table, then add all the detail rows to the `inv_item`
+    table. If you do that, *all* the new detail rows in the `inv_item` table have
+    the `AUTO_INCREMENT` value from the most recently entered `invoice` row. Thus,
+    all items appear to be part of that invoice, and rows in the two tables don’t
+    have the proper associations.
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您有多个要处理的发票怎么办？有正确的方法和错误的方法来输入信息。正确的方法是首先插入第一张发票的所有信息，然后继续下一张。错误的方法是将所有主行添加到`invoice`表中，然后将所有详细行添加到`inv_item`表中。如果这样做，`inv_item`表中所有新的详细行都将具有最近输入的`invoice`行的`AUTO_INCREMENT`值。因此，所有项目看起来都属于该发票，并且两个表中的行没有正确的关联。
+- en: 'If the detail table contains its own `AUTO_INCREMENT` column, you must be even
+    more careful about how you add rows to the tables. Suppose that you want each
+    row in the `inv_item` table to have a unique identifier. To do that, create the
+    `inv_item` table as follows with an `AUTO_INCREMENT` column named `item_id`:'
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果详细表包含自己的`AUTO_INCREMENT`列，则在向表中添加行时必须更加小心。假设您希望`inv_item`表中的每一行都具有唯一标识符。为此，请按照以下方式创建`inv_item`表，其中包含名为`item_id`的`AUTO_INCREMENT`列：
+- en: '[PRE41]'
+  id: totrans-251
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: The `inv_id` column enables each `inv_item` row to be associated with the proper
+    `invoice` table row, just as with the original table structure. In addition, `item_id`
+    uniquely identifies each item row. However, now that both tables contain an `AUTO_INCREMENT`
+    column, you cannot enter information for an invoice the same way as before. If
+    you execute the `INSERT` statements shown previously, they now produce a different
+    result due to the change in the `inv_item` table structure. The `INSERT` into
+    the `invoice` table works properly. So does the first `INSERT` into the `inv_item`
+    table; `LAST_INSERT_ID()` returns the `inv_id` value from the master row in the
+    `invoice` table. However, this `INSERT` also generates its own `AUTO_INCREMENT`
+    value (for the `item_id` column), which changes the value of `LAST_INSERT_ID()`
+    and causes the master row `inv_id` value to be <q>lost.</q> As a result, each
+    of the remaining inserts into the `inv_item` table stores the preceding row’s
+    `item_id` value into the `inv_id` column. This causes the second and following
+    rows to have incorrect `inv_id` values.
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`inv_id`列使每个`inv_item`行能够与正确的`invoice`表行关联，就像原始表结构一样。此外，`item_id`唯一标识每个项目行。但是，现在两个表都包含`AUTO_INCREMENT`列，您不能像以前那样输入发票信息了。如果执行之前显示的`INSERT`语句，由于`inv_item`表结构的更改，它们现在会产生不同的结果。对`invoice`表的`INSERT`正常工作。同样对`inv_item`表的第一个`INSERT`也是如此；`LAST_INSERT_ID()`返回`invoice`表中主行的`inv_id`值。然而，此`INSERT`也生成自己的`AUTO_INCREMENT`值（用于`item_id`列），这会改变`LAST_INSERT_ID()`的值，并导致主行的`inv_id`值“丢失”。因此，`inv_item`表中的每个后续插入将上一行的`item_id`值存储到`inv_id`列中。这导致第二行及后续行的`inv_id`值不正确。'
+- en: 'To avoid this difficulty, save the sequence value generated by the insert into
+    the master table and use the saved value for the inserts into the detail table.
+    To save the value, use a user-defined SQL variable or a variable maintained by
+    your program. [Recipe 15.10](#nch-sequences-seq-simultaneous) describes those
+    techniques, which apply here as follows:'
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为避免这种困难，请保存插入主表生成的序列值，并在插入详细表时使用保存的值。要保存该值，请使用用户定义的 SQL 变量或程序维护的变量。[Recipe 15.10](#nch-sequences-seq-simultaneous)描述了这些技术，在此适用如下：
+- en: 'Use a user-defined variable: Save the master row `AUTO_INCREMENT` value in
+    a user-defined variable for use when inserting the detail rows:'
+  id: totrans-254
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用用户定义的变量：将主行`AUTO_INCREMENT`值保存在用户定义的变量中，以便在插入详细行时使用：
+- en: '[PRE42]'
+  id: totrans-255
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: 'Use a variable maintained by your program: This method is similar to the previous
+    one, but applies only from within an API. Insert the master row, and then save
+    the `AUTO_INCREMENT` value into an API variable for use when inserting detail
+    rows. For example, in Ruby, access the `AUTO_INCREMENT` value using the `last_id`
+    method:'
+  id: totrans-256
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用程序维护的变量：此方法类似于前面的方法，但仅适用于 API 内部。插入主行，然后将`AUTO_INCREMENT`值保存到 API 变量中，在插入详细行时使用。例如，在
+    Ruby 中，使用`last_id`方法访问`AUTO_INCREMENT`值：
+- en: '[PRE43]'
+  id: totrans-257
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 15.12 Using Sequence Generators as Counters
+  id: totrans-258
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.12 使用序列生成器作为计数器
+- en: Problem
+  id: totrans-259
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You’re interested only in counting events, so you want to avoid having to create
+    a new table row for each sequence value.
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您只对计数事件感兴趣，因此希望避免为每个序列值创建新的表行。
+- en: Solution
+  id: totrans-261
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Increment a single row per counter.
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个计数器递增单行。
+- en: Discussion
+  id: totrans-263
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: '`AUTO_INCREMENT` columns are useful for generating sequences across a set of
+    individual rows. But some applications require only a count of the number of times
+    an event occurs, and there’s no benefit from creating a separate row for each
+    event. Instances include web page or banner ad hit counters, a count of items
+    sold, or the number of votes in a poll. Such applications need only a single row
+    to hold the count as it changes over time. MySQL provides a mechanism for this
+    that enables counts to be treated like `AUTO_INCREMENT` values so that you can
+    not only increment the count, but retrieve the updated value easily.'
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`AUTO_INCREMENT` 列对于在一组单独的行中生成序列非常有用。但有些应用程序仅需要计数事件发生的次数，并且创建单独行并不会有任何好处。例如，网页或横幅广告点击计数器、销售商品的计数或投票数量。这些应用程序只需一个行来保存随时间变化的计数。MySQL
+    提供了一种机制，使得可以像处理 `AUTO_INCREMENT` 值一样处理计数，因此不仅可以增加计数，还可以轻松检索更新后的值。'
+- en: 'To count a single type of event, use a trivial table with a single row and
+    column. For example, to record copies sold of a book, create a table like this:'
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 若要计数单一类型的事件，使用一个带有单行和单列的简单表。例如，记录出售书籍的副本数，创建如下表：
+- en: '[PRE44]'
+  id: totrans-266
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: 'However, if you’re counting sales for multiple book titles, that method doesn’t
+    work well. You certainly don’t want to create a separate single-row counting table
+    per book. Instead, count them all within a single table by including a column
+    that uniquely identifies each book. The following table does this using a `title`
+    column for the book title in addition to a `copies` column that records the number
+    of copies sold:'
+  id: totrans-267
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，如果您要计算多本书的销售次数，这种方法效果不佳。您肯定不希望为每本书创建单独的单行计数表。相反，通过在单个表中包含一个唯一标识每本书的列来在同一表中计数它们所有。以下表格使用
+    `title` 列用于书名，另外一个 `copies` 列记录销售副本数：
+- en: '[PRE45]'
+  id: totrans-268
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: 'To record sales for a given book, different approaches are possible:'
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记录给定书籍的销售，有多种方法：
+- en: 'Initialize a row for the book with a `copies` value of 0:'
+  id: totrans-270
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 为书籍初始化一行，`copies` 值为 0：
+- en: '[PRE46]'
+  id: totrans-271
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: 'Then increment the `copies` value for each sale:'
+  id: totrans-272
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 然后为每个销售递增 `copies` 值：
+- en: '[PRE47]'
+  id: totrans-273
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: This method requires that you remember to initialize a row for each book or
+    the `UPDATE` will fail.
+  id: totrans-274
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 此方法要求您记得为每本书初始化一行，否则 `UPDATE` 将失败。
+- en: 'Use `INSERT` with `ON` `DUPLICATE` `KEY` `UPDATE`, which initializes the row
+    with a count of 1 for the first sale and increments the count for subsequent sales:'
+  id: totrans-275
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 `INSERT` 和 `ON` `DUPLICATE` `KEY` `UPDATE`，它会为首次销售初始化计数为 1 的行，并递增后续销售的计数：
+- en: '[PRE48]'
+  id: totrans-276
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: This is simpler because the same statement works to initialize and update the
+    sales count.
+  id: totrans-277
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这更简单，因为相同的语句用于初始化和更新销售计数。
+- en: 'To retrieve the sales count (for example, to display a message to customers
+    such as <q>you just purchased copy *`n`* of this book</q>), issue a `SELECT` query
+    for the same book title:'
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 检索销售计数（例如，向客户显示消息，如<q>你刚购买了此书的第 *`n`* 本</q>），发出 `SELECT` 查询获取相同书名：
+- en: '[PRE49]'
+  id: totrans-279
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: Unfortunately, this is not quite correct. Suppose that between the times when
+    you update and retrieve the count, some other person buys a copy of the book (and
+    thus increments the `copies` value). Then the `SELECT` statement won’t actually
+    produce the value *you* incremented the sales count to, but rather its most recent
+    value. In other words, other clients can affect the value before you have time
+    to retrieve it. This is similar to the problem discussed in [Recipe 15.4](#nch-sequences-seq-retrieve)
+    that can occur if you try to retrieve the most recent `AUTO_INCREMENT` value from
+    a column by invoking `MAX(`*`col_name`*`)` rather than `LAST_INSERT_ID()`.
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，这并不完全正确。假设在您更新和检索计数之间的时间段内，其他人购买了这本书的一本副本（从而增加了 `copies` 值）。那么 `SELECT`
+    语句实际上不会产生您增加的销售计数值，而是最近的值。换句话说，其他客户端可能在您检索之前影响值。这类似于在 [Recipe 15.4](#nch-sequences-seq-retrieve)
+    中讨论的问题，如果您尝试通过调用 `MAX(`*`col_name`*`)` 而不是 `LAST_INSERT_ID()` 来检索列中最近的 `AUTO_INCREMENT`
+    值时可能会出现的问题。
+- en: 'There are ways around this (such as by grouping the two statements as a transaction
+    or by locking the table), but MySQL provides a simpler solution based on `LAST_INSERT_ID()`.
+    If you call `LAST_INSERT_ID()` with an expression argument, MySQL treats it like
+    an `AUTO_INCREMENT` value. To use this feature with the `booksales` table, modify
+    the count-incrementing statement slightly:'
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有一些方法可以解决这个问题（例如将两个语句作为事务分组或锁定表），但MySQL基于 `LAST_INSERT_ID()` 提供了一个更简单的解决方案。如果您使用表
+    `booksales`，稍微修改增加计数的语句如下：
+- en: '[PRE50]'
+  id: totrans-282
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: 'The statement uses the `LAST_INSERT_ID(`*`expr`*`)` construct both to initialize
+    and to increment the count. MySQL treats the expression argument like an `AUTO_INCREMENT`
+    value, so that you can invoke `LAST_INSERT_ID()` later with no argument to retrieve
+    the value:'
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该语句同时用于初始化和递增计数的 `LAST_INSERT_ID(`*`expr`*`)` 构造。MySQL将表达式参数视为 `AUTO_INCREMENT`
+    值，因此稍后可以调用不带参数的 `LAST_INSERT_ID()` 来检索该值：
+- en: '[PRE51]'
+  id: totrans-284
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: 'By setting and retrieving the `copies` column this way, you always get back
+    the value you set it to, even if some other client updated it in the meantime.
+    If you issue the `INSERT` statement from within an API that provides a mechanism
+    for fetching the most recent `AUTO_INCREMENT` value directly, you need not even
+    issue the `SELECT` query. For example, using Connector/Python, update a count
+    and get the new value using the `lastrowid` attribute:'
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过这种方式设置和检索 `copies` 列，即使其他客户端在此期间对其进行了更新，您也始终可以获得您设置的值。如果您在提供直接获取最新 `AUTO_INCREMENT`
+    值机制的API内发出 `INSERT` 语句，甚至无需发出 `SELECT` 查询。例如，使用Connector/Python更新计数并使用 `lastrowid`
+    属性获取新值：
+- en: '[PRE52]'
+  id: totrans-286
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: 'In Java, the operation looks like this:'
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在Java中，操作如下所示：
+- en: '[PRE53]'
+  id: totrans-288
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 'Use of `LAST_INSERT_ID(`*`expr`*`)` for sequence generation has certain other
+    properties that differ from true `AUTO_INCREMENT` sequences:'
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `LAST_INSERT_ID(`*`expr`*`)` 生成序列时具有某些与真正的 `AUTO_INCREMENT` 序列不同的属性：
+- en: '`AUTO_INCREMENT` values increment by one each time, whereas values generated
+    by `LAST_INSERT_ID(`*`expr`*`)` can be any nonnegative value you want. For example,
+    to produce the sequence 10, 20, 30, …, increment the count by 10 each time. You
+    need not even increment the counter by the same value each time. If you sell a
+    dozen copies of a book rather than a single copy, update its sales count as follows:'
+  id: totrans-290
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`AUTO_INCREMENT` 值每次递增1，而由 `LAST_INSERT_ID(`*`expr`*`)` 生成的值可以是任何您想要的非负值。例如，要生成序列
+    10, 20, 30, …，每次递增10。甚至您无需每次以相同的值递增计数器。如果您出售一本书的一打副本而不是单本，更新其销售计数如下：'
+- en: '[PRE54]'
+  id: totrans-291
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: 'To reset a counter, simply set it to the desired value. Suppose that you want
+    to report to book buyers the sales for the current month, rather than the total
+    sales (for example, to display messages like <q>you’re the *`n`*th buyer this
+    month</q>). To clear the counters to zero at the beginning of each month, use
+    this statement:'
+  id: totrans-292
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 为了重置计数器，只需将其设置为所需的值。假设您想向图书买家报告本月的销售情况，而不是总销售额（例如，显示类似于 <q>你是本月的第 *`n`* 位买家</q>
+    的消息）。为了在每个月初将计数器清零，请使用以下语句：
+- en: '[PRE55]'
+  id: totrans-293
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: 'One property that’s not so desirable is that the value generated by `LAST_INSERT_ID(`*`expr`*`)`
+    is not uniformly available via client-side retrieval methods under all circumstances.
+    You can get it after `UPDATE` or `INSERT` statements, but not for `SET` statements.
+    If you generate a value as follows (in Ruby), the client-side value returned by
+    `insert_id` is 0, not 48:'
+  id: totrans-294
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 其中一个不太理想的属性是，由 `LAST_INSERT_ID(`*`expr`*`)` 生成的值在所有情况下都不能通过客户端检索方法均匀地获取。您可以在
+    `UPDATE` 或 `INSERT` 语句之后获取它，但不能在 `SET` 语句中获取。如果您像以下示例（在Ruby中）生成值，则 `insert_id`
+    返回的客户端值为0，而不是48：
+- en: '[PRE56]'
+  id: totrans-295
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: 'To get the value in this case, ask the server for it:'
+  id: totrans-296
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在这种情况下获取值，向服务器请求即可：
+- en: '[PRE57]'
+  id: totrans-297
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: 15.13 Generating Repeating Sequences
+  id: totrans-298
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.13 生成重复序列
+- en: Problem
+  id: totrans-299
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You require a sequence that contains cycles.
+  id: totrans-300
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要一个包含周期的序列。
+- en: Solution
+  id: totrans-301
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Make cycles in the sequence with division and modulo operations.
+  id: totrans-302
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用除法和模运算在序列中创建周期。
+- en: Discussion
+  id: totrans-303
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Some sequence-generation problems require values that go through cycles. Suppose
+    that you manufacture items such as pharmaceutical products or automobile parts,
+    and you must be able to track them by lot number if manufacturing problems are
+    discovered later that require items sold within a particular lot to be recalled.
+    Suppose also that you pack and distribute items 12 units to a box and 6 boxes
+    to a case. In this situation, item identifiers are three-part values: the unit
+    number (with a value from 1 to 12), the box number (with a value from 1 to 6),
+    and a lot number (with a value from 1 to the highest current case number).'
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有些序列生成问题需要经历循环值。假设您制造药品或汽车零件等物品，并且如果稍后发现需要召回特定批次内出售的物品，则必须能够通过批号跟踪它们。假设您将物品装箱并分发，每箱12个单位，每箱6个箱子，这种情况下，物品标识符是三部分值：单位号（值从1到12）、箱子号（值从1到6）和批号（值从1到当前最高箱数）。
+- en: 'This item-tracking problem appears to require that you maintain three counters,
+    so you might generate the next identifier value using an algorithm like this:'
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个项目跟踪问题似乎要求您维护三个计数器，因此您可以使用类似以下算法来生成下一个标识符值：
+- en: '[PRE58]'
+  id: totrans-306
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: 'Alternatively, it’s possible simply to assign each item a sequence number identifier
+    and derive the corresponding case, box, and unit numbers from it. The identifier
+    can come from an `AUTO_INCREMENT` column or a single-row sequence generator. The
+    formulas for determining the case, box, and unit numbers for any item from its
+    sequence number look like this:'
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，可以简单地为每个物品分配一个序列号标识符，并从中派生相应的案例、箱子和单位号。标识符可以来自于`AUTO_INCREMENT`列或单行序列生成器。用于根据其序列号确定任何物品的案例、箱子和单位号的公式如下所示：
+- en: '[PRE59]'
+  id: totrans-308
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: 'The following table illustrates the relationship between some sample sequence
+    numbers and the corresponding case, box, and unit numbers:'
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下表格展示了一些样本序列号与相应的案例、箱子和单元号之间的关系：
+- en: '| seq | case | box | unit |'
+  id: totrans-310
+  prefs: []
+  type: TYPE_TB
+  zh: '| seq | case | box | unit |'
+- en: '| --- | --- | --- | --- |'
+  id: totrans-311
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- | --- | --- |'
+- en: '| 1 | 1 | 1 | 1 |'
+  id: totrans-312
+  prefs: []
+  type: TYPE_TB
+  zh: '| 1 | 1 | 1 | 1 |'
+- en: '| 12 | 1 | 1 | 12 |'
+  id: totrans-313
+  prefs: []
+  type: TYPE_TB
+  zh: '| 12 | 1 | 1 | 12 |'
+- en: '| 13 | 1 | 2 | 1 |'
+  id: totrans-314
+  prefs: []
+  type: TYPE_TB
+  zh: '| 13 | 1 | 2 | 1 |'
+- en: '| 72 | 1 | 6 | 12 |'
+  id: totrans-315
+  prefs: []
+  type: TYPE_TB
+  zh: '| 72 | 1 | 6 | 12 |'
+- en: '| 73 | 2 | 1 | 1 |'
+  id: totrans-316
+  prefs: []
+  type: TYPE_TB
+  zh: '| 73 | 2 | 1 | 1 |'
+- en: '| 144 | 2 | 6 | 12 |'
+  id: totrans-317
+  prefs: []
+  type: TYPE_TB
+  zh: '| 144 | 2 | 6 | 12 |'
+- en: 15.14 Using Custom Increment Values
+  id: totrans-318
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.14 使用自定义增量值
+- en: Problem
+  id: totrans-319
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to increment sequences not by one but by a different number.
+  id: totrans-320
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望递增序列不是一，而是另一个数字。
+- en: Solution
+  id: totrans-321
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the system variables `auto_increment_increment` and `auto_increment_offset`.
+  id: totrans-322
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用系统变量`auto_increment_increment`和`auto_increment_offset`。
+- en: Discussion
+  id: totrans-323
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'By default MySQL increases values in a column, having an `AUTO_INCREMENT` option,
+    by one. This is not always desirable. Suppose you have a replication chain ([Recipe
+    3.9](ch03.xhtml#nch-replication-replication-circle)) of three servers: `Venus`,
+    `Mars`, `Saturn` and want to distinguish from which server the inserted value
+    is originated.'
+  id: totrans-324
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，MySQL通过一个具有`AUTO_INCREMENT`选项的列递增值。这并不总是理想的。假设您有三台服务器的复制链（[Recipe 3.9](ch03.xhtml#nch-replication-replication-circle)）：`Venus`、`Mars`、`Saturn`，并且希望区分插入值的来源服务器。
+- en: The simpliest solution for this issue would be to assign sequence of `1, 4,
+    7, 10, ...` values to the rows, inserted on `Venus`; sequence of `2, 5, 8, 11,
+    ...` to the rows, inserted on `Mars` and sequence of `3, 6, 9, 12, ...` for the
+    rows, inserted on `Saturn`.
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 解决此问题的最简单方法是为在`Venus`上插入的行分配`1, 4, 7, 10, ...`序列值；为在`Mars`上插入的行分配`2, 5, 8, 11,
+    ...`序列值；为在`Saturn`上插入的行分配`3, 6, 9, 12, ...`序列值。
+- en: 'To do it set the value of the system variable `auto_increment_increment` to
+    the number of servers: in our case three (3), so MySQL will increment sequence
+    value by three. Then set `auto_increment_offset` to one (1) on `Venus`, to two
+    (2) on `Mars` and to three (3) on `Saturn`. This will instruct MySQL to start
+    new sequences from the specified values.'
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要执行此操作，请将系统变量`auto_increment_increment`的值设置为服务器数量：在我们的情况下为三（3），因此MySQL将按三递增序列值。然后在`Venus`上将`auto_increment_offset`设置为1，在`Mars`上设置为2，在`Saturn`上设置为3。这将指示MySQL从指定值开始新的序列。
+- en: '[PRE60]'
+  id: totrans-327
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: Warning
+  id: totrans-328
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: We set session variables for our example, but if you want to affect not only
+    your own session, but all connections on the server you need to use *SET GLOBAL*.
+    To preserve configuration change after restart set these value in the configuration
+    file, or, starting from the version 8.0, use command *SET PERSIST*.
+  id: totrans-329
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们为示例设置了会话变量，但如果您不仅想影响自己的会话，还想影响服务器上所有连接，您需要使用*SET GLOBAL*。要在重新启动后保留配置更改，请在配置文件中设置这些值，或者从版本8.0开始，使用*SET
+    PERSIST*命令。
+- en: 'If you already have tables with an auto-increment column, specify the offset
+    using statement:'
+  id: totrans-330
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您已经有带有自增列的表，请使用语句指定偏移量：
+- en: '[PRE61]'
+  id: totrans-331
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: Warning
+  id: totrans-332
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Not all engines support option `AUTO_INCREMENT` for the *CREATE TABLE* and *ALTER
+    TABLE*. In this case you can set starting value for the auto-incremented column
+    by inserting a row with the desired value, then removing it.
+  id: totrans-333
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并非所有引擎都支持在*CREATE TABLE*和*ALTER TABLE*中使用`AUTO_INCREMENT`选项。在这种情况下，您可以通过插入具有所需值的行，然后删除它来设置自增列的起始值。
+- en: After preparations are done MySQL will use `auto_increment_increment` value
+    to generate the next sequence number.
+  id: totrans-334
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在准备工作完成后，MySQL将使用`auto_increment_increment`值生成下一个序列号。
+- en: '[PRE62]'
+  id: totrans-335
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: '[![1](Images/1.png)](#co_nch-sequences-seq-increment_increment-hostname_co)'
+  id: totrans-336
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![1](Images/1.png)](#co_nch-sequences-seq-increment_increment-hostname_co)'
+- en: System variable `hostname` contains value of the MySQL host. We use it to distinguish
+    machines.
+  id: totrans-337
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 系统变量`hostname`包含MySQL主机的值。我们用它来区分不同的机器。
+- en: '[![2](Images/2.png)](#co_nch-sequences-seq-increment_increment-venus_co)'
+  id: totrans-338
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![2](Images/2.png)](#co_nch-sequences-seq-increment_increment-venus_co)'
+- en: 'On `Venus` sequence starts from one and we have expected values: `1, 4, 7`.'
+  id: totrans-339
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`Venus`上，序列从一开始，我们有预期的值：`1, 4, 7`。
+- en: '[![3](Images/3.png)](#co_nch-sequences-seq-increment_increment-alter_co)'
+  id: totrans-340
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![3](Images/3.png)](#co_nch-sequences-seq-increment_increment-alter_co)'
+- en: Table on `Mars` already existed. The *ALTER TABLE* command sets offset for the
+    `AUTO_INCREMENT` sequence to the desired value.
+  id: totrans-341
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`Mars`上的表已经存在。*ALTER TABLE*命令设置`AUTO_INCREMENT`序列的偏移量为所需的值。
+- en: '[![4](Images/4.png)](#co_nch-sequences-seq-increment_increment-mars_co)'
+  id: totrans-342
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![4](Images/4.png)](#co_nch-sequences-seq-increment_increment-mars_co)'
+- en: Since table `offset` already had rows on Mars new `AUTO_INCREMENT` value started
+    from 8 that belongs to the sequence `2, 5, 8, 11, ...`.
+  id: totrans-343
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于`offset`表在Mars上已经有行，新的`AUTO_INCREMENT`值从8开始，属于序列`2, 5, 8, 11, ...`。
+- en: 15.15 Using Window Functions to Number Rows In the Result Set
+  id: totrans-344
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.15 使用窗口函数为结果集编号行
+- en: Problem
+  id: totrans-345
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to enumerate the result of a `SELECT` query.
+  id: totrans-346
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望枚举`SELECT`查询的结果。
+- en: Solution
+  id: totrans-347
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the window function `ROW_NUMBER()`.
+  id: totrans-348
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用窗口函数`ROW_NUMBER()`。
+- en: Discussion
+  id: totrans-349
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Sequences are useful not only when you store data in tables, but also when you
+    work with results of queries.
+  id: totrans-350
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 序列不仅在将数据存储在表中时有用，而且在处理查询结果时也很有用。
+- en: Suppose you are running a singing competition. Each talent should present in
+    its turn. To provide everyone equal chances the position in the queue should be
+    defined randomly.
+  id: totrans-351
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您正在进行歌唱比赛。每个才能应该按顺序呈现。为了让每个人都有平等的机会，队列中的位置应该随机定义。
+- en: 'Talents are stored in the `name` table. To retrieve them in random order use
+    function *RAND()*:'
+  id: totrans-352
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 天赋存储在`name`表中。要以随机顺序检索它们，请使用函数*RAND()*：
+- en: '[PRE63]'
+  id: totrans-353
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: This query will return list of names in different orders each time it is called.
+  id: totrans-354
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每次调用此查询都会返回不同顺序的名称列表。
+- en: Window functions can perform calculations per each row in the result set and
+    we can use them to create a new column with order in which the singers will perform.
+  id: totrans-355
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 窗口函数可以针对结果集中的每一行执行计算，我们可以使用它们创建一个新列，其中包含歌手表演的顺序。
+- en: Window functions work over a specific window that in our case is a `SELECT`
+    query. They may access multiple rows while are executing but produce result for
+    each row in the window.
+  id: totrans-356
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 窗口函数在我们的情况下适用于特定窗口，即`SELECT`查询。它们在执行时可以访问多行，但为窗口中的每行生成结果。
+- en: '[PRE64]'
+  id: totrans-357
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: '[![1](Images/1.png)](#co_nch-sequences-seq-window-functions-over_co)'
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![1](Images/1.png)](#co_nch-sequences-seq-window-functions-over_co)'
+- en: Function *ROW_NUMBER()* defines the position in the singing schedule.
+  id: totrans-359
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数*ROW_NUMBER()*定义了歌唱日程中的位置。
+- en: '[![2](Images/2.png)](#co_nch-sequences-seq-window-functions-table_co)'
+  id: totrans-360
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![2](Images/2.png)](#co_nch-sequences-seq-window-functions-table_co)'
+- en: Other columns in the table `name` which we want to see in the query result.
+  id: totrans-361
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们希望在查询结果中看到`name`表中的其他列。
+- en: '[![3](Images/3.png)](#co_nch-sequences-seq-window-functions-window_co)'
+  id: totrans-362
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![3](Images/3.png)](#co_nch-sequences-seq-window-functions-window_co)'
+- en: Keyword `WINDOW` defines named window over which we will use the function *ROW_NUMBER*.
+  id: totrans-363
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关键字`WINDOW`定义了一个命名窗口，我们将在其中使用函数*ROW_NUMBER*。
+- en: '[![4](Images/4.png)](#co_nch-sequences-seq-window-functions-order_co)'
+  id: totrans-364
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![4](Images/4.png)](#co_nch-sequences-seq-window-functions-order_co)'
+- en: Sort the window in random order to get fair queue distribution.
+  id: totrans-365
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将窗口随机排序以获得公平的队列分布。
+- en: Another common use of the function *ROW_NUMBER()* is to generate a sequence
+    of identifiers that later could be used to join `SELECT` result with the another
+    table. We discuss this approach in one of examples in [Recipe 15.16](#nch-sum-sum-recursive-cte).
+  id: totrans-366
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数*ROW_NUMBER()*的另一个常见用途是生成一系列标识符，稍后可以用于将`SELECT`结果与另一个表连接。我们在[食谱 15.16](#nch-sum-sum-recursive-cte)的一个示例中讨论了这种方法。
+- en: See Also
+  id: totrans-367
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: For additional information about window functions, see [Window Function Concepts
+    and Syntax](https://dev.mysql.com/doc/refman/8.0/en/window-functions-usage.html).
+  id: totrans-368
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关窗口函数的更多信息，请参阅[窗口函数概念和语法](https://dev.mysql.com/doc/refman/8.0/en/window-functions-usage.html)。
+- en: 15.16 Generating Series with Recursive CTEs
+  id: totrans-369
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.16 使用递归CTE生成系列
+- en: Problem
+  id: totrans-370
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to create a custom sequence, such as a geometric progression or Fibonacci
+    number.
+  id: totrans-371
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想创建一个自定义序列，例如几何级数或斐波那契数。
+- en: Solution
+  id: totrans-372
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use recursive Commont Table Expressions (CTEs) to create the sequence from the
+    custom formula.
+  id: totrans-373
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用递归公共表表达式（CTEs）根据自定义公式创建序列。
+- en: Discussion
+  id: totrans-374
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Sequences should not always be an arithmetic progression. They could be any
+    kind of progression and even random numbers or strings.
+  id: totrans-375
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 序列不应总是算术级数。它们可以是任何类型的级数，甚至是随机数或字符串。
+- en: 'One way to create custom sequences is recursive CTE. They are named temporary
+    result sets that allow self-referencing. Basic recursive CTE syntax is:'
+  id: totrans-376
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建自定义序列的一种方法是使用递归CTE。它们是允许自引用的命名临时结果集。基本的递归CTE语法是：
+- en: '[PRE65]'
+  id: totrans-377
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: Thus, to generate a geometric progression starting from two with a common ratio
+    two use CTE as follow.
+  id: totrans-378
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，要生成从二开始，公比为二的几何级数，请使用以下CTE。
+- en: '[PRE66]'
+  id: totrans-379
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: '[![1](Images/1.png)](#co_nch-sum-sum-recursive-cte-init_co)'
+  id: totrans-380
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![1](Images/1.png)](#co_nch-sum-sum-recursive-cte-init_co)'
+- en: Starting value for the sequence.
+  id: totrans-381
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 序列的起始值。
+- en: '[![2](Images/2.png)](#co_nch-sum-sum-recursive-cte-next_co)'
+  id: totrans-382
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![2](Images/2.png)](#co_nch-sum-sum-recursive-cte-next_co)'
+- en: All subsequent values in the geometric progression are previous number multiplied
+    by the common ratio.
+  id: totrans-383
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 几何级数中的所有后续值均为前一个数字乘以公比。
+- en: '[![3](Images/3.png)](#co_nch-sum-sum-recursive-cte-limit_co)'
+  id: totrans-384
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![3](Images/3.png)](#co_nch-sum-sum-recursive-cte-limit_co)'
+- en: To limit number of the generated numbers and avoid infinite loops use either
+    `LIMIT` clause or any valid `WHERE` condition.
+  id: totrans-385
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了限制生成的数字数量并避免无限循环，可以使用`LIMIT`子句或任何有效的`WHERE`条件。
+- en: 'Recursive CTEs allow to create multiple sequences at the same time. For example,
+    we can use them to create:'
+  id: totrans-386
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 递归CTE允许同时创建多个序列。例如，我们可以使用它们来创建：
+- en: An id that will use regular arithmetic progression, starting from one with a
+    common difference one
+  id: totrans-387
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个ID，将使用常规算术级数，从一开始，公差为一
+- en: A geometric progression, starting from three with a common ratio four
+  id: totrans-388
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从三开始，公比为四的几何级数
+- en: A random number between one and five
+  id: totrans-389
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个介于一和五之间的随机数
+- en: To create all these in a single query use a recursive CTE as follow.
+  id: totrans-390
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在单个查询中创建所有这些内容，请使用以下递归CTE。
+- en: '[PRE67]'
+  id: totrans-391
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: To illustrate use of the custom sequence suppose that we are working on a new
+    Data Phobia vaccine and want to start phase III trials on it. Phase III includes
+    testing of the real vaccine and a placebo. Doses are distributed randomly between
+    volunteers. To perform this trial we will use table `patients` and those who do
+    not have diagnosis of Data Phobia already. We generate a sequence of two random
+    values and assign either a real vaccine or a placebo based on that.
+  id: totrans-392
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了说明自定义序列的使用，假设我们正在开发一种新的数据恐惧疫苗，并希望开始其第三阶段试验。第三阶段包括对真实疫苗和安慰剂进行测试。剂量将随机分配给志愿者。为了执行此试验，我们将使用`patients`表，并选取尚未诊断为数据恐惧的志愿者。我们生成一系列两个随机值，并根据结果分配真实疫苗或安慰剂。
+- en: '[PRE68]'
+  id: totrans-393
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: '[![1](Images/1.png)](#co_nch-sum-sum-recursive-cte-options_co)'
+  id: totrans-394
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![1](Images/1.png)](#co_nch-sum-sum-recursive-cte-options_co)'
+- en: 'Function *FLOOR(1+RAND()*2)* generates two random numbers: one or two. Function
+    *IF* works as a ternary operator: if the first argument is true it returns the
+    second one, otherwise it returns the third argument.'
+  id: totrans-395
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数*FLOOR(1+RAND()*2)*生成两个随机数：一或二。函数*IF*充当三元运算符：如果第一个参数为真，则返回第二个参数，否则返回第三个参数。
+- en: '[![2](Images/2.png)](#co_nch-sum-sum-recursive-cte-count_co)'
+  id: totrans-396
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![2](Images/2.png)](#co_nch-sum-sum-recursive-cte-count_co)'
+- en: We do not want patients who already diagnosed with Data Phobia to participate
+    in our tests as well as we cannot test our vaccine on the patients who did not
+    recover.
+  id: totrans-397
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们不希望已经被诊断为数据恐惧的患者参与我们的测试，同样我们也不能在未康复的患者身上测试我们的疫苗。
+- en: '[![3](Images/3.png)](#co_nch-sum-sum-recursive-cte-volunteers_co)'
+  id: totrans-398
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![3](Images/3.png)](#co_nch-sum-sum-recursive-cte-volunteers_co)'
+- en: While the table `patients` has an `AUTO_INCREMENT` column `id` we cannot use
+    it, because we could not excude patients that do not participate in our tests
+    this way. Therefore we use CTE to create named result set `volunteers` and generate
+    its own sequence for it.
+  id: totrans-399
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管`patients`表具有`AUTO_INCREMENT`列`id`，但我们不能使用它，因为这样无法排除不参与测试的患者。因此，我们使用CTE创建命名结果集`volunteers`并为其生成自己的序列。
+- en: '[![4](Images/4.png)](#co_nch-sum-sum-recursive-cte-rownumber_co)'
+  id: totrans-400
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![4](Images/4.png)](#co_nch-sum-sum-recursive-cte-rownumber_co)'
+- en: The function *ROW_NUMBER()* generates new sequence for the patients who participate
+    in the tests.
+  id: totrans-401
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数 *ROW_NUMBER()* 为参与测试的患者生成新的序列。
+- en: '[![5](Images/5.png)](#co_nch-sum-sum-recursive-cte-join_co)'
+  id: totrans-402
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![5](Images/5.png)](#co_nch-sum-sum-recursive-cte-join_co)'
+- en: Join generated sequence of random values for the dose and named result set `volunteers`
+    using generated `id` without including it into the final result set.
+  id: totrans-403
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将随机值生成的剂量和命名结果集 `volunteers` 的生成 id 连接，但不包括在最终结果集中。
+- en: See Also
+  id: totrans-404
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: See Also
+- en: For additional information about Common Table Expressions, see [Recipe 10.18](ch10.xhtml#nch-sum-sum-with).
+  id: totrans-405
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关公共表达式的更多信息，请参见 [Recipe 10.18](ch10.xhtml#nch-sum-sum-with)。
+- en: 15.17 Creating and Storing Custom Sequences
+  id: totrans-406
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 15.17 创建和存储自定义序列
+- en: Problem
+  id: totrans-407
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to use custom sequence as a stored id column in the table.
+  id: totrans-408
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要在表中使用自定义序列作为存储的 id 列。
+- en: Solution
+  id: totrans-409
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Create a table that will hold sequence values and a function that will update
+    and select these values.
+  id: totrans-410
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建一个用于保存序列值的表，并创建一个函数来更新和选择这些值。
+- en: Discussion
+  id: totrans-411
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Although MySQL does not support the SQL `SEQUENCE` object, it is pretty easy
+    to imitate one.
+  id: totrans-412
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管 MySQL 不支持 SQL 的 `SEQUENCE` 对象，但模拟一个相当容易。
+- en: First you need to create a table that will hold sequences.
+  id: totrans-413
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，您需要创建一个用于保存序列的表。
+- en: '[PRE69]'
+  id: totrans-414
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: 'For this recipe we used the same table definition that the MySQL Engineering
+    Team is planning to implement as part of [WL#827: SEQUENCE object as in Oracle,
+    PostgreSQL, and/or SQL:2003](https://dev.mysql.com/worklog/task/?id=827) . This
+    definition is not required for real-life sequence implementation that could be
+    either simpler or have more options.'
+  id: totrans-415
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '对于这个示例，我们使用了与 MySQL 工程团队计划实现的 [WL#827: SEQUENCE object as in Oracle, PostgreSQL,
+    and/or SQL:2003](https://dev.mysql.com/worklog/task/?id=827) 相同的表定义。这个定义对于实际序列实现并不是必须的，可能更简单或包含更多选项。'
+- en: Columns in the table `sequences` all have special meanings. [Table 15-1](#nch-sequences-seq-custom-sequences)
+    shows their meanings.
+  id: totrans-416
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 `sequences` 中的列都有特殊含义。 [表 15-1](#nch-sequences-seq-custom-sequences) 显示了它们的含义。
+- en: Table 15-1\. Columns in the table `sequences`
+  id: totrans-417
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 15-1\. 表 `sequences` 中的列
+- en: '| Column | Description | Comments |'
+  id: totrans-418
+  prefs: []
+  type: TYPE_TB
+  zh: '| 列 | 描述 | 注释 |'
+- en: '| --- | --- | --- |'
+  id: totrans-419
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- | --- |'
+- en: '| `sequence_name` | Name of the sequence. | Required field, should be unique.
+    |'
+  id: totrans-420
+  prefs: []
+  type: TYPE_TB
+  zh: '| `sequence_name` | 序列的名称。 | 必需字段，应该是唯一的。 |'
+- en: '| `maximum_value` | Maximum value that the sequence can generate. | We allow
+    negative values in our custom sequence, therefore maximum possible value is 9223372036854775807
+    that is the maximum value for the `BIGINT SIGNED` datatype. If you make this column
+    `BIGINT UNSIGNED` the sequence could have two times more values. This option is
+    not critical for the sequence generation and could be skipped. |'
+  id: totrans-421
+  prefs: []
+  type: TYPE_TB
+  zh: '| `maximum_value` | 序列可以生成的最大值。 | 在我们的自定义序列中，我们允许负值，因此最大可能值是9223372036854775807，这是`BIGINT
+    SIGNED`数据类型的最大值。如果将此列设置为`BIGINT UNSIGNED`，则序列可以有两倍的值。这个选项对序列生成并不是关键，可以跳过。 |'
+- en: '| `minimum_value` | Minimum value for the sequence. | In our case default is
+    -9223372036854775808 that is the minimum for the type `BIGINT SIGNED`. Depending
+    on how you want to create custom sequences this column could be skipped or have
+    different type or different default value. |'
+  id: totrans-422
+  prefs: []
+  type: TYPE_TB
+  zh: '| `minimum_value` | 序列的最小值。 | 在我们的案例中，默认值是 -9223372036854775808，这是 `BIGINT
+    SIGNED` 类型的最小值。根据您想要创建的自定义序列方式，此列可能会被省略或具有不同的类型或不同的默认值。 |'
+- en: '| `increment` | Increment for the sequence. | SQL standard defines sequence
+    that use arithmetic progression. This column contains a common difference for
+    the progression. This is required field.If you create custom sequence, such as
+    geometric progression you may have a common ratio in this field or any other value
+    that allows to generate the next one. |'
+  id: totrans-423
+  prefs: []
+  type: TYPE_TB
+  zh: '| `increment` | 序列的增量。 | SQL 标准定义了使用算术级数的序列。该列包含了进度的公共差异。这是必需的字段。如果您创建自定义序列，比如等比级数，您可能在此字段中有一个公共比率或任何其他值，以便生成下一个值。
+    |'
+- en: '| `start_value` | The value from which the sequence will start. | This is not
+    essential field for implemnting sentences. In our case it is `minimum_value` by
+    default. |'
+  id: totrans-424
+  prefs: []
+  type: TYPE_TB
+  zh: '| `start_value` | 序列将从哪个值开始。 | 对于实现句子并不是必要的字段。在我们的案例中，默认值是 `minimum_value`。
+    |'
+- en: '| `current_base_value` | The value that the sequence needs to return when asked
+    for the next value. Once returned it should be replaced with the newly generated
+    one. | This is required field. Default is the same as `start_value`. |'
+  id: totrans-425
+  prefs: []
+  type: TYPE_TB
+  zh: '| `current_base_value` | 当序列请求下一个值时应返回的值。返回后应替换为新生成的值。 | 这是必需的字段。默认值与 `start_value`
+    相同。 |'
+- en: '| `cycle_option` | Does the sequence support cycles? | If enabled the sequence
+    will reset back to `start_value` when it reaches either its `minimum_value` or
+    `maximum_value`. |'
+  id: totrans-426
+  prefs: []
+  type: TYPE_TB
+  zh: '| `cycle_option` | 序列是否支持循环？ | 如果启用，当序列达到其`minimum_value`或`maximum_value`时，序列将重置为`start_value`。
+    |'
+- en: Then we need to create a stored procedure that will update the table `sequences`.
+  id: totrans-427
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后我们需要创建一个存储过程，该过程将更新表`sequences`。
+- en: '[PRE70]'
+  id: totrans-428
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: Note
+  id: totrans-429
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: 'Using stored routines, rather than updating the table `sequences` directly,
+    has a number of advantages:'
+  id: totrans-430
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用存储过程而不是直接更新表`sequences`具有许多优点：
+- en: You do not need to care on how to update the `current_base_value` each time
+    you use the sequence.
+  id: totrans-431
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 每次使用序列时无需关心如何更新`current_base_value`。
+- en: If `cycle_option` is enabled you do not need to put code, resetting the `current_base_value`
+    each time when the sequence boundaries are reached.
+  id: totrans-432
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果启用了`cycle_option`，则无需放置代码，当达到序列边界时每次都会重置`current_base_value`。
+- en: You may restrict direct access to the table `sequences` for anyone, except the
+    administrator while still allow application users to use sequences. See [Recipe
+    24.13](ch24.xhtml#nch-security-security-routines) for the details.
+  id: totrans-433
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你可以限制除管理员外的任何人对表`sequences`的直接访问，同时允许应用程序用户使用序列。详细信息请参见[Recipe 24.13](ch24.xhtml#nch-security-security-routines)。
+- en: MySQL does not allow us to call a stored function with a variable number of
+    arguments. The function *COALESCE* allows to put defaults if `NULL` values are
+    passed in the places of the arguments for which you want to have default values.
+  id: totrans-434
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL不允许我们使用可变数量的参数调用存储函数。函数*COALESCE*允许在希望使用默认值的参数位置传递`NULL`值时放置默认值。
+- en: '[PRE71]'
+  id: totrans-435
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: In the example above we first created sequence `bar` that starts from 1, increments
+    by 1, does not have cycle option and has default `maximum_value` 9223372036854775807\.
+    Then, we created the sequence `baz`, that also starts from 1, increments by 1,
+    but has `cycle_option` enabled and `maximum_value` 10, so it cycles quite fast.
+    Finally, we created sequence `foo` that has only custom name and all other defaults.
+  id: totrans-436
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上面的示例中，我们首先创建了序列`bar`，从1开始，增量为1，不具有循环选项，并具有默认的`maximum_value` 9223372036854775807。然后，我们创建了序列`baz`，也从1开始，增量为1，但启用了`cycle_option`，`maximum_value`为10，因此循环速度很快。最后，我们创建了序列`foo`，只具有自定义名称和所有其他默认值。
+- en: To get the next sequnece value and update the sequence table at the same time
+    we will use a stored function.
+  id: totrans-437
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取下一个序列值并同时更新序列表，我们将使用一个存储函数。
+- en: '[PRE72]'
+  id: totrans-438
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: The function first retrieves `current_base_value` of the sequence using statement
+    `SELECT ... FOR UPDATE`, so other connections would not modify the sequence until
+    we return the value.
+  id: totrans-439
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该函数首先使用语句`SELECT ... FOR UPDATE`检索序列的`current_base_value`，因此在我们返回值之前，其他连接不会修改序列。
+- en: Our function supports cycles. In cases where `cycle_option` is enabled, and
+    the next sequence value exceeds the boundaries, it sets `current_base_value` to
+    the value, defined by the `start_value`. If `cycle_option` is disabled and the
+    next sequence value exceeds boundaries we insert `NULL` value into the column
+    `current_base_value` that MySQL will reject with an error. You may consider raising
+    a custom exception instead.
+  id: totrans-440
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的函数支持循环。在启用`cycle_option`且下一个序列值超出边界的情况下，它将`current_base_value`设置为由`start_value`定义的值。如果未启用`cycle_option`且下一个序列值超出边界，则会向列`current_base_value`插入`NULL`值，MySQL将拒绝此操作并报错。您可以考虑抛出自定义异常。
+- en: To demonstrate how `cycle_option` option works let’s see how sequence `baz`
+    behaves when its boundaries are reached.
+  id: totrans-441
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了演示`cycle_option`选项的工作原理，让我们看看当序列`baz`达到其边界时的行为。
+- en: '[PRE73]'
+  id: totrans-442
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: To demonstrate function behavior when boundaries are reached while `cycle_option`
+    is not enabled we created a sequence that has small maximum value.
+  id: totrans-443
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了演示`cycle_option`未启用时边界达到时函数的行为，我们创建了一个具有较小最大值的序列。
+- en: '[PRE74]'
+  id: totrans-444
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: To use custom sequences with tables simply call `sequence_next_value` each time
+    when you need the next sequence value.
+  id: totrans-445
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在表上使用自定义序列，只需在需要下一个序列值时调用`sequence_next_value`即可。
+- en: '[PRE75]'
+  id: totrans-446
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: You can automate sequence values generation for your tables if use triggers.
+  id: totrans-447
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果使用触发器，您可以自动化表的序列值生成。
+- en: '[PRE76]'
+  id: totrans-448
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: In this example we generate new sequence value when a user tries to insert `NULL`
+    into the `id` column of the table `sequence_test`. If the user, instead, decides
+    to specify the value explicitly, the trigger would not change it.
+  id: totrans-449
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此示例中，当用户尝试将`NULL`插入到表`sequence_test`的`id`列时，我们生成新的序列值。如果用户决定显式指定值，则触发器不会更改它。
+- en: '[PRE77]'
+  id: totrans-450
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: Finally, we need to define a stored procedure to delete the sequence when we
+    do not need it.
+  id: totrans-451
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，我们需要定义一个存储过程来在不需要时删除序列。
+- en: '[PRE78]'
+  id: totrans-452
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: You will find code for maintaining custom sequneces in the file `sequences/custom_sequences.sql`
+    of the `recipes` distribution.
+  id: totrans-453
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你会在`recipes`分发的文件`sequences/custom_sequences.sql`中找到维护自定义序列的代码。

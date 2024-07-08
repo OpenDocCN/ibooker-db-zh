@@ -1,0 +1,1128 @@
+- en: Chapter 13\. Administration
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第13章。管理
+- en: 'This chapter covers replica set administration, including:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章涵盖副本集管理，包括：
+- en: Performing maintenance on individual members
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对各个成员执行维护
+- en: Configuring sets under a variety of circumstances
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在各种情况下配置集合
+- en: Getting information about and resizing your oplog
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 获取关于和调整你的操作日志（oplog）大小的信息
+- en: Doing some more exotic set configurations
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 进行一些更复杂的集合配置
+- en: Converting from master/slave to a replica set
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 转换从主/从（master/slave）到副本集
+- en: Starting Members in Standalone Mode
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 在独立模式下启动成员
+- en: A lot of maintenance tasks cannot be performed on secondaries (because they
+    involve writes) and shouldn’t be performed on primaries because of the impact
+    this could have on application performance. Thus, the following sections frequently
+    mention starting up a server in standalone mode. This means restarting the member
+    so that it is a standalone server, not a member of a replica set (temporarily).
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多维护任务无法在辅助节点上执行（因为它们涉及写操作），也不应该在主节点上执行，因为这可能会影响应用程序性能。因此，以下各节经常提到启动服务器为独立模式。这意味着重新启动成员，使其成为独立服务器，而不是副本集成员（暂时）。
+- en: 'To start up a member in standalone mode, first look at the command-line options
+    used to start it. Suppose they look something like this:'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在独立模式下启动成员，请首先查看用于启动它的命令行选项。假设它们看起来像这样：
+- en: '[PRE0]'
+  id: totrans-10
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: To perform maintenance on this server we can restart it without the `replSet`
+    option. This will allow us to read and write to it as a normal standalone *mongod*.
+    We don’t want the other servers in the set to be able to contact it, so we’ll
+    make it listen on a different port (so that the other members won’t be able to
+    find it). Finally, we want to keep the `dbpath` the same, as we are presumably
+    starting it up this way to manipulate the server’s data somehow.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在该服务器上执行维护操作，我们可以在不使用`replSet`选项的情况下重新启动它。这将允许我们像普通独立的*mongod*一样读写它。我们不希望集合中的其他服务器能够联系到它，因此我们将使其监听不同的端口（以便其他成员无法找到它）。最后，我们希望保持`dbpath`不变，因为我们假定以这种方式启动它来某种方式地操作服务器的数据。
+- en: 'First, we shut down the server from the *mongo* shell:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们从*mongo* shell中关闭服务器：
+- en: '[PRE1]'
+  id: totrans-13
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'Then, in an operating system shell (e.g., bash), we restart *mongod* on another
+    port and without the `replSet` parameter:'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，在操作系统 shell（例如，bash）中，我们在另一个端口上重新启动*mongod*并且不使用`replSet`参数：
+- en: '[PRE2]'
+  id: totrans-15
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: It will now be running as a standalone server, listening on port 30000 for connections.
+    The other members of the set will attempt to connect to it on port 27017 and assume
+    that it is down.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在它将作为独立服务器运行，监听端口30000以进行连接。该集合的其他成员将尝试在端口27017上连接它并认为它已经停止。
+- en: When we have finished performing maintenance on the server, we can shut it down
+    and restart it with its original options. It will automatically sync up with the
+    rest of the set, replicating any operations that it missed while it was “away.”
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们完成对服务器的维护时，我们可以关闭它并使用其原始选项重新启动它。它将自动与集合的其余部分同步，复制其在“离线”期间错过的任何操作。
+- en: Replica Set Configuration
+  id: totrans-18
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 副本集配置
+- en: Replica set configuration is always kept in a document in the *local.system.replset*
+    collection. This document is the same on all members of the set. Never update
+    this document using `update`. Always use an `rs` helper or the `replSetReconfig`
+    command.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 副本集配置始终保留在*local.system.replset*集合的文档中。此文档在集合的所有成员上都相同。永远不要使用`update`来更新此文档。始终使用`rs`助手或`replSetReconfig`命令。
+- en: Creating a Replica Set
+  id: totrans-20
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 创建副本集
+- en: 'You create a replica set by starting up the *mongods* that you want to be members
+    and then passing one of them a configuration through `rs.initiate()`:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过启动你想要作为成员的*mongods*并通过`rs.initiate()`传递配置来创建副本集：
+- en: '[PRE3]'
+  id: totrans-22
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Warning
+  id: totrans-23
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: You should always pass a config object to `rs.initiate()`. If you do not, MongoDB
+    will attempt to automatically generate a config for a one-member replica set;
+    it might not use the hostname that you want or correctly configure the set.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你应该总是向`rs.initiate()`传递一个配置对象。如果不这样做，MongoDB将尝试自动生成一个单成员副本集的配置；它可能不使用你想要的主机名或者正确配置该集合。
+- en: You only call `rs.initiate()` on one member of the set. The member that receives
+    the configuration will pass it on to the other members.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你只在集合的一个成员上调用`rs.initiate()`。接收配置的成员将将其传递给其他成员。
+- en: Changing Set Members
+  id: totrans-26
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 更改集合成员
+- en: When you add a new set member, it should either have nothing in its data directory—in
+    which case it will perform an initial sync—or have a copy of the data from another
+    member (see [Chapter 23](ch23.xhtml#chapter-backup) for more information about
+    backing up and restoring replica set members).
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你添加一个新的集合成员时，它应该在其数据目录中要么为空—这种情况下它将执行初始同步—要么拥有来自另一个成员的数据的副本（有关备份和恢复复制集成员的更多信息，请参阅[第
+    23 章](ch23.xhtml#chapter-backup)）。
+- en: 'Connect to the primary and add a new member as follows:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 连接到主服务器，并按以下方式添加新成员：
+- en: '[PRE4]'
+  id: totrans-29
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'Alternatively, you can specify a more complex member config as a document:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，你可以将更复杂的成员配置指定为一个文档：
+- en: '[PRE5]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'You can also remove members by their `"host"` field:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你也可以通过它们的 `"host"` 字段移除成员：
+- en: '[PRE6]'
+  id: totrans-33
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'You can change a member’s settings by reconfiguring. There are a few restrictions
+    in changing a member’s settings:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以通过重新配置来更改成员的设置。在更改成员设置时有一些限制：
+- en: You cannot change a member’s `"_id"`.
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你不能改变成员的 `"_id"`。
+- en: You cannot make the member you’re sending the reconfig to (generally the primary)
+    priority 0.
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你不能使你发送重新配置的成员（通常是主服务器）的优先级为 0。
+- en: You cannot turn an arbiter into a nonarbiter, or vice versa.
+  id: totrans-37
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你不能将裁判转换为非裁判，反之亦然。
+- en: You cannot change a member’s `"buildIndexes"` field from `false` to `true`.
+  id: totrans-38
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 你不能将成员的 `"buildIndexes"` 字段从 `false` 改为 `true`。
+- en: Notably, you *can* change a member’s `"host"` field. Thus, if you incorrectly
+    specify a host (say, if you use a public IP instead of a private one) you can
+    later go back and simply change the config to use the correct IP.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 值得注意的是，你*可以*改变成员的 `"host"` 字段。因此，如果你错误地指定了主机（比如说，如果你使用了公共 IP 而不是私有 IP），你可以稍后返回并简单地更改配置以使用正确的
+    IP。
+- en: 'To change a hostname, you could do something like this:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要更改主机名，你可以像这样做：
+- en: '[PRE7]'
+  id: totrans-41
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'This same strategy applies to changing any other option: fetch the config with
+    `rs.config()`, modify any parts of it that you wish, and reconfigure the set by
+    passing `rs.reconfig()` the new configuration.'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个策略同样适用于改变任何其他选项：获取配置信息 `rs.config()`，修改任何你希望修改的部分，然后通过传递新配置给 `rs.reconfig()`
+    来重新配置集合。
+- en: Creating Larger Sets
+  id: totrans-43
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 创建更大的集合
+- en: Replica sets are limited to 50 members in total and only 7 voting members. This
+    is to reduce the amount of network traffic required for everyone to heartbeat
+    everyone else and to limit the amount of time elections take.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制集总共限制为 50 个成员，只能有 7 个投票成员。这是为了减少每个人需要相互心跳的网络流量，并限制选举所需的时间。
+- en: 'If you are creating a replica set that has more than seven members, every additional
+    member must be given zero votes. You can do this by specifying it in the member’s
+    config:'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你正在创建一个超过七个成员的复制集，那么每个额外的成员必须被赋予零票。你可以通过在成员配置中指定来做到这一点：
+- en: '[PRE8]'
+  id: totrans-46
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: This prevents these members from casting positive votes in elections.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将阻止这些成员在选举中投出正面票。
+- en: Forcing Reconfiguration
+  id: totrans-48
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 强制重新配置
+- en: 'When you permanently lose a majority of a set, you may want to reconfigure
+    the set while it doesn’t have a primary. This is a little tricky, as usually you’d
+    send the reconfig to the primary. In this case, you can force-reconfigure the
+    set by sending a reconfig command to a secondary. Connect to a secondary in the
+    shell and pass it a reconfig with the `"force"` option:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你永久丢失了一个集合的大部分时，你可能希望在没有主服务器的情况下重新配置该集合。这有点棘手，因为通常你会把重新配置发送到主服务器。但在这种情况下，你可以通过向次级服务器发送带有
+    `"force"` 选项的重新配置命令来强制重新配置集合。在 shell 中连接到次级服务器，并传递一个带有 `"force"` 选项的重新配置：
+- en: '[PRE9]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'Forced reconfigurations follow the same rules as a normal reconfiguration:
+    you must send a valid, well-formed configuration with the correct options. The
+    `"force"` option doesn’t allow invalid configs; it just allows a secondary to
+    accept a reconfig.'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 强制重新配置遵循与正常重新配置相同的规则：你必须发送一个有效且格式良好的配置，带有正确的选项。`"force"` 选项不允许无效的配置；它只允许次级服务器接受重新配置。
+- en: 'Forced reconfigurations bump the replica set `"version"` number by a large
+    amount. You may see it jump by tens or hundreds of thousands. This is normal:
+    it is to prevent version number collisions (just in case there’s a reconfig on
+    either side of a network partition).'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 强制重新配置会显著增加复制集的 `"version"` 数字。你可能会看到它跳动几万甚至几十万。这是正常的：它是为了防止版本号冲突（以防网络分区的情况下有重新配置）。
+- en: When the secondary receives the reconfig, it will update its configuration and
+    pass the new config along to the other members. The other members of the set will
+    only pick up on a change of config if they recognize the sending server as a member
+    of their current config. Thus, if some of your members have changed hostnames,
+    you should force reconfig from a member that kept its old hostname. If every member
+    has a new hostname, you should shut down each member of the set, start a new one
+    up in standalone mode, change its *local.system.replset* document manually, and
+    then restart the member.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当次要成员接收到重新配置时，它将更新其配置并将新配置传递给其他成员。如果其他集合成员将发送服务器识别为其当前配置的成员，它们才能检测到配置更改。因此，如果您的一些成员已更改主机名，您应该从保留其旧主机名的成员强制重新配置。如果每个成员都有新的主机名，您应该关闭集合中的每个成员，在独立模式下启动一个新的成员，手动更改其*local.system.replset*文档，然后重新启动成员。
+- en: Manipulating Member State
+  id: totrans-54
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 操控成员状态
+- en: There are several ways to manually change a member’s state for maintenance or
+    in response to load. Note that there is no way to force a member to become primary,
+    however, other than configuring the set appropriately—in this case, by giving
+    the replica set member a priority higher than any other member of the set.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有几种方式可以手动更改成员的状态以进行维护或响应负载。请注意，除了通过适当配置集合来配置副本集成员的优先级高于任何其他成员之外，没有其他方法可以强制成员成为主服务器。
+- en: Turning Primaries into Secondaries
+  id: totrans-56
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 将主服务器转为次要服务器
+- en: 'You can demote a primary to a secondary using the `stepDown` function:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用`stepDown`函数将主服务器降级为次要服务器：
+- en: '[PRE10]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'This makes the primary step down into SECONDARY state for 60 seconds. If no
+    other primary is elected in that time period, it will be able to attempt a reelection.
+    If you would like it to remain a secondary for a longer or shorter amount of time,
+    you can specify your own number of seconds for it to stay in SECONDARY state:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这使得主服务器降为次要状态，持续60秒。如果在该时间段内没有选举出其他主服务器，它将能够尝试重新选举。如果您希望它在次要状态下停留更长或更短的时间，您可以为其指定自己的秒数：
+- en: '[PRE11]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: Preventing Elections
+  id: totrans-61
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 防止选举
+- en: 'If you need to do some maintenance on the primary but don’t want any of the
+    other eligible members to become primary in the interim, you can force them to
+    stay secondaries by running `freeze` on each of them:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您需要对主服务器进行一些维护，但不希望其他符合条件的成员在此期间成为主服务器，您可以通过在每个成员上运行`freeze`来强制它们保持次要状态：
+- en: '[PRE12]'
+  id: totrans-63
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: Again, this takes a number of seconds for the member to remain a secondary.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同样，这需要一些时间使成员保持次要状态。
+- en: 'If you finish whatever maintenance you’re doing on the primary before this
+    time elapses and want to unfreeze the other members, simply run the command again
+    on each of them, giving a timeout of 0 seconds:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您在此时间段到期之前完成了对主服务器的任何维护，并希望解冻其他成员，只需在每个成员上再次运行该命令，指定超时为0秒即可。
+- en: '[PRE13]'
+  id: totrans-66
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: An unfrozen member will be able to hold an election, if it chooses.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个未冻结的成员将能够进行选举，如果它选择这样做。
+- en: You can also unfreeze primaries that have been stepped down by running `rs.freeze(0)`.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以通过运行`rs.freeze(0)`来解冻已被降级为次要服务器的主服务器。
+- en: Monitoring Replication
+  id: totrans-69
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 监控复制
+- en: 'It is important to be able to monitor the status of a set: not only that all
+    members are up, but what states they are in and how up to date the replication
+    is. There are several commands you can use to see replica set information. MongoDB
+    hosting services and management tools including Atlas, Cloud Manager, and Ops
+    Manager (see [Chapter 22](ch22.xhtml#chapter-mms)) also provide mechanisms to
+    monitor replication and dashboards on the key replication metrics.'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 能够监视集合的状态非常重要：不仅要确保所有成员处于活动状态，还要知道它们的状态及复制的最新情况。有几个命令可用于查看副本集信息。MongoDB托管服务和管理工具包括Atlas、Cloud
+    Manager和Ops Manager（参见[第22章](ch22.xhtml#chapter-mms)）还提供了监视复制和关键复制指标的仪表板机制。
+- en: 'Often issues with replication are transient: a server could not reach another
+    server, but now it can. The easiest way to see issues like this is to look at
+    the logs. Make sure you know where the logs are being stored (and that they *are*
+    being stored) and that you can access them.'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制问题通常是暂时的：一个服务器可能无法连接另一个服务器，但现在可以了。查看日志是发现这类问题的最简单方法。确保您知道日志存储在哪里（以及确实被存储），并且可以访问它们。
+- en: Getting the Status
+  id: totrans-72
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 获取状态
+- en: 'One of the most useful commands you can run is `replSetGetStatus`, which gets
+    the current information about every member of the set (from the view of the member
+    you’re running it on). There is a helper for this command in the shell:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以运行的最有用的命令之一是 `replSetGetStatus`，它获取集合的每个成员的当前信息（从您运行它的成员的视角）。在 shell 中有一个此命令的辅助程序：
+- en: '[PRE14]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'These are some of the most useful fields:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些是一些最有用的字段之一：
+- en: '`"self"`'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"self"`'
+- en: This field is only present in the member `rs.status()` was run on—in this case,
+    *server-2* (*m1.example.net:27017*).
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此字段仅出现在运行 `rs.status()` 的成员中——在本例中，即 *server-2* (*m1.example.net:27017*)。
+- en: '`"stateStr"`'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"stateStr"`'
+- en: A string describing the state of the server. See [“Member States”](ch11.xhtml#sect2-rs-states)
+    for descriptions of the various states.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 描述服务器状态的字符串。有关各种状态的描述，请参阅[“成员状态”](ch11.xhtml#sect2-rs-states)。
+- en: '`"uptime"`'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"uptime"`'
+- en: The number of seconds a member has been reachable, or the time since this server
+    was started for the `"self"` member. Thus, *server-1* has been up for 269 seconds,
+    and *server-2* and *server-3* for 14 seconds.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 成员可达的秒数，或者对于 `"self"` 成员来说，自服务器启动以来的时间。因此，*server-1* 已经运行了 269 秒，*server-2*
+    和 *server-3* 运行了 14 秒。
+- en: '`"optimeDate"`'
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"optimeDate"`'
+- en: The last optime in each member’s oplog (where that member is synced to). Note
+    that this is the state of each member as reported by the heartbeat, so the optime
+    reported here may be off by a couple of seconds.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个成员操作日志中每个成员的最后 `optime`（该成员同步到的地方）。请注意，这是由心跳报告的每个成员的状态，因此这里报告的 `optime` 可能会比实际少几秒钟。
+- en: '`"lastHeartbeat"`'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"lastHeartbeat"`'
+- en: The time this server last received a heartbeat from the `"self"` member. If
+    there have been network issues or the server has been busy, this may be longer
+    than two seconds ago.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此服务器上次从 `"self"` 成员接收到心跳的时间。如果存在网络问题或服务器忙碌，这可能比两秒钟之前更长。
+- en: '`"pingMs"`'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"pingMs"`'
+- en: The running average of how long heartbeats to this server have taken. This is
+    used in determining which member to sync from.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 向此服务器发出心跳所花费的平均时间。这用于确定从哪个成员进行同步。
+- en: '`"errmsg"`'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"errmsg"`'
+- en: Any status message that the member chose to return in the heartbeat request.
+    These are often merely informational, not error messages. For example, the `"errmsg"`
+    field in *server-3* indicates that this server is in the process of initial syncing.
+    The hexadecimal number 507e9a30:851 is the timestamp of the operation this member
+    needs to get to to complete the initial sync.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 成员选择在心跳请求中返回的任何状态消息。这些通常只是信息性的，不是错误消息。例如，*server-3* 中的 `"errmsg"` 字段指示此服务器正在进行初始同步的过程中。十六进制数字
+    507e9a30:851 是此成员需要达到以完成初始同步的操作的时间戳。
+- en: 'There are several fields that give overlapping information. `"state"` is the
+    same as `"stateStr"`; it’s simply the internal ID for the state. `"health"` merely
+    reflects whether a given server is reachable (`1`) or unreachable (`0`), which
+    is also shown by `"state"` and `"stateStr"` (they’ll be `UNKNOWN` or `DOWN` if
+    the server is unreachable). Similarly, `"optime"` and `"optimeDate"` are the same
+    value represented in two ways: one represents milliseconds since the epoch (`"t"
+    : 135...`) and the other is a more human-readable date.'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '有几个字段提供了重叠的信息。`"state"` 与 `"stateStr"` 相同；它只是状态的内部 ID。`"health"` 只是反映了给定服务器是否可达（`1`）或不可达（`0`），这也可以通过
+    `"state"` 和 `"stateStr"` 来显示（如果服务器不可达，则它们将显示为 `UNKNOWN` 或 `DOWN`）。类似地，`"optime"`
+    和 `"optimeDate"` 是以两种方式表示的相同值：一个表示自纪元以来的毫秒数（`"t" : 135...`），另一个是更易读的日期。'
+- en: Warning
+  id: totrans-91
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: 'Note that this report is from the point of view of whichever member of the
+    set you run it on: the information it contains may be incorrect or out of date
+    due to network issues.'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，此报告是从您运行它的集合成员的视角来看的：它包含的信息可能由于网络问题而不正确或过时。
+- en: Visualizing the Replication Graph
+  id: totrans-93
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 可视化复制图
+- en: 'If you run `rs.status()` on a secondary, there will be a top-level field called
+    `"syncingTo"`. This gives the host that this member is replicating from. By running
+    the `replSetGetStatus` command on each member of the set, you can figure out the
+    replication graph. For example, assuming `server1` was a connection to *server1*,
+    `server2` was a connection to *server2*, and so on, you might have something like:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果在辅助节点上运行 `rs.status()`，将会有一个顶级字段称为 `"syncingTo"`。这显示了此成员正在复制的主机。通过在集合的每个成员上运行
+    `replSetGetStatus` 命令，您可以了解复制图。例如，假设 `server1` 是连接到 *server1*，`server2` 是连接到 *server2*，依此类推，可能会有如下内容：
+- en: '[PRE15]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: Thus, *server0* is the replication source for *server1*, *server1* is the replication
+    source for *server2* and *server3*, and *server2* is the replication source for
+    *server4*.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，*server0*是*server1*的复制源，*server1*是*server2*和*server3*的复制源，*server2*是*server4*的复制源。
+- en: 'MongoDB determines who to sync to based on ping time. When one member heartbeats
+    another, it times how long that request takes. MongoDB keeps a running average
+    of these times. When a member has to choose another member to sync from, it looks
+    for the one that is closest to it and ahead of it in replication (thus, you cannot
+    end up with a replication cycle: members will only replicate from the primary
+    or secondaries that are further ahead).'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB根据ping时间确定同步到哪个成员。当一个成员心跳另一个成员时，它计算该请求花费的时间。MongoDB会维护这些时间的运行平均值。当一个成员必须选择另一个成员进行同步时，它会选择距离自己最近且在复制中领先的成员（因此，不能出现复制循环：成员只会从主服务器或进展较快的辅助服务器进行复制）。
+- en: This means that if you bring up a new member in a secondary data center, it
+    is more likely to sync from another member in that data center than a member in
+    your primary data center (thus minimizing WAN traffic), as shown in [Figure 13-1](#repl-admin-1).
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这意味着，如果您在次要数据中心中启动了新的成员，它更有可能从该数据中心的另一个成员进行同步，而不是从主数据中心的成员进行同步（从而最小化广域网流量），如[图 13-1](#repl-admin-1)所示。
+- en: 'However, there is a downside to automatic replication chaining: more replication
+    hops means that it takes a bit longer to replicate writes to all servers. For
+    example, let’s say that everything is in one data center but, due to the vagaries
+    of network speeds when you added members, MongoDB ends up replicating in a line,
+    as shown in [Figure 13-2](#repl-admin-2).'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，自动复制链的一个缺点是：复制的跳数越多，将写操作复制到所有服务器的时间就会稍长一些。例如，假设所有内容都在一个数据中心，但由于网络速度的不确定性，当您添加成员时，MongoDB最终以线性方式进行复制，如[图 13-2](#repl-admin-2)所示。
+- en: '![](Images/mdb3_1301.png)'
+  id: totrans-100
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1301.png)'
+- en: Figure 13-1\. New secondaries will generally choose to sync from a member in
+    the same data center
+  id: totrans-101
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 13-1\. 新的辅助服务器通常会选择从同一数据中心的成员进行同步
+- en: '![](Images/mdb3_1302.png)'
+  id: totrans-102
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_1302.png)'
+- en: Figure 13-2\. As replication chains get longer, it takes longer for all members
+    to get a copy of the data
+  id: totrans-103
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 13-2\. 随着复制链变得越来越长，所有成员获取数据的时间也会变得更长
+- en: 'This is highly unlikely, but not impossible. It is, however, probably undesirable:
+    each secondary in the chain will have to be a bit further behind than the secondary
+    “in front” of it. You can fix this by modifying the replication source for a member
+    using the `replSetSyncFrom` command (or the `rs.syncFrom()` helper).'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种情况极为罕见，但并非不可能。然而，这可能是不可取的：链中的每个辅助服务器都比其前面的辅助服务器落后一些。您可以通过使用`replSetSyncFrom`命令（或`rs.syncFrom()`辅助工具）来修改成员的复制源来解决这个问题。
+- en: 'Connect to the secondary whose replication source you want to change and run
+    this command, passing it the server you’d prefer this member to sync from:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 连接到要更改其复制源的辅助服务器，并运行以下命令，传递您希望此成员同步的服务器：
+- en: '[PRE16]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: It may take a few seconds to switch sync sources, but if you run `rs.status()`
+    on that member again, you should see that the `"syncingTo"` field now says `"server0:27017"`.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 切换同步源可能需要几秒钟，但如果您再次在该成员上运行`rs.status()`，您应该会看到`"syncingTo"`字段现在显示为`"server0:27017"`。
+- en: This member (*server4*) will now continue replicating from *server0* until *server0*
+    becomes unavailable or, if it happened to be a secondary, falls significantly
+    behind the other members.
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此成员（*server4*）现在将从*server0*继续复制，直到*server0*不可用或者（如果它恰好是辅助服务器）落后于其他成员。
+- en: Replication Loops
+  id: totrans-109
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 复制环路
+- en: A *replication loop* is when members end up replicating from one another—for
+    example, *A* is syncing from *B* who is syncing from *C* who is syncing from *A*.
+    As none of the members in a replication loop can be a primary, the members will
+    not receive any new operations to replicate and will fall behind.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*复制环路*是指成员最终彼此进行复制，例如，*A*从*B*同步，*B*从*C*同步，*C*又从*A*同步。由于复制环路中的成员都不能成为主服务器，因此这些成员将无法接收到任何新的操作来进行复制，并且会落后。'
+- en: Replication loops should be impossible when members choose who to sync from
+    automatically. However, you can force replication loops using the `replSetSyncFrom`
+    command. Inspect the `rs.status()` output carefully before manually changing sync
+    targets, and be careful not to create loops. The `replSetSyncFrom` command will
+    warn you if you do not choose to sync from a member that is strictly ahead, but
+    it will allow it.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制环路应该是不可能的，当成员选择自动同步时，但是，你可以使用 `replSetSyncFrom` 命令强制创建复制环路。在手动更改同步目标之前，仔细检查
+    `rs.status()` 输出，并注意不要创建环路。如果您不选择严格领先的成员进行同步，`replSetSyncFrom` 命令将会提醒您，但仍将允许该操作。
+- en: Disabling Chaining
+  id: totrans-112
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 禁用链式同步
+- en: '*Chaining* is when a secondary syncs from another secondary (instead of the
+    primary). As mentioned earlier, members may decide to sync from other members
+    automatically. You can disable chaining, forcing everyone to sync from the primary,
+    by changing the `"chainingAllowed"` setting to `false` (if not specified, it defaults
+    to `true`):'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*链式同步* 是指次要服务器从另一个次要服务器同步（而不是从主服务器）。如前所述，成员可能决定自动从其他成员同步。您可以通过将 `"chainingAllowed"`
+    设置为 `false`（如果未指定，默认为 `true`）来禁用链式同步，强制所有成员从主服务器同步：'
+- en: '[PRE17]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: With `"chainingAllowed"` set to `false`, all members will sync from the primary.
+    If the primary becomes unavailable, they will fall back to syncing from secondaries.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当 `"chainingAllowed"` 设置为 `false` 时，所有成员将从主服务器同步。如果主服务器不可用，它们将退回到从次要服务器同步。
+- en: Calculating Lag
+  id: totrans-116
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 计算滞后
+- en: One of the most important metrics to track for replication is how well the secondaries
+    are keeping up with the primary. *Lag* is how far behind a secondary is, which
+    means the difference between the timestamp of the last operation the primary has
+    performed and the timestamp of the last operation the secondary has applied.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于复制而言，最重要的度量之一是跟踪次要服务器与主服务器的同步情况。*滞后* 是指次要服务器落后于主服务器执行的最后一个操作的时间戳与次要服务器应用的最后一个操作的时间戳之间的差异。
+- en: You can use `rs.status()` to see a member’s replication state, but you can also
+    get a quick summary by running `rs.printReplicationInfo()` or `rs.printSlaveReplicationInfo()`.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用 `rs.status()` 查看成员的复制状态，但也可以通过运行 `rs.printReplicationInfo()` 或 `rs.printSlaveReplicationInfo()`
+    获取快速摘要。
+- en: '`rs.printReplicationInfo()` gives a summary of the primary’s oplog, including
+    its size and the date range of its operations:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`rs.printReplicationInfo()` 提供了主要操作日志的摘要，包括其大小和操作的日期范围：'
+- en: '[PRE18]'
+  id: totrans-120
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: In this example, the oplog is about 10 MB (10 MiB) and is only able to fit about
+    an hour of operations.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此示例中，操作日志约为 10 MB（10 MiB），仅能够容纳约一小时的操作。
+- en: If this were a real deployment, the oplog should probably be larger (see the
+    next section for instructions on changing oplog size). We want the log length
+    to be *at least* as long as the time it takes to do a full resync. That way, we
+    don’t run into a case where a secondary falls off the end of the oplog before
+    finishing its initial sync.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果这是一个真实的部署，操作日志（oplog）可能应该更大（请参阅下一节有关更改 oplog 大小的说明）。我们希望日志长度*至少*与执行完整重新同步所需的时间一样长。这样，我们就不会遇到在次要服务器完成初始同步之前，次要服务器已经落后于操作日志结尾的情况。
+- en: Note
+  id: totrans-123
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The log length is computed by taking the time difference between the first and
+    last operation in the oplog once the oplog has filled up. If the server has just
+    started with nothing in the oplog, then the earliest operation will be relatively
+    recent. In that case, the log length will be small, even though the oplog probably
+    still has free space available. The length is a more useful metric for servers
+    that have been operating long enough to write through their entire oplog at least
+    once.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 日志长度是通过在操作日志填满后计算第一个和最后一个操作之间的时间差来计算的。如果服务器刚刚启动且操作日志中没有任何内容，则最早的操作可能相对较新。在这种情况下，尽管操作日志可能仍然有空闲空间可用，但日志长度较小。对于已经运行足够长时间以至少完整写入其整个操作日志的服务器来说，长度是一个更有用的度量。
+- en: 'You can also use the `rs.printSlaveReplicationInfo()` function to get the `syncedTo`
+    value for each member and the time when the last oplog entry was written to each
+    secondary, as shown in the following example:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以使用 `rs.printSlaveReplicationInfo()` 函数获取每个成员的 `syncedTo` 值以及最后一个操作日志条目写入每个次要服务器的时间，如下例所示：
+- en: '[PRE19]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: Remember that a replica set member’s lag is calculated relative to the primary,
+    not against “wall time.” This usually is irrelevant, but on very low-write systems,
+    this can cause phantom replication lag “spikes.” For example, suppose you do a
+    write once an hour. Right after that write, before it’s replicated, the secondary
+    will look like it’s an hour behind the primary. However, it’ll be able to catch
+    up with that “hour” of operations in a few milliseconds. This can sometimes cause
+    confusion when monitoring a low-throughput system.
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请记住，副本集成员的滞后是相对于主节点计算的，而不是相对于“墙上的时间”。这通常是无关紧要的，但在非常低写入系统上，这可能会导致幻影复制滞后“峰值”。例如，假设你每小时写入一次。在该写入之后，但在其被复制之前，次要节点看起来落后主节点一小时。然而，它将能够在几毫秒内赶上那“小时”的操作。在监视低吞吐量系统时，这有时可能会导致混淆。
+- en: Resizing the Oplog
+  id: totrans-128
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 调整操作日志大小
+- en: Your primary’s oplog should be thought of as your maintenance window. If your
+    primary has an oplog that is an hour long, then you only have one hour to fix
+    anything that goes wrong before your secondaries fall too far behind and must
+    be resynced from scratch. Thus, you generally want to have an oplog that can hold
+    a couple days’ to a week’s worth of data, to give yourself some breathing room
+    if something goes wrong.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你的主要操作日志应该被视为维护窗口。如果你的主要操作日志长度为一小时，那么在你的次要节点落后太多并必须从头同步之前，你只有一小时来修复任何出现的问题。因此，通常希望操作日志能够保存几天到一周的数据，以便在出现问题时有所缓冲。
+- en: Unfortunately, there’s no easy way to tell how long your oplog is going to be
+    before it fills up. The WiredTiger storage engine allows online resizing of your
+    oplog while your server is running. You should perform these steps on each secondary
+    replica set member first; once these have been changed, then and only then should
+    you make the changes to your primary. Remember that each server that could become
+    a primary should have a large enough oplog to give you a sane maintenance window.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，没有简单的方法可以预测操作日志在填满之前会有多长。WiredTiger存储引擎允许在服务器运行时在线调整操作日志的大小。你应该先在每个次要副本集成员上执行这些步骤；一旦这些步骤完成，然后才应该对主节点进行更改。请记住，每个可能成为主节点的服务器都应该有足够大的操作日志，以便为你提供合理的维护窗口。
+- en: 'To increase the size of your oplog, perform the following steps:'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 增加操作日志（oplog）的大小，请执行以下步骤：
+- en: Connect to the replica set member. If authentication is enabled, be sure to
+    use a user with privileges that can modify the `local` database.
+  id: totrans-132
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 连接到副本集成员。如果启用了认证，请确保使用具有修改`local`数据库权限的用户。
+- en: 'Verify the current size of the oplog:'
+  id: totrans-133
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 验证当前操作日志的大小：
+- en: '[PRE20]'
+  id: totrans-134
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: Note
+  id: totrans-135
+  prefs:
+  - PREF_IND
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: This will display the collection size in megabytes.
+  id: totrans-136
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这将显示以兆字节为单位的集合大小。
+- en: 'Change the oplog size of the replica set member:'
+  id: totrans-137
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 更改副本集成员的操作日志大小：
+- en: '[PRE21]'
+  id: totrans-138
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: Note
+  id: totrans-139
+  prefs:
+  - PREF_IND
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The following operation changes the oplog size of the replica set member to
+    16 gigabytes, or 16000 megabytes.
+  id: totrans-140
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 下面的操作将副本集成员的操作日志大小更改为16 GB，即16000 MB。
+- en: Finally, if you have reduced the size of the oplog, you may need to run the
+    `compact` to reclaim the disk space allocated. This should not be run against
+    a member while it is a primary. Please see the [“Change the Size of the Oplog”
+    tutorial in the MongoDB documentation](https://oreil.ly/krv0R) for more details
+    on this case and on the entire procedure.
+  id: totrans-141
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 最后，如果你减少了操作日志的大小，可能需要运行`compact`以回收分配的磁盘空间。请参阅[MongoDB文档中的“更改操作日志大小”教程](https://oreil.ly/krv0R)以获取更多关于此案例和整个过程的详细信息。
+- en: 'You generally should not decrease the size of your oplog: although it may be
+    months long, there is usually ample disk space for it and it does not use up any
+    valuable resources like RAM or CPU.'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常不应减少操作日志的大小：尽管它可能长达数月，但通常有足够的磁盘空间，并且不会使用RAM或CPU等宝贵资源。
+- en: Building Indexes
+  id: totrans-143
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 建立索引
+- en: If you send an index build to the primary, the primary will build the index
+    normally and then the secondaries will build the index when they replicate the
+    “build index” operation. Although this is the easiest way to build an index, index
+    builds are resource-intensive operations that can make members unavailable. If
+    all of your secondaries start building an index at the same time, almost every
+    member of your set will be offline until the index build completes. This process
+    is only for replica sets; for a sharded cluster, please see [the MongoDB documentation
+    tutorial about building indexes on a sharded cluster](https://oreil.ly/wJNeE).
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果向主服务器发送索引构建请求，则主服务器将正常构建索引，然后在复制“构建索引”操作时次要节点将构建索引。尽管这是构建索引的最简单方法，但索引构建是资源密集型操作，可能会使成员不可用。如果所有次要节点同时开始构建索引，那么集合的几乎每个成员都将离线，直到索引构建完成。此过程仅适用于副本集；对于分片集群，请参阅[MongoDB文档中关于在分片集群上构建索引的教程](https://oreil.ly/wJNeE)。
+- en: Warning
+  id: totrans-145
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: You must stop all writes to a collection when you are creating a `"unique"`
+    index. If the writes are not stopped, you can end up with inconsistent data across
+    the replica set members.
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建“unique”索引时，必须停止向集合写入。如果不停止写入，则可能导致副本集成员之间的数据不一致。
+- en: 'Therefore, you may want to build an index on one member at a time to minimize
+    the impact on your application. To accomplish this, do the following:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，您可能希望逐个成员构建索引，以最小化对应用程序的影响。为此，请执行以下操作：
+- en: Shut down a secondary.
+  id: totrans-148
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 关闭一个次要节点。
+- en: Restart it as a standalone server.
+  id: totrans-149
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 重新启动为独立服务器。
+- en: Build the index on the standalone server.
+  id: totrans-150
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在独立服务器上构建索引。
+- en: When the index build is complete, restart the server as a member of the replica
+    set. When restarting this member, you need to remove the `disableLogicalSessionCacheRefresh`
+    parameter if it is present in your command-line options or configuration file.
+  id: totrans-151
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 当索引构建完成时，将服务器重新启动为副本集的成员。重新启动此成员时，如果您的命令行选项或配置文件中存在`disableLogicalSessionCacheRefresh`参数，则需要将其删除。
+- en: Repeat steps 1 through 4 for each secondary in the replica set.
+  id: totrans-152
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 对副本集中的每个次要节点重复步骤1至4。
+- en: 'You should now have a set where every member other than the primary has the
+    index built. Now there are two options, and you should choose the one that will
+    impact your production system the least:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，您应该有一个每个成员（主服务器除外）都构建了索引的集合。现在有两个选项，您应该选择对生产系统影响最小的选项之一：
+- en: Build the index on the primary. If you have an “off” time when you have less
+    traffic, that would probably be a good time to build it. You also might want to
+    modify read preferences to temporarily shunt more load onto secondaries while
+    the build is in progress.
+  id: totrans-154
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在主服务器上构建索引。如果您有交通量较少的“关闭”时间，那可能是构建索引的好时机。您还可能希望暂时修改读取偏好设置，将更多负载转移至次要节点，同时进行构建。
+- en: The primary will replicate the index build to the secondaries, but they will
+    already have the index so it will be a no-op for them.
+  id: totrans-155
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 主服务器将索引构建复制到次要节点，但它们已经拥有该索引，因此对它们来说是无操作。
+- en: Step down the primary, then follow steps 2 through 4 of the procedure outlined
+    previously. This requires a failover, but you will have a normally functioning
+    primary while the old primary is building its index. After its index build is
+    complete, you can reintroduce it to the set.
+  id: totrans-156
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 首先降低主服务器，然后按照先前概述的步骤2至4进行操作。这需要进行故障切换，但旧主服务器正在构建其索引时，您将拥有一个正常运行的主服务器。索引构建完成后，您可以将其重新引入集合。
+- en: 'Note that you could also use this technique to build different indexes on a
+    secondary than you have on the rest of the set. This could be useful for offline
+    processing, but make sure a member with different indexes can never become primary:
+    its priority should always be `0`.'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，您还可以使用此技术在次要节点上构建与其余集合不同的索引。这对离线处理可能很有用，但请确保具有不同索引的成员永远不能成为主服务器：其优先级应始终为`0`。
+- en: If you are building a unique index, make sure that the primary is not inserting
+    duplicates or that you build the index on the primary first. Otherwise, the primary
+    could be inserting duplicates that would then cause replication errors on secondaries.
+    If this occurs, the secondary will shut itself down. You will have to restart
+    it as a standalone server, remove the unique index, and restart it.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果正在构建唯一索引，请确保主服务器未插入重复项，或者首先在主服务器上构建索引。否则，主服务器可能会插入重复项，然后在次要节点上会导致复制错误。如果发生这种情况，则次要节点将自行关闭。您将需要将其重新启动为独立服务器，删除唯一索引，然后重新启动。
+- en: Replication on a Budget
+  id: totrans-159
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 紧缩预算的复制
+- en: 'If it is difficult to get more than one high-quality server, consider getting
+    a secondary server that is strictly for disaster recovery, with less RAM and CPU,
+    slower disk I/O, etc. The good server will always be your primary and the cheaper
+    server will never handle any client traffic (configure your clients to send all
+    reads to the primary). Here are the options to set for the cheaper box:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果很难获得超过一个高质量的服务器，请考虑获取一个仅用于灾难恢复的次级服务器，具有较少的RAM和CPU，较慢的磁盘I/O等。优质服务器始终将是您的主服务器，并且更便宜的服务器永远不会处理任何客户端流量（请配置您的客户端将所有读取发送到主服务器）。以下是为更便宜的机器设置的选项：
+- en: '`"priority" : 0`'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"priority" : 0`'
+- en: You do not want this server to ever become primary.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您不希望此服务器成为主服务器。
+- en: '`"hidden" : true`'
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"hidden" : true`'
+- en: You do not want clients ever sending reads to this secondary.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您不希望客户端向此次级发送读取请求。
+- en: '`"buildIndexes" : false`'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"buildIndexes" : false`'
+- en: This is optional, but it can decrease the load this server has to handle considerably.
+    If you ever need to restore from this server, you’ll need to rebuild the indexes.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是可选项，但可以显著减少此服务器需要处理的负载。如果您需要从此服务器进行恢复，则需要重建索引。
+- en: '`"votes" : 0`'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"votes" : 0`'
+- en: If you only have two machines, set `"votes"` on this secondary to `0` so that
+    the primary can stay primary if this machine goes down. If you have a third server
+    (even just your application server), run an arbiter on that instead of setting
+    `"votes"` to `0`.
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您只有两台机器，请将此次级设置为`0`，以便主机在此机器宕机时保持主机状态。如果有第三台服务器（即使只是您的应用服务器），请在该服务器上运行仲裁者，而不是将`"votes"`设置为`0`。
+- en: This will give you the safety and security of having a secondary without having
+    to invest in two high-performance servers.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将为您提供具有次级备份的安全性和保障，而无需投资于两台高性能服务器。

@@ -1,0 +1,752 @@
+- en: Chapter 9\. Other Challenges
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第9章 其他挑战
+- en: 'This chapter is a short but important laundry list of common MySQL challenges
+    and how to mitigate them. These challenges don’t fit into other chapters because
+    most are not directly related to performance. But don’t underestimate them: the
+    first two challenges, for example, can ruin a database. More importantly, these
+    challenges are not special cases that only happen when the stars align and The
+    Fates conspire to ruin your day. These are common challenges. Take them seriously,
+    and expect to face them.'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章是一个短小但重要的关于常见 MySQL 挑战的清单及其缓解方法。这些挑战不适合其他章节，因为大多数与性能无直接关系。但不要低估它们：例如，前两个挑战可以毁掉一个数据库。更重要的是，这些挑战并不是仅在恒星对齐和命运共谋的情况下才发生的特殊情况。这些都是常见的挑战。认真对待它们，并期望面对它们。
+- en: Split-Brain Is the Greatest Risk
+  id: totrans-2
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 脑裂是最大的风险
+- en: 'Split-brain requires two conditions to occur at the same time, in the same
+    replication topology:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 脑裂需要同时在同一复制拓扑中发生两个条件：
+- en: More than one MySQL instance is writable (`read_only=0`)
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 多于一个 MySQL 实例是可写的（`read_only=0`）
+- en: Writes occur on more than one MySQL instance
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在多个 MySQL 实例上发生写入
+- en: 'Neither of those should ever happen—especially not at the same time—but life
+    is full of surprises, and you cannot avoid bugs or accidents forever. When it
+    happens, it’s called *split-brain*: instead of all MySQL instances having the
+    same data, they’re figuratively split because data is no longer identical (consistent)
+    on every instance. Not only is inconsistent data fundamentally wrong, it can break
+    replication or—worse—have a ripple effect that causes more data to become inconsistent,
+    which causes the next challenge: data drift.'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 两者都不应该同时发生——尤其是在同一时间——但生活充满了惊喜，你无法永远避免错误或意外。一旦发生，就称之为*脑裂*：而不是所有 MySQL 实例都具有相同的数据，它们被象征性地分裂，因为数据不再在每个实例上一致（一致）。不一致的数据不仅根本是错误的，它还可能破坏复制或更糟——产生连锁反应，导致更多数据变得不一致，从而带来下一个挑战：数据漂移。
+- en: Note
+  id: totrans-7
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Split-brain does not apply to MySQL replication topologies intentionally designed
+    to have multiple writable instances.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 脑裂不适用于有意设计为具有多个可写实例的 MySQL 复制拓扑。
+- en: If split-brain occurs, you must detect and stop it *immediately*. Why? Because
+    a single write can affect any number of rows. Mere seconds of split-brain can
+    produce an avalanche of inconsistent data, resulting in *weeks* of data forensics
+    and reconciliation.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果发生了脑裂，必须*立即*检测并停止它。为什么？因为一次写操作可能影响任意数量的行。短短几秒钟的脑裂可能导致一系列不一致的数据，导致*数周*的数据取证和对账工作。
+- en: 'To stop split-brain, disable writes on *all* instances: `SET GLOBAL read_only=1`.
+    Do not leave one instance writable; that will make the problem worse. If you cannot
+    disable writes, then kill MySQL or the server—seriously. *Data integrity is more
+    important than data availability*.'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要停止脑裂，禁用*所有*实例上的写入操作：`SET GLOBAL read_only=1`。不要让一个实例保持可写状态；那会使问题变得更糟。如果无法禁用写入操作，那就关闭
+    MySQL 或服务器——严肃点。*数据完整性比数据可用性更重要*。
+- en: Tip
+  id: totrans-11
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: Data integrity is more important than data availability.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据完整性比数据可用性更重要。
+- en: Ideally, you should take the entire database offline until all inconsistent
+    data is found and reconciled. But realistically, if a prolonged database outage
+    will kill the business and you’re absolutely certain that reading potentially
+    incorrect data will not cause further damage, then you can run MySQL in read-only
+    mode (`read_only=1`) while you fix data using [`super_read_only`](https://oreil.ly/JrqIs)
+    mode.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理想情况下，应该将整个数据库离线，直到找到并协调所有不一致的数据。但现实情况是，如果长时间的数据库停机会毁掉业务，并且您绝对确定读取可能不正确的数据不会造成进一步的损害，那么您可以在修复数据时以只读模式运行
+    MySQL（`read_only=1`），同时使用[`super_read_only`](https://oreil.ly/JrqIs)模式。
+- en: 'There are only two ways to find inconsistent rows: run [`pt-table-sync`](https://oreil.ly/Dr10P),
+    or check manually. Manually entails whatever you can do to compare and verify
+    rows given your understanding of the application, the data, and what changes were
+    likely to have occurred during the split-brain. `pt-table-sync` is an open source
+    tool that can find, print, and synchronize data differences between two MySQL
+    instances, but use it with caution because any tool that changes data is inherently
+    risky.'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 找到不一致行的唯一两种方法是运行[`pt-table-sync`](https://oreil.ly/Dr10P)，或者手动检查。手动检查包括根据您对应用程序、数据及可能在脑裂期间发生的更改的理解，尽力进行比较和验证行。`pt-table-sync`是一个可以找到、打印和同步两个
+    MySQL 实例之间数据差异的开源工具，但要小心使用，因为任何更改数据的工具本质上都存在风险。
+- en: Warning
+  id: totrans-15
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: '`pt-table-sync` is a dangerous tool unless you wield it carefully. Do *not*
+    use its `--execute` option: only use `--print`, and reads its manual thoroughly.'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`pt-table-sync` 是一个危险的工具，除非你小心操作。不要使用其`--execute`选项：只使用`--print`，并彻底阅读其手册。'
+- en: 'Reconciling rows is the difficult part, and you should work with a MySQL expert
+    to ensure that it’s done correctly. If you’re lucky, you’ll determine that one
+    MySQL instance is authoritative—all rows have the correct data—and you can rebuild
+    rather than reconcile: rebuild all replicas from the authoritative instance. If
+    you’re not lucky, then work with a MySQL expert to determine your options.'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 调和行是困难的部分，你应该与 MySQL 专家合作，确保正确执行。如果幸运的话，你会确定一个 MySQL 实例是权威的——所有行都有正确的数据——那么你可以重建而不是调和：从权威实例重新建立所有副本。如果不幸的话，那么与
+    MySQL 专家合作确定你的选择。
+- en: Data Drift Is Real but Invisible
+  id: totrans-18
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据漂移是真实但看不见的
+- en: '*Data drift* refers to inconsistent data: one or more rows have different values
+    on different MySQL instances in the same replication topology. (*Drift* is figurative
+    for the values drifting further apart as changes to the inconsistent data cause
+    further inconsistencies.) Whereas inconsistent data from a split-brain scenario
+    is expected, inconsistent data from data drift is unexpected: you don’t know or
+    have any reason to suspect that there is inconsistent data. Although data drift
+    is invisible in the sense that it does not seem to cause a problem, it is nevertheless
+    a real problem because the application could return wrong values.'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*数据漂移*指的是不一致的数据：同一复制拓扑中不同 MySQL 实例上的一个或多个行具有不同的值。（*漂移*比喻为随着不一致数据的更改导致进一步的不一致，这些值漂离得越来越远。）而来自分裂脑场景的不一致数据是预期的，来自数据漂移的不一致数据是意外的：你不知道，也没有任何理由怀疑存在不一致的数据。虽然从表面上看，数据漂移似乎不会造成问题，但它仍然是一个真实的问题，因为应用可能返回错误的值。'
+- en: 'Fortunately, data drift is easy to detect: run [`pt-table-checksum`](https://oreil.ly/mogUa).
+    This tool is safe: it only reads and compares data. Unfortunately, data drift
+    is no easier to reconcile than inconsistent data due to split-brain. But that
+    probably won’t be an issue because data drift tends to be limited and isolated
+    in scope—not an avalanche of inconsistent data—because it’s not caused by a serious
+    failure like split-brain.'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 幸运的是，数据漂移很容易检测：运行[`pt-table-checksum`](https://oreil.ly/mogUa)。这个工具很安全：它只是读取和比较数据。不幸的是，数据漂移和由于分裂脑导致的不一致数据一样难以调和。但这可能不是问题，因为数据漂移往往是有限和局部的，不会像不一致数据的雪崩一样——因为它不是由像分裂脑这样的严重故障造成的。
+- en: The fascinating aspect of data drift is that, to my knowledge, no one has ever
+    found or proven the root cause of data drift in the wild (in a real production
+    database). In theory, it’s caused by nondeterministic queries and statement-based
+    replication, or writes on replicas. In a laboratory, those two would surely cause
+    data drift, but they never seem to be the cause in the wild. Instead, engineers
+    and DBAs alike are certain that nothing was done to cause or permit data drift.
+    And yet, it exists.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据漂移令人着迷的一面在于，据我所知，在野外（即真实的生产数据库中），从未有人找到或证明过数据漂移的根本原因。理论上，它是由于非确定性查询和基于语句的复制，或者在副本上的写入引起的。在实验室中，这两者肯定会导致数据漂移，但在野外似乎从未是原因。相反，工程师和数据库管理员一致认为没有做任何事情来导致或允许数据漂移。但它确实存在。
+- en: Tip
+  id: totrans-22
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: 'Check for data drift every few months (or once a year at the very least) by
+    running [`pt-table-checksum`](https://oreil.ly/mogUa). If you find data drift
+    once, don’t worry about it: reconcile the rows, and check again in a month. If
+    data keeps drifting (which is very unlikely), then you have an exotic problem
+    worth a detailed investigation to find and fix the root cause.'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每隔几个月（或至少每年一次）运行[`pt-table-checksum`](https://oreil.ly/mogUa)检查数据漂移。如果发现了数据漂移，不要担心：调和这些行，并在一个月后再次检查。如果数据持续漂移（这种情况非常罕见），那么你就有一个值得详细调查并修复根本原因的特殊问题。
+- en: Don’t Trust ORM
+  id: totrans-24
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 不要信任 ORM
+- en: 'The purpose of object-relational mapping (ORM) is to aid programmers by abstracting
+    data access into programming terms and objects. ORM is not inherently bad or inefficient,
+    but you should verify queries generated by an ORM library because performance
+    is not its purpose. For example, since ORM treats rows as objects, an ORM library
+    might select all columns, which is contrary to what you saw in the efficient data
+    access checklist ([Table 3-2](ch03.html#data-access-checklist)). Another example:
+    some ORM libraries execute other queries (`SHOW WARNINGS`, for example) before
+    or after the actual application query. When striving for maximum performance,
+    every query is important; other queries are unacceptable waste.'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对象关系映射（ORM）的目的是通过将数据访问抽象为编程术语和对象来帮助程序员。ORM 本身并不坏或低效，但你应该验证ORM库生成的查询，因为性能并不是它的目的。例如，由于ORM将行视为对象，ORM库可能会选择所有列，这与你在高效数据访问检查表([表
+    3-2](ch03.html#data-access-checklist))中看到的情况相反。另一个例子：一些ORM库在实际应用查询之前或之后执行其他查询（例如`SHOW
+    WARNINGS`）。在追求最大性能时，每个查询都很重要；其他查询是不可接受的浪费。
+- en: 'There are high-performance applications that use ORM, but the engineers are
+    careful not to trust ORM: they verify ORM-generated queries in the query profile
+    and query report (see [“Query profile”](ch01.html#query-profile) and [“Query report”](ch01.html#query-report),
+    respectively). If an ORM-generated query is too inefficient, read the ORM library
+    documentation to learn how to configure it to generate a more efficient query.'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有一些高性能应用使用ORM，但工程师们小心地不信任ORM：他们验证ORM生成的查询在查询分析和查询报告中（分别参见[“查询分析”](ch01.html#query-profile)和[“查询报告”](ch01.html#query-report)）。如果ORM生成的查询效率太低，可以阅读ORM库文档，了解如何配置以生成更高效的查询。
+- en: Schemas Always Change
+  id: totrans-27
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 架构总是在变化。
+- en: 'You probably already know this challenge, but in case you’re brand new to life
+    with any relational database: schemas always change. (More specifically, table
+    definitions always change, but tables constitute a schema.) The challenge is doing
+    an *online schema change* (OSC): changing a schema while it’s in use, without
+    affecting the application. As mentioned in previous chapters, there are three
+    great solutions for MySQL:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能已经了解到这个挑战，但如果你刚接触任何关系数据库生活的话，我们来详细谈一谈：架构总是在变化。（更具体地说，表定义总是在变化，但表构成了一个架构。）挑战在于进行*在线架构更改*（OSC）：在使用过程中改变架构，而不影响应用程序。正如前几章所述，MySQL
+    有三个很好的解决方案：
+- en: '[pt-online-schema-change](https://oreil.ly/brtmM)'
+  id: totrans-29
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[pt-online-schema-change](https://oreil.ly/brtmM)'
+- en: '[`gh-ost`](https://oreil.ly/ZKQAd)'
+  id: totrans-30
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[`gh-ost`](https://oreil.ly/ZKQAd)'
+- en: '[`ALTER TABLE`](https://oreil.ly/GRQuf)'
+  id: totrans-31
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '[`ALTER TABLE`](https://oreil.ly/GRQuf)'
+- en: Each solution works very differently, but all of them can alter a table definition
+    online without affecting the application. Read the documentation for each to decide
+    which one works best for you.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个解决方案的工作方式都非常不同，但它们都可以在线更改表定义，而不影响应用程序。阅读每个文档以决定哪一个最适合你。
+- en: 'There’s another aspect to this challenge: integrating schema changes into the
+    software development process. You can run an OSC manually, but engineering teams
+    don’t do that because, like other code changes, schema changes need to be a part
+    of the development process so they are reviewed, approved, tested in staging,
+    and so forth. Since development processes are team-specific, your team will have
+    to create its own solution. But there is currently one open source solution: [Skeema](https://www.skeema.io).
+    For a thorough read on how renowned MySQL expert Shlomi Noach solved this challenge
+    at GitHub, read his blog post [“Automating MySQL Schema Migrations with GitHub
+    Actions and More”](https://oreil.ly/9cEJi).'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个挑战还有另一个方面：将架构更改集成到软件开发过程中。你可以手动运行OSC，但工程团队不会这样做，因为像其他代码更改一样，架构更改需要成为开发过程的一部分，因此需要审核、批准、在测试环境中测试等等。由于开发流程是团队特定的，你的团队将不得不创建自己的解决方案。但目前有一个开源解决方案：[Skeema](https://www.skeema.io)。要深入了解，如何在GitHub上解决这个挑战的著名MySQL专家Shlomi
+    Noach，请阅读他的博客文章[“使用GitHub Actions等自动化MySQL架构迁移”](https://oreil.ly/9cEJi)。
+- en: MySQL Extends Standard SQL
+  id: totrans-34
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MySQL 扩展了标准 SQL
+- en: If you use only MySQL, then perhaps you can skip this challenge. But if you’re
+    coming from (or going to) another relational database, then be aware that MySQL
+    has many extensions to standard SQL enumerated in [“MySQL Extensions to Standard
+    SQL”](https://oreil.ly/gLN1l) in the MySQL manual. And MySQL does not support
+    some standard SQL features, like full outer joins. There are other restrictions
+    and limitations cataloged in the aptly named excerpt [“MySQL Restrictions and
+    Limitations”](https://oreil.ly/x3xro), and you will find other mentions and oddities
+    throughout the MySQL manual.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您只使用MySQL，那么也许您可以跳过这个挑战。但如果您来自（或去往）另一个关系型数据库，那么请注意，MySQL在MySQL手册中列举了许多标准SQL的扩展，详见[“MySQL对标准SQL的扩展”](https://oreil.ly/gLN1l)。MySQL不支持一些标准SQL功能，比如全外连接。还有其他限制和限制在名为[“MySQL限制和限制”](https://oreil.ly/x3xro)的节选中列出，您将在MySQL手册中找到其他提及和奇特之处。
+- en: 'Any database with a history as long and storied as MySQL is bound to be equally
+    eclectic. What’s uniquely MySQL about MySQL is something that experts have come
+    to know and trust so naturally that it’s rarely pointed out: the [MySQL Manual](https://oreil.ly/IXARN)
+    is comprehensive and authoritative. Software documentation can be sparse, out
+    of date, or nonexistent, but not the MySQL manual. There are arcane bits of information
+    about MySQL not in the manual, but those aside, MySQL experts rely heavily on
+    the MySQL manual—and so should you.'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 任何具有像MySQL这样悠久而丰富历史的数据库都必定同样充满异国风情。关于MySQL的独特之处是专家们自然而然地了解和信任的东西，很少有人指出：[MySQL手册](https://oreil.ly/IXARN)是全面而权威的。软件文档可能稀缺、过时或不存在，但MySQL手册不是。关于MySQL的一些神秘信息不在手册中，但除此之外，MySQL专家们严重依赖MySQL手册——你也应该如此。
+- en: Noisy Neighbors
+  id: totrans-37
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 嘈杂邻居
+- en: 'On a physical server, a *noisy neighbor* is a program that degrades performance
+    for other programs by using inordinately more system resources. For example, if
+    a server is running 20 separate MySQL instances, but one of them uses all the
+    CPU and disk I/O, then it’s a noisy neighbor. This is a common challenge because
+    a *shared server* (or *multitenancy*) is the norm: running multiple virtualized
+    environments on a single physical server. (The opposite, a *dedicated server*
+    [or *single-tenancy*], is rare and expensive, especially in the cloud.) A noisy
+    neighbor is a perplexing challenge because the performance impact is not your
+    fault, but it is your problem.'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在物理服务器上，*嘈杂邻居*是通过使用过多系统资源而降低其他程序性能的程序。例如，如果服务器运行了20个独立的MySQL实例，但其中一个使用了所有的CPU和磁盘I/O，那么它就是一个嘈杂邻居。这是一个常见的挑战，因为*共享服务器*（或*多租户*）是正常的：在单个物理服务器上运行多个虚拟化环境。相反，*专用服务器*（或*单租户*）是罕见且昂贵的，尤其是在云中。嘈杂邻居是一个令人困惑的挑战，因为性能影响不是您的错，但却是您的问题。
+- en: 'If your company runs its own hardware, then the problem is tractable: measure
+    the resource usage of each program or virtual environment on the shared server
+    where you suspect a noisy neighbor. Noisy neighbors are easy to spot because they’re
+    noisy. Then move the noisy neighbor (or your database) to another, quieter server.
+    If that’s not possible, then buy another copy of this book for the noisy neighbor
+    so they can learn how to optimize MySQL performance.'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的公司使用自己的硬件，那么问题是可以解决的：测量您怀疑存在嘈杂邻居的共享服务器上每个程序或虚拟环境的资源使用情况。嘈杂邻居很容易被发现，因为它们很吵闹。然后将嘈杂邻居（或您的数据库）迁移到另一个更安静的服务器上。如果这不可能，那么为嘈杂邻居购买另一本这本书，让他们学习如何优化MySQL性能。
+- en: In the cloud, you cannot see or prove the existence of a noisy neighbor. For
+    security, cloud providers maintain strict separation of tenants (customers like
+    you) on shared servers. And they are unlikely to admit the existence of a noisy
+    neighbor because it would imply that they are not balancing the server load, which
+    should be included in the cost. Consequently, the standard practice is to reprovision
+    a cloud database when you suspect a noisy neighbor. Some companies benchmark a
+    cloud resource before using it and only keep it if performance meets a baseline;
+    else, the resource is destroyed, another one is provisioned, and the process repeats
+    until—by chance—the resource is provisioned on a quiet server.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在云中，您无法看到或证明存在嘈杂邻居。出于安全考虑，云提供商在共享服务器上严格保持租户（像您这样的客户）的分离。他们不太可能承认存在嘈杂邻居，因为这将意味着他们没有平衡服务器负载，这应该包含在成本中。因此，当您怀疑存在嘈杂邻居时，标准做法是重新配置云数据库。一些公司在使用云资源之前对其进行基准测试，只有在性能达到基线时才保留它；否则，资源将被销毁，另一个资源将被配置，这个过程会重复，直到—偶然地—资源被配置在一个安静的服务器上。
+- en: Applications Do Not Fail Gracefully
+  id: totrans-41
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 应用程序无法优雅地失败
+- en: 'Netflix originated *chaos engineering*: intentionally introducing problems
+    and failures into a system to test its resiliency and necessitate that engineers
+    design for failure. This philosophy and practice is bold because it *truly* tests
+    the mettle of an application. Writing software that works correctly when everything
+    around it also works correctly is an expectation so basic and obvious that it
+    counts for nothing. The challenge is to write software that works—in some capacity—even
+    when everything around it is failing. As engineers, we often think that we have
+    accounted for failure in our software, but how do we know until something fails
+    for real? Plus, not all failures are binary: working or not working. The most
+    insidious problems are not outright failures but, rather, edge cases and outliers:
+    the kind of problem that requires a story to explain it, not a simple failure
+    statement like “the hard drive died.”'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Netflix 发起了 *混乱工程*：有意引入问题和故障到系统中，以测试其弹性，并迫使工程师设计用于故障的解决方案。这种哲学和实践是大胆的，因为它 *真正*
+    测试了应用程序的实力。编写软件在周围一切正常运行时也能正确工作，这是一种基本和显而易见的期望，但它毫无意义。挑战在于编写软件，即使在周围一切都在失败的情况下也能工作。作为工程师，我们经常认为在软件中考虑了故障，但在真正发生故障之前我们怎么知道呢？而且，并非所有故障都是二进制的：工作或不工作。最阴险的问题不是明显的故障，而是边缘情况和异常情况：这种问题需要一个故事来解释，而不是简单的故障声明，比如“硬盘死机”。
+- en: 'The same is true for applications with respect to MySQL. However, chaos engineering
+    is not standard practice in the MySQL industry because trifling with a database
+    is risky and few engineers are so bold. But fortune favors the bold, so here are
+    12 database chaos scenarios to test the mettle of your application:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 MySQL 的应用程序也是如此。但是，在 MySQL 行业中，混乱工程不是标准做法，因为玩弄数据库是有风险的，很少有工程师如此大胆。但幸运总是眷顾大胆者，因此这里有
+    12 种数据库混乱场景，可以测试您的应用程序的实力：
+- en: MySQL is offline
+  id: totrans-44
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL 离线
+- en: MySQL is very slow to respond
+  id: totrans-45
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL 响应非常慢
+- en: MySQL is read-only
+  id: totrans-46
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL 是只读的
+- en: MySQL has just started (cold buffer pool)
+  id: totrans-47
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL 刚刚启动（冷缓冲池）
+- en: Read replicas are offline or very slow
+  id: totrans-48
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 读取副本离线或非常缓慢
+- en: Failover in the same region
+  id: totrans-49
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在同一地区的故障转移
+- en: Failover to a different region
+  id: totrans-50
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 故障转移到不同的地区
+- en: Database backup is running
+  id: totrans-51
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据库备份正在运行
+- en: DNS resolution is very slow
+  id: totrans-52
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: DNS 解析非常慢
+- en: Network is slow (high latency) or saturated
+  id: totrans-53
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 网络速度慢（高延迟）或饱和
+- en: One hard drive in a RAID array is degraded
+  id: totrans-54
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: RAID 阵列中的一个硬盘已降级
+- en: Free disk space on an SSD is less than 5%
+  id: totrans-55
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: SSD 上的空闲磁盘空间低于 5%
+- en: Some of those 12 database chaos scenarios might not apply to your infrastructure,
+    but most are standard and yield interesting results depending on the application.
+    If you have never engineered chaos, then I encourage you to start because chaos
+    doesn’t wait until you’re ready.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些 12 种数据库混乱场景中的一些可能不适用于您的基础设施，但大多数都是标准的，并根据应用程序产生有趣的结果。如果您从未进行过混乱工程设计，那么我鼓励您开始，因为混乱不会等到你准备好。
+- en: High Performance MySQL Is Difficult
+  id: totrans-57
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 高性能 MySQL 非常困难
+- en: If you earnestly apply all the best practices and techniques in this book, I
+    am confident that you will achieve remarkable performance with MySQL. But that
+    does not mean it’ll be quick or easy. High-performance MySQL requires practice
+    because resources—books, blogs, videos, conferences, and so on—teach you theory,
+    which is different than reality. Consequently, when you begin to apply what you’ve
+    learned from this book to your application, you might run into the following two
+    challenges.
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您真诚地应用了本书中的所有最佳实践和技术，我相信您将在 MySQL 中取得卓越的性能。但这并不意味着它会快速或轻松。高性能 MySQL 需要实践，因为资源——书籍、博客、视频、会议等——教给您的是理论，而不是现实。因此，当您开始将本书中学到的东西应用到您的应用程序中时，您可能会遇到以下两个挑战。
+- en: 'The first challenge is that real application queries can be—and usually are—more
+    complex than the pithy little examples strewn throughout these pages. Add to that
+    the additional challenge of remembering and applying so much knowledge at once:
+    query metrics, indexes and indexing, `EXPLAIN` output, query optimizations, table
+    definitions, and so forth. It can be overwhelming at first, but take it one query
+    at a time, and remember [“North Star”](ch01.html#north-star) and [“Indexing: How
+    to Think Like MySQL”](ch02.html#think-like-mysql). Even experts need time to unravel
+    and understand the full story of a query.'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一个挑战是，真实应用的查询通常比这些页面上零散的简短示例更复杂。加之一次性记住和应用如此多的知识的额外挑战：查询指标、索引和索引、`EXPLAIN`输出、查询优化、表定义等等。一开始可能会感到不知所措，但逐个查询来处理，并记住[“北极星”](ch01.html#north-star)和[“索引：如何像
+    MySQL 一样思考”](ch02.html#think-like-mysql)。即使是专家也需要时间来揭示并理解查询的完整故事。
+- en: 'The second challenge is that real application performance rarely depends on
+    a single aspect of the workload. Fixing slow queries will undoubtedly help, but
+    it might not help enough. The more performance you need from MySQL, the more you
+    have to optimize the entire workload: each query, all data, and every access pattern.
+    Eventually you will need to apply knowledge from every chapter of this book. (Except
+    [Chapter 10](ch10.html#ch10) if you’re not using MySQL in the cloud.) Start small
+    (Chapters [1](ch01.html#ch01)–[4](ch04.html#ch04)), but commit to learning and
+    applying everything in this book because you will need it.'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二个挑战是，真实应用的性能很少仅取决于工作负载的某一个方面。修复慢查询无疑会有所帮助，但可能不够。你需要从整个工作负载着手优化：每个查询、所有数据以及每种访问模式。最终，你将需要应用这本书每一章的知识。（除非你不在云端使用
+    MySQL，否则忽略[第十章](ch10.html#ch10)。）从[第一章](ch01.html#ch01)到[第四章](ch04.html#ch04)开始小步前进，但务必学习并应用这本书中的所有内容，因为你会需要它们。
+- en: 'There is more to MySQL performance than I present in this book, but I assure
+    you: the knowledge imparted in these chapters is comprehensive and effective.
+    Moreover, there are no secrets known only to experts that unlock amazing MySQL
+    performance. I know that from my own experience and also from having worked with
+    many of the best MySQL experts in the world. Plus, open source software is terrible
+    at keeping secrets.'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 的性能远不止本书中我所介绍的内容，但我向你保证：这些章节中所传授的知识是全面且有效的。此外，并没有仅专家才知道的秘密能够极大地提升 MySQL
+    的性能。我从自己的经验中知道这一点，也从与世界上许多顶级 MySQL 专家的合作中了解到这一点。而且，开源软件很难保守秘密。
+- en: 'Practice: Identify the Guardrails that Prevent Split-Brain'
+  id: totrans-62
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实践：识别防止分裂脑的保护措施
+- en: 'The goal of this practice is to identify the guardrails that prevent split-brain.
+    There are two parts: detailing the guardrails so that every engineer understands
+    what they are, where they are (probably in tools), and how they work, and then
+    carefully reviewing tools that manage or change MySQL instances, especially failover
+    tools.'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个实践的目标是识别防止分裂脑的保护措施。它有两个部分：详细说明保护措施，以便每个工程师都理解它们的作用、位置（可能在工具中）以及它们的工作原理，然后仔细审查管理或更改
+    MySQL 实例的工具，特别是故障转移工具。
+- en: If you do not manage MySQL, then schedule time with the engineers who manage
+    MySQL to have them detail how they prevent split-brain during operations, especially
+    failover. This should be an easy request because preventing split-brain is fundamental
+    to managing MySQL.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你不管理 MySQL，那么请安排时间与管理 MySQL 的工程师会面，让他们详细说明他们在运营中如何防止分裂脑，特别是故障转移时。这应该是一个简单的请求，因为防止分裂脑是管理
+    MySQL 的基本要求。
+- en: If you use MySQL in the cloud, the details vary. Cloud providers have undisclosed
+    methods to prevent split-brain depending on the internal setup and management
+    of MySQL. For example, split-brain is theoretically not possible with a standard
+    multi-AZ instance of Amazon RDS for MySQL because, although it’s multi-AZ, multiple
+    instances of MySQL do not run at the same time. (It’s a single running instance
+    of MySQL in one availability zone [AZ]. If that instance fails, another instance
+    is started in another AZ.) But if you add read replicas, then you have multiple
+    running instances of MySQL in the same replication topology, and Amazon does not
+    make any guarantees about split-brain with respect to read replicas. In the cloud,
+    presume that you are responsible for the guardrails that prevent split-brain,
+    but also know when the cloud provider does and does not prevent split-brain.
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果在云中使用 MySQL，情况会有所不同。云服务提供商根据内部设置和管理 MySQL 的方式采取未公开的方法来防止脑裂。例如，使用标准的 Amazon
+    RDS for MySQL 多可用区实例理论上不可能出现脑裂，因为虽然是多可用区，但多个 MySQL 实例不会同时运行。（在一个可用区 [AZ] 中有一个运行中的
+    MySQL 实例。如果该实例失败，另一个实例将在另一个 AZ 中启动。）但是，如果添加读取副本，则在相同复制拓扑中有多个运行中的 MySQL 实例，Amazon
+    对于与读取副本相关的脑裂不作任何保证。在云中，假设您负责防止脑裂的护栏，但也要了解云提供商何时会或不会防止脑裂。
+- en: 'If you manage MySQL on your own hardware, then I advise you to contract a MySQL
+    expert to help you identify the guardrails that prevent split-brain. (It shouldn’t
+    take long, so it should be a short and affordable contract.) There is one foundational
+    guardrail that you must implement: configure MySQL (in its *my.cnf* file) to start
+    in read-only mode: `read_only=1`. Always start MySQL in read-only mode. From this
+    foundation, other guardrails detail how read-only mode is toggled such that it’s
+    guaranteed to be off (MySQL is writable) on only one instance at a time.'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您在自己的硬件上管理 MySQL，则建议您聘请 MySQL 专家帮助您确定防止脑裂的护栏。（这不应花费太长时间，所以应该是一个简短而经济实惠的合同。）有一个基本的护栏必须实施：在其
+    *my.cnf* 文件中配置 MySQL 以只读模式启动：`read_only=1`。始终以只读模式启动 MySQL。从这个基础上，其他护栏详细说明了如何切换只读模式，以确保一次只有一个实例处于非只读模式（MySQL
+    可写）。
+- en: Tip
+  id: totrans-67
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 小贴士
+- en: Always start MySQL in read-only mode (`read_only=1`).
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 始终以只读模式启动 MySQL (`read_only=1`)。
+- en: 'Once the guardrails are understood by engineers, the second part is to carefully
+    review tools that manage or change MySQL instances, especially failover tools,
+    to ensure that the guardrails are implemented and working as expected. Of course,
+    all code should be unit tested, but preventing split-brain is so important that
+    it warrants manual code review, too. There are issues in code that might not surface
+    when identifying the guardrails; for example: race conditions, retries, and error
+    handling. The last—error handling—is especially important: can (or should) a tool
+    roll back changes on error? Remember: data integrity is more important than data
+    availability. When toggling MySQL read-only, tools should err on the side of caution:
+    if an operation has a nonzero chance of causing split-brain, don’t do it; leave
+    MySQL in read-only mode, fail, and let a human figure it out.'
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦工程师理解了护栏，第二部分是仔细审查管理或更改 MySQL 实例的工具，特别是故障转移工具，以确保护栏得到实施并按预期工作。当然，所有代码都应该经过单元测试，但是防止脑裂如此重要，以至于需要进行手动代码审查。在识别护栏时可能存在的代码问题包括：竞争条件、重试和错误处理。最后一点——错误处理——尤为重要：工具是否能（或者应该）在出错时回滚更改？记住：数据完整性比数据可用性更重要。当切换
+    MySQL 为只读时，工具应该谨慎行事：如果某个操作有非零概率导致脑裂，就不要这样做；让 MySQL 保持只读模式，失败时让人工解决。
+- en: 'Bottom line: be 100% clear on the guardrails that prevent split-brain.'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 底线：对于防止脑裂的护栏要非常清楚。
+- en: 'Practice: Check for Data Drift'
+  id: totrans-71
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实践：检查数据漂移
+- en: 'The goal of this practice is to check for data drift using [`pt-table-checksum`](https://oreil.ly/mogUa).
+    You’re in luck: this tool was purposely written to be easy and automatic. Simply
+    download and run the tool, and it automates the rest in most cases. If not, a
+    quick read through its documentation will answer any questions.'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种做法的目的是使用 [`pt-table-checksum`](https://oreil.ly/mogUa) 检查数据漂移。您很幸运：这个工具专门设计得非常简单和自动化。只需下载并运行该工具，它将在大多数情况下自动完成其余工作。如果不行，快速阅读其文档将解答任何问题。
+- en: Note
+  id: totrans-73
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Most MySQL tools need special configuration to work with MySQL in the cloud.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数 MySQL 工具需要特殊配置才能与云中的 MySQL 配合工作。
+- en: '`pt-table-checksum` does only one thing: check for and report data drift. It
+    can run for hours or days depending on data size and access load. By default,
+    it’s slow to avoid interfering with production access. Therefore, be sure to run
+    it in a `screen` or `tmux` session.'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`pt-table-checksum` 只做一件事情：检查并报告数据漂移。根据数据大小和访问负载的不同，它可能会运行数小时或数天。默认情况下，它运行缓慢以避免干扰生产访问。因此，请务必在
+    `screen` 或 `tmux` 会话中运行它。'
+- en: 'When `pt-table-checksum` finishes checking a table, it prints a one-line result
+    for the table. The output looks like this:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当 `pt-table-checksum` 完成对表的检查时，它会打印表的一行结果。输出如下：
+- en: '[PRE0]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: The last line of the output reveals a table with data drift because column `DIFFS`
+    has a nonzero value. If any table has data drift, rerun with the `--replicate-check-only`
+    option to print the replicas and chunks that are different than the source. (A
+    *chunk* is a range of rows delineated by upper and lower boundary values for an
+    index [usually the primary key]. `pt-table-checksum` verifies rows in chunks because
+    checking individual rows is too slow and inefficient.) You will need to devise
+    a plan to isolate and reconcile inconsistent rows. If there are very few, you
+    might be able to isolate and reconcile them manually. If not, then I advise you
+    to work with a MySQL expert to ensure it’s done correctly.
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出的最后一行显示出数据漂移的表，因为列 `DIFFS` 的值不为零。如果任何表有数据漂移，请使用 `--replicate-check-only` 选项重新运行以打印与源不同的副本和分块。(*分块*
+    是由索引的上限和下限边界值界定的行范围 [通常是主键]。`pt-table-checksum` 通过检查分块中的行来验证，因为逐行检查效率太低且效率低下。)
+    您将需要制定计划来隔离和调整不一致的行。如果不多，您可以尝试手动隔离和调整它们。如果不行，那么我建议您与 MySQL 专家合作，确保正确完成操作。
+- en: 'Practice: Chaos'
+  id: totrans-79
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实践：混沌
+- en: The goal of this practice is to test the mettle of your application. Chaos engineering
+    is not for the faint of heart, so start with your staging database.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种实践的目标是测试您的应用程序的能力。混沌工程不适合胆小者，因此请从您的演示数据库开始。
+- en: Warning
+  id: totrans-81
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: This practice will cause outages.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种实践会导致停机。
+- en: For the following chaos, MySQL and the application should be running normally
+    with some load, and you should have good metrics and observability into both to
+    record and analyze how they respond.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在接下来的混沌测试中，MySQL 和应用程序应该正常运行，并且有一定的负载。您应该能够充分记录和分析它们的运行状况。
+- en: 'I propose the following chaos, but pick and choose based on your level of risk:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我建议以下混沌操作，但根据您的风险承受能力进行选择：
+- en: Restart MySQL
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重启 MySQL
+- en: 'Restarting MySQL tests how the application responds when MySQL is offline,
+    and how it responds when MySQL buffers are cold (specifically, the InnoDB buffer
+    pool). Cold buffers require disk I/O to read data into memory, which causes slower
+    than usual response time. It also teaches you three things: how long it takes
+    MySQL to shutdown, how long it takes MySQL to start up, and how long it takes
+    the buffers to warm up.'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重启 MySQL 测试应用程序在 MySQL 脱机时的响应情况，以及在 MySQL 缓冲区冷启动时的响应情况（特别是 InnoDB 缓冲池）。冷启动需要进行磁盘
+    I/O 将数据读入内存，导致响应时间比平时慢。这还能让您了解三件事情：MySQL 关闭所需的时间、MySQL 启动所需的时间以及缓冲区热身所需的时间。
+- en: Enable read-only mode
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 启用只读模式
+- en: '`SET GLOBAL read_only=1` on the source instance to enable read-only mode and
+    test how the application responds to being able to read data but not write data.
+    Engineers often think that the application will continue working for reads and
+    gracefully fail for writes, but chaos is full of surprises. This also effectively
+    simulates a failed failover, which should never happen (because it would mean
+    a failure of high availability), but “should never happen” is within the purview
+    of chaos.'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在源实例上设置 `SET GLOBAL read_only=1` 以启用只读模式，并测试应用程序在可以读取但不能写入数据时的响应。工程师们通常认为应用程序在读取方面会继续工作，并且对写入进行优雅失败，但混沌充满了意外。这也有效地模拟了失败的故障转移，这种情况永远不应发生（因为这意味着高可用性的失败），但“永远不应该发生”也包含在混沌的范围内。
+- en: Stop MySQL for 1 hour
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 停止 MySQL 1 小时
+- en: 'Most applications can weather a storm for seconds or minutes—maybe even tens
+    of minutes—but at some point, queues fill up, retires are exhausted, exponential
+    backoffs become very long, rate limits reset, and users give up and go to a competitor.
+    MySQL should never be offline more than a few seconds—if properly managed—but
+    again: chaos.'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数应用程序可以在几秒或几分钟内经受住风暴的考验，甚至可以是十几分钟，但在某个时刻，队列会填满，重试次数会用尽，指数回退时间会变得非常长，速率限制会重置，用户会放弃并转向竞争对手。MySQL
+    在正常管理的情况下，不应该离线超过几秒钟，但再次：混沌。
+- en: Back in 2004 when I worked in a data center, moments before I started my 2 p.m.
+    to midnight shift, an engineer accidentally hit the emergency power off button—*to
+    the data center*. Calm is the only answer to chaos, so I got a cup of coffee before
+    sitting down to help reboot the data center.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 2004年，当我在一个数据中心工作时，在我开始下午2点到午夜班之前，一位工程师意外地按到了紧急关机按钮——*关掉了整个数据中心*。在混乱中保持冷静是唯一的答案，所以我先拿了杯咖啡，然后坐下来帮助重新启动数据中心。

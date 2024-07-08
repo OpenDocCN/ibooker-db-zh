@@ -1,0 +1,4362 @@
+- en: Chapter 19\. Working with JSON
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第19章。使用JSON
+- en: 19.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 19.0 介绍
+- en: Relational databases have proven to be effective for decades. They prevent duplicates
+    and misses of data, and enable fast access to stored values. However, business
+    continually invents new scenarios in which data needs to be more flexible than
+    the relational model allows.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 几十年来，关系数据库已被证明非常有效。它们防止了数据的重复和丢失，并且能够快速访问存储的值。然而，业务不断创造新的情景，其中数据需要比关系模型允许的更加灵活。
+- en: For example let’s consider a record for a user who can access subscription-only
+    digital content and leave comments. For such a user, having only basic information
+    - their name, email address, and password - is enough to get started. However,
+    once the users start exploring more options (for example, requiring delivery),
+    they may need their mailing address to be stored. Mailing address could be different
+    from the billing address. The user may want to add a social network account or
+    few of them.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，让我们考虑一个可以访问仅订阅数字内容并留下评论的用户记录。对于这样的用户，只有基本信息 - 姓名、电子邮件地址和密码 - 就足以开始使用。然而，一旦用户开始探索更多选项（例如，需要交付物品），他们可能需要存储其邮寄地址。邮寄地址可能与账单地址不同。用户可能还希望添加一个或几个社交网络账号。
+- en: One way of storing flexible data in the relational database would be to store
+    additional pieces of data in the referenced table that shares details for each
+    user. We discuss this technique in [Recipe 16.5](ch16.xhtml#nch-multi-multi-one-to-many)
+    and [Recipe 16.6](ch16.xhtml#nch-multi-multi-many-to-many).
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在关系数据库中存储灵活数据的一种方法是将附加数据片段存储在共享每个用户详细信息的引用表中。我们在[配方16.5](ch16.xhtml#nch-multi-multi-one-to-many)和[配方16.6](ch16.xhtml#nch-multi-multi-many-to-many)中讨论了这种技术。
+- en: However, this technique may be not the best in the following situations.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，在以下情况下，这种技术可能不是最佳选择。
+- en: When only few items in the main table have details in the referenced table
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当主表中只有少数项目在引用表中具有详细信息时
+- en: If you still need to know about these details, when you query required fields
+    in the main table you will need to join it with the referencing table every time.
+    This will complicate queries and affect performance.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您仍然需要了解这些详细信息，当您查询主表中所需字段时，您将需要每次将其与引用表进行连接。这将使查询复杂化并影响性能。
+- en: When most of the specific details could be missed
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当大多数具体细节可能被忽略时
+- en: Details such as a user’s district, or building number are only necessary for
+    users who requested physical delivery of items. For everyone else, these fields
+    could be empty, still you need to reserve space in the database for those empty
+    fields. This adds significant cost once the database grows.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用户的区域或楼号等详细信息仅适用于请求物品实体交付的用户。对于其他用户，这些字段可以为空，但仍然需要在数据库中保留这些空字段的空间。随着数据库的增长，这将增加显著成本。
+- en: When you may not know which additional data you need in future
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您可能不知道未来需要哪些额外数据时
+- en: Business may require adding additional details to the data collections. Appending
+    such details in the relational model means creating new tables and columns to
+    the existent table. This requires schema re-design and maintenance windows to
+    implement the changes. This is not always possible and space/cost effective.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 业务可能需要向数据集合添加附加详细信息。在关系模型中追加这些详细信息意味着在现有表格中创建新的表格和列。这需要模式重新设计和实施更改的维护窗口。这并不总是可行且成本/空间高效。
+- en: To resolve these issues flexible data structures, such as JSON, are the best
+    fit. MySQL always allowed to store JSON values in text fields using string data
+    types. Since version 5.7 MySQL also supports JSON data type and functions that
+    allow to manipulate JSON values in effective manner. MySQL combines advantages
+    of both SQL and NoSQL worlds.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要解决这些问题，灵活的数据结构（如JSON）是最佳选择。MySQL始终允许使用字符串数据类型在文本字段中存储JSON值。自MySQL版本5.7以来，还支持JSON数据类型和函数，可以有效地操作JSON值。MySQL结合了SQL和NoSQL世界的优势。
+- en: 19.1 Choosing the Right Data Type
+  id: totrans-13
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 19.1 选择正确的数据类型
+- en: Problem
+  id: totrans-14
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to store JSON values and do not know which data type to choose.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望存储JSON值但不知道选择哪种数据类型。
+- en: Solution
+  id: totrans-16
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the data type JSON.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用JSON数据类型。
+- en: Discussion
+  id: totrans-18
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'JSON data can be stored in any text or binary column. JSON functions will work
+    without issues but the special data type JSON has numerous advantages, particularly:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: JSON数据可以存储在任何文本或二进制列中。JSON函数可以正常工作，但是JSON特殊数据类型具有许多优点，特别是：
+- en: Optimized performance
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 优化性能
+- en: JSON data is converted into a format that allows quick lookup for values in
+    the document.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: JSON数据被转换为一种格式，允许在文档中快速查找值。
+- en: Partial updates
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 部分更新
+- en: Updates to JSON elements happen in place, without need to rewrite full document.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对JSON元素的更新在原地进行，无需重新编写完整文档。
+- en: Automatic data validation
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自动数据验证
+- en: When a value is inserted into column of JSON data type, MySQL automatically
+    validates it and produces an error if the document is invalid JSON.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当将一个值插入JSON数据类型的列时，MySQL会自动验证它，并在文档无效时产生错误。
+- en: The following will create a table with JSON column `author`.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下代码将创建一个具有JSON列`author`的表。
+- en: '[PRE0]'
+  id: totrans-27
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: See Also
+  id: totrans-28
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 另请参阅
+- en: For additional information about data type JSON, see [The JSON Data Type](https://dev.mysql.com/doc/refman/8.0/en/json.html)
+    in the MySQL User Reference Manual.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 想要关于JSON数据类型的更多信息，请参阅MySQL用户参考手册中的[JSON数据类型](https://dev.mysql.com/doc/refman/8.0/en/json.html)。
+- en: 19.2 Inserting JSON values
+  id: totrans-30
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 19.2 插入JSON值
+- en: Problem
+  id: totrans-31
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to store JSON documents in MySQL.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你希望在MySQL中存储JSON文档。
+- en: Solution
+  id: totrans-33
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: User regular `INSERT` statements.
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用常规的`INSERT`语句。
+- en: Discussion
+  id: totrans-35
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: JSON is not different from other data types. Use regular `INSERT` statements
+    to add your documents into the tables.
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: JSON与其他数据类型无异。使用常规的`INSERT`语句将文档添加到表中。
+- en: '[PRE1]book_authors[PRE2]'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[PRE1]书籍作者[PRE2]'
+- en: 19.3 Validating JSON
+  id: totrans-38
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 19.3 验证JSON
+- en: Problem
+  id: totrans-39
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to ensure that a given string is a valid JSON.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你希望确保一个给定的字符串是有效的JSON。
+- en: Solution
+  id: totrans-41
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the JSON datatype to perform automatic validation. Use the function `JSON_VALID`
+    to validate strings. Use the JSON Schema to define schema for the JSON documents.
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用JSON数据类型执行自动验证。使用函数`JSON_VALID`验证字符串。使用JSON模式定义JSON文档的模式。
+- en: Discussion
+  id: totrans-43
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Function `JSON_VALID` checks if given document is valid JSON.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数`JSON_VALID`检查给定文档是否为有效的JSON。
+- en: '[PRE3]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: If a column defined as JSON MySQL will not allow you to insert invalid values.
+    Additionally, error message will locate the first error, so you can fix it faster.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果一个列定义为JSON，MySQL将不允许你插入无效值。此外，错误消息将定位到第一个错误，因此你可以更快地修复它。
+- en: '[PRE4]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: If you want to not only validate a JSON document, but also want it to satisfy
+    a schema, use the function `JSON_SCHEMA_VALID`. This function supports JSON schema
+    as described in [Draft 4 of the JSON Schema specification](https://json-schema.org/specification-links.html#draft-4).
+    To use it you need to define a schema first and compare the JSON value with it.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你不仅想验证一个JSON文档，还想使其满足一个模式，请使用函数`JSON_SCHEMA_VALID`。该函数支持JSON模式，如[JSON模式规范草案第4版](https://json-schema.org/specification-links.html#draft-4)所述。使用它之前，你需要先定义一个模式，然后将JSON值与之进行比较。
+- en: The function `JSON_SCHEMA_VALIDATION_REPORT` not only checks a given document
+    against the schema but also reports which particular part of the schema is violated.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数`JSON_SCHEMA_VALIDATION_REPORT`不仅检查给定的文档是否符合模式，还会报告违反模式的具体部分。
+- en: 'For the table `book_authors` we may define a schema that require having `name`
+    and `lastname` as required fields and array of book titles as optional element
+    `books`. We can use following code for the schema:'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于表`book_authors`，我们可以定义一个模式，要求必须包含`name`和`lastname`作为必填字段，并且可以选择包含书籍标题数组作为可选元素`books`。我们可以使用以下代码来定义模式：
+- en: '[PRE5]'
+  id: totrans-51
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: '[![1](Images/1.png)](#co_nch-json-json-validation-id_co)'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![1](Images/1.png)](#co_nch-json-json-validation-id_co)'
+- en: Unique identifier of the schema
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模式的唯一标识符
+- en: '[![2](Images/2.png)](#co_nch-json-json-validation-schema_co)'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![2](Images/2.png)](#co_nch-json-json-validation-schema_co)'
+- en: JSON schema specification. Should always be `http://json-schema.org/draft-04/schema#`
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: JSON模式规范。应始终为`http://json-schema.org/draft-04/schema#`
+- en: '[![3](Images/3.png)](#co_nch-json-json-validation-desc_co)'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![3](Images/3.png)](#co_nch-json-json-validation-desc_co)'
+- en: Description of the schema
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模式的描述
+- en: '[![4](Images/4.png)](#co_nch-json-json-validation-type_co)'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![4](Images/4.png)](#co_nch-json-json-validation-type_co)'
+- en: Type of the root element
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根元素的类型
+- en: '[![5](Images/5.png)](#co_nch-json-json-validation-props_co)'
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![5](Images/5.png)](#co_nch-json-json-validation-props_co)'
+- en: List of properies. Each of properties should be described. They shoud have a
+    defined type and can specify other validations, such as minimum and maximum.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 属性列表。每个属性都应该被描述。它们应该有一个定义的类型，并可以指定其他验证，如最小和最大值。
+- en: '[![6](Images/6.png)](#co_nch-json-json-validation-req_co)'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![6](Images/6.png)](#co_nch-json-json-validation-req_co)'
+- en: List of required fields
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 必填字段列表
+- en: If we assign just defined schema to a variable, say, `@schema`, we can check
+    JSON data against this schema.
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们将刚刚定义的模式赋给一个变量，比如`@schema`，我们可以根据这个模式检查JSON数据。
+- en: '[PRE6]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: In this case validation is failed, because the document contains only `name`
+    field and does not contain another required field `lastname`.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，验证失败，因为文档仅包含`name`字段，而没有包含另一个必填字段`lastname`。
+- en: '[PRE7]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: In this case document is valid, because it contains all required fields. Field
+    `books` is optional and not required.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，文档是有效的，因为它包含所有必需的字段。字段`books`是可选的，不是必需的。
+- en: '[PRE8]'
+  id: totrans-69
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: In this case document is not valid, because member `books` has type `string`
+    and not `array` as defined in the schema.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，文档无效，因为成员`books`的类型为`string`而不是模式中定义的`array`。
+- en: '[PRE9]'
+  id: totrans-71
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: This document fixes type error for the element `books`, thus valid.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这份文件修正了元素`books`的类型错误，因此有效。
+- en: '[PRE10]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'These documents are also valid, because there is no requirement for the property
+    `vehicles`: it may exist, may not exist and can be of any type.'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些文档也是有效的，因为`vehicles`属性没有要求：它可能存在，也可能不存在，并且可以是任何类型。
+- en: If you want to automatically validate JSON field in a table against a defined
+    schema use `CHECK` constraints.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您想自动验证表中的 JSON 字段是否符合定义的模式，请使用`CHECK`约束。
+- en: '[PRE11]'
+  id: totrans-76
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 19.4 Formatting JSON Values
+  id: totrans-77
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 19.4 格式化 JSON 值
+- en: Problem
+  id: totrans-78
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to print JSON nicely formatted.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望将 JSON 打印成漂亮的格式。
+- en: Solution
+  id: totrans-80
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use fuction `JSON_PRETTY`.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用函数`JSON_PRETTY`。
+- en: Discussion
+  id: totrans-82
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: By default JSON is printed as a long string that could be hard to read. If you
+    want MySQL to print it in human-readable format use function `JSON_PRETTY`.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，JSON 被打印为一个长字符串，可能很难阅读。如果希望 MySQL 将其以人类可读的格式打印，请使用函数`JSON_PRETTY`。
+- en: '[PRE12]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 19.5 Extracting Values from JSON
+  id: totrans-85
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 19.5 从 JSON 提取值
+- en: Problem
+  id: totrans-86
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to extract values from the JSON document.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望从 JSON 文档中提取值。
+- en: Solution
+  id: totrans-88
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the function `JSON_EXTRACT`, or the operators `->` and `->>`.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用函数`JSON_EXTRACT`，或者操作符`->`和`->>`。
+- en: Discussion
+  id: totrans-90
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: JSON by itself is no use if you cannot extract values from the documents. JSON
+    in MySQL supports the JSON path that could be used to point to the specific element
+    in JSON. The root element of the JSON document is represented by a `$` sign. Object
+    members are accessed by the operator `.` and array members are accessed by an
+    index, enclosed in the square brackets. Indexes start from zero. You can refer
+    multiple array elements with keyword `to` (e.g. `$.[3 to 5]`. The `last` keyword
+    is a synonym of the last element in the array.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: JSON 本身没有用处，如果无法从文档中提取值。MySQL 中的 JSON 支持 JSON 路径，可以用于指向 JSON 中的特定元素。JSON 文档的根元素由`$`符号表示。对象成员通过操作符`.`访问，数组成员通过索引在方括号中访问。索引从零开始。您可以使用关键字`to`引用多个数组元素（例如`$.[3
+    to 5]`。`last`关键字是数组中的最后一个元素的同义词。
+- en: 'The wildcard `*` represents either all values of all object members if used
+    after a dot: `.*` or all array elements if enclosed in the square brackets: `[*]`.'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通配符`*`表示所有对象成员的所有值，如果在点后使用：`.*`或者所有数组元素如果在方括号内：`[*]`。
+- en: Expression `[prefix]**suffix` represents all paths, beginning with the `prefix`
+    and ending with the `suffix`. Note that while the `suffix` part is required, `prefix`
+    is optional. In other words, JSON Path expression should not end with double asterisk
+    sign.
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表达式`[prefix]**suffix`表示所有以`prefix`开头且以`suffix`结尾的路径。请注意，虽然`suffix`部分是必需的，但`prefix`是可选的。换句话说，JSON
+    Path 表达式不应以双星号结束。
+- en: To access JSON elements use function `JSON_EXTRACT`.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要访问 JSON 元素，请使用函数`JSON_EXTRACT`。
+- en: 'For example, to select names of the authors, use following SQL:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，要选择作者的名称，请使用以下 SQL：
+- en: '[PRE13]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: To remove quotes from the values use function `JSON_UNQUOTE`.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要从值中删除引号，请使用函数`JSON_UNQUOTE`。
+- en: '[PRE14]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Operator `->` is an alias of the function `JSON_EXTRACT`.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 操作符`->`是函数`JSON_EXTRACT`的别名。
+- en: '[PRE15]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: Operator `->>` is an alias of `JSON_UNQUOTE(JSON_EXTRACT(...))`.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 操作符`->>`是`JSON_UNQUOTE(JSON_EXTRACT(...))`的别名。
+- en: '[PRE16]'
+  id: totrans-102
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: To extract the first and the last books by the authors use array indexes `0`
+    and `last` correspondingly.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要分别使用数组索引`0`和`last`提取作者的第一本和最后一本书。
+- en: '[PRE17]First` `Book[PRE18],`'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[PRE17]First` `Book[PRE18],`'
+- en: -> `author``-``>``>``'$.books[last]'` `AS` `` ` [PRE19] ` `` `FROM` `book_authors``\``G`
+  id: totrans-105
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `author``-``>``>``'$.books[last]'` `AS` `` ` [PRE19] ` `` `FROM` `book_authors``\``G`
+- en: '*************************** 1. row ***************************'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1. 行 ***************************'
+- en: 'author: Paul DuBois'
+  id: totrans-107
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 作者：Paul DuBois
+- en: 'First Book: Software Portability with imake: Practical Software Engineering'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一本书：使用 imake 进行软件可移植性的实际软件工程
+- en: 'Last Book: MySQL (Developer''s Library)'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后一本书：MySQL（开发者图书馆）
+- en: '*************************** 2. row ***************************'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 2. 行 ***************************'
+- en: 'author: Alkin Tezuysal'
+  id: totrans-111
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 作者：Alkin Tezuysal
+- en: 'First Book: MySQL Cookbook'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一本书：MySQL Cookbook
+- en: 'Last Book: MySQL Cookbook'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后一本书：MySQL Cookbook
+- en: '*************************** 3. row ***************************'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 3. 行 ***************************'
+- en: 'author: Sveta Smirnova'
+  id: totrans-115
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 作者：Sveta Smirnova
+- en: 'First Book: MySQL Troubleshooting'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一本书：MySQL 故障排除
+- en: 'Last Book: MySQL Cookbook'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后一本书：MySQL Cookbook
+- en: 3 rows in set (0,00 sec)
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一共 3 行（0,00 秒）
+- en: '[PRE20]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: mysql> `SELECT` `author``-``>``'$.*'` `FROM` `book_authors` `WHERE` `author``-``>``>``'$.name'`
+    `=` `'Sveta'``;`
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `author``-``>``'$.*'` `FROM` `book_authors` `WHERE` `author``-``>``>``'$.name'`
+    `=` `'Sveta'``;`
+- en: +-----------------------------------------------------------------------+ |
+    author->'$.*'                                                         |
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-----------------------------------------------------------------------+ |
+    author->'$.*'                                                         |
+- en: +-----------------------------------------------------------------------+ |
+    [3, "Sveta", ["MySQL Troubleshooting", "MySQL Cookbook"], "Smirnova"] |
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-----------------------------------------------------------------------+ |
+    [3, "Sveta", ["MySQL故障排除", "MySQL食谱"], "Smirnova"] |
+- en: +-----------------------------------------------------------------------+ 1
+    row in set (0,00 sec)
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-----------------------------------------------------------------------+ 1
+    行 (0.00 秒)
+- en: '[PRE21]'
+  id: totrans-124
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: mysql> `SELECT` `author``-``>``>``'$.name'` `AS` `author` `FROM` `book_authors`
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `author``-``>``>``'$.name'` `AS` `author` `FROM` `book_authors`
+- en: -> `WHERE` `JSON_SEARCH``(``author``,` `'one'``,` `'MySQL Cookbook'``)``;`
+  id: totrans-126
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `WHERE` `JSON_SEARCH``(``author``,` `'one'``,` `'MySQL食谱'``)``;`
+- en: +--------+ | author |
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------+ | 作者 |
+- en: +--------+ | Paul   |
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------+ | Paul   |
+- en: '| Alkin  |'
+  id: totrans-129
+  prefs: []
+  type: TYPE_TB
+  zh: '| Alkin  |'
+- en: '| Sveta  |'
+  id: totrans-130
+  prefs: []
+  type: TYPE_TB
+  zh: '| Sveta  |'
+- en: +--------+ 3 rows in set, 1 warning (0,00 sec)
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------+ 3 行, 1 警告 (0.00 秒)
+- en: '[PRE22]'
+  id: totrans-132
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: mysql> `SELECT` `author``-``>``>``'$.name'` `AS` `author``,`
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `author``-``>``>``'$.name'` `AS` `author``,`
+- en: -> `JSON_SEARCH``(``author``,` `'all'``,` `'MySQL%'``)` `AS` `books`
+  id: totrans-134
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `JSON_SEARCH``(``author``,` `'all'``,` `'MySQL%'``)` `AS` `books`
+- en: -> `FROM` `book_authors``\``G`
+  id: totrans-135
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `FROM` `book_authors``\``G`
+- en: '*************************** 1. row ***************************'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1. 行 ***************************'
+- en: 'author: Paul'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'author: Paul'
+- en: 'books: ["$.books[2]", "$.books[3]", "$.books[4]", "$.books[5]", "$.books[7]"]'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'books: ["$.books[2]", "$.books[3]", "$.books[4]", "$.books[5]", "$.books[7]"]'
+- en: '*************************** 2. row ***************************'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 2. 行 ***************************'
+- en: 'author: Alkin'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'author: Alkin'
+- en: 'books: "$.books[0]"'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'books: "$.books[0]"'
+- en: '*************************** 3. row ***************************'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 3. 行 ***************************'
+- en: 'author: Sveta'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'author: Sveta'
+- en: 'books: ["$.books[0]", "$.books[1]"]'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'books: ["$.books[0]", "$.books[1]"]'
+- en: 3 rows in set (0,00 sec)
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 3 行 (0.00 秒)
+- en: '[PRE23]'
+  id: totrans-146
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: mysql> `SELECT` `author``-``>``>``'$.name'` `AS` `author``,`
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `author``-``>``>``'$.name'` `AS` `author``,`
+- en: -> `JSON_EXTRACT``(``author``,`
+  id: totrans-148
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `JSON_EXTRACT``(``author``,`
+- en: -> `JSON_UNQUOTE``(``JSON_SEARCH``(``author``,` `'one'``,` `'MySQL%'``)``)``)`
+    `AS` `book`
+  id: totrans-149
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `JSON_UNQUOTE``(``JSON_SEARCH``(``author``,` `'one'``,` `'MySQL%'``)``)``)`
+    `AS` `book`
+- en: -> `FROM` `book_authors``;`
+  id: totrans-150
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `FROM` `book_authors``;`
+- en: +--------+-----------------------------------+ | author | book                              |
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------+-----------------------------------+ | 作者 | 书籍                              |
+- en: +--------+-----------------------------------+ | Paul   | "MySQL Certification
+    Study Guide" |
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------+-----------------------------------+ | Paul   | "MySQL认证考试指南" |
+- en: '| Alkin  | "MySQL Cookbook"                  |'
+  id: totrans-153
+  prefs: []
+  type: TYPE_TB
+  zh: '| Alkin  | "MySQL食谱"                  |'
+- en: '| Sveta  | "MySQL Troubleshooting"           |'
+  id: totrans-154
+  prefs: []
+  type: TYPE_TB
+  zh: '| Sveta  | "MySQL故障排除"           |'
+- en: +--------+-----------------------------------+ 3 rows in set (0,00 sec)
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------+-----------------------------------+ 3 行 (0.00 秒)
+- en: '[PRE24]'
+  id: totrans-156
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: UPDATE book_authors SET author = JSON_INSERT(author, '$.work', 'Percona')
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: UPDATE book_authors SET author = JSON_INSERT(author, '$.work', 'Percona')
+- en: WHERE author->>'$.name' IN ('Sveta', 'Alkin');
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: WHERE author->>'$.name' IN ('Sveta', 'Alkin');
+- en: '[PRE25]'
+  id: totrans-159
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: UPDATE book_authors SET author = JSON_ARRAY_APPEND(author, '$.books',
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: UPDATE book_authors SET author = JSON_ARRAY_APPEND(author, '$.books',
+- en: '''MySQL Performance Schema in Action'') WHERE author->>''$.name'' = ''Sveta'';'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '''MySQL性能模式实战'') WHERE author->>''$.name'' = ''Sveta'';'
+- en: '[PRE26]'
+  id: totrans-162
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: mysql> `SELECT` `JSON_PRETTY``(``author``)` `FROM` `book_authors`
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `JSON_PRETTY``(``author``)` `FROM` `book_authors`
+- en: -> `WHERE` `author``-``>``>``'$.name'` `=` `'Sveta'``\``G`
+  id: totrans-164
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `WHERE` `author``-``>``>``'$.name'` `=` `'Sveta'``\``G`
+- en: '*************************** 1. row ***************************'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1. 行 ***************************'
+- en: 'JSON_PRETTY(author): {'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'JSON_PRETTY(author): {'
+- en: '"id": 3,'
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"id": 3,'
+- en: '"name": "Sveta",'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"name": "Sveta",'
+- en: '"work": "Percona",'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"work": "Percona",'
+- en: '"books": ['
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"books": ['
+- en: '"MySQL Troubleshooting",'
+  id: totrans-171
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL故障排除",'
+- en: '"MySQL Cookbook",'
+  id: totrans-172
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL食谱",'
+- en: '"MySQL Performance Schema in Action"'
+  id: totrans-173
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL性能模式实战"'
+- en: '],'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '],'
+- en: '"lastname": "Smirnova"'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"lastname": "Smirnova"'
+- en: '}'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 row in set (0,00 sec)
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 行 (0.00 秒)
+- en: '[PRE27]'
+  id: totrans-178
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: UPDATE book_authors SET author = JSON_ARRAY_INSERT(author, '$.books[0]',
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: UPDATE book_authors SET author = JSON_ARRAY_INSERT(author, '$.books[0]',
+- en: '''MySQL for Absolute Beginners'') WHERE author->>''$.name'' = ''Alkin'';'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '''MySQL初学者入门'') WHERE author->>''$.name'' = ''Alkin'';'
+- en: '[PRE28]'
+  id: totrans-181
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: mysql> `SELECT` `JSON_PRETTY``(``author``)`
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `JSON_PRETTY``(``author``)`
+- en: -> `FROM` `book_authors` `WHERE` `author``-``>``>``'$.name'` `=` `'Alkin'``\``G`
+  id: totrans-183
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `FROM` `book_authors` `WHERE` `author``-``>``>``'$.name'` `=` `'Alkin'``\``G`
+- en: '*************************** 1. row ***************************'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1. 行 ***************************'
+- en: 'JSON_PRETTY(author): {'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'JSON_PRETTY(author): {'
+- en: '"id": 2,'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"id": 2,'
+- en: '"name": "Alkin",'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"name": "Alkin",'
+- en: '"work": "Percona",'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"work": "Percona",'
+- en: '"books": ['
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"books": ['
+- en: '"MySQL for Absolute Beginners",'
+  id: totrans-190
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL初学者入门",'
+- en: '"MySQL Cookbook"'
+  id: totrans-191
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL Cookbook"'
+- en: '],'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '],'
+- en: '"lastname": "Tezuysal"'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"lastname": "Tezuysal"'
+- en: '}'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 row in set (0,00 sec)
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 行数据（0,00 秒）
+- en: '[PRE29]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: UPDATE book_authors SET author = JSON_REPLACE(author, '$.work', 'PlanetScale')
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: UPDATE book_authors SET author = JSON_REPLACE(author, '$.work', 'PlanetScale')
+- en: WHERE author->>'$.name' = 'Alkin';
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: WHERE author->>'$.name' = 'Alkin';
+- en: '[PRE30]'
+  id: totrans-199
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: mysql> `UPDATE` `book_authors` `SET` `author` `=` `JSON_REPLACE``(``author``,`
+    `'$.work'``,` `'Oracle'``)`
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `UPDATE` `book_authors` `SET` `author` `=` `JSON_REPLACE``(``author``,`
+    `'$.work'``,` `'Oracle'``)`
+- en: -> `WHERE` `author``-``>``>``'$.name'` `=` `'Paul'``;`
+  id: totrans-201
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `WHERE` `author``-``>``>``'$.name'` `=` `'Paul'``;`
+- en: Query OK, 0 rows affected (0,00 sec)
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询成功，0 行受影响（0,00 秒）
+- en: 'Rows matched: 1  Changed: 0  Warnings: 0'
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '匹配行数: 1  修改行数: 0  警告数: 0'
+- en: mysql> `SELECT` `author``-``>``>``'$.work'` `FROM` `book_authors` `WHERE` `author``-``>``>``'$.name'`
+    `=` `'Paul'``;`
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `author``-``>``>``'$.work'` `FROM` `book_authors` `WHERE` `author``-``>``>``'$.name'`
+    `=` `'Paul'``;`
+- en: +-------------------+ | author->>'$.work' |
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------------------+ | author->>'$.work' |
+- en: +-------------------+ | NULL              |
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------------------+ | NULL              |
+- en: +-------------------+ 1 row in set (0,00 sec)
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------------------+ 1 行数据（0,00 秒）
+- en: '[PRE31]'
+  id: totrans-208
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: mysql> `UPDATE` `book_authors` `SET` `author` `=` `JSON_SET``(``author``,` `'$.work'``,`
+    `'MySQL'``)`
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `UPDATE` `book_authors` `SET` `author` `=` `JSON_SET``(``author``,` `'$.work'``,`
+    `'MySQL'``)`
+- en: -> `WHERE` `author``-``>``>``'$.name'` `=` `'Paul'``;`
+  id: totrans-210
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `WHERE` `author``-``>``>``'$.name'` `=` `'Paul'``;`
+- en: Query OK, 1 row affected (0,01 sec)
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询成功，1 行受影响（0,01 秒）
+- en: 'Rows matched: 1  Changed: 1  Warnings: 0'
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '匹配行数: 1  修改行数: 1  警告数: 0'
+- en: mysql> `SELECT` `author``-``>``>``'$.work'` `FROM` `book_authors` `WHERE` `author``-``>``>``'$.name'`
+    `=` `'Paul'``;`
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `author``-``>``>``'$.work'` `FROM` `book_authors` `WHERE` `author``-``>``>``'$.name'`
+    `=` `'Paul'``;`
+- en: +-------------------+ | author->>'$.work' |
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------------------+ | author->>'$.work' |
+- en: +-------------------+ | MySQL             |
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------------------+ | MySQL             |
+- en: +-------------------+ 1 row in set (0,00 sec)
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------------------+ 1 行数据（0,00 秒）
+- en: mysql> `UPDATE` `book_authors` `SET` `author` `=` `JSON_SET``(``author``,` `'$.work'``,`
+    `'Oracle'``)`
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `UPDATE` `book_authors` `SET` `author` `=` `JSON_SET``(``author``,` `'$.work'``,`
+    `'Oracle'``)`
+- en: -> `WHERE` `author``-``>``>``'$.name'` `=` `'Paul'``;`
+  id: totrans-218
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `WHERE` `author``-``>``>``'$.name'` `=` `'Paul'``;`
+- en: Query OK, 1 row affected (0,00 sec)
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询成功，1 行受影响（0,00 秒）
+- en: 'Rows matched: 1  Changed: 1  Warnings: 0'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '匹配行数: 1  修改行数: 1  警告数: 0'
+- en: mysql> `SELECT` `author``-``>``>``'$.work'` `FROM` `book_authors` `WHERE` `author``-``>``>``'$.name'`
+    `=` `'Paul'``;`
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `author``-``>``>``'$.work'` `FROM` `book_authors` `WHERE` `author``-``>``>``'$.name'`
+    `=` `'Paul'``;`
+- en: +-------------------+ | author->>'$.work' |
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------------------+ | author->>'$.work' |
+- en: +-------------------+ | Oracle            |
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------------------+ | Oracle            |
+- en: +-------------------+ 1 row in set (0,00 sec)
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------------------+ 1 行数据（0,00 秒）
+- en: '[PRE32]'
+  id: totrans-225
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: UPDATE book_authors SET author = JSON_REMOVE(author, '$.books[0]')
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: UPDATE book_authors SET author = JSON_REMOVE(author, '$.books[0]')
+- en: WHERE author->>'$.name' = 'Alkin';
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: WHERE author->>'$.name' = 'Alkin';
+- en: UPDATE book_authors SET author = JSON_REMOVE(author, '$.books[last]')
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: UPDATE book_authors SET author = JSON_REMOVE(author, '$.books[last]')
+- en: WHERE author->>'$.name' = 'Sveta';
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: WHERE author->>'$.name' = 'Sveta';
+- en: '[PRE33]'
+  id: totrans-230
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: SELECT author INTO @paul FROM book_authors WHERE author->>'$.name'='Paul';
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SELECT author INTO @paul FROM book_authors WHERE author->>'$.name'='Paul';
+- en: SELECT author INTO @sveta FROM book_authors WHERE author->>'$.name'='Sveta';
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SELECT author INTO @sveta FROM book_authors WHERE author->>'$.name'='Sveta';
+- en: SELECT author INTO @alkin FROM book_authors WHERE author->>'$.name'='Alkin';
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SELECT author INTO @alkin FROM book_authors WHERE author->>'$.name'='Alkin';
+- en: SELECT author->>'$.books' INTO @sveta_books FROM book_authors
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SELECT author->>'$.books' INTO @sveta_books FROM book_authors
+- en: WHERE author->>'$.name'='Sveta';
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: WHERE author->>'$.name'='Sveta';
+- en: '[PRE34]'
+  id: totrans-236
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: mysql> `SELECT` `JSON_PRETTY``(``JSON_MERGE_PRESERVE``(``@``sveta``,`
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `JSON_PRETTY``(``JSON_MERGE_PRESERVE``(``@``sveta``,`
+- en: '-> `''{"places lived": ["Russia", "Turkey"]}''``)``)``\``G`'
+  id: totrans-238
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '-> `''{"places lived": ["俄罗斯", "土耳其"]}''``)``)``\``G`'
+- en: '*************************** 1. row ***************************'
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1. 行 ***************************'
+- en: 'JSON_PRETTY(JSON_MERGE_PRESERVE(@sveta, ''{"places lived": ["Russia", "Turkey"]}'')):
+    {'
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'JSON_PRETTY(JSON_MERGE_PRESERVE(@sveta, ''{"places lived": ["俄罗斯", "土耳其"]}'')):
+    {'
+- en: '"id": 3,'
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"id": 3,'
+- en: '"name": "Sveta",'
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"name": "Sveta",'
+- en: '"work": "Percona",'
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"work": "Percona",'
+- en: '"books": ['
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"books": ['
+- en: '"MySQL Troubleshooting",'
+  id: totrans-245
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL Troubleshooting",'
+- en: '"MySQL Cookbook"'
+  id: totrans-246
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL Cookbook"'
+- en: '],'
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '],'
+- en: '"lastname": "Smirnova",'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"lastname": "Smirnova",'
+- en: '"places lived": ['
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"places lived": ['
+- en: '"Russia",'
+  id: totrans-250
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"俄罗斯",'
+- en: '"Turkey"'
+  id: totrans-251
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"土耳其"'
+- en: ']'
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ']'
+- en: '}'
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 row in set (0,00 sec)
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 行数据（0,00 秒）
+- en: '[PRE35]'
+  id: totrans-255
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: mysql> `SELECT` `JSON_PRETTY``(``JSON_MERGE_PRESERVE``(``@``sveta``,`
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `JSON_PRETTY``(``JSON_MERGE_PRESERVE``(``@``sveta``,`
+- en: '-> `''{"books": ["MySQL Performance Schema in Action"]}''``)``)``\``G`'
+  id: totrans-257
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '-> `''{"books": ["MySQL Performance Schema in Action"]}''``)``)``\``G`'
+- en: '*************************** 1. row ***************************'
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1. 行 ***************************'
+- en: JSON_PRETTY(JSON_MERGE_PRESERVE(@sveta, ↩
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: JSON_PRETTY(JSON_MERGE_PRESERVE(@sveta, ↩
+- en: '''{"books": ["MySQL Performance Schema in Action"]}'')): {'
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '''{"books": ["MySQL Performance Schema in Action"]}'')): {'
+- en: '"id": 3,'
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"id": 3，'
+- en: '"name": "Sveta",'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"name": "Sveta",'
+- en: '"work": "Percona",'
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"work": "Percona",'
+- en: '"books": ['
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"books": ['
+- en: '"MySQL Troubleshooting",'
+  id: totrans-265
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL Troubleshooting",'
+- en: '"MySQL Cookbook",'
+  id: totrans-266
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL Cookbook",'
+- en: '"MySQL Performance Schema in Action"'
+  id: totrans-267
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL Performance Schema in Action"'
+- en: '],'
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '],'
+- en: '"lastname": "Smirnova"'
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"lastname": "Smirnova"'
+- en: '}'
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 row in set (0,00 sec)
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 row in set (0,00 sec)
+- en: '[PRE36]'
+  id: totrans-272
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: mysql> `SELECT` `JSON_PRETTY``(``JSON_MERGE_PRESERVE``(``@``paul``,` `@``sveta``,`
+    `@``alkin``)``)` `AS` `authors``\``G`
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `JSON_PRETTY``(``JSON_MERGE_PRESERVE``(``@``paul``,` `@``sveta``,`
+    `@``alkin``)``)` `AS` `authors``\``G`
+- en: '*************************** 1. row ***************************'
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1. row ***************************'
+- en: 'authors: {'
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'authors: {'
+- en: '"id": ['
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"id": ['
+- en: 1,
+  id: totrans-277
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 1,
+- en: 3,
+  id: totrans-278
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 3,
+- en: '2'
+  id: totrans-279
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '2'
+- en: '],'
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '],'
+- en: '"name": ['
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"name": ['
+- en: '"Paul",'
+  id: totrans-282
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"Paul",'
+- en: '"Sveta",'
+  id: totrans-283
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"Sveta",'
+- en: '"Alkin"'
+  id: totrans-284
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"Alkin"'
+- en: '],'
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '],'
+- en: '"work": ['
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"work": ['
+- en: '"Oracle",'
+  id: totrans-287
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"Oracle",'
+- en: '"Percona",'
+  id: totrans-288
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"Percona",'
+- en: '"PlanetScale"'
+  id: totrans-289
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"PlanetScale"'
+- en: '],'
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '],'
+- en: '"books": ['
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"books": ['
+- en: '"Software Portability with imake: Practical Software Engineering",'
+  id: totrans-292
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"Software Portability with imake: Practical Software Engineering",'
+- en: '"Mysql: The Definitive Guide to Using, Programming, ↩'
+  id: totrans-293
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"Mysql: The Definitive Guide to Using, Programming, ↩'
+- en: and Administering Mysql 4 (Developer's Library)",
+  id: totrans-294
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: and Administering Mysql 4 (Developer's Library)",
+- en: '"MySQL Certification Study Guide",'
+  id: totrans-295
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL Certification Study Guide",'
+- en: '"MySQL (OTHER NEW RIDERS)",'
+  id: totrans-296
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL (OTHER NEW RIDERS)",'
+- en: '"MySQL Cookbook",'
+  id: totrans-297
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL Cookbook",'
+- en: '"MySQL 5.0 Certification Study Guide",'
+  id: totrans-298
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL 5.0 Certification Study Guide",'
+- en: '"Using csh & tcsh: Type Less, Accomplish More (Nutshell Handbooks)",'
+  id: totrans-299
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"Using csh & tcsh: Type Less, Accomplish More (Nutshell Handbooks)",'
+- en: '"MySQL (Developer''s Library)",'
+  id: totrans-300
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL (Developer''s Library)",'
+- en: '"MySQL Troubleshooting",'
+  id: totrans-301
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL Troubleshooting",'
+- en: '"MySQL Cookbook",'
+  id: totrans-302
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL Cookbook",'
+- en: '"MySQL Cookbook"'
+  id: totrans-303
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL Cookbook"'
+- en: '],'
+  id: totrans-304
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '],'
+- en: '"lastname": ['
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"lastname": ['
+- en: '"DuBois",'
+  id: totrans-306
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"DuBois",'
+- en: '"Smirnova",'
+  id: totrans-307
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"Smirnova",'
+- en: '"Tezuysal"'
+  id: totrans-308
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"Tezuysal"'
+- en: ']'
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ']'
+- en: '}'
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 row in set (0,00 sec)
+  id: totrans-311
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 row in set (0,00 sec)
+- en: '[PRE37]'
+  id: totrans-312
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: mysql> `SELECT` `JSON_PRETTY``(``JSON_MERGE_PATCH``(``@``paul``,` `@``sveta``,`
+    `@``alkin``)``)` `AS` `authors``\``G`
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `JSON_PRETTY``(``JSON_MERGE_PATCH``(``@``paul``,` `@``sveta``,`
+    `@``alkin``)``)` `AS` `authors``\``G`
+- en: '*************************** 1. row ***************************'
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1. row ***************************'
+- en: 'authors: {'
+  id: totrans-315
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'authors: {'
+- en: '"id": 2,'
+  id: totrans-316
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"id": 2,'
+- en: '"name": "Alkin",'
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"name": "Alkin",'
+- en: '"work": "PlanetScale",'
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"work": "PlanetScale",'
+- en: '"books": ['
+  id: totrans-319
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"books": ['
+- en: '"MySQL Cookbook"'
+  id: totrans-320
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL Cookbook"'
+- en: '],'
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '],'
+- en: '"lastname": "Tezuysal"'
+  id: totrans-322
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"lastname": "Tezuysal"'
+- en: '}'
+  id: totrans-323
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 row in set (0,00 sec)
+  id: totrans-324
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 row in set (0,00 sec)
+- en: '[PRE38]'
+  id: totrans-325
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'mysql> `SELECT` `JSON_PRETTY``(``JSON_MERGE_PATCH``(``@``sveta``,` `''{"work":
+    null}''``)``)``\``G`'
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'mysql> `SELECT` `JSON_PRETTY``(``JSON_MERGE_PATCH``(``@``sveta``,` `''{"work":
+    null}''``)``)``\``G`'
+- en: '*************************** 1. row ***************************'
+  id: totrans-327
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1. row ***************************'
+- en: 'JSON_PRETTY(JSON_MERGE_PATCH(@sveta, ''{"work": null}'')): {'
+  id: totrans-328
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'JSON_PRETTY(JSON_MERGE_PATCH(@sveta, ''{"work": null}'')): {'
+- en: '"id": 3,'
+  id: totrans-329
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"id": 3,'
+- en: '"name": "Sveta",'
+  id: totrans-330
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"name": "Sveta",'
+- en: '"books": ['
+  id: totrans-331
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"books": ['
+- en: '"MySQL Troubleshooting",'
+  id: totrans-332
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL Troubleshooting",'
+- en: '"MySQL Cookbook"'
+  id: totrans-333
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL Cookbook"'
+- en: '],'
+  id: totrans-334
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '],'
+- en: '"lastname": "Smirnova"'
+  id: totrans-335
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"lastname": "Smirnova"'
+- en: '}'
+  id: totrans-336
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 row in set (0,00 sec)
+  id: totrans-337
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 row in set (0,00 sec)
+- en: '[PRE39]'
+  id: totrans-338
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: mysql> `SELECT` `JSON_PRETTY``(``JSON_MERGE_PRESERVE``(``@``sveta_books``,`
+  id: totrans-339
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `JSON_PRETTY``(``JSON_MERGE_PRESERVE``(``@``sveta_books``,`
+- en: -> `'"MySQL Performance Schema in Action"'``)``)` `AS` `'Books by Sveta'``\``G`
+  id: totrans-340
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `'"MySQL Performance Schema in Action"'``)``)` `AS` `'Books by Sveta'``\``G`
+- en: '*************************** 1. row ***************************'
+  id: totrans-341
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1. row ***************************'
+- en: 'Books by Sveta: ['
+  id: totrans-342
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'Books by Sveta: ['
+- en: '"MySQL Troubleshooting",'
+  id: totrans-343
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"MySQL Troubleshooting",'
+- en: '"MySQL Cookbook",'
+  id: totrans-344
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"MySQL Cookbook",'
+- en: '"MySQL Performance Schema in Action"'
+  id: totrans-345
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"MySQL Performance Schema in Action"'
+- en: ']'
+  id: totrans-346
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ']'
+- en: 1 row in set (0,00 sec)
+  id: totrans-347
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 row in set (0,00 sec)
+- en: '[PRE40]'
+  id: totrans-348
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: mysql> `SELECT` `JSON_PRETTY``(``JSON_MERGE_PATCH``(``@``sveta_books``,`
+  id: totrans-349
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `JSON_PRETTY``(``JSON_MERGE_PATCH``(``@``sveta_books``,`
+- en: -> `'"MySQL Performance Schema in Action"'``)``)` `AS` `'Books by Sveta'``;`
+  id: totrans-350
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `'"MySQL Performance Schema in Action"'``)``)` `AS` `'Books by Sveta'``;`
+- en: +--------------------------------------+ | Books by Sveta                       |
+  id: totrans-351
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------------------------------------+ | Books by Sveta                       |
+- en: +--------------------------------------+ | "MySQL Performance Schema in Action"
+    |
+  id: totrans-352
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------------------------------------+ | "MySQL Performance Schema in Action"
+    |
+- en: +--------------------------------------+ 1 row in set (0,00 sec)
+  id: totrans-353
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------------------------------------+ 1 row in set (0,00 sec)
+- en: '[PRE41]'
+  id: totrans-354
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: mysql> `SELECT` `JSON_PRETTY``(`
+  id: totrans-355
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `JSON_PRETTY``(`
+- en: -> `JSON_OBJECT``(``"string"``,` `"Some String"``,` `"number"``,` `42``,` `"null"``,`
+    `NULL``)``)` `AS` `my_object``\``G`
+  id: totrans-356
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `JSON_OBJECT``(``"string"``,` `"Some String"``,` `"number"``,` `42``,` `"null"``,`
+    `NULL``)``)` `AS` `my_object``\``G`
+- en: '*************************** 1. row ***************************'
+  id: totrans-357
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1. row ***************************'
+- en: 'my_object: {'
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'my_object: {'
+- en: '"null": null,'
+  id: totrans-359
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"null": null,'
+- en: '"number": 42,'
+  id: totrans-360
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"number": 42,'
+- en: '"string": "Some String"'
+  id: totrans-361
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"string": "Some String"'
+- en: '}'
+  id: totrans-362
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 row in set (0,00 sec)
+  id: totrans-363
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 row in set (0,00 sec)
+- en: '[PRE42]'
+  id: totrans-364
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: mysql> `SELECT` `JSON_PRETTY``(``JSON_ARRAY``(``"one"``,` `"two"``,` `"three"``,`
+    `4``,` `5``)``)` `AS` `my_array``\``G`
+  id: totrans-365
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `JSON_PRETTY``(``JSON_ARRAY``(``"one"``,` `"two"``,` `"three"``,`
+    `4``,` `5``)``)` `AS` `my_array``\``G`
+- en: '*************************** 1. row ***************************'
+  id: totrans-366
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1. row ***************************'
+- en: 'my_array: ['
+  id: totrans-367
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'my_array: ['
+- en: '"one",'
+  id: totrans-368
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"one",'
+- en: '"two",'
+  id: totrans-369
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"two",'
+- en: '"three",'
+  id: totrans-370
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"three",'
+- en: 4,
+  id: totrans-371
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 4,
+- en: '5'
+  id: totrans-372
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '5'
+- en: ']'
+  id: totrans-373
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ']'
+- en: 1 row in set (0,00 sec)
+  id: totrans-374
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 row in set (0,00 sec)
+- en: '[PRE43]'
+  id: totrans-375
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: mysql> `SELECT` `JSON_PRETTY``(``JSON_OBJECT``(``"Example"``,` `"Nesting object
+    and array"``,`
+  id: totrans-376
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `选择` `JSON_PRETTY``(``JSON_OBJECT``(``"示例"``,` `"嵌套对象和数组"``,`
+- en: -> `"Human"``,` `JSON_OBJECT``(``"name"``,` `"Sveta"``,` `"lastname"``,` `"Smirnova"``)``,`
+  id: totrans-377
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `"人类"``,` `JSON_OBJECT``(``"名称"``,` `"斯韦塔"``,` `"姓"``,` `"斯米尔诺娃"``)``,`
+- en: -> `"Numbers"``,` `JSON_ARRAY``(``"one"``,` `"two"``,` `"three"``)``)``)` `AS`
+    `my_object``\``G`
+  id: totrans-378
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `"数字"``,` `JSON_ARRAY``(``"一个"``,` `"两"``,` `"三"``)``)``)` `AS` `my_object``\``G`
+- en: '*************************** 1. row ***************************'
+  id: totrans-379
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1. row ***************************'
+- en: 'my_object: {'
+  id: totrans-380
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'my_object: {'
+- en: '"Human": {'
+  id: totrans-381
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"人类": {'
+- en: '"name": "Sveta",'
+  id: totrans-382
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"名称": "斯韦塔",'
+- en: '"lastname": "Smirnova"'
+  id: totrans-383
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"姓": "斯米尔诺娃"'
+- en: '},'
+  id: totrans-384
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '},'
+- en: '"Example": "Nesting object and array",'
+  id: totrans-385
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"示例": "嵌套对象和数组",'
+- en: '"Numbers": ['
+  id: totrans-386
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"数字": ['
+- en: '"one",'
+  id: totrans-387
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"一个",'
+- en: '"two",'
+  id: totrans-388
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"两",'
+- en: '"three"'
+  id: totrans-389
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"三"'
+- en: ']'
+  id: totrans-390
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ']'
+- en: '}'
+  id: totrans-391
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 row in set (0,00 sec)
+  id: totrans-392
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1行设置（0,00秒）
+- en: '[PRE44]'
+  id: totrans-393
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: mysql> `SELECT` `JSON_PRETTY``(``JSON_OBJECT``(``'Movie'``,` `movie``,`
+  id: totrans-394
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `选择` `JSON_PRETTY``(``JSON_OBJECT``(``'电影'``,` `电影``,`
+- en: -> `'Starred'``,` `JSON_ARRAYAGG``(``actor``)``)``)` `AS` `starred`
+  id: totrans-395
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `'主演'``,` `JSON_ARRAYAGG``(``演员``)``)``)` `AS` `主演`
+- en: -> `FROM` `movies_actors` `GROUP` `BY` `movie``\``G`
+  id: totrans-396
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `从` `电影演员` `组` `BY` `电影``\``G`
+- en: '*************************** 1. row ***************************'
+  id: totrans-397
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1. row ***************************'
+- en: 'starred: {'
+  id: totrans-398
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'starred: {'
+- en: '"Movie": "Kingdom of Heaven",'
+  id: totrans-399
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"电影": "天国王朝",'
+- en: '"Starred": ['
+  id: totrans-400
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"主演": ['
+- en: '"Liam Neeson",'
+  id: totrans-401
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"连姆·尼森",'
+- en: '"Orlando Bloom"'
+  id: totrans-402
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"奥兰多·布鲁姆"'
+- en: ']'
+  id: totrans-403
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ']'
+- en: '}'
+  id: totrans-404
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '*************************** 2. row ***************************'
+  id: totrans-405
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 2. row ***************************'
+- en: 'starred: {'
+  id: totrans-406
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'starred: {'
+- en: '"Movie": "Red",'
+  id: totrans-407
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"电影": "红色",'
+- en: '"Starred": ['
+  id: totrans-408
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"主演": ['
+- en: '"Helen Mirren",'
+  id: totrans-409
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"海伦·米伦",'
+- en: '"Bruce Willis"'
+  id: totrans-410
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"布鲁斯·威利斯"'
+- en: ']'
+  id: totrans-411
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ']'
+- en: '}'
+  id: totrans-412
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '*************************** 3. row ***************************'
+  id: totrans-413
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 3. row ***************************'
+- en: 'starred: {'
+  id: totrans-414
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'starred: {'
+- en: '"Movie": "The Fellowship of the Ring",'
+  id: totrans-415
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"电影": "指环王",'
+- en: '"Starred": ['
+  id: totrans-416
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"主演": ['
+- en: '"Ian McKellen",'
+  id: totrans-417
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"伊恩·麦克莱恩",'
+- en: '"Ian Holm",'
+  id: totrans-418
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"伊恩·霍尔姆",'
+- en: '"Orlando Bloom",'
+  id: totrans-419
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"奥兰多·布鲁姆",'
+- en: '"Elijah Wood"'
+  id: totrans-420
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"伊莱贾·伍德"'
+- en: ']'
+  id: totrans-421
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ']'
+- en: '}'
+  id: totrans-422
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '*************************** 4. row ***************************'
+  id: totrans-423
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 4. row ***************************'
+- en: 'starred: {'
+  id: totrans-424
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'starred: {'
+- en: '"Movie": "The Fifth Element",'
+  id: totrans-425
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"电影": "第五元素",'
+- en: '"Starred": ['
+  id: totrans-426
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"主演": ['
+- en: '"Bruce Willis",'
+  id: totrans-427
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"布鲁斯·威利斯",'
+- en: '"Gary Oldman",'
+  id: totrans-428
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"加里·奥德曼",'
+- en: '"Ian Holm"'
+  id: totrans-429
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"伊恩·霍尔姆"'
+- en: ']'
+  id: totrans-430
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ']'
+- en: '}'
+  id: totrans-431
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '*************************** 5. row ***************************'
+  id: totrans-432
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 5. row ***************************'
+- en: 'starred: {'
+  id: totrans-433
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'starred: {'
+- en: '"Movie": "The Phantom Menace",'
+  id: totrans-434
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"电影": "幽灵危机",'
+- en: '"Starred": ['
+  id: totrans-435
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"主演": ['
+- en: '"Ewan McGregor",'
+  id: totrans-436
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"伊万·麦克格雷格",'
+- en: '"Liam Neeson"'
+  id: totrans-437
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"连姆·尼森"'
+- en: ']'
+  id: totrans-438
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ']'
+- en: '}'
+  id: totrans-439
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '*************************** 6. row ***************************'
+  id: totrans-440
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 6. row ***************************'
+- en: 'starred: {'
+  id: totrans-441
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'starred: {'
+- en: '"Movie": "Unknown",'
+  id: totrans-442
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"电影": "未知",'
+- en: '"Starred": ['
+  id: totrans-443
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"主演": ['
+- en: '"Diane Kruger",'
+  id: totrans-444
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"黛安·克鲁格",'
+- en: '"Liam Neeson"'
+  id: totrans-445
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"连姆·尼森"'
+- en: ']'
+  id: totrans-446
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ']'
+- en: '}'
+  id: totrans-447
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 6 rows in set (0,00 sec)
+  id: totrans-448
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 6行设置（0,00秒）
+- en: '[PRE45]'
+  id: totrans-449
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: mysql> `SELECT` `JSON_PRETTY``(``JSON_OBJECTAGG``(``name``,` `website``)``)`
+    `AS` `websites`
+  id: totrans-450
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `选择` `JSON_PRETTY``(``JSON_OBJECTAGG``(``名称``,` `网站``)``)` `AS` `网站`
+- en: -> `FROM` `book_vendor``\``G`
+  id: totrans-451
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `从` `书籍供应商``\``G`
+- en: '*************************** 1. row ***************************'
+  id: totrans-452
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1. row ***************************'
+- en: 'websites: {'
+  id: totrans-453
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 网站：{
+- en: '"Amazon.com": "www.amazon.com",'
+  id: totrans-454
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"亚马逊": "www.amazon.com",'
+- en: '"Barnes & Noble": "www.barnesandnoble.com",'
+  id: totrans-455
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"巴恩斯与贵族": "www.barnesandnoble.com",'
+- en: '"O''Reilly Media": "www.oreilly.com"'
+  id: totrans-456
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"O''Reilly Media": "www.oreilly.com"'
+- en: '}'
+  id: totrans-457
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 row in set (0,00 sec)
+  id: totrans-458
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1行设置（0,00秒）
+- en: '[PRE46]'
+  id: totrans-459
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: '{'
+  id: totrans-460
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"null": null,'
+  id: totrans-461
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"空": null,'
+- en: '"number": 42,'
+  id: totrans-462
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"号码": 42,'
+- en: '"string": "Some String"'
+  id: totrans-463
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"字符串": "一些字符串"'
+- en: '}'
+  id: totrans-464
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '[PRE47]'
+  id: totrans-465
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: mysql> `SELECT` `*`  ![1](Images/1.png)
+  id: totrans-466
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `选择` `*`  ![1](Images/1.png)
+- en: -> `FROM` `JSON_TABLE``(` ![2](Images/2.png)
+  id: totrans-467
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `从` `JSON_TABLE``(` ![2](Images/2.png)
+- en: '-> `''{"null": null, "number": 42, "string": "Some String"}''``,`  ![3](Images/3.png)'
+  id: totrans-468
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '-> `''{"空": null, "号码": 42, "字符串": "一些字符串"}''``,`  ![3](Images/3.png)'
+- en: -> `'$'`  ![4](Images/4.png)
+  id: totrans-469
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `'$'`  ![4](Images/4.png)
+- en: -> `COLUMNS``(`  ![5](Images/5.png)
+  id: totrans-470
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `COLUMNS``(`  ![5](Images/5.png)
+- en: -> `number` `INT` `PATH` `'$.number'``,`  ![6](Images/6.png)
+  id: totrans-471
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `number` `INT` `PATH` `'$.number'``,`  ![6](Images/6.png)
+- en: -> `string` `VARCHAR``(``255``)` `PATH` `'$.string'` `ERROR` `ON` `ERROR` ![7](Images/7.png)
+  id: totrans-472
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `字符串` `VARCHAR``(``255``)` `PATH` `'$.string'` `错误` `ON` `错误` ![7](Images/7.png)
+- en: -> `)``)` `AS` `jt``;` ![8](Images/8.png)
+  id: totrans-473
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `)``)` `AS` `jt``;` ![8](Images/8.png)
+- en: +--------+-------------+ | number | string      |
+  id: totrans-474
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------+-------------+ | number | string      |
+- en: +--------+-------------+ |     42 | Some String |
+  id: totrans-475
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------+-------------+ |     42 | 一些字符串 |
+- en: +--------+-------------+ 1 row in set (0,00 sec)
+  id: totrans-476
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------+-------------+ 1行设置（0,00秒）
+- en: '[PRE48]'
+  id: totrans-477
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: SELECT * FROM mytable, JSON_TABLE(mytable.mycolumn ...
+  id: totrans-478
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择* FROM mytable, JSON_TABLE(mytable.mycolumn ...
+- en: '[PRE49]'
+  id: totrans-479
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: mysql> `SELECT` `jt``.``*` `FROM` `book_authors` `ba``,`  ![1](Images/1.png)
+  id: totrans-480
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `选择` `jt``.``*` `从` `书籍作者` `ba``,`  ![1](Images/1.png)
+- en: -> `JSON_TABLE``(``ba``.``author``,`
+  id: totrans-481
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `JSON_TABLE``(``ba``.``作者``,`
+- en: -> `'$'` `COLUMNS` `(`
+  id: totrans-482
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `'$'` `COLUMNS` `(`
+- en: -> `name` `VARCHAR``(``255``)` `PATH` `'$.name'``,`
+  id: totrans-483
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `名称` `VARCHAR``(``255``)` `PATH` `'$.name'``,`
+- en: -> `lastname` `VARCHAR``(``255``)` `PATH` `'$.lastname'``,`
+  id: totrans-484
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `lastname` `VARCHAR``(``255``)` `PATH` `'$.lastname'``,`
+- en: -> `NESTED` `PATH` `'$.books[*]'` `COLUMNS` `(` ![2](Images/2.png)
+  id: totrans-485
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `NESTED` `PATH` `'$.books[*]'` `COLUMNS` `(` ![2](Images/2.png)
+- en: -> `book` `VARCHAR``(``255``)` `PATH` `'$'` `)` ![3](Images/3.png)
+  id: totrans-486
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `book` `VARCHAR``(``255``)` `PATH` `'$'` `)` ![3](Images/3.png)
+- en: -> `)``)` `AS` `jt``;`
+  id: totrans-487
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `)``)` `AS` `jt``;`
+- en: +-------+----------+-----------------------------------------------------------------+
+    | name  | lastname | book                                                            |
+  id: totrans-488
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------+----------+-----------------------------------------------------------------+
+    | 名称  | 姓氏 | 书籍                                                            |
+- en: '+-------+----------+-----------------------------------------------------------------+
+    | Paul  | DuBois   | Software Portability with imake: Practical Software Engineering
+    |'
+  id: totrans-489
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '+-------+----------+-----------------------------------------------------------------+
+    | 保罗  | 杜博伊斯   | 使用 imake 进行软件可移植性: 实用软件工程 |'
+- en: '| Paul  | DuBois   | Mysql: The Definitive Guide to Using, Programming, ↩'
+  id: totrans-490
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '| 保罗  | 杜博伊斯   | Mysql: 详细使用指南, 编程, ↩'
+- en: and Administering Mysql 4 (Developer's Library)                 |
+  id: totrans-491
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 和管理 Mysql 4 (开发者图书馆)                 |
+- en: '| Paul  | DuBois   | MySQL Certification Study Guide                                 |'
+  id: totrans-492
+  prefs: []
+  type: TYPE_TB
+  zh: '| 保罗  | 杜博伊斯   | MySQL 认证学习指南                                 |'
+- en: '| Paul  | DuBois   | MySQL (OTHER NEW RIDERS)                                        |'
+  id: totrans-493
+  prefs: []
+  type: TYPE_TB
+  zh: '| 保罗  | 杜博伊斯   | MySQL (OTHER NEW RIDERS)                                        |'
+- en: '| Paul  | DuBois   | MySQL Cookbook                                                  |'
+  id: totrans-494
+  prefs: []
+  type: TYPE_TB
+  zh: '| 保罗  | 杜博伊斯   | MySQL Cookbook                                                  |'
+- en: '| Paul  | DuBois   | MySQL 5.0 Certification Study Guide                             |'
+  id: totrans-495
+  prefs: []
+  type: TYPE_TB
+  zh: '| 保罗  | 杜博伊斯   | MySQL 5.0 认证学习指南                             |'
+- en: '| Paul  | DuBois   | Using csh & tcsh: Type Less, Accomplish More ↩'
+  id: totrans-496
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '| 保罗  | 杜博伊斯   | 使用 csh & tcsh: 更少打字, 更多成就 ↩'
+- en: (Nutshell Handbooks)                                            |
+  id: totrans-497
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: (Nutshell Handbooks)                                            |
+- en: '| Paul  | DuBois   | MySQL (Developer''s Library)                                     |'
+  id: totrans-498
+  prefs: []
+  type: TYPE_TB
+  zh: '| 保罗  | 杜博伊斯   | MySQL (Developer''s Library)                                     |'
+- en: '| Alkin | Tezuysal | MySQL Cookbook                                                  |'
+  id: totrans-499
+  prefs: []
+  type: TYPE_TB
+  zh: '| 阿尔金 | 特祖萨尔 | MySQL Cookbook                                                  |'
+- en: '| Sveta | Smirnova | MySQL Troubleshooting                                           |'
+  id: totrans-500
+  prefs: []
+  type: TYPE_TB
+  zh: '| 斯维塔 | 斯米尔诺娃 | MySQL 故障排除                                           |'
+- en: '| Sveta | Smirnova | MySQL Cookbook                                                  |'
+  id: totrans-501
+  prefs: []
+  type: TYPE_TB
+  zh: '| 斯维塔 | 斯米尔诺娃 | MySQL Cookbook                                                  |'
+- en: +-------+----------+-----------------------------------------------------------------+
+    11 rows in set (0,01 sec)
+  id: totrans-502
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +-------+----------+-----------------------------------------------------------------+
+    11 行结果 (0.01 秒)
+- en: '[PRE50]'
+  id: totrans-503
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: mysql> `SELECT` `CONCAT``(``author``-``>``>``'$.name'``,` `' '``,` `author``-``>``>``'$.lastname'``)`
+    `AS` `'author'``,`
+  id: totrans-504
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `CONCAT``(``author``-``>``>``'$.name'``,` `' '``,` `author``-``>``>``'$.lastname'``)`
+    `AS` `'author'``,`
+- en: -> `JSON_LENGTH``(``author``-``>``>``'$.books'``)` `AS` `'Number of Books'`
+    `FROM` `book_authors``;`
+  id: totrans-505
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `JSON_LENGTH``(``author``-``>``>``'$.books'``)` `AS` `'书籍数量'` `FROM` `book_authors``;`
+- en: +----------------+-----------------+ | author         | Number of Books |
+  id: totrans-506
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +----------------+-----------------+ | 作者         | 书籍数量 |
+- en: +----------------+-----------------+ | Paul DuBois    |               8 |
+  id: totrans-507
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +----------------+-----------------+ | 保罗 杜博伊斯    |               8 |
+- en: '| Alkin Tezuysal |               1 |'
+  id: totrans-508
+  prefs: []
+  type: TYPE_TB
+  zh: '| 阿尔金·特祖萨尔 |               1 |'
+- en: '| Sveta Smirnova |               2 |'
+  id: totrans-509
+  prefs: []
+  type: TYPE_TB
+  zh: '| 斯维塔 斯米尔诺娃 |               2 |'
+- en: +----------------+-----------------+ 3 rows in set (0,01 sec)
+  id: totrans-510
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +----------------+-----------------+ 3 行结果 (0.01 秒)
+- en: '[PRE51]'
+  id: totrans-511
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: mysql> `SELECT` `JSON_DEPTH``(``author``)` `FROM` `book_authors` `WHERE` `author``-``>``>``'$.name'`
+    `=` `'Sveta'``;`
+  id: totrans-512
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `JSON_DEPTH``(``author``)` `FROM` `book_authors` `WHERE` `author``-``>``>``'$.name'`
+    `=` `'斯维塔'``;`
+- en: +--------------------+ | JSON_DEPTH(author) |
+  id: totrans-513
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------------------+ | JSON_DEPTH(author) |
+- en: +--------------------+ |                  3 |
+  id: totrans-514
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------------------+ |                  3 |
+- en: +--------------------+ 1 row in set (0,00 sec)
+  id: totrans-515
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +--------------------+ 1 行结果 (0.00 秒)
+- en: '[PRE52]'
+  id: totrans-516
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: '{ ![1](Images/1.png)'
+  id: totrans-517
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{ ![1](Images/1.png)'
+- en: '"id": 3,'
+  id: totrans-518
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"id": 3,'
+- en: '"name": "Sveta",'
+  id: totrans-519
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"name": "斯维塔",'
+- en: '"work": "Percona", ![2](Images/2.png)'
+  id: totrans-520
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"work": "Percona", ![2](Images/2.png)'
+- en: '"books": ['
+  id: totrans-521
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"books": ['
+- en: '"MySQL Troubleshooting", ![3](Images/3.png)'
+  id: totrans-522
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL 故障排除", ![3](Images/3.png)'
+- en: '"MySQL Cookbook"'
+  id: totrans-523
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"MySQL Cookbook"'
+- en: '],'
+  id: totrans-524
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '],'
+- en: '"lastname": "Smirnova"'
+  id: totrans-525
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '"lastname": "斯米尔诺娃"'
+- en: '}'
+  id: totrans-526
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '[PRE53]'
+  id: totrans-527
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: mysql> `SELECT` `JSON_STORAGE_SIZE``(``author``)` `FROM` `book_authors``;`
+  id: totrans-528
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `JSON_STORAGE_SIZE``(``author``)` `FROM` `book_authors``;`
+- en: +---------------------------+ | JSON_STORAGE_SIZE(author) |
+  id: totrans-529
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +---------------------------+ | JSON_STORAGE_SIZE(author) |
+- en: +---------------------------+ |                       475 |
+  id: totrans-530
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +---------------------------+ |                       475 |
+- en: '|                       144 |'
+  id: totrans-531
+  prefs: []
+  type: TYPE_TB
+  zh: '|                       144 |'
+- en: '|                       171 |'
+  id: totrans-532
+  prefs: []
+  type: TYPE_TB
+  zh: '|                       171 |'
+- en: +---------------------------+ 3 rows in set (0,00 sec)
+  id: totrans-533
+  prefs: []
+  type: TYPE_NORMAL
+  zh: +---------------------------+ 3 行结果 (0.00 秒)
+- en: '[PRE54]'
+  id: totrans-534
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: mysql> `SELECT` `JSON_TYPE``(``author``)``,` `JSON_TYPE``(``author``-``>``'$.id'``)``,`
+  id: totrans-535
+  prefs: []
+  type: TYPE_NORMAL
+  zh: mysql> `SELECT` `JSON_TYPE``(``author``)``,` `JSON_TYPE``(``author``-``>``'$.id'``)``,`
+- en: -> `JSON_TYPE``(``author``-``>``'$.name'``)``,` `JSON_TYPE``(``author``-``>``'$.books'``)`
+  id: totrans-536
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `JSON_TYPE``(``author``-``>``'$.name'``)``,` `JSON_TYPE``(``author``-``>``'$.books'``)`
+- en: -> `FROM` `book_authors` `WHERE` `author``-``>``>``'$.name'` `=` `'Sveta'``\``G`
+  id: totrans-537
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `FROM` `book_authors` `WHERE` `author``-``>``>``'$.name'` `=` `'Sveta'``\``G`
+- en: '*************************** 1. row ***************************'
+  id: totrans-538
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*************************** 1. row ***************************'
+- en: 'JSON_TYPE(author): OBJECT'
+  id: totrans-539
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 'JSON_TYPE(author): OBJECT'
+- en: 'JSON_TYPE(author->''$.id''): INTEGER'
+  id: totrans-540
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'JSON_TYPE(author->''$.id''): INTEGER'
+- en: 'JSON_TYPE(author->''$.name''): STRING'
+  id: totrans-541
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'JSON_TYPE(author->''$.name''): STRING'
+- en: 'JSON_TYPE(author->''$.books''): ARRAY'
+  id: totrans-542
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'JSON_TYPE(author->''$.books''): ARRAY'
+- en: 1 row in set (0,00 sec)
+  id: totrans-543
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 row in set (0,00 sec)
+- en: '[PRE55]'
+  id: totrans-544
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: CREATE TABLE `MyCollection` (
+  id: totrans-545
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CREATE TABLE `MyCollection` (
+- en: '`doc` json DEFAULT NULL,'
+  id: totrans-546
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`doc` json DEFAULT NULL,'
+- en: '`_id` varbinary(32) GENERATED ALWAYS AS (json_unquote('
+  id: totrans-547
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`_id` varbinary(32) GENERATED ALWAYS AS (json_unquote('
+- en: json_extract(`doc`,_utf8mb4'$._id'))) STORED NOT NULL,
+  id: totrans-548
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: json_extract(`doc`,_utf8mb4'$._id'))) STORED NOT NULL,
+- en: '`_json_schema` json GENERATED ALWAYS AS (_utf8mb4''{"type":"object"}'') VIRTUAL,'
+  id: totrans-549
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`_json_schema` json GENERATED ALWAYS AS (_utf8mb4''{"type":"object"}'') VIRTUAL,'
+- en: PRIMARY KEY (`_id`),
+  id: totrans-550
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PRIMARY KEY (`_id`),
+- en: CONSTRAINT `$val_strict_2190F99D7C6BE98E2C1EFE4E110B46A3D43C9751`
+  id: totrans-551
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CONSTRAINT `$val_strict_2190F99D7C6BE98E2C1EFE4E110B46A3D43C9751`
+- en: CHECK (json_schema_valid(`_json_schema`,`doc`)) /*!80016 NOT ENFORCED */
+  id: totrans-552
+  prefs: []
+  type: TYPE_NORMAL
+  zh: CHECK (json_schema_valid(`_json_schema`,`doc`)) /*!80016 NOT ENFORCED */
+- en: ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  id: totrans-553
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+- en: '[PRE56]'
+  id: totrans-554
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: MySQL  cookbook  JS > `session.getDefaultSchema().createCollection('MyCollection')`
+  id: totrans-555
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `session.getDefaultSchema().createCollection('MyCollection')`
+- en: <Collection:MyCollection>
+  id: totrans-556
+  prefs: []
+  type: TYPE_NORMAL
+  zh: <Collection:MyCollection>
+- en: '[PRE57]'
+  id: totrans-557
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: MySQL  cookbook  JS > `MyCollection = session.getDefaultSchema().`
+  id: totrans-558
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection = session.getDefaultSchema().
+- en: -> `getCollection('MyCollection')`
+  id: totrans-559
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `getCollection('MyCollection')`
+- en: <Collection:MyCollection>
+  id: totrans-560
+  prefs: []
+  type: TYPE_NORMAL
+  zh: <Collection:MyCollection>
+- en: '[PRE58]'
+  id: totrans-561
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: 'MySQL  cookbook  JS > `MyCollection.add({"document": "one"}).`'
+  id: totrans-562
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'MySQL  cookbook  JS > `MyCollection.add({"document": "one"}).`'
+- en: '-> `add([{"document": "two"}, {"document": "three"}]).`'
+  id: totrans-563
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '-> `add([{"document": "two"}, {"document": "three"}]).`'
+- en: '-> `add(mysqlx.expr(''{"document": "four"}''))`'
+  id: totrans-564
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '-> `add(mysqlx.expr(''{"document": "four"}''))`'
+- en: ->
+  id: totrans-565
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: ->
+- en: Query OK, 4 items affected (0.0083 sec)
+  id: totrans-566
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Query OK, 4 items affected (0.0083 sec)
+- en: 'Records: 4  Duplicates: 0  Warnings: 0'
+  id: totrans-567
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'Records: 4  Duplicates: 0  Warnings: 0'
+- en: '[PRE59]'
+  id: totrans-568
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: MySQL  cookbook  JS > `MyCollection.find()`
+  id: totrans-569
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection.find()`
+- en: '{'
+  id: totrans-570
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab750000000000000012",'
+  id: totrans-571
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab750000000000000012",'
+- en: '"document": "one"'
+  id: totrans-572
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"document": "one"'
+- en: '}'
+  id: totrans-573
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '{'
+  id: totrans-574
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab750000000000000013",'
+  id: totrans-575
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab750000000000000013",'
+- en: '"document": "two"'
+  id: totrans-576
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"document": "two"'
+- en: '}'
+  id: totrans-577
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '{'
+  id: totrans-578
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab750000000000000014",'
+  id: totrans-579
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab750000000000000014",'
+- en: '"document": "three"'
+  id: totrans-580
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"document": "three"'
+- en: '}'
+  id: totrans-581
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '{'
+  id: totrans-582
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab750000000000000015",'
+  id: totrans-583
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab750000000000000015",'
+- en: '"document": "four"'
+  id: totrans-584
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"document": "four"'
+- en: '}'
+  id: totrans-585
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 4 documents in set (0.0007 sec)
+  id: totrans-586
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 4 documents in set (0.0007 sec)
+- en: '[PRE60]'
+  id: totrans-587
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: MySQL  cookbook  JS > `MyCollection.find("document LIKE 't%'")`
+  id: totrans-588
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection.find("document LIKE 't%'")`
+- en: '{'
+  id: totrans-589
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab750000000000000013",'
+  id: totrans-590
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab750000000000000013",'
+- en: '"document": "two"'
+  id: totrans-591
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"document": "two"'
+- en: '}'
+  id: totrans-592
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '{'
+  id: totrans-593
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab750000000000000014",'
+  id: totrans-594
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab750000000000000014",'
+- en: '"document": "three"'
+  id: totrans-595
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"document": "three"'
+- en: '}'
+  id: totrans-596
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 2 documents in set (0.0009 sec)
+  id: totrans-597
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 2 documents in set (0.0009 sec)
+- en: '[PRE61]'
+  id: totrans-598
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: MySQL  cookbook  JS > `MyCollection.find("document LIKE 't%'").`
+  id: totrans-599
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection.find("document LIKE 't%'").`
+- en: '-> `fields(mysqlx.expr(''{"Document": upper(document)}''))`'
+  id: totrans-600
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '-> `fields(mysqlx.expr(''{"Document": upper(document)}''))`'
+- en: ->
+  id: totrans-601
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: ->
+- en: '{'
+  id: totrans-602
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"Document": "TWO"'
+  id: totrans-603
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"Document": "TWO"'
+- en: '}'
+  id: totrans-604
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '{'
+  id: totrans-605
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"Document": "THREE"'
+  id: totrans-606
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"Document": "THREE"'
+- en: '}'
+  id: totrans-607
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 2 documents in set (0.0009 sec)
+  id: totrans-608
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 2 documents in set (0.0009 sec)
+- en: '[PRE62]'
+  id: totrans-609
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: MySQL  cookbook  JS > `limbs = session.getDefaultSchema().getCollection('CollectionLimbs')`
+  id: totrans-610
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `limbs = session.getDefaultSchema().getCollection('CollectionLimbs')`
+- en: <Collection:CollectionLimbs>
+  id: totrans-611
+  prefs: []
+  type: TYPE_NORMAL
+  zh: <Collection:CollectionLimbs>
+- en: MySQL  cookbook  JS > `limbs.find().fields('arms', 'COUNT(thing)').groupBy('arms')`
+  id: totrans-612
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `limbs.find().fields('arms', 'COUNT(thing)').groupBy('arms')`
+- en: '{'
+  id: totrans-613
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"arms": 2,'
+  id: totrans-614
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"arms": 2,'
+- en: '"COUNT(thing)": 3'
+  id: totrans-615
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"COUNT(thing)": 3'
+- en: '}'
+  id: totrans-616
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '{'
+  id: totrans-617
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"arms": 0,'
+  id: totrans-618
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"arms": 0,'
+- en: '"COUNT(thing)": 5'
+  id: totrans-619
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"COUNT(thing)": 5'
+- en: '}'
+  id: totrans-620
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '{'
+  id: totrans-621
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"arms": 10,'
+  id: totrans-622
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"arms": 10,'
+- en: '"COUNT(thing)": 1'
+  id: totrans-623
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"COUNT(thing)": 1'
+- en: '}'
+  id: totrans-624
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '{'
+  id: totrans-625
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"arms": 1,'
+  id: totrans-626
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"arms": 1,'
+- en: '"COUNT(thing)": 1'
+  id: totrans-627
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"COUNT(thing)": 1'
+- en: '}'
+  id: totrans-628
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '{'
+  id: totrans-629
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"arms": null,'
+  id: totrans-630
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"arms": null,'
+- en: '"COUNT(thing)": 1'
+  id: totrans-631
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"COUNT(thing)": 1'
+- en: '}'
+  id: totrans-632
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 5 documents in set (0.0010 sec)
+  id: totrans-633
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 5 documents in set (0.0010 sec)
+- en: '[PRE63]'
+  id: totrans-634
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: MySQL  cookbook  JS > `limbs.find().fields('arms', 'COUNT(thing)').`
+  id: totrans-635
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `limbs.find().fields('arms', 'COUNT(thing)').`
+- en: -> `groupBy('arms').having('MIN(legs) > 0')`
+  id: totrans-636
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `groupBy('arms').having('MIN(legs) > 0')`
+- en: '{'
+  id: totrans-637
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"arms": 2,'
+  id: totrans-638
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"arms": 2,'
+- en: '"COUNT(thing)": 3'
+  id: totrans-639
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"COUNT(thing)": 3'
+- en: '}'
+  id: totrans-640
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 document in set (0.0006 sec)
+  id: totrans-641
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 document in set (0.0006 sec)
+- en: '[PRE64]'
+  id: totrans-642
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: MySQL  cookbook  JS > `limbs.find().sort('legs DESC').limit(3)`
+  id: totrans-643
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `limbs.find().sort('legs DESC').limit(3)`
+- en: '{'
+  id: totrans-644
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab75000000000000001a",'
+  id: totrans-645
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab75000000000000001a",'
+- en: '"arms": 0,'
+  id: totrans-646
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"arms": 0,'
+- en: '"legs": 99,'
+  id: totrans-647
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"legs": 99,'
+- en: '"thing": "centipede"'
+  id: totrans-648
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"thing": "centipede"'
+- en: '}'
+  id: totrans-649
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '{'
+  id: totrans-650
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab750000000000000017",'
+  id: totrans-651
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab750000000000000017",'
+- en: '"arms": 0,'
+  id: totrans-652
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"arms": 0,'
+- en: '"legs": 6,'
+  id: totrans-653
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"legs": 6,'
+- en: '"thing": "insect"'
+  id: totrans-654
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"thing": "insect"'
+- en: '}'
+  id: totrans-655
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '{'
+  id: totrans-656
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab75000000000000001b",'
+  id: totrans-657
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab75000000000000001b",'
+- en: '"arms": 0,'
+  id: totrans-658
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"arms": 0,'
+- en: '"legs": 4,'
+  id: totrans-659
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"legs": 4,'
+- en: '"thing": "table"'
+  id: totrans-660
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"thing": "table"'
+- en: '}'
+  id: totrans-661
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 3 documents in set (0.0006 sec)
+  id: totrans-662
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 3 documents in set (0.0006 sec)
+- en: '[PRE65]'
+  id: totrans-663
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: MySQL  cookbook  JS > `limbs.find('legs = :legs').bind('legs', 4)`
+  id: totrans-664
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `limbs.find('legs = :legs').bind('legs', 4)`
+- en: '{'
+  id: totrans-665
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab75000000000000001b",'
+  id: totrans-666
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab75000000000000001b",'
+- en: '"arms": 0,'
+  id: totrans-667
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"arms": 0,'
+- en: '"legs": 4,'
+  id: totrans-668
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"legs": 4,'
+- en: '"thing": "table"'
+  id: totrans-669
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"thing": "table"'
+- en: '}'
+  id: totrans-670
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: '{'
+  id: totrans-671
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab75000000000000001c",'
+  id: totrans-672
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab75000000000000001c",'
+- en: '"arms": 2,'
+  id: totrans-673
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"arms": 2,'
+- en: '"legs": 4,'
+  id: totrans-674
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"legs": 4,'
+- en: '"thing": "armchair"'
+  id: totrans-675
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"thing": "armchair"'
+- en: '}'
+  id: totrans-676
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 2 documents in set (0.0008 sec)
+  id: totrans-677
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 2 documents in set (0.0008 sec)
+- en: MySQL  cookbook  JS > `limbs.find('legs = :legs and arms = :arms').`
+  id: totrans-678
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `limbs.find('legs = :legs and arms = :arms').`
+- en: -> `bind('legs', 4).bind('arms', 2)`
+  id: totrans-679
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `bind('legs', 4).bind('arms', 2)`
+- en: '{'
+  id: totrans-680
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab75000000000000001c",'
+  id: totrans-681
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab75000000000000001c",'
+- en: '"arms": 2,'
+  id: totrans-682
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"arms": 2,'
+- en: '"legs": 4,'
+  id: totrans-683
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"legs": 4,'
+- en: '"thing": "armchair"'
+  id: totrans-684
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"thing": "armchair"'
+- en: '}'
+  id: totrans-685
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 document in set (0.0005 sec)
+  id: totrans-686
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 document in set (0.0005 sec)
+- en: '[PRE66]'
+  id: totrans-687
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: MySQL  cookbook  JS > `MyCollection``.``find``(``'document = "one"'``)` ![1](Images/1.png)
+  id: totrans-688
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection``.``find``(``'document = "one"'``)` ![1](Images/1.png)
+- en: '{'
+  id: totrans-689
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab750000000000000012",'
+  id: totrans-690
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab750000000000000012",'
+- en: '"document": "one"'
+  id: totrans-691
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"document": "one"'
+- en: '}'
+  id: totrans-692
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 document in set (0.0005 sec)
+  id: totrans-693
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 document in set (0.0005 sec)
+- en: MySQL  cookbook  JS > `MyCollection``.``modify``(``'document = "one"'``)``.`
+  id: totrans-694
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection``.``modify``(``'document = "one"'``)``.`
+- en: -> `set``(``'array'``,` `[``2``,` `3``,` `4``]``)`![2](Images/2.png)
+  id: totrans-695
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `set``(``'array'``,` `[``2``,` `3``,` `4``]``)`![2](Images/2.png)
+- en: Query OK, 1 item affected (0.0054 sec)
+  id: totrans-696
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Query OK, 1 item affected (0.0054 sec)
+- en: 'Rows matched: 1  Changed: 1  Warnings: 0'
+  id: totrans-697
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'Rows matched: 1  Changed: 1  Warnings: 0'
+- en: MySQL  cookbook  JS > `MyCollection``.``find``(``'document = "one"'``)`
+  id: totrans-698
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection``.``find``(``'document = "one"'``)`
+- en: '{'
+  id: totrans-699
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab750000000000000012",'
+  id: totrans-700
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab750000000000000012",'
+- en: '"array": ['
+  id: totrans-701
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"array": ['
+- en: 2,
+  id: totrans-702
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 2,
+- en: 3,
+  id: totrans-703
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 3,
+- en: '4'
+  id: totrans-704
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '4'
+- en: '],'
+  id: totrans-705
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '],'
+- en: '"document": "one"'
+  id: totrans-706
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"document": "one"'
+- en: '}'
+  id: totrans-707
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 document in set (0.0005 sec)
+  id: totrans-708
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 document in set (0.0005 sec)
+- en: MySQL  cookbook  JS > `MyCollection``.``modify``(``'document = "one"'``)``.``arrayAppend``(``'array'``,`
+    `5``)`![3](Images/3.png)
+  id: totrans-709
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection``.``modify``(``'document = "one"'``)``.``arrayAppend``(``'array'``,`
+    `5``)`![3](Images/3.png)
+- en: Query OK, 1 item affected (0.0073 sec)
+  id: totrans-710
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Query OK, 1 item affected (0.0073 sec)
+- en: 'Rows matched: 1  Changed: 1  Warnings: 0'
+  id: totrans-711
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'Rows matched: 1  Changed: 1  Warnings: 0'
+- en: MySQL  cookbook  JS > `MyCollection``.``find``(``'document = "one"'``)`
+  id: totrans-712
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection``.``find``(``'document = "one"'``)`
+- en: '{'
+  id: totrans-713
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab750000000000000012",'
+  id: totrans-714
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab750000000000000012",'
+- en: '"array": ['
+  id: totrans-715
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"array": ['
+- en: 2,
+  id: totrans-716
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 2,
+- en: 3,
+  id: totrans-717
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 3,
+- en: 4,
+  id: totrans-718
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 4,
+- en: '5'
+  id: totrans-719
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '5'
+- en: '],'
+  id: totrans-720
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '],'
+- en: '"document": "one"'
+  id: totrans-721
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"document": "one"'
+- en: '}'
+  id: totrans-722
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 document in set (0.0007 sec)
+  id: totrans-723
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 document in set (0.0007 sec)
+- en: MySQL  cookbook  JS > `MyCollection``.``modify``(``'document = "one"'``)``.`
+  id: totrans-724
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection``.``modify``(``'document = "one"'``)``.`
+- en: -> `arrayInsert``(``'array[0]'``,` `1``)`![4](Images/4.png)
+  id: totrans-725
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `arrayInsert``(``'array[0]'``,` `1``)`![4](Images/4.png)
+- en: Query OK, 1 item affected (0.0072 sec)
+  id: totrans-726
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Query OK, 1 item affected (0.0072 sec)
+- en: 'Rows matched: 1  Changed: 1  Warnings: 0'
+  id: totrans-727
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'Rows matched: 1  Changed: 1  Warnings: 0'
+- en: MySQL  cookbook  JS > `MyCollection``.``find``(``'document = "one"'``)`
+  id: totrans-728
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection``.``find``(``'document = "one"'``)`
+- en: '{'
+  id: totrans-729
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab750000000000000012",'
+  id: totrans-730
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab750000000000000012",'
+- en: '"array": ['
+  id: totrans-731
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"array": ['
+- en: 1,
+  id: totrans-732
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 1,
+- en: 2,
+  id: totrans-733
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 2,
+- en: 3,
+  id: totrans-734
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 3,
+- en: 4,
+  id: totrans-735
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 4,
+- en: '5'
+  id: totrans-736
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '5'
+- en: '],'
+  id: totrans-737
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '],'
+- en: '"document": "one"'
+  id: totrans-738
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"document": "one"'
+- en: '}'
+  id: totrans-739
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 document in set (0.0008 sec)
+  id: totrans-740
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 document in set (0.0008 sec)
+- en: MySQL  cookbook  JS > `MyCollection``.``modify``(``'document = "one"'``)``.``arrayDelete``(``'array[2]'``)`![5](Images/5.png)
+  id: totrans-741
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection``.``modify``(``'document = "one"'``)``.``arrayDelete``(``'array[2]'``)`![5](Images/5.png)
+- en: Query OK, 1 item affected (0.0059 sec)
+  id: totrans-742
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Query OK, 1 item affected (0.0059 sec)
+- en: 'Rows matched: 1  Changed: 1  Warnings: 0'
+  id: totrans-743
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'Rows matched: 1  Changed: 1  Warnings: 0'
+- en: MySQL  cookbook  JS > `MyCollection``.``find``(``'document = "one"'``)`
+  id: totrans-744
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection``.``find``(``'document = "one"'``)`
+- en: '{'
+  id: totrans-745
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab750000000000000012",'
+  id: totrans-746
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab750000000000000012",'
+- en: '"array": ['
+  id: totrans-747
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"array": ['
+- en: 1,
+  id: totrans-748
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 1,
+- en: 2,
+  id: totrans-749
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 2,
+- en: 4,
+  id: totrans-750
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '4'
+- en: '5'
+  id: totrans-751
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '5'
+- en: '],'
+  id: totrans-752
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '],'
+- en: '"document": "one"'
+  id: totrans-753
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"document": "one"'
+- en: '}'
+  id: totrans-754
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 document in set (0.0009 sec)
+  id: totrans-755
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 document in set (0.0009 sec)
+- en: MySQL  cookbook  JS > `MyCollection``.``modify``(``'document = "one"'``)``.``unset``(``'array'``)`![6](Images/6.png)
+  id: totrans-756
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection``.``modify``(``'document = "one"'``)``.``unset``(``'array'``)`![6](Images/6.png)
+- en: Query OK, 1 item affected (0.0080 sec)
+  id: totrans-757
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Query OK, 1 item affected (0.0080 sec)
+- en: 'Rows matched: 1  Changed: 1  Warnings: 0'
+  id: totrans-758
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'Rows matched: 1  Changed: 1  Warnings: 0'
+- en: MySQL  cookbook  JS > `MyCollection``.``find``(``'document = "one"'``)`
+  id: totrans-759
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection``.``find``(``'document = "one"'``)`
+- en: '{'
+  id: totrans-760
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab750000000000000012",'
+  id: totrans-761
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab750000000000000012",'
+- en: '"document": "one"'
+  id: totrans-762
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"document": "one"'
+- en: '}'
+  id: totrans-763
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 document in set (0.0007 sec)
+  id: totrans-764
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 document in set (0.0007 sec)
+- en: MySQL  cookbook  JS > `MyCollection``.``modify``(``'document = "one"'``)``.`
+  id: totrans-765
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection``.``modify``(``'document = "one"'``)``.`
+- en: -> `patch``(``{``'number'``:` `42``,` `'array'``:` `[``1``,``2``,``3``]``}``)``.`
+  id: totrans-766
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `patch``(``{``'number'``:` `42``,` `'array'``:` `[``1``,``2``,``3``]``}``)``.`
+- en: -> `patch``(``{``'array'``:` `[``4``,``5``]``}``)`![7](Images/7.png)
+  id: totrans-767
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: -> `patch``(``{``'array'``:` `[``4``,``5``]``}``)`![7](Images/7.png)
+- en: Query OK, 1 item affected (0.0063 sec)
+  id: totrans-768
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Query OK, 1 item affected (0.0063 sec)
+- en: 'Rows matched: 1  Changed: 1  Warnings: 0'
+  id: totrans-769
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'Rows matched: 1  Changed: 1  Warnings: 0'
+- en: MySQL  cookbook  JS > `MyCollection``.``find``(``'document = "one"'``)`
+  id: totrans-770
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL  cookbook  JS > `MyCollection``.``find``(``'document = "one"'``)`
+- en: '{'
+  id: totrans-771
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '{'
+- en: '"_id": "000060d5ab750000000000000012",'
+  id: totrans-772
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"_id": "000060d5ab750000000000000012",'
+- en: '"array": ['
+  id: totrans-773
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"array": ['
+- en: 4,
+  id: totrans-774
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 4,
+- en: '5'
+  id: totrans-775
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '5'
+- en: '],'
+  id: totrans-776
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '],'
+- en: '"number": 42,'
+  id: totrans-777
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"number": 42,'
+- en: '"document": "one"'
+  id: totrans-778
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '"document": "one"'
+- en: '}'
+  id: totrans-779
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '}'
+- en: 1 document in set (0.0007 sec)
+  id: totrans-780
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 1 document in set (0.0007 sec)
+- en: '[PRE67]'
+  id: totrans-781
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: MyCollection.remove('document = :number').bind('number', 'one')
+  id: totrans-782
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MyCollection.remove('document = :number').bind('number', 'one')
+- en: '[PRE68]'
+  id: totrans-783
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: session.getSchema('cookbook').dropCollection('MyCollection')
+  id: totrans-784
+  prefs: []
+  type: TYPE_NORMAL
+  zh: session.getSchema('cookbook').dropCollection('MyCollection')
+- en: '```'
+  id: totrans-785
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '```'
+- en: See Also
+  id: totrans-786
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 查看也可以
+- en: For additional information about X DevAPI, see [X DevAPI Reference Manual](https://dev.mysql.com/doc/dev/mysqlsh-api-javascript/8.0/group___x_dev_a_p_i.html).
+  id: totrans-787
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于X DevAPI的更多信息，请参见[X DevAPI参考手册](https://dev.mysql.com/doc/dev/mysqlsh-api-javascript/8.0/group___x_dev_a_p_i.html)。

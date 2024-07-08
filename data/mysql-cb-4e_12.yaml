@@ -1,0 +1,2635 @@
+- en: Chapter 12\. Working with Metadata
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第12章。处理元数据
+- en: 12.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 12.0 介绍
+- en: 'Most of the SQL statements used so far have been written to work with the data
+    stored in the database. That is, after all, what the database is designed to hold.
+    But sometimes you need more than just data values. You need information that characterizes
+    or describes those values—that is, the statement metadata. Metadata is used most
+    often to process result sets, but also applies to other aspects of your interaction
+    with MySQL. This chapter describes how to obtain and use several types of metadata:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止使用的大多数SQL语句都是为了与数据库中存储的数据一起工作而编写的。毕竟，这就是数据库设计用来保存的内容。但有时您需要的不仅仅是数据值，而是描述或表征这些值的信息，即语句元数据。元数据最常用于处理结果集，但也适用于与MySQL交互的其他方面。本章描述了如何获取和使用几种类型的元数据：
+- en: Information about statement results
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 语句结果的信息
+- en: For statements that delete or update rows, you can determine how many rows were
+    changed. For a `SELECT` statement, you can obtain the number of columns in the
+    result set, as well as information about each column in the result set, such as
+    the column name and its display width. For example, to format a tabular display,
+    you can determine how wide to make each column and whether to justify values to
+    the left or right.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于删除或更新行的语句，您可以确定更改了多少行。对于`SELECT`语句，可以获取结果集中的列数，以及有关结果集中每个列的信息，例如列名及其显示宽度。例如，为了格式化表格显示，可以确定每列的宽度以及是否将值左对齐或右对齐。
+- en: Information about databases and tables
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库和表的信息
+- en: A MySQL server can be queried to determine which databases and tables it manages.
+    This is useful for existence tests or producing lists. For example, an application
+    might present a display enabling the user to select one of the available databases.
+    Table metadata can be examined to determine column definitions; for example, to
+    determine the legal values for `ENUM` or `SET` columns to generate web form elements
+    corresponding to the available choices.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以查询MySQL服务器以确定它管理哪些数据库和表。这对于存在性测试或生成列表非常有用。例如，一个应用程序可能呈现一个显示，让用户选择可用数据库之一。可以检查表的元数据以确定列的定义；例如，确定`ENUM`或`SET`列的合法值，以生成对应于可用选择的Web表单元素。
+- en: Information about the MySQL server
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL服务器的信息
+- en: The database server provides information about itself and about the status of
+    your current session with it. Knowing the server version can be useful for determining
+    whether it supports a given feature, which helps you build adaptive applications.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库服务器提供关于自身和与其当前会话状态的信息。了解服务器版本对于确定其是否支持特定功能很有用，这有助于您构建适应性应用程序。
+- en: Metadata is closely tied to the implementation of the database system, so it
+    tends to be database system−dependent. This means that if an application uses
+    techniques shown in this chapter, it might need some modification if you port
+    it to other database systems. For example, lists of tables and databases in MySQL
+    are available by executing `SHOW` statements. However, `SHOW` is a MySQL-specific
+    extension to SQL, so even for APIs like Perl DBI, PHP PDO, Python DB API, and
+    JDBC that give you a database-independent way of executing statements, the SQL
+    itself is MySQL-specific and must be changed to work with other database systems.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 元数据与数据库系统的实现密切相关，因此往往依赖于特定的数据库系统。这意味着，如果一个应用程序使用本章展示的技术，那么如果将其移植到其他数据库系统，可能需要进行一些修改。例如，在MySQL中，可以通过执行`SHOW`语句来获取表和数据库列表。但是，`SHOW`是SQL的MySQL特定扩展，因此即使对于像Perl
+    DBI、PHP PDO、Python DB API和JDBC这样的API，它们提供了一个与数据库无关的执行语句的方式，SQL本身仍然是MySQL特定的，必须进行修改才能与其他数据库系统一起工作。
+- en: 'A more portable source of metadata is `INFORMATION_SCHEMA`, a database that
+    contains information about databases, tables, columns, character sets, and so
+    forth. `INFORMATION_SCHEMA` has some advantages over `SHOW`:'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更便携的元数据来源是`INFORMATION_SCHEMA`，这是一个包含有关数据库、表、列、字符集等信息的数据库。`INFORMATION_SCHEMA`相对于`SHOW`有一些优势：
+- en: Other database systems support `INFORMATION_SCHEMA`, so applications that use
+    it are likely to be more portable than those that use `SHOW` statements.
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 其他数据库系统支持`INFORMATION_SCHEMA`，因此使用它的应用程序可能比使用`SHOW`语句更具可移植性。
+- en: '`INFORMATION_SCHEMA` is used with standard `SELECT` syntax, so it’s more similar
+    to other data-retrieval operations than `SHOW` statements.'
+  id: totrans-12
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`INFORMATION_SCHEMA`与标准的`SELECT`语法一起使用，因此与其他数据检索操作更相似，而不是`SHOW`语句。'
+- en: Because of those advantages, recipes in this chapter use `INFORMATION_SCHEMA`
+    rather than `SHOW` in most cases.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为这些优势，本章中的示例使用 `INFORMATION_SCHEMA` 而不是大多数情况下的 `SHOW`。
+- en: A disadvantage of `INFORMATION_SCHEMA` is that statements to access it are more
+    verbose than the corresponding `SHOW` statements. That doesn’t matter so much
+    when you’re writing programs, but for interactive use, `SHOW` statements can be
+    more attractive because they require less typing.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INFORMATION_SCHEMA` 的一个缺点是，访问它的语句比相应的 `SHOW` 语句更冗长。当你编写程序时，这并不重要，但对于交互使用而言，`SHOW`
+    语句可能更吸引人，因为需要输入更少。'
+- en: Note
+  id: totrans-15
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The results retrieved from `INFORMATION_SCHEMA` or `SHOW` depend on your privileges.
+    You’ll see information only for those databases or tables for which you have some
+    privileges. Thus, an existence test for an object returns false if it exists but
+    you have no privileges for accessing it. You may need to use a user with administrative
+    privileges to be able to repeat all code examples that we provide in this chapter.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从 `INFORMATION_SCHEMA` 或 `SHOW` 检索到的结果取决于你的权限。你只会看到那些你拥有某些权限的数据库或表的信息。因此，如果存在对象但你无权访问它，对象的存在测试将返回
+    false。你可能需要使用具有管理权限的用户才能重复本章中我们提供的所有代码示例。
+- en: Scripts that create tables used in this chapter are located in the *tables*
+    directory of the `recipes` distribution. Scripts containing code for the examples
+    are located in the *metadata* directory. (Some of them use utility functions located
+    in the *lib* directory.) The distribution often provides implementations in languages
+    other than those shown.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中使用的创建表的脚本位于 `recipes` 发行版的 *tables* 目录中。包含示例代码的脚本位于 *metadata* 目录中。（其中一些使用位于
+    *lib* 目录中的实用函数。）该发行版通常提供了除显示语言外的其他语言的实现。
+- en: 12.1 Determining the Number of Rows Affected by a Statement
+  id: totrans-18
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 12.1 确定语句影响的行数
+- en: Problem
+  id: totrans-19
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know how many rows have been changed by an SQL statement..
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你想知道 SQL 语句改变了多少行。
+- en: Solution
+  id: totrans-21
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Some APIs return the row count as a return value of the function that executes
+    the statement. Others provide a separate function that you call after executing
+    the statement. Use the method, available in the programming language you use.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有些 API 将行数作为执行语句的函数的返回值返回。其他的则提供了一个单独的函数，在执行语句后调用。使用你使用的编程语言中可用的方法。
+- en: Discussion
+  id: totrans-23
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'For statements that affect rows (`UPDATE`, `DELETE`, `INSERT`, `REPLACE`),
+    each API provides a way to determine the number of rows involved. For MySQL, the
+    default meaning of <q>affected by</q> is <q>changed by,</q> not <q>matched by.</q>
+    That is, rows not changed by a statement are not counted, even if they match the
+    conditions specified in the statement. For example, the following `UPDATE` statement
+    results in an <q>affected by</q> value of zero because it changes no columns from
+    their current values, no matter how many rows the `WHERE` clause matches:'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于影响行的语句（`UPDATE`、`DELETE`、`INSERT`、`REPLACE`），每个 API 都提供了一种确定涉及行数的方法。对于 MySQL，<q>受影响的</q>
+    的默认含义是 <q>更改的</q>，而不是 <q>匹配的</q>。也就是说，语句未更改的行不会计数，即使它们匹配语句中指定的条件。例如，以下 `UPDATE`
+    语句的 <q>受影响的</q> 值为零，因为它没有更改列的当前值，无论 `WHERE` 子句匹配多少行：
+- en: '[PRE0]'
+  id: totrans-25
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: The MySQL server permits a client to set a connect-time flag to indicate that
+    it wants rows-matched counts, not rows-changed counts. In this case, the row count
+    for the preceding statement would be equal to the number of rows with a `cats`
+    value of 0, even though the statement results in no net change to the table. However,
+    not all MySQL APIs expose this flag. The following discussion indicates which
+    APIs enable you to select the type of count you want and which use the rows-matched
+    count by default rather than the rows-changed count.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 服务器允许客户端设置连接时的标志，以指示它想要匹配行数而不是更改行数的计数。在这种情况下，前面语句的行数将等于具有 `cats` 值为 0
+    的行数，即使语句对表没有净变化。但并非所有 MySQL API 都公开此标志。以下讨论指出了哪些 API 允许你选择所需的计数类型，哪些默认使用行匹配计数而不是行更改计数。
+- en: Perl
+  id: totrans-27
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: Perl
+- en: 'In Perl DBI scripts, `do()` returns the row count for statements that modify
+    rows:'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Perl DBI 脚本中，`do()` 返回修改行的行数：
+- en: '[PRE1]'
+  id: totrans-29
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: 'If you prepare a statement first and then execute it, `execute()` returns the
+    row count:'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果首先准备语句，然后执行它，`execute()` 将返回行数：
+- en: '[PRE2]'
+  id: totrans-31
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'To tell MySQL whether to return rows-changed or rows-matched counts, specify
+    `mysql_client_found_rows` in the options part of the data source name (DSN) argument
+    of the `connect()` call when you connect to the MySQL server. Set the option to
+    0 for rows-changed counts and 1 for rows-matched counts. Here’s an example:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要告知 MySQL 返回更改行数还是匹配行数，请在连接到 MySQL 服务器时，在数据源名称（DSN）参数的选项部分指定 `mysql_client_found_rows`。将该选项设置为
+    0 表示更改行数，设置为 1 表示匹配行数。以下是一个示例：
+- en: '[PRE3]'
+  id: totrans-33
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: '`mysql_client_found_rows` changes the row-reporting behavior for the duration
+    of the session.'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`mysql_client_found_rows` 在会话期间更改行报告行为。'
+- en: Although the default behavior for MySQL itself is to return rows-changed counts,
+    current versions of the Perl DBI driver for MySQL automatically request rows-matched
+    counts unless you specify otherwise. For applications that depend on a particular
+    behavior, it’s best to explicitly set the `mysql_client_found_rows` option in
+    the DSN to the appropriate value.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管 MySQL 本身的默认行为是返回更改的行数，但当前版本的 Perl DBI 驱动程序自动请求匹配的行数，除非另有指定。对于依赖特定行为的应用程序，最好在
+    DSN 中明确设置 `mysql_client_found_rows` 选项以获取适当的值。
+- en: Ruby
+  id: totrans-36
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: Ruby
+- en: 'In Ruby Mysql2 scripts, the `affected_rows` method returns the row count for
+    statements that modify rows:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Ruby Mysql2 脚本中，`affected_rows` 方法返回修改行的行数：
+- en: '[PRE4]'
+  id: totrans-38
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'If you use prepared statements method `execute` to execute a statement, use
+    the statement handle `affected_rows` method to get the count afterward:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果使用准备语句的 `execute` 方法执行语句，则可以使用语句句柄的 `affected_rows` 方法在之后获取计数：
+- en: '[PRE5]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'The Ruby driver for MySQL returns rows-changed counts by default, but the driver
+    supports a `Mysql2::Client::FOUND_ROWS` option that enables you to control whether
+    the server returns rows-changed or rows-matched counts. For example, to request
+    rows-matched counts, do this:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Ruby MySQL 驱动程序默认返回更改的行数，但支持 `Mysql2::Client::FOUND_ROWS` 选项，该选项允许您控制服务器返回更改的行数或匹配的行数。例如，要请求匹配的行数，请执行以下操作：
+- en: '[PRE6]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: PHP
+  id: totrans-43
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: PHP
+- en: 'In PDO, the database handle `exec()` method returns the rows-affected count:'
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 PDO 中，数据库句柄的 `exec()` 方法返回受影响的行数：
+- en: '[PRE7]'
+  id: totrans-45
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'If you use `prepare()` plus `execute()` instead, the rows-affected count is
+    available from the statement handle `rowCount()` method:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果使用 `prepare()` 加 `execute()`，则可以从语句句柄的 `rowCount()` 方法获取受影响的行数：
+- en: '[PRE8]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'The PDO driver for MySQL returns rows-changed counts by default, but the driver
+    supports a `PDO::MYSQL_ATTR_FOUND_ROWS` attribute that you can specify at connect
+    time to control whether the server returns rows-changed or rows-matched counts.
+    The `new` `PDO` class constructor takes an optional key/value array following
+    the password argument. Pass `PDO::MYSQL_ATTR_FOUND_ROWS` `=>` `1` in this array
+    to request rows-matched counts:'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PDO MySQL 驱动程序默认返回更改的行数，但支持 `PDO::MYSQL_ATTR_FOUND_ROWS` 属性，您可以在连接时指定该属性来控制服务器返回更改的行数或匹配的行数。`new
+    PDO` 类构造函数在密码参数之后接受一个可选的键值数组。在此数组中传递 `PDO::MYSQL_ATTR_FOUND_ROWS => 1` 来请求匹配的行数：
+- en: '[PRE9]'
+  id: totrans-49
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: Python
+  id: totrans-50
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: Python
+- en: 'Python’s DB API makes the rows-changed count available as the value of the
+    statement cursor’s `rowcount` attribute:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Python 的 DB API 通过语句游标的 `rowcount` 属性提供更改的行数：
+- en: '[PRE10]'
+  id: totrans-52
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'To obtain rows-matched counts instead, import the Connector/Python client-flag
+    constants and pass the `FOUND_ROWS` flag in the `client_flags` parameter of the
+    `connect()` method:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取匹配行数，请导入 Connector/Python 客户端标志常量，并在 `connect()` 方法的 `client_flags` 参数中传递
+    `FOUND_ROWS` 标志：
+- en: '[PRE11]'
+  id: totrans-54
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: Go
+  id: totrans-55
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: Go
+- en: Go SQL driver provides method `RowsAffected` of the `Result` type that returns
+    number of changed rows.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Go SQL 驱动程序提供了 `Result` 类型的 `RowsAffected` 方法，返回更改的行数。
+- en: '[PRE12]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'To retrieve row-matched count instead add a parameter `clientFoundRows=true`
+    to the connection string:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要检索匹配行数，请在连接字符串中添加参数 `clientFoundRows=true`：
+- en: '[PRE13]'
+  id: totrans-59
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: Java
+  id: totrans-60
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: Java
+- en: For statements that modify rows, the Connector/J driver provides rows-matched
+    counts rather than rows-changed counts, for conformance with the Java JDBC specification.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于修改行的语句，Connector/J 驱动程序提供了匹配行数而不是更改行数，以符合 Java JDBC 规范。
+- en: 'The JDBC interface provides row counts two different ways, depending on the
+    method you invoke to execute the statement. If you use `executeUpdate()`, the
+    row count is its return value:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: JDBC 接口提供两种不同的行数计数方式，取决于执行语句的方法。如果使用 `executeUpdate()`，则行数计数是其返回值：
+- en: '[PRE14]'
+  id: totrans-63
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'If you use `execute()`, that method returns true or false to indicate whether
+    the statement produces a result set. For statements such as `UPDATE` or `DELETE`
+    that return no result set, `execute()` returns false and the row count is available
+    by calling the `getUpdateCount()` method:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果使用了`execute()`，该方法返回true或false来指示语句是否产生了结果集。对于诸如`UPDATE`或`DELETE`这样不返回结果集的语句，`execute()`返回false，并且可以通过调用`getUpdateCount()`方法获取行数：
+- en: '[PRE15]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 12.2 Obtaining Result Set Metadata
+  id: totrans-66
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 12.2 获取结果集元数据
+- en: Problem
+  id: totrans-67
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: After retrieving the rows (see [Recipe 4.4](ch04.xhtml#nch-api-api-statement))
+    you want to know other details *about* the result set, such as the column names
+    and data types, or how many rows and columns there are.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在检索行（参见[Recipe 4.4](ch04.xhtml#nch-api-api-statement)）之后，您需要了解关于结果集的其他细节，如列名和数据类型，或者有多少行和列。
+- en: Solution
+  id: totrans-69
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the capabilities provided by your API.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 利用您的API提供的功能。
+- en: Discussion
+  id: totrans-71
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Statements such as `SELECT` that generate a result set produce several types
+    of metadata. This section discusses the information available through each API,
+    using programs that show how to display the result set metadata available after
+    executing a sample statement (`SELECT` `name,` `birth` `FROM` `profile`). The
+    example programs illustrate one of the simplest uses for this information: when
+    you retrieve a row from a result set and you want to process the column values
+    in a loop, the column count stored in the metadata serves as the upper bound on
+    the loop iterator.'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 诸如`SELECT`这样生成结果集的语句会生成多种类型的元数据。本节讨论了通过每个API获取的信息，使用显示在执行示例语句（`SELECT` `name,`
+    `birth` `FROM` `profile`）后可用的结果集元数据的程序。示例程序说明了此信息的最简单用法之一：当您从结果集检索行并希望在循环中处理列值时，存储在元数据中的列计数将作为循环迭代器的上限。
+- en: Perl
+  id: totrans-73
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: Perl
+- en: 'The scope of result set metadata available from Perl DBI depends on how you
+    process queries:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从Perl DBI获取的结果集元数据的范围取决于您如何处理查询：
+- en: Using a statement handle
+  id: totrans-75
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用语句句柄
+- en: In this case, invoke `prepare()` to get the statement handle. This handle has
+    an `execute()` method. Invoke it to generate the result set, then fetch the rows
+    in a loop. With this approach, access to the metadata is available while the result
+    set is active—that is, after the call to `execute()` and until the end of the
+    result set is reached. When the row-fetching method finds that there are no more
+    rows, it invokes `finish()` implicitly, which causes the metadata to become unavailable.
+    (That also happens if you explicitly call `finish()` yourself.) Thus, normally
+    it’s best to access the metadata immediately after calling `execute()`, making
+    a copy of any values that you’ll need to use beyond the end of the fetch loop.
+  id: totrans-76
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在这种情况下，调用`prepare()`以获取语句句柄。该句柄具有一个`execute()`方法。调用它生成结果集，然后在循环中获取行。使用这种方法，在结果集处于活动状态（即调用`execute()`之后，直到到达结果集的末尾）时，可以访问元数据。当行提取方法发现没有更多的行时，会隐式地调用`finish()`，导致元数据变得不可用。（如果您显式调用`finish()`，也会发生这种情况。）因此，通常最好在调用`execute()`后立即访问元数据，并复制任何您需要在提取循环结束后使用的值的副本。
+- en: Using a database-handle method that returns the result set in a single operation
+  id: totrans-77
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用将结果集一次性返回的数据库句柄方法
+- en: With this approach, any metadata generated while processing the statement will
+    have been disposed of by the time the method returns. You can still determine
+    the number of rows and columns from the size of the result set.
+  id: totrans-78
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 使用这种方法，处理语句时生成的任何元数据都将在方法返回时被丢弃。您仍然可以通过结果集的大小确定行数和列数。
+- en: 'When you use a statement handle to process a query, DBI makes result set metadata
+    available after you invoke the handle’s `execute()` method. This information is
+    available primarily in the form of references to arrays. For each such type of
+    metadata, the array has one element per column in the result set. Access these
+    array references as attributes of the statement handle. For example, `$sth->{NAME}`
+    points to the column name array, with individual column names available as elements
+    of this array:'
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您使用语句句柄处理查询时，DBI在调用句柄的`execute()`方法后会提供结果集元数据。这些信息主要以数组引用的形式提供。对于每种元数据类型，数组中每一列都有一个元素。可以将这些数组引用作为语句句柄的属性访问。例如，`$sth->{NAME}`指向列名数组，数组的各个元素即为列名：
+- en: '[PRE16]'
+  id: totrans-80
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'Or access the entire array like this:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者像这样访问整个数组：
+- en: '[PRE17]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: '[Table 12-1](#nch-meta-meta-result-perl) lists the attribute names through
+    which you access array-based metadata and the meaning of values in each array.
+    Names that begin with uppercase are standard DBI attributes and should be available
+    for most database engines. Attribute names that begin with `mysql_` are MySQL-specific
+    and nonportable:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[表 12-1](#nch-meta-meta-result-perl) 列出了通过数组访问元数据的属性名称以及每个数组中值的含义。以大写字母开头的名称是标准的
+    DBI 属性，应该适用于大多数数据库引擎。以 `mysql_` 开头的属性名称是 MySQL 特定的，不可移植的：'
+- en: Table 12-1\. Metadata in Perl
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 12-1\. Perl 中的元数据
+- en: '| Attribute name | Array element meaning |'
+  id: totrans-85
+  prefs: []
+  type: TYPE_TB
+  zh: '| 属性名称 | 数组元素含义 |'
+- en: '| --- | --- |'
+  id: totrans-86
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `NAME` | Column name |'
+  id: totrans-87
+  prefs: []
+  type: TYPE_TB
+  zh: '| `NAME` | 列名 |'
+- en: '| `NAME_lc` | Column name in lowercase |'
+  id: totrans-88
+  prefs: []
+  type: TYPE_TB
+  zh: '| `NAME_lc` | 列名小写 |'
+- en: '| `NAME_uc` | Column name in uppercase |'
+  id: totrans-89
+  prefs: []
+  type: TYPE_TB
+  zh: '| `NAME_uc` | 列名大写 |'
+- en: '| `NULLABLE` | 0 or empty string = column values cannot be `NULL` |'
+  id: totrans-90
+  prefs: []
+  type: TYPE_TB
+  zh: '| `NULLABLE` | 0 或空字符串 = 列值不能为 `NULL` |'
+- en: '|  | 1 = column values can be `NULL` |'
+  id: totrans-91
+  prefs: []
+  type: TYPE_TB
+  zh: '|  | 1 = 列值可以为 `NULL` |'
+- en: '|  | 2 = unknown |'
+  id: totrans-92
+  prefs: []
+  type: TYPE_TB
+  zh: '|  | 2 = 未知 |'
+- en: '| `PRECISION` | Column width |'
+  id: totrans-93
+  prefs: []
+  type: TYPE_TB
+  zh: '| `PRECISION` | 列宽度 |'
+- en: '| `SCALE` | Number of decimal places (for numeric columns) |'
+  id: totrans-94
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SCALE` | 小数位数（对于数字列） |'
+- en: '| `TYPE` | Data type (numeric DBI code) |'
+  id: totrans-95
+  prefs: []
+  type: TYPE_TB
+  zh: '| `TYPE` | 数据类型（数字 DBI 代码） |'
+- en: '| `mysql_is_blob` | True if column has a `BLOB` (or `TEXT`) type |'
+  id: totrans-96
+  prefs: []
+  type: TYPE_TB
+  zh: '| `mysql_is_blob` | 如果列具有 `BLOB`（或 `TEXT`）类型则为真 |'
+- en: '| `mysql_is_key` | True if column is part of a key |'
+  id: totrans-97
+  prefs: []
+  type: TYPE_TB
+  zh: '| `mysql_is_key` | 如果列是键的一部分则为真 |'
+- en: '| `mysql_is_num` | True if column has a numeric type |'
+  id: totrans-98
+  prefs: []
+  type: TYPE_TB
+  zh: '| `mysql_is_num` | 如果列具有数字类型则为真 |'
+- en: '| `mysql_is_pri_key` | True if column is part of a primary key |'
+  id: totrans-99
+  prefs: []
+  type: TYPE_TB
+  zh: '| `mysql_is_pri_key` | 如果列是主键则为真 |'
+- en: '| `mysql_max_length` | Actual maximum length of column values in result set
+    |'
+  id: totrans-100
+  prefs: []
+  type: TYPE_TB
+  zh: '| `mysql_max_length` | 结果集中列值的实际最大长度 |'
+- en: '| `mysql_table` | Name of table the column is part of |'
+  id: totrans-101
+  prefs: []
+  type: TYPE_TB
+  zh: '| `mysql_table` | 列所属表的名称 |'
+- en: '| `mysql_type` | Data type (numeric internal MySQL code) |'
+  id: totrans-102
+  prefs: []
+  type: TYPE_TB
+  zh: '| `mysql_type` | 数据类型（数字内部 MySQL 代码） |'
+- en: '| `mysql_type_name` | Data type name |'
+  id: totrans-103
+  prefs: []
+  type: TYPE_TB
+  zh: '| `mysql_type_name` | 数据类型名称 |'
+- en: 'Some types of metadata, listed in [Table 12-2](#nch-meta-meta-result-perl-hash),
+    are accessed as references to hashes rather than arrays. These hashes have one
+    element per column value. The element key is the column name and its value is
+    the position of the column within the result set. For example:'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些元数据类型，列在 [表 12-2](#nch-meta-meta-result-perl-hash) 中列出，作为哈希的引用而不是数组来访问。这些哈希每个列值有一个元素。元素键是列名，其值是结果集中的列位置。例如：
+- en: '[PRE18]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: Table 12-2\. Metadata in Perl, accessible as references to hashes
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 12-2\. Perl 中的元数据，可作为哈希引用访问
+- en: '| Attribute name | Hash element meaning |'
+  id: totrans-107
+  prefs: []
+  type: TYPE_TB
+  zh: '| 属性名称 | 哈希元素含义 |'
+- en: '| --- | --- |'
+  id: totrans-108
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `NAME_hash` | Column name |'
+  id: totrans-109
+  prefs: []
+  type: TYPE_TB
+  zh: '| `NAME_hash` | 列名 |'
+- en: '| `NAME_hash_lc` | Column name in lowercase |'
+  id: totrans-110
+  prefs: []
+  type: TYPE_TB
+  zh: '| `NAME_hash_lc` | 列名小写 |'
+- en: '| `NAME_hash_uc` | Column name in uppercase |'
+  id: totrans-111
+  prefs: []
+  type: TYPE_TB
+  zh: '| `NAME_hash_uc` | 列名大写 |'
+- en: 'The number of columns in a result set is available as a scalar value:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果集中的列数可作为标量值获得：
+- en: '[PRE19]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'This example code shows how to execute a statement and display result set metadata:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个示例代码展示了如何执行语句并显示结果集元数据：
+- en: '[PRE20]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'The program produces this output:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 程序产生以下输出：
+- en: '[PRE21]'
+  id: totrans-117
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: To get a row count from a result set generated by calling `execute()`, fetch
+    the rows and count them yourself. Using `$sth->rows()` to get a count for `SELECT`
+    statements is expressly deprecated in the DBI documentation.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要从调用 `execute()` 生成的结果集中获取行数，请自行获取行并计数。在 DBI 文档中明确不推荐使用 `$sth->rows()` 来获取 `SELECT`
+    语句的计数。
+- en: You can also obtain a result set by calling one of the DBI methods that uses
+    a database handle rather than a statement handle, such as `selectall_arrayref()`
+    or `selectall_hashref()`. These methods provide no access to column metadata.
+    That information already will have been disposed of by the time the method returns,
+    and is unavailable to your scripts. However, you can derive column and row counts
+    by examining the result set itself. [Recipe 4.4](ch04.xhtml#nch-api-api-statement)
+    discusses the result set structures produced by several methods and how to use
+    them to obtain row and column counts.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以通过调用使用数据库句柄而不是语句句柄的 DBI 方法之一（如 `selectall_arrayref()` 或 `selectall_hashref()`）来获取结果集。这些方法不提供对列元数据的访问。该信息在方法返回时已被处理，无法在脚本中使用。但是，您可以通过检查结果集本身来推导列和行计数。[Recipe
+    4.4](ch04.xhtml#nch-api-api-statement) 讨论了几种方法产生的结果集结构以及如何使用它们来获取行和列计数。
+- en: Ruby
+  id: totrans-120
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: Ruby
+- en: Ruby Mysql2 gem does not provide own methods to access result set metadata after
+    you execute a statement. You can only get column names by calling method `fields`
+    of the class `Mysql2::Result`.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Ruby Mysql2 gem 在执行语句后不提供自己的方法来访问结果集的元数据。你只能通过调用`Mysql2::Result`类的`fields`方法获取列名。
+- en: '[PRE22]'
+  id: totrans-122
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: To obtain other column metadata query Information Schema as we suggest in [Recipe
+    12.5](#nch-meta-meta-column-info)
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取其他列的元数据，请参考我们在[Recipe 12.5](#nch-meta-meta-column-info)中建议的Information Schema查询。
+- en: PHP
+  id: totrans-124
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: PHP
+- en: In PHP, metadata for `SELECT` statements is available from PDO after a successful
+    call to `query()`. If you execute a statement using `prepare()` plus `execute()`
+    instead (which can be used for `SELECT` or non-`SELECT` statements), metadata
+    becomes available after `execute()`.
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在PHP中，对于`SELECT`语句的元数据可以在成功调用`query()`后从PDO中获取。如果您使用`prepare()`加`execute()`执行语句（适用于`SELECT`或非`SELECT`语句），则在`execute()`后元数据将可用。
+- en: To determine metadata availability, check whether the statement handle `columnCount()`
+    method returns a value greater than zero. If so, the handle’s `getColumnMeta()`
+    method returns an associative array containing metadata for a single column. The
+    following table shows the elements of this array. (The format of the `flags` value
+    might differ for other database systems.)
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定元数据的可用性，请检查语句句柄的`columnCount()`方法是否返回大于零的值。如果是，则句柄的`getColumnMeta()`方法将返回一个包含单个列的元数据的关联数组。下表显示了该数组的元素。（对于其他数据库系统，`flags`值的格式可能有所不同。）
+- en: Table 12-3\. Metadata in PHP
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表格 12-3\. PHP中的元数据
+- en: '| Name | Value |'
+  id: totrans-128
+  prefs: []
+  type: TYPE_TB
+  zh: '| Name | 值 |'
+- en: '| --- | --- |'
+  id: totrans-129
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `pdo_type` | Column type (corresponds to a `PDO::PARAM_`*`XXX`* value) |'
+  id: totrans-130
+  prefs: []
+  type: TYPE_TB
+  zh: '| `pdo_type` | 列类型（对应于`PDO::PARAM_`*`XXX`*的值） |'
+- en: '| `native_type` | PHP native type for the column value |'
+  id: totrans-131
+  prefs: []
+  type: TYPE_TB
+  zh: '| `native_type` | 列值的PHP本机类型 |'
+- en: '| `name` | Column name |'
+  id: totrans-132
+  prefs: []
+  type: TYPE_TB
+  zh: '| `name` | 列名 |'
+- en: '| `len` | Column length |'
+  id: totrans-133
+  prefs: []
+  type: TYPE_TB
+  zh: '| `len` | 列长度 |'
+- en: '| `precision` | Column precision |'
+  id: totrans-134
+  prefs: []
+  type: TYPE_TB
+  zh: '| `precision` | 列精度 |'
+- en: '| `flags` | Array of flags describing the column attributes |'
+  id: totrans-135
+  prefs: []
+  type: TYPE_TB
+  zh: '| `flags` | 描述列属性的标志数组 |'
+- en: '| `table` | Name of table the column is part of |'
+  id: totrans-136
+  prefs: []
+  type: TYPE_TB
+  zh: '| `table` | 表格的名称 |'
+- en: 'This example code shows how to execute a statement and display result set metadata:'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个示例代码展示了如何执行语句并显示结果集的元数据：
+- en: '[PRE23]'
+  id: totrans-138
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'The program produces this output:'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 程序产生如下输出：
+- en: '[PRE24]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: To get a row count from a statement that returns rows, fetch the rows and count
+    them yourself. The `rowCount()` method is not guaranteed to work for result sets.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要从返回行的语句中获取行数，请获取行并自行计数。`rowCount()`方法不能保证适用于结果集。
+- en: Python
+  id: totrans-142
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: Python
+- en: For statements that produce a result set, Python’s DB API makes row and column
+    counts available, as well as a few information items about individual columns.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于产生结果集的语句，Python的DB API提供了行和列计数，以及有关各个列的少量信息项。
+- en: 'To get the row count for a result set, access the cursor’s `rowcount` attribute.
+    This requires that the cursor be buffered so that it fetches query results immediately;
+    otherwise, you must count the rows as you fetch them. The column count is not
+    available directly, but after calling `fetchone()` or `fetchall()`, you can determine
+    the count as the length of any result set row tuple. It’s also possible to determine
+    the column count without fetching any rows by using `cursor.description`. This
+    is a tuple containing one element per column in the result set, so its length
+    tells you how many columns are in the set. (If the statement generates no result
+    set, such as for `UPDATE`, the value of `description` is `None`.) Each element
+    of the `description` tuple is another tuple that represents the metadata for the
+    corresponding column of the result. For Connector/Python, only a few `description`
+    values are meaningful. The following code shows how to access them:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取结果集的行数，请访问游标的`rowcount`属性。这要求游标被缓冲，以便立即获取查询结果；否则，您必须在获取时计算行数。直接获取列数不可用，但在调用`fetchone()`或`fetchall()`后，可以将结果集行元组的长度作为列数。也可以在不获取任何行的情况下，通过使用`cursor.description`确定列数。这是一个元组，每个元素代表结果集中每一列的元数据，因此其长度告诉您结果集中有多少列。（如果语句生成没有结果集，例如对于`UPDATE`，`description`的值为`None`。）`description`元组的每个元素都是另一个元组，表示结果集相应列的元数据。对于Connector/Python，只有少数几个`description`值是有意义的。以下代码显示了如何访问它们：
+- en: '[PRE25]'
+  id: totrans-145
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'The code uses the `FieldType` class, imported as follows:'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 代码使用了导入如下的`FieldType`类：
+- en: '[PRE26]'
+  id: totrans-147
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'The program produces this output:'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 程序产生如下输出：
+- en: '[PRE27]'
+  id: totrans-149
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: Go
+  id: totrans-150
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: Go
+- en: Go provides column metadata as array of `ColumnType` values, returned by the
+    method `Rows.ColumnTypes`. You can query each of the array members to obtain specific
+    characteristic of the column.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Go通过`Rows.ColumnTypes`方法返回作为`ColumnType`值数组的列元数据。您可以查询数组的每个成员以获取列的特定特性。
+- en: '[Table 12-4](#nch-meta-meta-result-go) contains methods that the `ColumnType`
+    supports.'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[表 12-4](#nch-meta-meta-result-go) 包含`ColumnType`支持的方法。'
+- en: Table 12-4\. Metadata in Go
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 12-4\. Go中的元数据
+- en: '| Method name | Description |'
+  id: totrans-154
+  prefs: []
+  type: TYPE_TB
+  zh: '| 方法名称 | 描述 |'
+- en: '| --- | --- |'
+  id: totrans-155
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `DatabaseTypeName` | Database type, such as `INT` or `VARCHAR`. |'
+  id: totrans-156
+  prefs: []
+  type: TYPE_TB
+  zh: '| `DatabaseTypeName` | 数据库类型，如`INT`或`VARCHAR`。 |'
+- en: '| `DecimalSize` | Scale and precision for the decimal type |'
+  id: totrans-157
+  prefs: []
+  type: TYPE_TB
+  zh: '| `DecimalSize` | 十进制类型的比例和精度 |'
+- en: '| `Length` | Column type lenght for the variable length text and binary columns.
+    Not supported by the MySQL driver. |'
+  id: totrans-158
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Length` | 变长文本和二进制列的列类型长度。MySQL驱动程序不支持。 |'
+- en: '| `Name` | The name or the alias of the column. |'
+  id: totrans-159
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Name` | 列的名称或别名。 |'
+- en: '| `Nullable` | Whenever column is nullable. |'
+  id: totrans-160
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Nullable` | 列是否可为空。 |'
+- en: '| `ScanType` | The native Go type, suitable for scanning into `Rows.Scan`.
+    |'
+  id: totrans-161
+  prefs: []
+  type: TYPE_TB
+  zh: '| `ScanType` | 适合扫描到`Rows.Scan`中的本地Go类型。 |'
+- en: You may also get the list of column names if use method `Rows.Columns`. It returns
+    array of strings that contain column names or aliases.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果使用`Rows.Columns`方法，还可以获取列名列表。它返回包含列名或别名的字符串数组。
+- en: The example code demonstrates how to obtain column names and metadata in the
+    Go applicaiton.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 示例代码演示了如何在Go应用程序中获取列名和元数据。
+- en: '[PRE28]'
+  id: totrans-164
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'The program produces this output:'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该程序生成以下输出：
+- en: '[PRE29]'
+  id: totrans-166
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: Java
+  id: totrans-167
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: Java
+- en: 'JDBC makes result set metadata available through a `ResultSetMetaData` object,
+    obtained by calling the `getMetaData()` method of your `ResultSet` object. The
+    metadata object provides access to several kinds of information. Its `getColumnCount()`
+    method returns the number of columns in the result set. Other types of metadata,
+    illustrated by the following code, provide information about individual columns
+    and take a column index as their argument. For JDBC, column indexes begin at 1
+    rather than 0, unlike our other APIs:'
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: JDBC通过调用您的`ResultSet`对象的`getMetaData()`方法获得结果集元数据，通过`ResultSetMetaData`对象提供对几种信息的访问。其`getColumnCount()`方法返回结果集中的列数。与我们的其他API不同，对于JDBC，列索引从1开始而不是从0开始：
+- en: '[PRE30]'
+  id: totrans-169
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'The program produces this output:'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该程序生成以下输出：
+- en: '[PRE31]'
+  id: totrans-171
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: The row count of the result set is not available directly; you must fetch the
+    rows and count them.
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果集的行数不直接可用；您必须获取行并计数它们。
+- en: JDBC has several other result set metadata calls, but many of them provide no
+    useful information for MySQL. To try them, consult a JDBC reference to see what
+    the calls are and modify the program to see what, if anything, they return.
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: JDBC有几个其他结果集元数据调用，但其中许多对MySQL没有实用信息。要尝试它们，请参考JDBC参考资料以查看这些调用，并修改程序以查看它们是否返回任何内容。
+- en: 12.3 Listing or Checking the Existence of Databases or Tables
+  id: totrans-174
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 12.3 列出或检查数据库或表的存在性
+- en: Problem
+  id: totrans-175
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to list the databases hosted by the MySQL server or the tables in a
+    database. Or you want to check whether a particular database or table exists.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望列出MySQL服务器托管的数据库或数据库中的表，或者您想检查特定数据库或表是否存在。
+- en: Solution
+  id: totrans-177
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use `INFORMATION_SCHEMA` to get this information. The `SCHEMATA` table contains
+    a row for each database, and the `TABLES` table contains a row for each table
+    or view in each database.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`INFORMATION_SCHEMA`获取这些信息。`SCHEMATA`表包含每个数据库的一行，`TABLES`表包含每个数据库中每个表或视图的一行。
+- en: Discussion
+  id: totrans-179
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'To retrieve the list of databases hosted by the server, use this statement:'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要检索服务器托管的数据库列表，请使用以下语句：
+- en: '[PRE32]'
+  id: totrans-181
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: To sort the result, add an `ORDER` `BY` `SCHEMA_NAME` clause.
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要对结果进行排序，请添加`ORDER` `BY` `SCHEMA_NAME`子句。
+- en: 'To check whether a specific database exists, use a `WHERE` clause with a condition
+    that names the database. If you get a row back, the database exists. The following
+    Ruby method shows how to perform an existence test for a database:'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要检查特定数据库是否存在，请使用带有命名数据库的条件的`WHERE`子句。如果返回一行，则数据库存在。以下Ruby方法显示了如何执行数据库的存在性测试：
+- en: '[PRE33]'
+  id: totrans-184
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'To obtain the list of tables in a database, name the database in the `WHERE`
+    clause of a statement that selects from the `TABLES` table:'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取数据库中表的列表，请在选择`TABLES`表的语句的`WHERE`子句中命名数据库：
+- en: '[PRE34]'
+  id: totrans-186
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: To sort the result, add an `ORDER` `BY` `TABLE_NAME` clause.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要对结果进行排序，请添加`ORDER` `BY` `TABLE_NAME`子句。
+- en: 'To obtain a list of tables in the default database, use this statement instead:'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取默认数据库中表的列表，请改用此语句代替：
+- en: '[PRE35]'
+  id: totrans-189
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: If no database has been selected, `DATABASE()` returns `NULL` and no rows match,
+    which is the correct result.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果没有选择数据库，`DATABASE()` 将返回 `NULL`，没有匹配的行，这是正确的结果。
+- en: 'To check whether a specific table exists, use a `WHERE` clause with a condition
+    that names the table. Here’s a Ruby method that performs an existence test for
+    a table in a given database:'
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要检查特定表是否存在，请使用带有命名表名的条件的 `WHERE` 子句。以下是在给定数据库中执行表存在性测试的 Ruby 方法：
+- en: '[PRE36]'
+  id: totrans-192
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'Some APIs provide a database-independent way to get database or table lists.
+    In Perl DBI, the database handle `tables()` method returns a list of tables in
+    the default database:'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些 API 提供了一种与数据库无关的方法来获取数据库或表列表。在 Perl DBI 中，数据库句柄的 `tables()` 方法返回默认数据库中表的列表：
+- en: '[PRE37]'
+  id: totrans-194
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'For Java, there are JDBC methods designed to return lists of databases or tables.
+    For each method, invoke your connection object’s `getMetaData()` method and use
+    the resulting `DatabaseMetaData` object to retrieve the information you want.
+    Here’s how to produce a list of databases:'
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 Java，有专门设计用于返回数据库或表列表的 JDBC 方法。对于每种方法，调用连接对象的 `getMetaData()` 方法，并使用生成的 `DatabaseMetaData`
+    对象检索所需的信息。以下是生成数据库列表的方法：
+- en: '[PRE38]'
+  id: totrans-196
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'To list the tables in a database, do this:'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要列出数据库中的表，请执行以下操作：
+- en: '[PRE39]'
+  id: totrans-198
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 12.4 Listing or Checking the Existence of Views
+  id: totrans-199
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 12.4 列出或检查视图的存在
+- en: Problem
+  id: totrans-200
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to check if your database contains views.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要检查您的数据库是否包含视图。
+- en: Solution
+  id: totrans-202
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Select only those tables from the table `INFORMATION_SCHEMA.TABLES` that have
+    `TABLE_TYPE` equal to `VIEW`.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 仅从 `INFORMATION_SCHEMA.TABLES` 表中选择那些具有 `TABLE_TYPE` 等于 `VIEW` 的表。
+- en: Discussion
+  id: totrans-204
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Method, used in the [Recipe 12.3](#nch-meta-meta-table-list) shows both physical
+    tables and views. If you need to distinguish them from each other use clause `WHERE
+    TABLE_TYPE=''VIEW''` to list only views:'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 方法，在 [Recipe 12.3](#nch-meta-meta-table-list) 中显示了物理表和视图。如果您需要区分它们，请使用子句 `WHERE
+    TABLE_TYPE='VIEW'` 仅列出视图：
+- en: '[PRE40]'
+  id: totrans-206
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'If you want, instead, to list only physical tables, use condition `TABLE_TYPE=''BASE
+    TABLE''`:'
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您只想列出物理表，可以使用条件 `TABLE_TYPE='BASE TABLE'`：
+- en: '[PRE41]'
+  id: totrans-208
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 12.5 Accessing Table Column Definitions
+  id: totrans-209
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 12.5 访问表列定义
+- en: Problem
+  id: totrans-210
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to find out what columns a table has and how they are defined.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要找出表具有哪些列及其定义方式。
+- en: Solution
+  id: totrans-212
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: There are several ways to do this. You can obtain column definitions from `INFORMATION_SCHEMA`,
+    from `SHOW` statements, or from *mysqldump*.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有几种方法可以做到这一点。您可以从 `INFORMATION_SCHEMA`、`SHOW` 语句或 *mysqldump* 中获取列定义。
+- en: Discussion
+  id: totrans-214
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Information about the structure of tables enables you to answer questions such
+    as <q>What columns does a table contain and what are their types?</q> or <q>What
+    are the legal values for an `ENUM` or `SET` column?</q> Here are some applications
+    for that kind of information:'
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于表结构的信息使您能够回答诸如 <q>表包含哪些列及其类型？</q> 或 <q>`ENUM` 或 `SET` 列的合法值是什么？</q> 等问题。以下是这种信息的一些应用程序：
+- en: Displaying column lists
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 显示列列表
+- en: A simple use of table information is presenting a list of the table’s columns.
+    This is common in web-based or GUI applications that enable users to construct
+    statements interactively by selecting a table column from a list and entering
+    a value against which to compare column values.
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表信息的一个简单用途是呈现表的列列表。这在基于 Web 或 GUI 的应用程序中很常见，用户可以通过从列表中选择表列并输入要与列值进行比较的值来交互地构造语句。
+- en: Interactive record editing
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 交互式记录编辑
+- en: Knowledge of a table’s structure can be very useful for applications that modify
+    data interactively. Suppose that an application retrieves a record from the database,
+    displays a form containing the record’s content so a user can edit it, and then
+    updates the record in the database after the user modifies the form and submits
+    it. You can use table structure information for validating column values, so you
+    would not try to insert invalid values into a database. If a column is an `ENUM`,
+    you can find out the valid enumeration values and check the value submitted by
+    the user against them to determine whether it’s legal. If the column is an integer
+    type, check the submitted value to make sure that it consists entirely of digits,
+    possibly preceded by a `+` or `−` sign character. If the column contains dates,
+    look for a legal date format.
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对表结构的了解对于修改数据的交互应用非常有用。假设一个应用从数据库检索记录，显示包含记录内容的表单以便用户编辑，然后在用户修改表单并提交后更新数据库中的记录。您可以使用表结构信息来验证列值，确保不会尝试插入无效值到数据库中。如果某列是
+    `ENUM` 类型，您可以查找有效的枚举值，并检查用户提交的值是否合法。如果列是整数类型，检查提交的值确保完全由数字组成，可能前面带有 `+` 或 `−`
+    符号。如果列包含日期，查找合法的日期格式。
+- en: But what if the user leaves a field empty? If the field corresponds to, say,
+    a `CHAR` column in the table, do you set the column value to `NULL` or to the
+    empty string? This too is a question that can be answered by checking the table’s
+    structure. Determine whether the column can contain `NULL` values. If it can,
+    set the column to `NULL`; otherwise, set it to the empty string.
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但如果用户将字段留空呢？如果字段对应于表中的 `CHAR` 列，您将列值设置为 `NULL` 还是空字符串？这也是可以通过检查表结构来回答的问题。确定列是否可以包含
+    `NULL` 值。如果可以，将列设置为 `NULL`；否则，将其设置为空字符串。
+- en: Mapping column definitions onto web page elements
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将列定义映射到网页元素
+- en: 'Some data types such as `ENUM` and `SET` correspond naturally to elements of
+    web forms:'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 某些数据类型，如 `ENUM` 和 `SET`，自然对应于 Web 表单的元素：
+- en: An `ENUM` has a fixed set of values from which you choose a single value. This
+    is analogous to a group of radio buttons, a pop-up menu, or a single-pick scrolling
+    list.
+  id: totrans-223
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ENUM` 具有固定的一组值，您可以从中选择单个值。这类似于一组单选按钮、弹出菜单或单选滚动列表。'
+- en: A `SET` column is similar, except that you can select multiple values; this
+    corresponds to a group of checkboxes or a multiple-pick scrolling list.
+  id: totrans-224
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SET` 列类似，但您可以选择多个值；这对应于一组复选框或多选滚动列表。'
+- en: By using table metadata to access definitions for these types of columns, you
+    can easily determine a column’s legal values and map them onto an appropriate
+    form element. [Recipe 12.6](#nch-meta-meta-enum) discusses how to get definitions
+    for these types of columns.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过使用表元数据访问这些列类型的定义，您可以轻松确定列的合法值，并将它们映射到适当的表单元素上。[Recipe 12.6](#nch-meta-meta-enum)
+    讨论了如何获取这些列类型的定义。
+- en: 'MySQL provides several ways to find out about a table’s structure:'
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 提供多种方法来获取表结构的信息：
+- en: Retrieve the information from `INFORMATION_SCHEMA`. The `COLUMNS` table contains
+    the column definitions.
+  id: totrans-227
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从 `INFORMATION_SCHEMA` 检索信息。`COLUMNS` 表包含列定义。
+- en: Use a `SHOW` `COLUMNS` statement.
+  id: totrans-228
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 `SHOW` `COLUMNS` 语句。
+- en: Use the `SHOW` `CREATE` `TABLE` statement or the *mysqldump* command-line program
+    to obtain a `CREATE` `TABLE` statement that displays the table’s structure.
+  id: totrans-229
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 `SHOW` `CREATE` `TABLE` 语句或 *mysqldump* 命令行程序获取显示表结构的 `CREATE` `TABLE` 语句。
+- en: 'The following discussion shows how to ask MySQL for table information using
+    each method. To try the examples, create an `item` table that lists item IDs,
+    names, and colors in which each item is available:'
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面的讨论展示了如何使用每种方法向 MySQL 请求表信息。要尝试这些示例，请创建一个 `item` 表，列出每个项目的 ID、名称和颜色：
+- en: '[PRE42]'
+  id: totrans-231
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: Using INFORMATION_SCHEMA to get table structure
+  id: totrans-232
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用 INFORMATION_SCHEMA 获取表结构
+- en: 'To obtain information about a single column in a table, query table `INFORMATION_SCHEMA.COLUMNS`:'
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取表中单个列的信息，请查询 `INFORMATION_SCHEMA.COLUMNS` 表：
+- en: '[PRE43]'
+  id: totrans-234
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: To obtain information about all columns, omit the `COLUMN_NAME` condition from
+    the `WHERE` clause.
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取所有列的信息，请在 `WHERE` 子句中省略 `COLUMN_NAME` 条件。
+- en: 'Here are some `COLUMNS` table columns likely to be of most use:'
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面是可能最有用的一些 `COLUMNS` 表列：
+- en: '`COLUMN_NAME`: The column name.'
+  id: totrans-237
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`COLUMN_NAME`：列名。'
+- en: '`ORDINAL_POSITION`: The position of the column within the table definition.'
+  id: totrans-238
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ORDINAL_POSITION`：列在表定义中的位置。'
+- en: '`COLUMN_DEFAULT`: The column’s default value.'
+  id: totrans-239
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`COLUMN_DEFAULT`：列的默认值。'
+- en: '`IS_NULLABLE`: `YES` or `NO` to indicate whether the column can contain `NULL`
+    values.'
+  id: totrans-240
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`IS_NULLABLE`: `YES` 或 `NO` 指示列是否可以包含 `NULL` 值。'
+- en: '`DATA_TYPE`, `COLUMN_TYPE`: Data type information. `DATA_TYPE` is the data-type
+    keyword and `COLUMN_TYPE` contains additional information such as type attributes.'
+  id: totrans-241
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`DATA_TYPE`, `COLUMN_TYPE`: 数据类型信息。`DATA_TYPE` 是数据类型关键字，`COLUMN_TYPE` 包含类型属性等附加信息。'
+- en: '`CHARACTER_SET_NAME`, `COLLATION_NAME`: The character set and collation for
+    string columns. They are `NULL` for nonstring columns.'
+  id: totrans-242
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`CHARACTER_SET_NAME`, `COLLATION_NAME`: 字符串列的字符集和排序规则。非字符串列的这些值为 `NULL`.'
+- en: '`COLUMN_KEY`: Information about whether the column is indexed.'
+  id: totrans-243
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`COLUMN_KEY`: 列索引信息。'
+- en: '`INFORMATION_SCHEMA` content is easy to use from within programs. Here’s a
+    PHP function that illustrates this process. It takes database and table name arguments,
+    selects from `INFORMATION_SCHEMA` to obtain a list of the table’s column names,
+    and returns the names as an array. The `ORDER` `BY` `ORDINAL_POSITION` clause
+    ensures that names in the array are returned in table-definition order:'
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从程序内部使用 `INFORMATION_SCHEMA` 内容非常简单。以下是一个PHP函数示例，演示了这一过程。它接受数据库和表名参数，从 `INFORMATION_SCHEMA`
+    中选择以获取表的列名，并将列名作为数组返回。`ORDER` `BY` `ORDINAL_POSITION` 子句确保数组中的名称按照表定义顺序返回：
+- en: '[PRE44]'
+  id: totrans-245
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: '`get_column_names()` returns an array containing only column names. If you
+    require additional column information, it’s possible to write a more general `get_column_info()`
+    routine that returns an array of column information structures. For implementations
+    of both routines in PHP as well as other languages, check the library files in
+    the *lib* directory of the `recipes` distribution.'
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`get_column_names()` 返回一个仅包含列名的数组。如果需要额外的列信息，可以编写一个更通用的 `get_column_info()`
+    程序，它返回列信息结构的数组。要查看PHP以及其他语言的实现，请查看 `recipes` 发行版中 *lib* 目录下的库文件。'
+- en: Using SHOW COLUMNS to get table structure
+  id: totrans-247
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用 `SHOW COLUMNS` 获取表结构
+- en: 'The `SHOW` `COLUMNS` statement produces one row of output for each column in
+    the table, with each row providing various pieces of information about the corresponding
+    column. The following example demonstrates `SHOW` `COLUMNS` output for the `item`
+    table `colors` column:'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SHOW COLUMNS` 语句为表中的每列生成一行输出，每行提供有关相应列的各种信息。以下示例演示了 `item` 表 `colors` 列的 `SHOW
+    COLUMNS` 输出：'
+- en: '[PRE45]'
+  id: totrans-249
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: '`SHOW` `COLUMNS` displays information for all columns having a name that matches
+    the `LIKE` pattern. To obtain information about all columns, omit the `LIKE` clause.'
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SHOW` `COLUMNS` 显示所有列名匹配 `LIKE` 模式的信息。要获取所有列的信息，请省略 `LIKE` 子句。'
+- en: 'The values displayed by `SHOW` `COLUMNS` correspond to these columns of the
+    `INFORMATION_SCHEMA` `COLUMNS` table: `COLUMN_NAME`, `COLUMN_TYPE`, `COLUMN_KEY`,
+    `IS_NULLABLE`, `COLUMN_DEFAULT`, `EXTRA`.'
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SHOW` `COLUMNS` 显示的值对应于 `INFORMATION_SCHEMA` `COLUMNS` 表的以下列：`COLUMN_NAME`,
+    `COLUMN_TYPE`, `COLUMN_KEY`, `IS_NULLABLE`, `COLUMN_DEFAULT`, `EXTRA`.'
+- en: '`SHOW` `FULL` `COLUMNS` displays additional `Collation`, `Privileges`, and
+    `Comment` fields for each column. These correspond to the `COLUMNS` table `COLLATION_NAME`,
+    `PRIVILEGES`, and `COLUMN_COMMENT` columns.'
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SHOW` `FULL` `COLUMNS` 显示每列的额外 `Collation`, `Privileges`, 和 `Comment` 字段。这些对应于
+    `COLUMNS` 表的 `COLLATION_NAME`, `PRIVILEGES`, 和 `COLUMN_COMMENT` 列。'
+- en: '`SHOW` interprets the pattern the same way as for the `LIKE` operator in the
+    `WHERE` clause of a `SELECT` statement. (For information about pattern matching,
+    see [Recipe 7.10](ch07.xhtml#nch-strings-strings-pat-sql).) If you specify a literal
+    column name, the string matches only that name and `SHOW` `COLUMNS` displays information
+    only for that column. If your column name contains SQL pattern characters (`%`
+    or `_`) that you want to match literally, you must escape them with a backslash
+    in the pattern string to avoid matching other names as well.'
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SHOW` 以与 `SELECT` 语句的 `WHERE` 子句中的 `LIKE` 操作符相同的方式解释模式。如果指定了文字列名，则字符串仅匹配该名称，并且
+    `SHOW` `COLUMNS` 仅显示该列的信息。如果列名包含 SQL 模式字符（`%` 或 `_`），您希望字面匹配它们，必须在模式字符串中使用反斜杠进行转义，以避免同时匹配其他名称。'
+- en: The need to escape `%` and `_` characters to match a `LIKE` pattern literally
+    also applies to other `SHOW` statements that permit a name pattern in the `LIKE`
+    clause, such as `SHOW` `TABLES` and `SHOW` `DATABASES`.
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 需要转义 `%` 和 `_` 字符以文字匹配 `LIKE` 模式，这也适用于其他允许 `LIKE` 子句中的名称模式的 `SHOW` 语句，如 `SHOW`
+    `TABLES` 和 `SHOW` `DATABASES`.
+- en: Within a program, you can use your API language’s pattern-matching capabilities
+    to escape SQL pattern characters before putting the column name into a `SHOW`
+    statement. In Perl, Ruby, and PHP, use the following expressions.
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在程序中，可以使用 API 语言的模式匹配功能在将列名放入 `SHOW` 语句之前转义 SQL 模式字符。在 Perl、Ruby 和 PHP 中，使用以下表达式。
+- en: 'Perl:'
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Perl：
+- en: '[PRE46]'
+  id: totrans-257
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: 'Ruby:'
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Ruby：
+- en: '[PRE47]'
+  id: totrans-259
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: 'PHP:'
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: PHP：
+- en: '[PRE48]'
+  id: totrans-261
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: 'For Python, import the `re` module, and use its `sub()` method:'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 Python，请导入 `re` 模块，并使用其 `sub()` 方法：
+- en: '[PRE49]'
+  id: totrans-263
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'For Go, use methods from the `regexp` package:'
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 Go，请使用 `regexp` 包中的方法：
+- en: '[PRE50]'
+  id: totrans-265
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: 'For Java, use methods from the `java.util.regex` package:'
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 Java，请使用 `java.util.regex` 包中的方法：
+- en: '[PRE51]'
+  id: totrans-267
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: If these expressions appear to have too many backslashes, remember that the
+    API language processor itself interprets backslashes and strips off a level before
+    performing the pattern match. To get a literal backslash into the result, it must
+    be doubled in the pattern. Another level on top of that is needed if the pattern
+    processor strips a set.
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果这些表达式看起来有太多反斜杠，请记住 API 语言处理器本身解释反斜杠并在执行模式匹配之前剥离一级。要将字面反斜杠放入结果中，必须在模式中加倍。如果模式处理器剥离集，则需要在此之上添加另一级。
+- en: Using SHOW CREATE TABLE to get table structure
+  id: totrans-269
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用 SHOW CREATE TABLE 获取表结构
+- en: 'Another way to obtain table structure information from MySQL is from the `CREATE`
+    `TABLE` statement that defines the table. To get this information, use the `SHOW`
+    `CREATE` `TABLE` statement:'
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从 MySQL 获取表结构信息的另一种方法是使用定义表的 `CREATE` `TABLE` 语句。要获取此信息，请使用 `SHOW` `CREATE`
+    `TABLE` 语句：
+- en: '[PRE52]'
+  id: totrans-271
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: From the command line, the same `CREATE` `TABLE` information is available from
+    *mysqldump* if you use the `--no-data` option, which tells *mysqldump* to dump
+    only the structure of the table and not its data.
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从命令行，如果使用 `--no-data` 选项，则 *mysqldump* 提供的相同 `CREATE` `TABLE` 信息，这告诉 *mysqldump*
+    仅转储表的结构而不是其数据。
+- en: '`CREATE` `TABLE` format is highly informative and easy to read because it shows
+    column information in a format similar to the one you used to create the table
+    in the first place. It also shows the index structure clearly, whereas the other
+    methods do not. However, you’ll probably find this method of checking table structure
+    more useful interactively than within programs. The information isn’t provided
+    in regular row-and-column format, so it’s more difficult to parse. Also, the format
+    is subject to change whenever the `CREATE` `TABLE` statement is enhanced, which
+    happens from time to time as MySQL’s capabilities are extended.'
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`CREATE` `TABLE` 格式非常信息丰富且易于阅读，因为它以与创建表时使用的格式相似的格式显示列信息。它还清楚显示索引结构，而其他方法则不然。但是，您可能会发现这种检查表结构的方法在交互中比在程序中更有用。该信息未以常规的行列格式提供，因此解析起来更困难。此外，格式在
+    MySQL 增强 `CREATE` `TABLE` 语句时可能会更改，这种情况偶尔会发生，因为 MySQL 的功能被扩展。'
+- en: 12.6 Getting ENUM and SET Column Information
+  id: totrans-274
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 12.6 获取 ENUM 和 SET 列信息
+- en: Problem
+  id: totrans-275
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know the members of an `ENUM` or `SET` column.
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想知道 `ENUM` 或 `SET` 列的成员。
+- en: Solution
+  id: totrans-277
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: This problem is a subset of getting table structure metadata. Obtain the column
+    definition from the table metadata, then extract the member list from the definition.
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此问题是获取表结构元数据的子集。从表元数据中获取列定义，然后从定义中提取成员列表。
+- en: Discussion
+  id: totrans-279
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: It’s often useful to know the list of allowed values for an `ENUM` or `SET`
+    column. Suppose that you want to present a web form containing a pop-up menu that
+    has options corresponding to each legal value of an `ENUM` column, such as the
+    sizes in which a garment can be ordered, or the available shipping methods for
+    delivering a package. You could hardwire the choices into the script that generates
+    the form, but if you alter the column later (for example, to add a new enumeration
+    value), you introduce a discrepancy between the column and the script that uses
+    it. If instead you look up the legal values using the table metadata, the script
+    can always produce a pop-up that contains the proper set of values. A similar
+    approach applies to `SET` columns.
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 了解 `ENUM` 或 `SET` 列的允许值列表通常很有用。假设您想要呈现包含与 `ENUM` 列的每个合法值对应的选项的 Web 表单，例如可以订购服装的尺寸或递送包裹的可用递送方式。您可以将选择硬编码到生成表单的脚本中，但是如果稍后更改列（例如添加新的枚举值），则会在列和使用它的脚本之间引入差异。如果改为使用表元数据查找合法值，脚本始终可以生成包含正确值集的弹出菜单。类似的方法适用于
+    `SET` 列。
+- en: 'To determine the permitted values for an `ENUM` or `SET` column, get its definition
+    using one of the techniques described in [Recipe 12.5](#nch-meta-meta-column-info).
+    For example, if you select from the `INFORMATION_SCHEMA` `COLUMNS` table, the
+    `COLUMN_TYPE` value for the `colors` column of the `item` table looks like this:'
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定`ENUM`或`SET`列的允许值，请使用[食谱12.5](#nch-meta-meta-column-info)中描述的技术之一获取其定义。例如，如果从`INFORMATION_SCHEMA`的`COLUMNS`表中选择，`item`表的`colors`列的`COLUMN_TYPE`值如下所示：
+- en: '[PRE53]'
+  id: totrans-282
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: '`SET` columns are similar, except that they say `set` rather than `enum`. For
+    either data type, extract the permitted values by stripping the initial word and
+    the parentheses, splitting at the commas, and removing the enclosing quotes from
+    the individual values.'
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SET`列类似，只是它们说`set`而不是`enum`。对于任一数据类型，通过去除初始单词和括号、在逗号处分割，并从各个值中移除包围引号，可以提取允许的值。'
+- en: 'Let’s write a `get_enumorset_info()` routine to extract these values from the
+    data-type definition. While we’re at it, we can have the routine return the column’s
+    type, its default value, and whether values can be `NULL`. Then the routine can
+    be used by scripts that may need more than just the list of values. Here is a
+    version in Ruby. Its arguments are a database handle, a database name, a table
+    name, and a column name. It returns a hash with entries corresponding to the various
+    aspects of the column definition (or `nil` if the column does not exist):'
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们编写一个`get_enumorset_info()`例程来从数据类型定义中提取这些值。顺便说一下，我们可以使该例程返回列的类型、默认值以及值是否可以为`NULL`。然后可以通过可能需要不仅仅是值列表的脚本来使用该例程。以下是Ruby版本。它的参数是数据库句柄、数据库名称、表名称和列名称。它返回一个哈希，其中条目对应于列定义的各个方面（如果列不存在则为`nil`）：
+- en: '[PRE54]'
+  id: totrans-285
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: The routine uses case-insensitive matching when checking the data type and nullable
+    attributes. This guards against future lettercase changes in metadata results.
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在检查数据类型和可空属性时，此例程使用不区分大小写的匹配。这可以防止元数据结果中未来字母大小写的更改。
+- en: 'The following example shows how to access and display each element of the hash
+    returned by `get_enumorset_info()`:'
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下示例显示了如何访问并显示`get_enumorset_info()`返回的哈希的每个元素：
+- en: '[PRE55]'
+  id: totrans-288
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: 'That code produces the following output for the `profile` table `color` column:'
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该代码生成了以下输出，显示了`profile`表的`color`列：
+- en: '[PRE56]'
+  id: totrans-290
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: Equivalent routines for other APIs are similar. You can find implementations
+    in the *lib* directory of the `recipes` distribution. Such routines are useful
+    for validation of input values (see [Recipe 14.11](ch14.xhtml#nch-format-format-meta)).
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 其他API的等效例程类似。您可以在`recipes`分发的*lib*目录中找到实现。这些例程对于验证输入值（参见[食谱14.11](ch14.xhtml#nch-format-format-meta)）非常有用。
+- en: 12.7 Getting Server Metadata
+  id: totrans-292
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 12.7 获取服务器元数据
+- en: Problem
+  id: totrans-293
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to get information about the MySQL server itself, such as its version,
+    configuration, and current status of its components.
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望获取有关MySQL服务器本身的信息，例如其版本、配置以及其组件的当前状态。
+- en: Solution
+  id: totrans-295
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Several SQL functions and `SHOW` statements return information about the server.
+  id: totrans-296
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 几个SQL函数和`SHOW`语句返回有关服务器的信息。
+- en: Discussion
+  id: totrans-297
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'MySQL has several SQL functions and statements that provide you with information
+    about the server itself and about your current client session. [Table 12-5](#nch-meta-meta-server-funcs)
+    shows a few that you may find useful. Both `SHOW` statements permit a `GLOBAL`
+    or `SESSION` keyword to select global server values or values specific to your
+    session, and a `LIKE` `''`*`pattern`*`''` clause for limiting the results to variable
+    names matching the pattern:'
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL具有几个SQL函数和语句，可以为您提供有关服务器本身以及当前客户端会话的信息。[Table 12-5](#nch-meta-meta-server-funcs)显示了一些您可能发现有用的函数。两个`SHOW`语句允许使用`GLOBAL`或`SESSION`关键字选择全局服务器值或特定于您会话的值，并使用`LIKE`
+    `'`*`pattern`*`'`子句来限制结果仅包含与模式匹配的变量名：
+- en: Table 12-5\. SQL Functions and Statements to Obtain Server Metadata
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表12-5\. 获取服务器元数据的SQL函数和语句
+- en: '| Statement | Information produced by statement |'
+  id: totrans-300
+  prefs: []
+  type: TYPE_TB
+  zh: '| 语句 | 由语句产生的信息 |'
+- en: '| --- | --- |'
+  id: totrans-301
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `SELECT VERSION()` | Server version string |'
+  id: totrans-302
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SELECT VERSION()` | 服务器版本字符串 |'
+- en: '| `SELECT DATABASE()` | Default database name (`NULL` if none) |'
+  id: totrans-303
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SELECT DATABASE()` | 默认数据库名称（如果没有则为`NULL`） |'
+- en: '| `SELECT USER()` | Current user as given by client when connecting |'
+  id: totrans-304
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SELECT USER()` | 连接时客户端给出的当前用户 |'
+- en: '| `SELECT CURRENT_USER()` | User used for checking client privileges |'
+  id: totrans-305
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SELECT CURRENT_USER()` | 用于检查客户端权限的用户 |'
+- en: '| `SHOW [GLOBAL&#124;SESSION] STATUS` | Server global or session status indicators
+    |'
+  id: totrans-306
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SHOW [GLOBAL&#124;SESSION] STATUS` | 服务器全局或会话状态指示器 |'
+- en: '| `SHOW [GLOBAL&#124;SESSION] VARIABLES` | Server global or status configuration
+    variables |'
+  id: totrans-307
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SHOW [GLOBAL&#124;SESSION] VARIABLES` | 服务器的全局或会话状态配置变量 |'
+- en: 'To obtain the information provided by any statement in the table, execute it
+    and process its result set. For example, `SELECT` `DATABASE()` returns the name
+    of the default database or `NULL` if no database has been selected. The following
+    Ruby code uses the statement to present a status display containing information
+    about the current session:'
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取表中任何语句提供的信息，请执行它并处理其结果集。例如，`SELECT DATABASE()` 返回默认数据库的名称，如果没有选择数据库则返回 `NULL`。以下
+    Ruby 代码使用该语句来呈现包含当前会话信息的状态显示：
+- en: '[PRE57]'
+  id: totrans-309
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: 'A given API might provide alternatives to executing SQL statements to access
+    these types of information. For example, JDBC has several database-independent
+    methods for obtaining server metadata. Use your connection object to obtain the
+    database metadata, then invoke the appropriate methods to get the information
+    in which you’re interested. Consult a JDBC reference for a complete list, but
+    here are a few representative examples:'
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 给定的 API 可能提供替代方法来执行 SQL 语句以访问这些类型的信息。例如，JDBC 提供了几种数据库无关的方法来获取服务器元数据。使用您的连接对象获取数据库元数据，然后调用适当的方法以获取您感兴趣的信息。查阅
+    JDBC 参考手册获取完整列表，但以下是一些代表性示例：
+- en: '[PRE58]'
+  id: totrans-311
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: See Also
+  id: totrans-312
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 另请参阅
+- en: For more discussion about the use of `SHOW` (and `INFORMATION_SCHEMA`) in the
+    context of server monitoring, see [Recipe 23.2](ch23.xhtml#nch-monitoring-monitoring-sources).
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更多关于在服务器监控环境中使用 `SHOW`（和 `INFORMATION_SCHEMA`）的讨论，请参见[第23.2章](ch23.xhtml#nch-monitoring-monitoring-sources)。
+- en: 12.8 Writing Applications That Adapt to the MySQL Server Version
+  id: totrans-314
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 12.8 编写适应 MySQL 服务器版本的应用程序
+- en: Problem
+  id: totrans-315
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to use a given feature that is available only as of a particular version
+    of MySQL.
+  id: totrans-316
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望使用的某个功能仅适用于特定版本的MySQL。
+- en: Solution
+  id: totrans-317
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Ask the server for its version number. If the server is too old to support a
+    given feature, maybe you can fall back to a workaround, if one exists. Or suggest
+    your user to upgrade.
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 向服务器请求其版本号。如果服务器太旧无法支持特定功能，也许可以退而求其次，如果有可行的解决方案的话。或者建议用户升级。
+- en: Discussion
+  id: totrans-319
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: With each new release of MySQL, new features are added. If you’re writing an
+    application that requires certain features, check the server version to determine
+    whether they are present; if not, you must perform some sort of workaround (assuming
+    there is one).
+  id: totrans-320
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每次 MySQL 的新发布都会添加新功能。如果您正在编写需要特定功能的应用程序，请检查服务器版本以确定其是否存在；如果不存在，则必须执行某种解决方案（假设存在）。
+- en: To get the server version, invoke the `VERSION()` function. The result is a
+    string that looks something like `5.7.33-debug-log` or `8.0.25`. In other words,
+    it returns a string consisting of major, minor, and <q>patch</q> version numbers,
+    possibly some nondigits at the end of the <q>patch</q> version, and possibly some
+    suffix. The version string can be used as is for presentation purposes, but for
+    comparisons, it’s simpler to work with a number—in particular, a five-digit number
+    in *`Mmmtt`* format, in which *`M`*, *`mm`*, *`tt`* are the major, minor, and
+    patch version numbers. Perform the conversion by splitting the string at the periods,
+    stripping from the third piece the suffix that begins with the first nonnumeric
+    character, and joining the pieces. For example, `5.7.33-debug-log` becomes `50733`,
+    and `8.0.25` becomes `80025`.
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取服务器版本，请调用 `VERSION()` 函数。结果是一个字符串，看起来类似于 `5.7.33-debug-log` 或 `8.0.25`。换句话说，它返回一个由主要、次要和<q>修订</q>版本号组成的字符串，可能在<q>修订</q>版本的末尾有一些非数字字符，可能还有一些后缀。版本字符串可以直接用于演示目的，但是为了比较，用数字更简单——特别是使用
+    *`Mmmtt`* 格式的五位数，在该格式中，*`M`*、*`mm`*、*`tt`* 分别代表主要、次要和修订版本号。通过在句点处拆分字符串、去除第三部分中以第一个非数字字符开始的后缀，并连接这些部分来执行转换。例如，`5.7.33-debug-log`
+    变成 `50733`，而 `8.0.25` 变成 `80025`。
+- en: 'Here’s a Perl DBI function that takes a database-handle argument and returns
+    a two-element list that contains both the string and numeric forms of the server
+    version. The code assumes that the minor and patch version parts are less than
+    100 and thus no more than two digits each. That should be a valid assumption because
+    the source code for MySQL itself uses the same format:'
+  id: totrans-322
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个 Perl DBI 函数，它接受一个数据库句柄参数，并返回一个包含服务器版本的字符串和数字形式的两元素列表。该代码假设次要版本和修订版本部分都小于
+    100，因此每部分最多两位数。这应该是一个有效的假设，因为 MySQL 本身的源代码也使用相同的格式：
+- en: '[PRE59]'
+  id: totrans-323
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: 'To get both forms of the version information at once, call the function like
+    this:'
+  id: totrans-324
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要一次获取两种形式的版本信息，请这样调用函数：
+- en: '[PRE60]'
+  id: totrans-325
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: 'To get just one of the values, call it as follows:'
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要仅获取其中一个值，请按以下方式调用：
+- en: '[PRE61]'
+  id: totrans-327
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: 'The following examples demonstrate how to use the numeric version value to
+    check whether the server supports certain features:'
+  id: totrans-328
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下示例演示了如何使用数字版本值检查服务器是否支持某些功能：
+- en: '[PRE62]'
+  id: totrans-329
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: 'The `recipes` distribution *metadata* directory contains `get_server_version()`
+    implementations in other API languages, and the *routines* directory contains
+    a `server_version()` stored function for use in SQL statements. The latter function
+    returns only the numeric value because `VERSION()` already produces the string
+    value. The following example shows how to use it to implement a stored procedure
+    that enables password locking for *`N`* failed login attempts if the server is
+    recent enough to support the `ALTER USER ... FAILED_LOGIN_ATTEMPTS` statement
+    (MySQL 8.0.19 or later):'
+  id: totrans-330
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`recipes` 发行版 *metadata* 目录中包含其他 API 语言中的 `get_server_version()` 实现，并且 *routines*
+    目录包含用于 SQL 语句的 `server_version()` 存储函数。后者仅返回数字值，因为 `VERSION()` 已经生成了字符串值。以下示例显示了如何使用它来实现一个存储过程，如果服务器支持
+    `ALTER USER ... FAILED_LOGIN_ATTEMPTS` 语句（MySQL 8.0.19 或更高版本），则对 *`N`* 次失败登录尝试进行密码锁定：'
+- en: '[PRE63]'
+  id: totrans-331
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: '`expire_password()` requires the `exec_stmt()` helper routine (see [Recipe
+    11.6](ch11.xhtml#nch-routines-dynamic-sql-helpers)). Both are available in the
+    *routines* directory. For more information about password expiration, see [Recipe
+    24.5](ch24.xhtml#nch-security-password-expiration).'
+  id: totrans-332
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`expire_password()` 需要 `exec_stmt()` 辅助例程（参见 [Recipe 11.6](ch11.xhtml#nch-routines-dynamic-sql-helpers)）。这两者都在
+    *routines* 目录中可用。关于密码过期的更多信息，请参见 [Recipe 24.5](ch24.xhtml#nch-security-password-expiration)。'
+- en: 12.9 Getting Child Tables That Reference a Specific Table via Foreign Key Constraints
+  id: totrans-333
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 12.9 获取通过外键约束引用特定表的子表
+- en: Problem
+  id: totrans-334
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know which other tables refer to your table as parent via foreign
+    key constraints.
+  id: totrans-335
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想知道哪些其他表通过外键约束引用您的表作为父表。
+- en: Solution
+  id: totrans-336
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Query the tables `INFORMATION_SCHEMA.TABLE_CONSTRAINTS` and `INFORMATION_SCHEMA.KEY_COLUMN_USAGE`.
+  id: totrans-337
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询表 `INFORMATION_SCHEMA.TABLE_CONSTRAINTS` 和 `INFORMATION_SCHEMA.KEY_COLUMN_USAGE`。
+- en: Discussion
+  id: totrans-338
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Foreign key constraints provide integrity checks as we discuss in [“Using Foreign
+    Keys to Enforce Referential Integrity and Prevent Mismatches”](ch16.xhtml#nch-multi-multi-fks).
+    They do it by preventing statements that modify data, referenced by the linked
+    table, to execute if the result of the statement can break integrity. Foreign
+    keys help keeping the data correct, but at the same time they can raise SQL errors
+    that is hard to troubleshoot. And while it is easy to figure out which table is
+    a parent for the particular child, it is not easy to find which table is a child
+    of the particular parent. Still it would be good to know if a table is referenced
+    by a child in case if you plan to modify it.
+  id: totrans-339
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 外键约束提供数据完整性检查，正如我们在 [“使用外键强制实现参照完整性和防止不匹配”](ch16.xhtml#nch-multi-multi-fks)
+    中讨论的那样。它们通过阻止修改由链接表引用的数据的语句来执行，以防止语句的结果破坏完整性。外键帮助保持数据正确，但同时可能引发难以排查的 SQL 错误。虽然很容易找出特定子表的父表是哪个，但要找出特定父表的子表却并不容易。但如果你计划修改它，则知道表是否被子表引用将会很有帮助。
+- en: 'Table `INFORMATION_SCHEMA.TABLE_CONSTRAINTS` contains all the constraints,
+    created for your MySQL installation. To select foreign key constraints, narrow
+    your search with the clause `WHERE CONSTRAINT_TYPE=''FOREIGN KEY''`:'
+  id: totrans-340
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 `INFORMATION_SCHEMA.TABLE_CONSTRAINTS` 包含为您的 MySQL 安装创建的所有约束。要选择外键约束，请使用子句
+    `WHERE CONSTRAINT_TYPE='FOREIGN KEY'` 来缩小搜索范围：
+- en: '[PRE64]'
+  id: totrans-341
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: 'The listing above prints foreign keys we created for the example in [Recipe
+    11.10](ch11.xhtml#nch-routines-routines-diagnostic-area). However, this output
+    still lists only the child table. To find out which table is parent we need to
+    join `INFORMATION_SCHEMA.TABLE_CONSTRAINTS` with table `INFORMATION_SCHEMA.KEY_COLUMN_USAGE`:'
+  id: totrans-342
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述列表打印了我们在 [Recipe 11.10](ch11.xhtml#nch-routines-routines-diagnostic-area)
+    示例中创建的外键。但是，此输出仍然只列出了子表。要找出哪个表是父表，我们需要将 `INFORMATION_SCHEMA.TABLE_CONSTRAINTS`
+    与表 `INFORMATION_SCHEMA.KEY_COLUMN_USAGE` 进行连接：
+- en: '[PRE65]'
+  id: totrans-343
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: In the listing above columns `TABLE_NAME` and `COLUMN_NAME` refer the child
+    table and columns `REFERENCED_TABLE_NAME` and `REFERENCED_COLUMN_NAME` refer the
+    parent table.
+  id: totrans-344
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上述列表中，列 `TABLE_NAME` 和 `COLUMN_NAME` 指代子表，列 `REFERENCED_TABLE_NAME` 和 `REFERENCED_COLUMN_NAME`
+    指代父表。
+- en: 'For InnoDB tables you may also query tables `INNODB_FOREIGN` and `INNODB_FOREIGN_COLS`:'
+  id: totrans-345
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于 InnoDB 表，您还可以查询表 `INNODB_FOREIGN` 和 `INNODB_FOREIGN_COLS`：
+- en: '[PRE66]'
+  id: totrans-346
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: Note that these tables take data from the internal InnoDB data dictionary that
+    stores database and table names in one field. Therefore you need to use the operator
+    `LIKE` to limit results to the specific database or table.
+  id: totrans-347
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，这些表从内部InnoDB数据字典中获取数据，该字典将数据库和表名存储在一个字段中。因此，您需要使用操作符 `LIKE` 来限制结果到特定的数据库或表。
+- en: 12.10 Listing Triggers
+  id: totrans-348
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 12.10 列出触发器
+- en: Problem
+  id: totrans-349
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to list triggers, defined for your table.
+  id: totrans-350
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望列出为您的表定义的触发器。
+- en: Solution
+  id: totrans-351
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Query the table `INFORMATION_SCHEMA.TRIGGERS`.
+  id: totrans-352
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询表 `INFORMATION_SCHEMA.TRIGGERS`。
+- en: Discussion
+  id: totrans-353
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Knowing which triggers are defined for the specific tables is very useful when
+    you tune performance. Especially in situations when:'
+  id: totrans-354
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在调优性能时，了解特定表定义的触发器非常有用，特别是在以下情况下：
+- en: Simple update, affecting a couple of rows, runs much longer than you expect.
+  id: totrans-355
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 简单的更新，影响了几行，运行时间比您预期的长。
+- en: Tables, not participating in the application load and not visible in the processlist,
+    wait for or hold the locks.
+  id: totrans-356
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 未参与应用负载并且在进程列表中不可见的表，等待或持有锁。
+- en: Disk IO is high.
+  id: totrans-357
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 磁盘IO很高。
+- en: 'For example, to list triggers, created for the table `auction` use the following
+    query:'
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，要列出为表 `auction` 创建的触发器，请使用以下查询：
+- en: '[PRE67]'
+  id: totrans-359
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: This way, you can have information such as when a trigger is fired, and its
+    body definition. If there are more than one trigger you will see all of them.
+  id: totrans-360
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这样，您可以获取触发器何时被触发以及其体定义的信息。如果有多个触发器，您将看到它们所有的信息。
+- en: 12.11 Listing Stored Routines and Scheduled Events
+  id: totrans-361
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 12.11 列出存储过程和计划事件
+- en: Problem
+  id: totrans-362
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know which stored procedures, functions and scheduled events are
+    created in your database.
+  id: totrans-363
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想知道在您的数据库中创建了哪些存储过程、函数和计划事件。
+- en: Solution
+  id: totrans-364
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Query the tables `INFORMATION_SCHEMA.ROUTINES` and `INFORMATION_SCHEMA.EVENTS`.
+  id: totrans-365
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询表 `INFORMATION_SCHEMA.ROUTINES` 和 `INFORMATION_SCHEMA.EVENTS`。
+- en: Discussion
+  id: totrans-366
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: To list both stored functions and stored procedures, query the table `INFORMATION_SCHEMA.ROUTINES`.
+    If you want to distinguish which kind of routine it is, narrow your search by
+    specifying `ROUTINE_TYPE` either `FUNCTION` or `PROCEDURE` by the `WHERE` condition.
+  id: totrans-367
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要列出存储函数和存储过程，请查询表 `INFORMATION_SCHEMA.ROUTINES`。如果要区分是哪种类型的例程，可以通过 `WHERE` 条件指定
+    `ROUTINE_TYPE` 为 `FUNCTION` 或 `PROCEDURE`。
+- en: 'For example, to list all routines that participate in sequence generation as
+    we discuss in [Recipe 15.17](ch15.xhtml#nch-sequences-seq-custom) use following
+    code:'
+  id: totrans-368
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，在我们讨论 [Recipe 15.17](ch15.xhtml#nch-sequences-seq-custom) 中的序列生成中，列出所有参与的例程，请使用以下代码：
+- en: '[PRE68]'
+  id: totrans-369
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: You may additionally select the column `ROUTINE_DEFINITION` to obtain the routine
+    body.
+  id: totrans-370
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以选择列 `ROUTINE_DEFINITION` 以获取例程体。
+- en: 'To get list of scheduled events, query the table `INFORMATION_SCHEMA.EVENTS`:'
+  id: totrans-371
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取计划事件列表，请查询表 `INFORMATION_SCHEMA.EVENTS`：
+- en: '[PRE69]'
+  id: totrans-372
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: This table holds not only event definitions, but also such metadata as when
+    it was executed last time, it’s scheduled interval and if it is enabled or disabled.
+  id: totrans-373
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此表不仅保存事件定义，还保存了诸如上次执行时间、计划间隔及其是否启用或禁用等元数据。
+- en: 12.12 Listing installed plugins
+  id: totrans-374
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 12.12 列出安装的插件
+- en: Problem
+  id: totrans-375
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know which plugins are installed for your MySQL server.
+  id: totrans-376
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想知道为您的MySQL服务器安装了哪些插件。
+- en: Solution
+  id: totrans-377
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Query the table `INFORMATION_SCHEMA.PLUGINS`.
+  id: totrans-378
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询表 `INFORMATION_SCHEMA.PLUGINS`。
+- en: Discussion
+  id: totrans-379
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL is highly modular system. Many of its parts are pluggable. For example,
+    all storage engines are also plugins. Therefore it is important to know which
+    are available on your server. To get information about installed plugins, query
+    the table `INFORMATION_SCHEMA.PLUGINS`, or run the command `SHOW PLUGINS`. While
+    the latter is convenient for the interactive use, the former provides more information.
+  id: totrans-380
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 是高度模块化的系统。它的许多部分都是可插拔的。例如，所有存储引擎也是插件。因此，了解服务器上可用的插件非常重要。要获取有关已安装插件的信息，请查询表
+    `INFORMATION_SCHEMA.PLUGINS` 或运行命令 `SHOW PLUGINS`。虽然后者适用于交互式使用，但前者提供了更多信息。
+- en: '[PRE70]'
+  id: totrans-381
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: 'For storage engines you can obtain even more details if query the table `INFORMATION_SCHEMA.ENGINES`,
+    or run the command `SHOW ENGINES`. Here is the table content for the InnoDB storage
+    engine:'
+  id: totrans-382
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于存储引擎，如果查询表 `INFORMATION_SCHEMA.ENGINES` 或运行命令 `SHOW ENGINES`，可以获取更多详细信息。以下是
+    InnoDB 存储引擎的表内容：
+- en: '[PRE71]'
+  id: totrans-383
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: 12.13 Listing Character Sets and Collations
+  id: totrans-384
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 12.13 列出字符集和排序规则
+- en: Problem
+  id: totrans-385
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Sort order, defining which letters are equal, does not work for you and you
+    want to study which other options you have.
+  id: totrans-386
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 排序顺序定义了哪些字母是相等的，但对您不起作用，您想了解您还有哪些其他选项。
+- en: Solution
+  id: totrans-387
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Obtain a list of characters sets, their default collation and available collations
+    by querying tables `INFORMATION_SCHEMA.CHARACTER_SETS` and `INFORMATION_SCHEMA.COLLATIONS`.
+  id: totrans-388
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过查询表`INFORMATION_SCHEMA.CHARACTER_SETS`和`INFORMATION_SCHEMA.COLLATIONS`，获取字符集的列表，它们的默认排序和可用排序。
+- en: Discussion
+  id: totrans-389
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: In [Recipe 7.5](ch07.xhtml#nch-strings-strings-charset-checking-changing) we
+    discuss how to change or set string’s character set and collation. But how do
+    you choose the one that suits your application requirements best?
+  id: totrans-390
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[Recipe 7.5](ch07.xhtml#nch-strings-strings-charset-checking-changing)中，我们讨论了如何更改或设置字符串的字符集和排序。但是如何选择最适合您应用程序要求的排序呢？
+- en: 'Fortunately, MySQL itself can help you to find the answer. Inside MySQL client,
+    select from the `INFORMATION_SCHEMA.CHARACTER_SETS` table to get list of all available
+    character sets, their default collations and maximum character lenght they can
+    store. For example, to list all Unicode character sets, run the following query:'
+  id: totrans-391
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 幸运的是，MySQL 本身可以帮助您找到答案。在 MySQL 客户端内部，从`INFORMATION_SCHEMA.CHARACTER_SETS`表中选择以获取所有可用字符集、它们的默认排序和它们可以存储的最大字符长度的列表。例如，要列出所有
+    Unicode 字符集，请运行以下查询：
+- en: '[PRE72]'
+  id: totrans-392
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: 'Each character set may have not only default collation, but other collations
+    that allow you to adjust sort order. For example, Turkish capital letters <q>I</q>
+    and <q>İ</q>, as well as <q>S</q> and <q>Ş</q> are considered equal by the `utf8mb4`
+    character set with the default collation. This leads to a situation when MySQL
+    thinks that Turksih words <q>ISSIZ</q> (deserted) and <q>İŞSİZ</q> (unemployed)
+    are the same:'
+  id: totrans-393
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个字符集不仅可能有默认排序，还可能有其他排序，允许您调整排序顺序。例如，土耳其大写字母<I>İ</I>和<I>İ</I>，以及<S>Ş</S>被认为是与默认排序的<q>utf8mb4</q>字符集相等。这导致
+    MySQL 认为土耳其单词<I>ISSIZ</I>（荒凉的）和<I>İŞSİZ</I>（失业的）是相同的：
+- en: '[PRE73]'
+  id: totrans-394
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: To resolve this situation let’s check the table `INFORMATION_SCHEMA.COLLATIONS`
+    for the collations of the character set `utf8mb4`, applicable for the Turkish
+    language.
+  id: totrans-395
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要解决此问题，请检查表`INFORMATION_SCHEMA.COLLATIONS`中`utf8mb4`字符集适用于土耳其语的排序。
+- en: '[PRE74]'
+  id: totrans-396
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: 'If we try them we will recieve the correct result: the words <q>deserted</q>
+    and <q>unemployed</q> are no longer considered equal:'
+  id: totrans-397
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们尝试它们，我们将收到正确的结果：单词<I>deserted</I>和<I>unemployed</I>不再被认为是相同的：
+- en: '[PRE75]'
+  id: totrans-398
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: 'Character set `utf8mb4` is default and works well for most of setups. However,
+    you may be in a situation when this is not the case. For example, if you store
+    the Russian words <q>совершенный</q> (perfect) and <q>совершённый</q> (accomplished)
+    in a `utf8mb4` column with default collation, MySQL will consider these two words
+    equal:'
+  id: totrans-399
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 字符集`utf8mb4`是默认的，并且适用于大多数设置。但是，如果您存储俄语单词<I>совершенный</I>（完美的）和<I>совершённый</I>（完成的）在具有默认排序的`utf8mb4`列中，MySQL
+    将认为这两个单词相等：
+- en: '[PRE76]two_words[PRE77]perfect[PRE78]accomplished[PRE79]'
+  id: totrans-400
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[PRE76]two_words[PRE77]perfect[PRE78]accomplished[PRE79]'
+- en: 'An intuitive way to solve this issue is to use available collations for the
+    Russian language: `utf8mb4_ru_0900_ai_ci`. Unfortunately, this does not work:'
+  id: totrans-401
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 解决此问题的直观方法是使用俄语语言的可用排序：`utf8mb4_ru_0900_ai_ci`。不幸的是，这并不起作用：
+- en: '[PRE80]'
+  id: totrans-402
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: 'The reason for this is that the collation `utf8mb4_ru_0900_ai_ci` is accent
+    insensitive. Its case sensitive and accent sensitive variation `utf8mb4_ru_0900_as_cs`
+    solves the issue:'
+  id: totrans-403
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`utf8mb4_ru_0900_ai_ci`排序是不区分重音的原因。其区分大小写和重音的变体`utf8mb4_ru_0900_as_cs`解决了这个问题：'
+- en: '[PRE81]'
+  id: totrans-404
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: 'Collations `utf8mb4_ru_0900_ai_ci` and `utf8mb4_ru_0900_as_cs` were added in
+    version 8.0\. If you are still using version 5.7 and are working on the application
+    where such difference is critical you may also examine the table `INFORMATION_SCHEMA.CHARACTER_SETS`
+    for a character set that supports Cyrillic alphabet and try it:'
+  id: totrans-405
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 版本 8.0 中添加了排序`utf8mb4_ru_0900_ai_ci`和`utf8mb4_ru_0900_as_cs`。如果您仍在使用版本 5.7，并且正在处理此类差异至关重要的应用程序，则还可以检查表`INFORMATION_SCHEMA.CHARACTER_SETS`，查找支持西里尔字母的字符集，并尝试使用它：
+- en: '[PRE82]'
+  id: totrans-406
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: We have chosen character set `cp1251` for our example, but all of them resolve
+    this comparison issue.
+  id: totrans-407
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们选择了字符集`cp1251`作为示例，但所有这些都解决了这个比较问题。
+- en: 12.14 Listing CHECK Constraints
+  id: totrans-408
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 12.14 列出 CHECK 约束
+- en: Problem
+  id: totrans-409
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to examine which `CHECK` constraints are defined for your database.
+  id: totrans-410
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要查看数据库中定义了哪些`CHECK`约束。
+- en: Solution
+  id: totrans-411
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Query the tables `INFORMATION_SCHEMA.CHECK_CONSTRAINTS` and `INFORMATION_SCHEMA.TABLE_CONSTRAINTS`.
+  id: totrans-412
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询表`INFORMATION_SCHEMA.CHECK_CONSTRAINTS`和`INFORMATION_SCHEMA.TABLE_CONSTRAINTS`。
+- en: Discussion
+  id: totrans-413
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'The table `INFORMATION_SCHEMA.CHECK_CONSTRAINTS` contains list of all constraints,
+    the schema for which they are definded, and the `CHECK_CLAUSE` that is practically
+    the constraint definition. However, the table does not store information about
+    for which table the constraint is created. To list both constraints and tables
+    for which they are defined join table `INFORMATION_SCHEMA.CHECK_CONSTRAINTS` with
+    table `INFORMATION_SCHEMA.TABLE_CONSTRAINTS`:'
+  id: totrans-414
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 `INFORMATION_SCHEMA.CHECK_CONSTRAINTS` 包含所有约束条件的列表，以及定义它们的模式，以及实际约束定义的 `CHECK_CLAUSE`。然而，该表不存储约束是为哪个表创建的信息。要列出既包含约束条件又包含定义它们的表，请将表
+    `INFORMATION_SCHEMA.CHECK_CONSTRAINTS` 与表 `INFORMATION_SCHEMA.TABLE_CONSTRAINTS`
+    进行连接：
+- en: '[PRE83]'
+  id: totrans-415
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE83]'

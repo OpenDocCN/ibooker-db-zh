@@ -1,0 +1,2165 @@
+- en: Chapter 5\. Indexes
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第 5 章 索引
+- en: 'This chapter introduces MongoDB indexes. Indexes enable you to perform queries
+    efficiently. They’re an important part of application development and are even
+    required for certain types of queries. In this chapter we will cover:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章介绍了 MongoDB 索引。索引使您能够高效执行查询。它们是应用程序开发的重要组成部分，甚至对某些类型的查询是必需的。本章将涵盖：
+- en: What indexes are and why you’d want to use them
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 索引是什么以及为什么要使用它们
+- en: How to choose which fields to index
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何选择要索引的字段
+- en: How to enforce and evaluate index usage
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如何强制和评估索引使用
+- en: Administrative details on creating and removing indexes
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 创建和删除索引的管理细节
+- en: As you’ll see, choosing the right indexes for your collections is critical to
+    performance.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如您所见，为您的集合选择合适的索引非常关键以提升性能。
+- en: Introduction to Indexes
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 索引简介
+- en: A database index is similar to a book’s index. Instead of looking through the
+    whole book, the database takes a shortcut and just looks at an ordered list with
+    references to the content. This allows MongoDB to query orders of magnitude faster.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库索引类似于书的索引。与查阅整本书不同，数据库采用一种快捷方式，只查看一个有序列表，并引用其内容。这使得 MongoDB 能够进行数量级更快的查询。
+- en: 'A query that does not use an index is called a *collection scan*, which means
+    that the server has to “look through the whole book” to find a query’s results.
+    This process is basically what you’d do if you were looking for information in
+    a book without an index: you’d start at page 1 and read through the whole thing.
+    In general, you want to avoid making the server do collection scans because the
+    process is very slow for large collections.'
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不使用索引的查询称为*集合扫描*，这意味着服务器必须“浏览整本书”以找到查询结果。这个过程基本上就是在没有索引的书中查找信息时所做的事情：从第一页开始阅读整本书。一般情况下，您希望避免使服务器进行集合扫描，因为对于大型集合来说这个过程非常慢。
+- en: 'Let’s look at an example. To get started, we’ll create a collection with 1
+    million documents in it (or 10 million or 100 million, if you have the patience):'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们看一个例子。为了开始，我们将创建一个包含 100 万个文档的集合（或者如果您有耐心，可以是 1000 万或 1 亿个文档）：
+- en: '[PRE0]'
+  id: totrans-11
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Then we’ll look at the differences in performance for queries on this collection,
+    first without an index and then with an index.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 接下来我们将查看在此集合上查询的性能差异，首先是没有索引的情况，然后是有索引的情况。
+- en: 'If we do a query on this collection, we can use the `explain` command to see
+    what MongoDB is doing when it executes the query. The preferred way to use the
+    `explain` command is through the cursor helper method that wraps this command.
+    The `explain` cursor method provides information on the execution of a variety
+    of CRUD operations. This method may be run in several verbosity modes. We’ll look
+    at `executionStats` mode since this helps us understand the effect of using an
+    index to satisfy queries. Try querying on a specific username to see an example:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们在这个集合上进行查询，可以使用 `explain` 命令来查看 MongoDB 在执行查询时的操作。使用 `explain` 命令的首选方式是通过包装此命令的游标辅助方法。`explain`
+    游标方法提供了关于执行各种 CRUD 操作的信息。我们将查看 `executionStats` 模式，因为这有助于我们理解使用索引来满足查询的效果。尝试查询特定用户名以查看示例：
+- en: '[PRE1]'
+  id: totrans-14
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: '[“explain Output”](#sect1_d1e5527) will explain the output fields; for now
+    you can ignore almost all of them. For this example, we want to look at the nested
+    document that is the value of the `"executionStats"` field. In this document,
+    `"totalDocsExamined"` is the number of documents MongoDB looked at while trying
+    to satisfy the query, which, as you can see, is every document in the collection.
+    That is, MongoDB had to look through every field in every document. This took
+    nearly half a second to accomplish on my laptop (the `"executionTimeMillis"` field
+    shows the number of milliseconds it took to execute the query).'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[“explain 输出”](#sect1_d1e5527) 将解释输出字段；目前您可以忽略其中的几乎所有内容。对于本例子，我们想查看作为 `"executionStats"`
+    字段值的嵌套文档。在这个文档中，`"totalDocsExamined"` 是 MongoDB 在尝试满足查询时查看的文档数，正如您所看到的，是集合中的每个文档。也就是说，MongoDB
+    必须查看每个文档中的每个字段。这在我的笔记本电脑上花费了将近半秒钟（`"executionTimeMillis"` 字段显示执行查询花费的毫秒数）。'
+- en: 'The `"nReturned"` field of the `"executionStats"` document shows the number
+    of results returned: `1`, which makes sense because there is only one user with
+    the username `"user101"`. Note that MongoDB had to look through every document
+    in the collection for matches because it did not know that usernames are unique.'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"executionStats"` 文档的 `"nReturned"` 字段显示返回的结果数为 `1`，这是有道理的，因为只有一个用户名为 `"user101"`
+    的用户。请注意，MongoDB 必须查看集合中的每个文档以匹配，因为它不知道用户名是唯一的。'
+- en: To enable MongoDB to respond to queries efficiently, all query patterns in your
+    application should be supported by an index. By query patterns, we simply mean
+    the different types of questions your application asks of the database. In this
+    example, we queried the *users* collection by username. That is an example of
+    a specific query pattern. In many applications, a single index will support several
+    query patterns. We will discuss tailoring indexes to query patterns in a later
+    section.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了使 MongoDB 能够高效地响应查询，在您的应用程序中所有的查询模式都应该有相应的索引支持。所谓查询模式，简单来说，就是应用程序向数据库提出的不同类型的问题。在这个例子中，我们通过用户名查询了
+    *users* 集合。这是一个具体的查询模式示例。在许多应用程序中，单个索引可以支持多个查询模式。我们将在后面的章节讨论如何根据查询模式定制索引。
+- en: Creating an Index
+  id: totrans-18
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 创建索引
+- en: 'Now let’s try creating an index on the `"username"` field. To create an index,
+    we’ll use the `createIndex` collection method:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们尝试在 `"username"` 字段上创建一个索引。要创建索引，我们将使用 `createIndex` 集合方法：
+- en: '[PRE2]'
+  id: totrans-20
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Creating the index should take no longer than a few seconds, unless you made
+    your collection especially large. If the `createIndex` call does not return after
+    a few seconds, run `db.currentOp()` (in a different shell) or check your *mongod*’s
+    log to see the index build’s progress.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建索引不应该花费超过几秒钟的时间，除非你的集合特别大。如果 `createIndex` 调用几秒钟后没有返回，请在另一个 shell 中运行 `db.currentOp()`
+    或检查 *mongod* 的日志，查看索引构建的进度。
+- en: 'Once the index build is complete, try repeating the original query:'
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引建立完成后，请尝试重复原始查询：
+- en: '[PRE3]'
+  id: totrans-23
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'This `explain` output is more complex, but for now you can continue to ignore
+    all the fields other than `"nReturned"`, `"totalDocsExamined"`, and `"executionTimeMillis"`
+    in the `"executionStats"` nested document. As you can see, the query is now almost
+    instantaneous and, even better, has a similar runtime when querying, for example,
+    for any username:'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个 `explain` 输出比较复杂，但目前你可以忽略除了 `"nReturned"`、`"totalDocsExamined"` 和 `"executionTimeMillis"`
+    在 `"executionStats"` 嵌套文档中的所有字段。正如你所见，现在查询几乎是瞬时的，而且在查询任何用户名时运行时间相似：
+- en: '[PRE4]'
+  id: totrans-25
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'An index can make a dramatic difference in query times. However, indexes have
+    their price: write operations (inserts, updates, and deletes) that modify an indexed
+    field will take longer. This is because in addition to updating the document,
+    MongoDB has to update indexes when your data changes. Typically, the tradeoff
+    is worth it. The tricky part becomes figuring out which fields to index.'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引可以显著提高查询时间。然而，索引也有其代价：修改索引字段的写操作（插入、更新和删除）会花费更长时间。这是因为除了更新文档外，MongoDB还必须在数据变化时更新索引。通常情况下，这种权衡是值得的。难点在于找出哪些字段需要建立索引。
+- en: Tip
+  id: totrans-27
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: MongoDB’s indexes work almost identically to typical relational database indexes,
+    so if you are familiar with those, you can just skim this section for syntax specifics.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 的索引工作方式几乎与典型的关系数据库索引相同，因此如果您熟悉这些内容，您可以仅仅浏览本节以获取语法的具体信息。
+- en: To choose which fields to create indexes for, look through your frequent queries
+    and queries that need to be fast and try to find a common set of keys from those.
+    For instance, in the preceding example, we were querying on `"username"`. If that
+    were a particularly common query or were becoming a bottleneck, indexing `"username"`
+    would be a good choice. However, if this were an unusual query or one that’s only
+    done by administrators who don’t care how long it takes, it would not be a good
+    choice for indexing.
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要选择哪些字段创建索引，请浏览您频繁查询和需要快速响应的查询，并尝试找到一个共同的键集。例如，在前面的例子中，我们正在查询 `"username"`。如果这是一个特别常见的查询或者成为瓶颈，建立
+    `"username"` 索引是一个不错的选择。但是，如果这是一个不寻常的查询或者只由不关心花费多长时间的管理员执行的查询，那么建立索引并不是一个好选择。
+- en: Introduction to Compound Indexes
+  id: totrans-30
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 复合索引简介
+- en: 'The purpose of an index is to make your queries as efficient as possible. For
+    many query patterns it is necessary to build indexes based on two or more keys.
+    For example, an index keeps all of its values in a sorted order, so it makes sorting
+    documents by the indexed key much faster. However, an index can only help with
+    sorting if it is a prefix of the sort. For example, the index on `"username"`
+    wouldn’t help much for this sort:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引的目的是尽可能提高您的查询效率。对于许多查询模式，基于两个或更多键构建索引是必要的。例如，索引将其所有值保持在排序顺序中，因此通过索引键排序文档速度更快。但是，只有当索引是排序的前缀时，索引才能帮助排序。例如，索引在`"username"`上对于这种排序帮助不大：
+- en: '[PRE5]'
+  id: totrans-32
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'This sorts by `"age"` and then `"username"`, so a strict sorting by `"username"`
+    isn’t terribly helpful. To optimize this sort, you could make an index on `"age"`
+    *and* `"username"`:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这按`"age"`然后按`"username"`排序，因此严格按`"username"`排序并不特别有帮助。为了优化这种排序，您可以在`"age"`和`"username"`上建立索引：
+- en: '[PRE6]'
+  id: totrans-34
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: This is called a *compound index* and is useful if your query has multiple sort
+    directions or multiple keys in the criteria. A compound index is an index on more
+    than one field.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这被称为*复合索引*，如果您的查询具有多个排序方向或多个条件键，则非常有用。复合索引是对多个字段的索引。
+- en: 'Suppose we have a *users* collection that looks something like this, if we
+    run a query with no sorting (called natural order):'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们有一个类似以下这样的*users*集合，如果我们运行一个没有排序的查询（称为自然顺序）：
+- en: '[PRE7]'
+  id: totrans-37
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'If we index this collection by `{"age" : 1, "username" : 1}`, the index will
+    have a form we can represent as follows:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '如果我们按`{"age" : 1, "username" : 1}`索引这个集合，索引将有以下形式：'
+- en: '[PRE8]'
+  id: totrans-39
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Each index entry contains an age and a username and points to a record identifier.
+    A record identifier is used internally by the storage engine to locate the data
+    for a document. Note that `"age"` fields are ordered to be strictly ascending
+    and, within each age, usernames are also in ascending order. In this example dataset,
+    each age has approximately 8,000 usernames associated with it. Here we’ve included
+    only those necessary to convey the general idea.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个索引条目包含一个年龄和一个用户名，并指向一个记录标识符。记录标识符由存储引擎内部使用，用于定位文档的数据。注意`"age"`字段被排序为严格升序，并且在每个年龄内，用户名也是按升序排列的。在这个示例数据集中，每个年龄大约有8,000个关联的用户名。这里我们只包含了传达一般思想所必需的部分。
+- en: 'The way MongoDB uses this index depends on the type of query you’re doing.
+    These are the three most common ways:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB使用此索引的方式取决于您正在执行的查询类型。以下是三种最常见的方法：
+- en: '`db.users.find({"age" : 21}).sort({"username" : -1})`'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`db.users.find({"age" : 21}).sort({"username" : -1})`'
+- en: 'This is an equality query, which searches for a single value. There may be
+    multiple documents with that value. Due to the second field in the index, the
+    results are already in the correct order for the sort: MongoDB can start with
+    the last match for `{"age" : 21}` and traverse the index in order:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '这是一个等值查询，搜索单个值。可能存在多个具有该值的文档。由于索引中的第二个字段，结果已按正确的排序顺序排列：MongoDB可以从`{"age" :
+    21}`的最后匹配开始，并按顺序遍历索引：'
+- en: '[PRE9]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'This type of query is very efficient: MongoDB can jump directly to the correct
+    age and doesn’t need to sort the results because traversing the index returns
+    the data in the correct order.'
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种类型的查询非常高效：MongoDB可以直接跳转到正确的年龄，而不需要对结果进行排序，因为遍历索引会按正确顺序返回数据。
+- en: 'Note that sort direction doesn’t matter: MongoDB can traverse the index in
+    either direction.'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意排序方向无关紧要：MongoDB可以以任意方向遍历索引。
+- en: '`db.users.find({"age" : {"$gte" : 21, "$lte" : 30}})`'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`db.users.find({"age" : {"$gte" : 21, "$lte" : 30}})`'
+- en: 'This is a range query, which looks for documents matching multiple values (in
+    this case, all ages between 21 and 30). MongoDB will use the first key in the
+    index, `"age"`, to return the matching documents, like so:'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个范围查询，查找匹配多个值的文档（在本例中，所有年龄在21到30之间的）。MongoDB将使用索引中的第一个键`"age"`返回匹配的文档，如下所示：
+- en: '[PRE10]'
+  id: totrans-49
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: In general, if MongoDB uses an index for a query it will return the resulting
+    documents in index order.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，如果MongoDB为查询使用索引，它将按索引顺序返回结果文档。
+- en: '`db.users.find({"age" : {"$gte" : 21, "$lte" : 30}}).sort({"username" : 1})`'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`db.users.find({"age" : {"$gte" : 21, "$lte" : 30}}).sort({"username" : 1})`'
+- en: This is a multivalue query, like the previous one, but this time it has a sort.
+    As before, MongoDB will use the index to match the criteria. However, the index
+    doesn’t return the usernames in sorted order and the query requested that the
+    results be sorted by username. This means MongoDB will need to sort the results
+    in memory before returning them, rather than simply traversing an index in which
+    the documents are already sorted in the desired order. This type of query is usually
+    less efficient as a consequence.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个多值查询，与之前的查询类似，但这次有一个排序。与之前一样，MongoDB 将使用索引来匹配条件。然而，索引不会按照用户名的顺序返回用户名，而查询要求结果按用户名排序。这意味着
+    MongoDB 需要在返回结果之前在内存中对结果进行排序，而不是简单地遍历一个已按所需顺序排序的索引中的文档。因此，这种类型的查询通常效率较低。
+- en: 'Of course, the speed depends on how many results match your criteria: if your
+    result set is only a couple of documents MongoDB won’t have much work to do to
+    sort them, but if there are more results it will be slower or may not work at
+    all. If you have more than 32 MB of results MongoDB will just error out, refusing
+    to sort that much data:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当然，速度取决于有多少结果符合您的条件：如果您的结果集只有几个文档，MongoDB 将不需要太多工作来对它们进行排序，但如果结果更多，速度会较慢，甚至可能根本无法工作。如果结果超过
+    32 MB，MongoDB 将直接报错，拒绝对如此多的数据进行排序：
+- en: '[PRE11]'
+  id: totrans-54
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: Tip
+  id: totrans-55
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 小贴士
+- en: If you need to avoid this error, then you must create an index supporting the
+    sort operation ([*https://docs.mongodb.com/manual/reference/method/cursor.sort/index.html#sort-index-use*](https://docs.mongodb.com/manual/reference/method/cursor.sort/index.html#sort-index-use))
+    or use `sort` in conjunction with `limit` to reduce the results to below 32 MB.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您需要避免此错误，则必须创建一个支持排序操作的索引（[*https://docs.mongodb.com/manual/reference/method/cursor.sort/index.html#sort-index-use*](https://docs.mongodb.com/manual/reference/method/cursor.sort/index.html#sort-index-use)）或者在使用
+    `sort` 与 `limit` 结合以将结果减少到 32 MB 以下。
+- en: 'One other index you can use in the last example is the same keys in reverse
+    order: `{"username" : 1, "age" : 1}`. MongoDB will then traverse all the index
+    entries, but in the order you want them back in. It will pick out the matching
+    documents using the `"age"` part of the index:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '在上一个例子中，您可以使用的另一个索引是相同键的倒序排列：`{"username" : 1, "age" : 1}`。MongoDB 将遍历所有索引条目，但按您希望它们返回的顺序进行。它将使用索引的`"age"`部分来选择匹配的文档：'
+- en: '[PRE12]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: This is good in that it does not require any giant in-memory sorts. However,
+    it does have to scan the entire index to find all the matches. Putting the sort
+    key first is generally a good strategy when designing compound indexes. As we’ll
+    see shortly, this is one of several best practices when considering how to construct
+    compound indexes with consideration for equality queries, multivalue queries,
+    and sorting.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这样做的好处是不需要任何大内存排序。然而，它必须扫描整个索引以找到所有匹配项。将排序键放在首位通常是设计复合索引时的一个好策略。稍后我们会看到，在考虑如何构建考虑等值查询、多值查询和排序的复合索引时，这是几个最佳实践之一。
+- en: How MongoDB Selects an Index
+  id: totrans-60
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: MongoDB 如何选择索引
+- en: Now let’s take a look at how MongoDB chooses an index to satisfy a query. Let’s
+    imagine we have five indexes. When a query comes in, MongoDB looks at the query’s
+    *shape*. The shape has to do with what fields are being searched on and additional
+    information, such as whether or not there is a sort. Based on that information,
+    the system identifies a set of candidate indexes that it might be able to use
+    in satisfying the query.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在让我们看看 MongoDB 是如何选择索引来满足查询的。假设我们有五个索引。当一个查询进来时，MongoDB 会看这个查询的*形状*。形状涉及到搜索哪些字段以及额外的信息，比如是否有排序。根据这些信息，系统确定了一组可能用于满足查询的候选索引。
+- en: Let’s assume we have a query come in, and three of our five indexes are identified
+    as candidates for this query. MongoDB will then create three query plans, one
+    for each of these indexes, and run the query in three parallel threads, each using
+    a different index. The objective here is to see which one is able to return results
+    the fastest.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们有一个查询进来，我们的五个索引中有三个被标识为该查询的候选索引。MongoDB 随后会为这三个索引创建三个查询计划，并在三个并行线程中运行查询，每个线程使用不同的索引。这里的目标是看哪个能够最快地返回结果。
+- en: Visually, we can think of this as a race, as pictured in [Figure 5-1](#fig0501).
+    The idea here is that the first query plan to reach a goal state is the winner.
+    But more importantly, going forward it will be selected as the index to use for
+    queries that have that same query shape. The plans are raced against each other
+    for a period (referred to as the trial period), after which the results of each
+    race are used to calculate the overall winning plan.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从视觉上来看，我们可以把这个过程想象成一场比赛，如图[5-1](#fig0501)所示。这里的想法是，首个达到目标状态的查询计划将获胜。但更重要的是，未来将选择它作为具有相同查询形状的查询所使用的索引。这些计划在一段时间内进行比赛（称为试验期），之后每场比赛的结果将用于计算总体获胜计划。
+- en: '![](Images/mdb3_0501.png)'
+  id: totrans-64
+  prefs: []
+  type: TYPE_IMG
+  zh: '![](Images/mdb3_0501.png)'
+- en: Figure 5-1\. How the MongoDB Query Planner selects an index, visualized as a
+    race
+  id: totrans-65
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 5-1\. MongoDB查询规划器如何选择索引，视觉化为一场比赛
+- en: To win the race, a query thread must be the first to either return all the query
+    results or return a trial number of results in sort order. The sort order portion
+    of this is important given how expensive it is to perform in-memory sorts.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要赢得比赛，查询线程必须首先返回所有查询结果或按顺序返回一定数量的试验结果。考虑到在内存中执行排序的昂贵性，排序顺序部分尤为重要。
+- en: The real value of racing several query plans against one another is that for
+    subsequent queries that have the same query shape, the MongoDB server will know
+    which index to select. The server maintains a cache of query plans. A winning
+    plan is stored in the cache for future use for queries of that shape. Over time,
+    as a collection changes and as the indexes change, eventually a query plan might
+    be evicted from the cache and MongoDB will, again, experiment with possible query
+    plans to find the one that works best for the current collection and set of indexes.
+    Other events that will lead to plans being evicted from the cache are if we rebuild
+    a given index, add or drop an index, or explicitly clear the plan cache. Finally,
+    the query plan cache does not survive a restart of a *mongod* process.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将几个查询计划相互比赛的真正价值在于，对于具有相同查询形状的后续查询，MongoDB服务器将知道选择哪个索引。服务器维护一个查询计划的缓存。获胜计划将存储在缓存中，以备将来用于该形状的查询。随着集合的变化和索引的变化，随着时间的推移，某个查询计划可能会从缓存中删除，MongoDB会再次尝试可能的查询计划，以找到最适合当前集合和索引集的计划。导致计划从缓存中删除的其他事件包括重建给定索引、添加或删除索引，或显式清除计划缓存。最后，查询计划缓存在
+    *mongod* 进程重新启动后不会保留。
+- en: Using Compound Indexes
+  id: totrans-68
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用复合索引
+- en: In the previous sections, we’ve been using compound indexes, which are indexes
+    with more than one key in them. Compound indexes are a little more complicated
+    to think about than single-key indexes, but they are very powerful. This section
+    covers them in more depth.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在之前的章节中，我们一直在使用复合索引，即在其中具有多个键的索引。复合索引比单键索引更加复杂，但它们非常强大。本节将更深入地介绍它们。
+- en: Here, we will walk through an example that gives you an idea of the type of
+    thinking you need to do when you are designing compound indexes. The goal is for
+    our read and write operations to be as efficient as possible—but as with so many
+    things, this requires some upfront thinking and some experimentation.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们将通过一个例子来逐步说明当您设计复合索引时需要考虑的思路类型。我们的目标是使我们的读取和写入操作尽可能高效——但与许多事物一样，这需要一些前期思考和实验。
+- en: To be sure we get the right indexes in place, it is necessary to test our indexes
+    under some real-world workloads and make adjustments from there. However, there
+    are some best practices we can apply as we design our indexes.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确保我们放置正确的索引非常重要，有必要在某些真实工作负载下测试我们的索引，并从中进行调整。然而，在设计我们的索引时，我们可以应用一些最佳实践。
+- en: First, we need to consider the selectivity of the index. We are interested in
+    the degree to which, for a given query pattern, the index is going to minimize
+    the number of records scanned. We need to consider selectivity in light of all
+    operations necessary to satisfy a query, and sometimes make tradeoffs. We will
+    need to consider, for example, how sorts are handled.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，我们需要考虑索引的选择性。我们对于特定的查询模式，索引在最小化扫描记录数方面的作用感兴趣。我们需要在考虑满足查询所需的所有操作时，有时需要进行权衡。例如，我们需要考虑如何处理排序操作。
+- en: 'Let’s look at an example. For this, we will use a student dataset containing
+    approximately one million records. Documents in this dataset resemble the following:'
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们来看一个例子。为此，我们将使用包含约一百万条记录的学生数据集。该数据集中的文档如下所示：
+- en: '[PRE13]'
+  id: totrans-74
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'We will begin with two indexes and look at how MongoDB uses these indexes (or
+    doesn’t) in order to satisfy queries. These two indexes are created as follows:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将从两个索引开始，并查看 MongoDB 如何使用（或不使用）这些索引来满足查询。这两个索引的创建方式如下：
+- en: '[PRE14]'
+  id: totrans-76
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'In working with this dataset, we will consider the following query, because
+    it illustrates several of the issues that we have to think about in designing
+    our indexes:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在处理这个数据集时，我们将考虑以下查询，因为它展示了我们在设计索引时需要考虑的几个问题：
+- en: '[PRE15]'
+  id: totrans-78
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: Note that in this query we are requesting all records with an ID greater than
+    500,000, so about half of the records. We are also constraining the search to
+    records for the class with ID `54`. There are about 500 classes represented in
+    this dataset. Finally, we are sorting in ascending order based on `"student_id"`.
+    Note that this is the same field on which we are doing a multivalue query. Throughout
+    this example we will look at the execution stats that the `explain` method provides
+    to illustrate how MongoDB will handle this query.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，在此查询中，我们要求所有 ID 大于 500,000 的记录，大约占记录总数的一半。我们还限制搜索以查找 ID 为 `54` 的类别的记录。在这个数据集中，大约有
+    500 个类别。最后，我们按照 `"student_id"` 的升序排序。请注意，这是我们进行多值查询的同一字段。在本例中，我们将查看 `explain`
+    方法提供的执行统计信息，以说明 MongoDB 如何处理此查询。
+- en: 'If we run the query, the output of the `explain` method tells us how MongoDB
+    used indexes to satisfy it:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们运行此查询，`explain` 方法的输出告诉我们 MongoDB 如何使用索引来满足它：
+- en: '[PRE16]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: As with most data output from MongoDB, the `explain` output is JSON. Let’s look
+    first at the bottom half of this output, which is almost entirely the execution
+    stats. The `"executionStats"` field contains statistics that describe the completed
+    query execution for the winning query plan. We will look at query plans and the
+    query plan output from `explain` a little later.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与大多数从 MongoDB 输出的数据一样，`explain` 的输出是 JSON 格式的。让我们首先看看输出的底部，几乎完全是执行统计信息。`"executionStats"`
+    字段包含描述已完成的查询执行的统计信息，用于获胜查询计划。稍后我们将查看查询计划和 `explain` 输出中的查询计划输出。
+- en: Within `"executionStats"`, first we will look at `"totalKeysExamined"`. This
+    is how many keys within the index MongoDB walked through in order to generate
+    the result set. We can compare `"totalKeysExamined"` to `"nReturned"` to get a
+    sense for how much of the index MongoDB had to traverse in order to find just
+    the documents matching the query. In this case, 850,477 index keys were examined
+    in order to locate the 9,903 matching documents.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 `"executionStats"` 中，首先我们将查看 `"totalKeysExamined"`。这是 MongoDB 为了生成结果集而遍历的索引键的数量。我们可以将
+    `"totalKeysExamined"` 与 `"nReturned"` 进行比较，以了解 MongoDB 为了找到与查询匹配的文档而必须遍历索引的多少部分。在这种情况下，检查了
+    850,477 个索引键以定位 9,903 个匹配的文档。
+- en: This means that the index used in order to satisfy this query was not very selective.
+    This is further emphasized by the fact that this query took more than 4.3 seconds
+    to run, as indicated by the `"executionTimeMillis"` field. Selectivity is one
+    of our key objectives when we are designing an index, so let’s figure out where
+    we went wrong with the existing indexes for this query.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这意味着用于满足此查询的索引选择性不高。这一点进一步强调了查询运行超过 4.3 秒的事实，如 `"executionTimeMillis"` 字段所示。在设计索引时，选择性是我们的主要目标之一，因此让我们找出我们在为此查询设计的现有索引出了什么问题。
+- en: Near the top of the `explain` output is the winning query plan (see the field
+    `"winningPlan"`). A query plan describes the steps MongoDB used to satisfy a query.
+    This is, in JSON form, the specific outcome of racing a couple of different query
+    plans against one another. In particular, we are interested in what indexes were
+    used and whether MongoDB had to do an in-memory sort. Below the winning plan are
+    the rejected plans. We’ll look at both.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 `explain` 输出的顶部附近是获胜的查询计划（参见 `"winningPlan"` 字段）。查询计划描述了 MongoDB 用于满足查询的步骤。这是几种不同查询计划竞争的具体结果，以
+    JSON 形式呈现。特别是，我们对使用了哪些索引以及 MongoDB 是否需要在内存中排序感兴趣。在获胜计划下面是被拒绝的计划。我们将查看这两者。
+- en: 'In this case, the winning plan used a compound index based on `"student_id"`
+    and `"class_id"`. This is evident in the following portion of the `explain` output:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，获胜计划使用了基于 `"student_id"` 和 `"class_id"` 的复合索引。这在 `explain` 输出的以下部分中明显可见：
+- en: '[PRE17]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: The `explain` output presents the query plan as a tree of stages. A stage can
+    have one or more input stages, depending on how many child stages it has. An input
+    stage provides the documents or index keys to its parent. In this case, there
+    was one input stage, an index scan, and that scan provided the record IDs for
+    documents matching the query to its parent, the `"FETCH"` stage. The `"FETCH"`
+    stage, then, will retrieve the documents themselves and return them in batches
+    as the client requests them.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`explain`输出将查询计划表示为一个阶段树。一个阶段可以有一个或多个输入阶段，这取决于它有多少子阶段。一个输入阶段向其父级提供文档或索引键。在本例中，有一个输入阶段，即索引扫描，该扫描为与查询匹配的文档提供了记录ID，传递给其父级`"FETCH"`阶段。然后，`"FETCH"`阶段将检索文档本身，并根据客户端请求逐批返回它们。'
+- en: 'The losing query plan—there is only one—would have used an index based on `"class_id"`
+    but then it would have had to do an in-memory sort. That is what the following
+    portion of this particular query plan means. When you see a `"SORT"` stage in
+    a query plan, it means that MongoDB would have been unable to sort the result
+    set in the database using an index and instead would have had to do an in-memory
+    sort:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 失败的查询计划——只有一个——本应使用基于`"class_id"`的索引，但随后需要在内存中进行排序。这就是特定查询计划的以下部分的含义。当你在查询计划中看到`"SORT"`阶段时，意味着MongoDB无法使用索引对结果集进行排序，而必须在内存中进行排序：
+- en: '[PRE18]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: For this query, the index that won is one that was able to return sorted output.
+    To win it only had to reach a trial number of sorted result documents. For the
+    other plan to win, that query thread would have had to return the entire result
+    set (nearly 10,000 documents) first, since those would then need to be sorted
+    in memory.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于这个查询，获胜的索引是能够返回排序输出的索引。要赢得它，它只需达到一定数量的已排序结果文档的试验号。对于另一个计划要获胜，那个查询线程必须首先返回整个结果集（将近10,000个文档），因为然后需要在内存中对其进行排序。
+- en: 'The issue here is one of selectivity. The multivalue query we are running specifies
+    a broad range of `"student_id"` values, because it’s requesting records for which
+    the `"student_id"` is greater than 500,000\. That’s about half the records in
+    our collection. Here again, for convenience, is the query we are running:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里的问题是选择性的问题。我们正在运行的多值查询指定了一个广泛范围的`"student_id"`值，因为它请求`"student_id"`大于500,000的记录，这大约占我们收藏中的一半记录。这里再次为了方便，列出我们正在运行的查询：
+- en: '[PRE19]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: Now, I’m sure you can see where we are headed here. This query contains both
+    a multivalue portion and an equality portion. The equality portion is that we
+    are asking for all records in which `"class_id"` is equal to `54`. There are only
+    about 500 classes in this dataset, and while there are a large number of students
+    with grades in those classes, `"class_id"` would serve as a much more selective
+    basis on which to execute this query. It is this value that constrains our result
+    set to just under 10,000 records rather than the approximately 850,000 that were
+    identified by the multivalue portion of this query.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，我相信你可以看出我们将要讨论的内容。此查询包含多值部分和相等部分。相等部分是我们要求所有`"class_id"`等于`54`的记录。在这个数据集中只有大约500个班级，尽管有许多学生在这些班级中获得了成绩，`"class_id"`作为执行此查询的更为选择性的依据。正是这个值将我们的结果集约束在不到10,000条记录，而不是此查询的多值部分所识别的大约850,000条记录。
+- en: In other words, it would be better, given the indexes we have, if we were to
+    use the index based on just `"class_id"`—the one in the losing query plan. MongoDB
+    provides two ways of forcing the database to use a particular index. However,
+    I cannot stress strongly enough that you should use these ways of overriding what
+    would be the outcome of the query planner with caution. These are not techniques
+    you should use in a production deployment.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 换句话说，考虑到我们拥有的索引，如果我们使用仅基于`"class_id"`的索引——即失败的查询计划中的索引——会更好。MongoDB 提供了两种强制数据库使用特定索引的方法。但是，我强调你应该谨慎使用这些方式，以覆盖查询规划器的结果。这些不是你应该在生产环境中使用的技术。
+- en: The cursor `hint` method enables us to specify a particular index to use, either
+    by specifying its shape or its name. An index filter uses a query shape, which
+    is a combination of a query, sort, and projection specification. The `planCacheSetFilter`
+    function can be used with an index filter to limit the query optimizer to only
+    considering indexes specified in the index filter. If an index filter exists for
+    a query shape, MongoDB will ignore `hint`. Index filters only persist for the
+    duration of the *mongod* server process; they do not persist after shutdown.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 游标 `hint` 方法使我们能够指定要使用的特定索引，可以通过指定其形状或名称来实现。索引过滤器使用查询形状，这是查询、排序和投影规范的组合。`planCacheSetFilter`
+    函数可以与索引过滤器一起使用，以限制查询优化器仅考虑索引过滤器中指定的索引。如果查询形状存在索引过滤器，MongoDB 将忽略 `hint`。索引过滤器仅在
+    *mongod* 服务器进程的持续时间内存在；它们在关闭后不会持续存在。
+- en: 'If we change our query slightly to use `hint`, as in the following example,
+    the `explain` output will be quite different:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们稍微改变查询，使用 `hint`，如下例所示，`explain` 输出将会有很大不同：
+- en: '[PRE20]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'The resulting output shows that we are now down from having scanned roughly
+    850,000 index keys to just about 20,000 in order to get to our result set of just
+    under 10,000\. In addition, the execution time is only 272 milliseconds rather
+    than the 4.3 seconds we saw with the query plan using the other index:'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果输出显示，我们现在从扫描大约 850,000 个索引键减少到大约 20,000 个，以便获得我们少于 10,000 个结果集。此外，执行时间仅为 272
+    毫秒，而不是使用其他索引的查询计划时的 4.3 秒：
+- en: '[PRE21]'
+  id: totrans-100
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: However, what we really want to see is `"nReturned"` very close to `"totalKeysExamined"`.
+    In addition, we would like avoid having to use `hint` in order to more efficiently
+    execute this query. The way to address both of these concerns is to design a better
+    index.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，我们真正希望看到的是 `"nReturned"` 接近 `"totalKeysExamined"`。此外，我们希望避免使用 `hint` 以更有效地执行此查询。解决这两个问题的方法是设计一个更好的索引。
+- en: 'A better index for the query pattern in question is one based on `"class_id"`
+    and `"student_id"`, in that order. With `"class_id"` as the prefix, we are using
+    the equality filter in our query to restrict the keys considered within the index.
+    This is the most selective component of our query, and therefore effectively constrains
+    the number of keys MongoDB needs to consider to satisfy this query. We can build
+    this index as follows:'
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于问题中的查询模式，更好的索引是基于 `"class_id"` 和 `"student_id"` 的索引，按照这个顺序。以 `"class_id"`
+    作为前缀，我们在查询中使用等值过滤器来限制在索引中考虑的键。这是查询中最具选择性的组件，因此有效地限制了 MongoDB 需要考虑的键的数量以满足此查询。我们可以如下构建这个索引：
+- en: '[PRE22]'
+  id: totrans-103
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: While not true for absolutely every dataset, in general you should design compound
+    indexes such that fields on which you will be using equality filters come before
+    those on which your application will use multivalue filters.
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管对于绝对每个数据集都不是真实的，但通常你应该设计复合索引，使得那些你将使用等值过滤器的字段位于你的应用程序将使用多值过滤器的字段之前。
+- en: 'With our new index in place, if we rerun our query, this time no hinting is
+    required and we can see from the `"executionStats"` field in the `explain` output
+    that we have a fast query (37 milliseconds) for which the number of results returned
+    (`"nReturned"`) is equal to the number of keys scanned in the index (`"totalKeysExamined"`).
+    We can also see that this is due to the fact that the `"executionStages"`, which
+    reflect the winning query plan, contain an index scan that makes use of the new
+    index we created:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有了我们的新索引，如果重新运行我们的查询，这次不需要提示，我们可以从 `explain` 输出的 `"executionStats"` 字段看到，我们有一个快速的查询（37
+    毫秒），其中返回的结果数 (`"nReturned"`) 等于索引中扫描的键数 (`"totalKeysExamined"`)。我们还可以看到，这是因为 `"executionStages"`
+    反映了获胜的查询计划，其中包含使用我们创建的新索引的索引扫描：
+- en: '[PRE23]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'Considering what we know about how indexes are built, you can probably see
+    why this works. The `[class_id, student_id]` index is composed of key pairs such
+    as the following. Since the student IDs are ordered within these key pairs, in
+    order to satisfy our sort MongoDB simply needs to walk all the key pairs beginning
+    with the first one for `class_id` `54`:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 考虑到我们对索引构建方式的了解，你可能能够理解为什么这会奏效。`[class_id, student_id]` 索引由以下类似的键对组成。由于学生 ID
+    在这些键对中是有序的，为了满足我们的排序，MongoDB 只需遍历以 `class_id` `54` 开头的所有键对：
+- en: '[PRE24]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: In considering the design of a compound index, we need to know how to address
+    equality filters, multivalue filters, and sort components of common query patterns
+    that will make use of the index. It is necessary to consider these three factors
+    for all compound indexes, and if you design your index to balance these concerns
+    correctly, you will get the best performance out of MongoDB for your queries.
+    While we’ve addressed all three factors for our example query with the `[class_id,
+    student_id]` index, the query as written represents a special case of the compound
+    index problem because we’re sorting on one of the fields we are also filtering
+    on.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在考虑复合索引设计时，我们需要知道如何处理常见查询模式的等值过滤器、多值过滤器和排序组件。对于所有复合索引，必须考虑这三个因素，如果您设计您的索引以正确平衡这些问题，您将获得MongoDB查询的最佳性能。虽然我们已经通过`[class_id,
+    student_id]`索引解决了我们示例查询的所有三个因素，但是由于我们正在对其中一个我们也正在过滤的字段进行排序，所以该查询作为复合索引问题的一个特例。
+- en: 'To remove the special-case nature of this example, let’s sort on final grade
+    instead, changing our query to the following:'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了消除这个示例的特例性质，让我们改为按照最终成绩排序，修改我们的查询如下：
+- en: '[PRE25]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'If we run this query and look at the `explain` output, we see that we’re now
+    doing an in-memory sort. While the query is still fast at only 136 milliseconds,
+    it is an order of magnitude slower than when sorting on `"student_id"`, because
+    we are now doing an in-memory sort. We can see that we are doing an in-memory
+    sort because the winning query plan now contains a `"SORT"` stage:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们运行此查询并查看`explain`输出，我们会看到我们现在正在执行内存排序。虽然查询仍然快速，只需136毫秒，但比在`"student_id"`上排序慢一个数量级，因为我们现在正在执行内存排序。我们可以看到我们正在执行内存排序，因为获胜查询计划现在包含一个`"SORT"`阶段：
+- en: '[PRE26]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: If we can avoid an in-memory sort with a better index design, we should. This
+    will allow us to scale more easily with respect to dataset size and system load.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们可以通过更好的索引设计避免内存排序，那就应该这么做。这将使我们能够更轻松地应对数据集大小和系统负载。
+- en: But to do that, we are going to have to make a tradeoff. This is commonly the
+    case when designing compound indexes.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是要做到这一点，我们将不得不做出一个权衡。这在设计复合索引时通常是必要的。
+- en: As is so often necessary for compound indexes, in order to avoid an in-memory
+    sort we need to examine more keys than the number of documents we return. To use
+    the index to sort, MongoDB needs to be able to walk the index keys in order. This
+    means that we need to include the sort field among the compound index keys.
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于复合索引经常必须做的是，为了避免内存排序，我们需要检查更多的键比我们返回的文档数目。为了使用索引进行排序，MongoDB需要能够按顺序遍历索引键。这意味着我们需要在复合索引键中包括排序字段。
+- en: 'The keys in our new compound index should be ordered as follows: `[class_id,
+    final_grade, student_id]`. Note that we include the sort component immediately
+    after the equality filter, but before the multivalue filter. This index will very
+    selectively narrow the set of keys considered for this query. Then, by walking
+    the key triplets matching the equality filter in this index, MongoDB can identify
+    the records that match the multivalue filter and those records will be ordered
+    properly by final grade in ascending order.'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们新的复合索引中键的顺序应该如下：`[class_id, final_grade, student_id]`。请注意，我们在等值过滤器之后但在多值过滤器之前包括排序组件。这个索引将非常有选择地缩小此查询考虑的键集合。然后，通过遍历与此索引中等值过滤器匹配的键三元组，MongoDB可以识别匹配多值过滤器的记录，并且这些记录将按照最终成绩升序正确排序。
+- en: 'This compound index forces MongoDB to examine keys for more documents than
+    will end up being in our result set. However, by using the index to ensure we
+    have sorted documents, we save execution time. We can construct the new index
+    using the following command:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个复合索引强制MongoDB检查的键比最终将在我们的结果集中结束的文档数多。然而，通过使用索引来确保我们已经排序的文档，我们节省了执行时间。我们可以使用以下命令构建新索引：
+- en: '[PRE27]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'Now, if we once again issue our query:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，如果我们再次发出我们的查询：
+- en: '[PRE28]'
+  id: totrans-121
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'we get the following `"executionStats"` in the output from `explain`. This
+    will vary depending on your hardware and what else is going on in the system,
+    but you can see that the winning plan no longer includes an in-memory sort. It
+    is instead using the index we just created to satisfy the query, including the
+    sort:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们从`explain`输出中得到以下`"executionStats"`。这会根据您的硬件和系统中的其他活动而变化，但您可以看到获胜计划不再包括内存排序。相反，它使用我们刚刚创建的索引来满足查询，包括排序：
+- en: '[PRE29]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: This section has provided a concrete example of some best practices for designing
+    compound indexes. While these guidelines do not hold for every situation, they
+    do for most and should be the first ideas you consider when constructing a compound
+    index.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节提供了设计复合索引的一些最佳实践的具体示例。虽然这些指南并不适用于每一种情况，但对大多数情况有效，并且应该是你在构建复合索引时首先考虑的想法。
+- en: 'To recap, when designing a compound index:'
+  id: totrans-125
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总结一下，在设计复合索引时：
+- en: Keys for equality filters should appear first.
+  id: totrans-126
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 用于等值过滤器的键应该首先出现。
+- en: Keys used for sorting should appear before multivalue fields.
+  id: totrans-127
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 用于排序的键应该出现在多值字段之前。
+- en: Keys for multivalue filters should appear last.
+  id: totrans-128
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 用于多值过滤器的键应该最后出现。
+- en: Design your compound index using these guidelines and then test it under real-world
+    workloads for the range of query patterns your index is designed to support.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据这些指南设计你的复合索引，然后在真实的工作负载下测试它，以支持索引设计的查询模式范围。
+- en: Choosing key directions
+  id: totrans-130
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 选择键的方向
+- en: 'So far, all of our index entries have been sorted in ascending, or least-to-greatest,
+    order. However, if you need to sort on two (or more) criteria, you may need to
+    have index keys go in different directions. For example, going back to our earlier
+    example with the *users* collection, suppose we wanted to sort the collection
+    by age from youngest to oldest and by name from Z−A. Our previous indexes would
+    not be very efficient for this problem: within each age group users were sorted
+    by username in ascending order (A−Z, not Z−A). The compound indexes we’ve been
+    using so far do not hold the values in any useful order for getting `"age"` ascending
+    and `"username"` descending.'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，我们所有的索引条目都按升序或最小至最大的顺序排序。然而，如果你需要根据两个（或更多）标准进行排序，可能需要让索引键以不同的方向排列。例如，回到我们早期的例子，假设我们想按年龄从小到大和按名称从Z到A对集合进行排序。我们之前的索引对于这个问题不是很有效：在每个年龄组内，用户按用户名升序（A-Z，而不是Z-A）排序。到目前为止，我们使用的复合索引没有以任何有用的顺序保存值，以获得`"age"`升序和`"username"`降序。
+- en: 'To optimize compound sorts in different directions, we need to use an index
+    with matching directions. In this example, we could use `{"age" : 1, "username"
+    : -1}`, which would organize the data as follows:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '要优化不同方向的复合排序，我们需要使用具有匹配方向的索引。在这个例子中，我们可以使用`{"age" : 1, "username" : -1}`，这将按以下方式组织数据：'
+- en: '[PRE30]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: The ages are arranged from youngest to oldest, and within each age, the usernames
+    are sorted from Z to A (or rather 9 to 0, given our usernames).
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 年龄从小到大排列，在每个年龄段内，用户名从Z到A排序（或者说是从9到0，鉴于我们的用户名）。
+- en: 'If our application also needed to optimize sorting by `{"age" : 1, "username"
+    : 1}`, we would have to create a second index with those directions. To figure
+    out which directions to use for an index, simply match the directions your sort
+    is using. Note that inverse indexes (multiplying each direction by −1) are equivalent:
+    `{"age" : 1, "username" : -1}` suits the same queries that `{"age" : -1, "username"
+    : 1}` does.'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '如果我们的应用程序还需要优化`{"age" : 1, "username" : 1}`的排序，我们需要创建一个带有这些方向的第二个索引。要确定索引使用的方向，只需匹配你的排序使用的方向。请注意，反向索引（每个方向乘以-1）是等效的：`{"age"
+    : 1, "username" : -1}`适用于与`{"age" : -1, "username" : 1}`相同的查询。'
+- en: 'Index direction only really matters when you’re sorting based on multiple criteria.
+    If you’re only sorting by a single key, MongoDB can just as easily read the index
+    in the opposite order. For example, if you had a sort on `{"age" : -1}` and an
+    index on `{"age" : 1}`, MongoDB could optimize it just as well as if you had an
+    index on `{"age" : -1}` (so don’t create both!). The direction only matters for
+    multikey sorts.'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '索引方向只在基于多个标准进行排序时才真正重要。如果仅按单个键排序，MongoDB可以轻松地以相反顺序读取索引。例如，如果你按`{"age" : -1}`排序并且有一个`{"age"
+    : 1}`的索引，MongoDB可以像在`{"age" : -1}`上创建索引一样进行优化（因此不要同时创建两者！）。方向仅对多键排序有效。'
+- en: Using covered queries
+  id: totrans-137
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用覆盖查询
+- en: In the preceding examples, the index was always used to find the correct document
+    and then follow a pointer back to fetch the actual document. However, if your
+    query is only looking for the fields that are included in the index, it does not
+    need to fetch the document. When an index contains all the values requested by
+    a query, the query is considered to be *covered*. Whenever practical, use covered
+    queries in preference to going back to documents. You can make your working set
+    much smaller that way.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的例子中，索引总是用于查找正确的文档，然后跟随指针返回以获取实际文档。但是，如果您的查询只是查找索引中包含的字段，它就不需要获取文档。当索引包含查询请求的所有值时，该查询被认为是*covered*。在实际操作中，优先使用covered查询，而不是返回文档。这样可以显著减少您的工作集。
+- en: To make sure a query can use the index only, you should use projections (which
+    limit the fields returned to only those specified in your query; see [“Specifying
+    Which Keys to Return”](ch04.xhtml#sect2_d1e3675)) to avoid returning the `"_id"`
+    field (unless it is part of the index). You may also have to index fields that
+    you aren’t querying on, so you should balance your need for faster queries with
+    the overhead this will add on writes.
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确保查询只使用索引，您应该使用投影（限制返回的字段仅限于查询中指定的字段；参见[“指定要返回的键”](ch04.xhtml#sect2_d1e3675)）来避免返回`"_id"`字段（除非它是索引的一部分）。您可能还需要对未查询的字段创建索引，因此您应该在提高查询速度和写入开销之间取得平衡。
+- en: If you run `explain` on a covered query, the result has an `"IXSCAN"` stage
+    that is *not* a descendant of a `"FETCH"` stage, and in the `"executionStats"`,
+    the value of `"totalDocsExamined"` is `0`.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果在一个covered查询上运行`explain`，结果会有一个不是`"FETCH"`阶段后代的`"IXSCAN"`阶段，并且在`"executionStats"`中，`"totalDocsExamined"`的值为`0`。
+- en: Implicit indexes
+  id: totrans-141
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 隐式索引
+- en: 'Compound indexes can do “double duty” and act like different indexes for different
+    queries. If we have an index on `{"age" : 1, "username" : 1}`, the `"age"` field
+    is sorted identically to the way it would be if we had an index on just `{"age"
+    : 1}`. Thus, the compound index can be used the way an index on `{"age" : 1}`
+    by itself would be.'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '复合索引可以“双重职能”，对不同的查询起到不同的索引作用。例如，如果我们在`{"age": 1, "username": 1}`上有一个索引，则`"age"`字段的排序方式与仅在`{"age":
+    1}`上有索引时相同。因此，复合索引可以像仅在`{"age": 1}`上有索引时那样使用。'
+- en: 'This can be generalized to as many keys as necessary: if an index has *N* keys,
+    you get a “free” index on any prefix of those keys. For example, if we have an
+    index that looks like `{"a": 1, "b": 1, "c": 1, ..., "z": 1}`, we effectively
+    have indexes on `{"a": 1}`, `{"a": 1, "b" : 1}`, `{"a": 1, "b": 1, "c": 1}`, and
+    so on.'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '这可以推广到任意数量的键：如果一个索引有*N*个键，您可以在这些键的任何前缀上获得一个“免费”的索引。例如，如果我们有一个看起来像`{"a": 1,
+    "b": 1, "c": 1, ..., "z": 1}`的索引，我们实际上有`{"a": 1}`、`{"a": 1, "b" : 1}`、`{"a": 1,
+    "b": 1, "c": 1}`等索引。'
+- en: 'Note that this doesn’t hold for *any* subset of keys: queries that would use
+    the index `{"b": 1}` or `{"a": 1, "c": 1}` (for example) will not be optimized.
+    Only queries that can use a prefix of the index can take advantage of it.'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '注意，这并不适用于*任何*键的子集：例如，使用索引`{"b": 1}`或`{"a": 1, "c": 1}`的查询都不会被优化。只有能使用索引前缀的查询才能利用它。'
+- en: How $ Operators Use Indexes
+  id: totrans-145
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: $操作符如何使用索引
+- en: Some queries can use indexes more efficiently than others; some queries cannot
+    use indexes at all. This section covers how various query operators are handled
+    by MongoDB.
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些查询可以比其他查询更有效地使用索引；有些查询根本不能使用索引。本节介绍了MongoDB如何处理各种查询操作符。
+- en: Inefficient operators
+  id: totrans-147
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 低效的操作符
+- en: 'In general, negation is inefficient. `"$ne"` queries can use an index, but
+    not very well. They must look at all the index entries other than the one specified
+    by `"$ne"`, so they basically have to scan the entire index. For example, for
+    a collection with an index on the field named `"i"`, here are the index ranges
+    traversed for such a query:'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 总的来说，否定操作效率低下。`"$ne"`查询可以使用索引，但效果不佳。它们必须查看除了`"$ne"`指定的条目之外的所有索引条目，因此基本上必须扫描整个索引。例如，对于一个具有字段名为`"i"`的集合，在这样一个查询中遍历的索引范围如下：
+- en: '[PRE31]'
+  id: totrans-149
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: This query looks at all index entries less than `3` and all index entries greater
+    than `3`. This can be efficient if a large swath of your collection is `3`, but
+    otherwise it must check almost everything.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此查询查看所有小于`3`的索引条目和所有大于`3`的索引条目。如果集合中有大量的`3`，这可能是有效的，但否则它必须几乎检查所有内容。
+- en: '`"$not"` can sometimes use an index but often does not know how. It can reverse
+    basic ranges (``{"*`key`*" : {"$lt" : 7}}`` becomes ``{"*`key`*" : {"$gte" : 7}}``)
+    and regular expressions. However, most other queries with `"$not"` will fall back
+    to doing a table scan. `"$nin"` always uses a table scan.'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"$not"`有时可以使用索引，但通常不知道如何。它可以反转基本范围（``{"*`key`*" : {"$lt" : 7}}``变成``{"*`key`*"
+    : {"$gte" : 7}}``）和正则表达式。但是，大多数带有`"$not"`的其他查询将退回到扫描表。`"$nin"`始终使用扫描表。'
+- en: If you need to perform one of these types of queries quickly, figure out if
+    there’s another clause that you could add to the query that could use an index
+    to filter the result set down to a small number of documents before MongoDB attempts
+    to do nonindexed matching.
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果需要快速执行此类查询，请查看是否有其他子句可以添加到查询中，以使用索引将结果集过滤到少量文档，然后再尝试进行非索引匹配。
+- en: Ranges
+  id: totrans-153
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 范围
+- en: 'Compound indexes can help MongoDB efficiently execute queries with multiple
+    clauses. When designing an index with multiple fields, put fields that will be
+    used in exact matches first (e.g., `"x" : 1`) and ranges last (e.g., `"y": {"$gt"
+    : 3, "$lt" : 5}`). This allows the query to find an exact value for the first
+    index key and then search within that for a second index range. For example, suppose
+    we were querying for a specific age and a range of usernames using an `{"age"
+    : 1, "username" : 1}` index. We would get fairly exact index bounds:'
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '复合索引可以帮助MongoDB高效地执行具有多个子句的查询。设计具有多个字段的索引时，首先放置将在精确匹配中使用的字段（例如`"x" : 1`），然后放置范围字段（例如`"y":
+    {"$gt" : 3, "$lt" : 5}`）。这允许查询找到第一个索引键的精确值，然后在其中搜索第二个索引范围。例如，假设我们使用`{"age" : 1,
+    "username" : 1}`索引查询特定年龄和用户名范围。我们将得到相当精确的索引边界：'
+- en: '[PRE32]'
+  id: totrans-155
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'The query goes directly to `"age" : 47` and then searches within that for usernames
+    between `"user5"` and `"user8"`.'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '查询直接转到`"age" : 47`，然后在其中搜索用户名在`"user5"`和`"user8"`之间。'
+- en: 'Conversely, suppose we use an index on `{"username" : 1, "age" : 1}`. This
+    changes the query plan, as the query must look at all users between `"user5"`
+    and `"user8"` and pick out the ones with `"age" : 47`:'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '相反，假设我们使用`{"username" : 1, "age" : 1}`的索引。这会改变查询计划，因为查询必须查看所有用户名在`"user5"`和`"user8"`之间的用户，并挑选出`"age"
+    : 47`的用户：'
+- en: '[PRE33]'
+  id: totrans-158
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: This forces MongoDB to scan 100 times the number of index entries as using the
+    previous index would. Using two ranges in a query basically always forces this
+    less-efficient query plan.
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这迫使MongoDB扫描比使用先前索引大100倍的索引条目数。在查询中使用两个范围基本上总是强制执行这种效率较低的查询计划。
+- en: OR queries
+  id: totrans-160
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: OR 查询
+- en: 'As of this writing, MongoDB can only use one index per query. That is, if you
+    create one index on `{"x" : 1}` and another index on `{"y" : 1}` and then do a
+    query on `{"x" : 123, "y" : 456}`, MongoDB will use one of the indexes you created,
+    not both. The only exception to this rule is `"$or"`. `"$or"` can use one index
+    per `"$or"` clause, as `"$or"` performs two queries and then merges the results:'
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '截至本文撰写时，MongoDB每次查询只能使用一个索引。也就是说，如果您在`{"x" : 1}`上创建了一个索引，并在`{"y" : 1}`上创建了另一个索引，然后进行`{"x"
+    : 123, "y" : 456}`的查询，MongoDB将使用您创建的其中一个索引，而不是两个。唯一的例外是`"$or"`。`"$or"`可以每个`"$or"`子句使用一个索引，因为`"$or"`执行两次查询然后合并结果：'
+- en: '[PRE34]'
+  id: totrans-162
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: As you can see, this `explain` required two separate queries on the two indexes
+    (as indicated by the two `"IXSCAN"` stages). In general, doing two queries and
+    merging the results is much less efficient than doing a single query; thus, whenever
+    possible, prefer `"$in"` to `"$or"`.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如您所见，此`explain`需要在两个索引上执行两个单独的查询（由两个`"IXSCAN"`阶段指示）。通常情况下，执行两次查询并合并结果比执行单个查询效率低得多；因此，尽可能使用`"$in"`而不是`"$or"`。
+- en: If you must use an `"$or"`, keep in mind that MongoDB needs to look through
+    the results of both queries and remove any duplicates (documents that matched
+    more than one `"$or"` clause).
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果必须使用`"$or"`，请记住MongoDB需要查看两个查询的结果并删除任何重复项（匹配多个`"$or"`子句的文档）。
+- en: 'When running `"$in"` queries there is no way, other than sorting, to control
+    the order of documents returned. For example, `{"x" : {"$in" : [1, 2, 3]}}` will
+    return documents in the same order as `{"x" : {"$in" : [3, 2, 1]}}`.'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '在运行`"$in"`查询时，除了排序之外，没有其他方法控制返回文档的顺序。例如，`{"x" : {"$in" : [1, 2, 3]}}`将以与`{"x"
+    : {"$in" : [3, 2, 1]}}`相同的顺序返回文档。'
+- en: Indexing Objects and Arrays
+  id: totrans-166
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 对象和数组的索引
+- en: MongoDB allows you to reach into your documents and create indexes on nested
+    fields and arrays. Embedded object and array fields can be combined with top-level
+    fields in compound indexes, and although they are special in some ways, they mostly
+    behave the way “normal” index fields behave.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 允许您深入到文档中并在嵌套字段和数组上创建索引。嵌入对象和数组字段可以与顶级字段结合在复合索引中，尽管它们在某些方面很特殊，但它们大多数情况下的行为与“普通”索引字段相同。
+- en: Indexing embedded docs
+  id: totrans-168
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 索引嵌入文档
+- en: 'Indexes can be created on keys in embedded documents in the same way that they
+    are created on normal keys. If we had a collection where each document represented
+    a user, we might have an embedded document that described each user’s location:'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以像在普通键上创建索引一样，在嵌入文档的键上创建索引。如果我们有一个集合，每个文档代表一个用户，我们可能有一个描述每个用户位置的嵌入文档：
+- en: '[PRE35]'
+  id: totrans-170
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'We could put an index on one of the subfields of `"loc"`, say `"loc.city"`,
+    to speed up queries using that field:'
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以在`"loc"`的子字段之一，比如`"loc.city"`上创建一个索引，以加快使用该字段的查询：
+- en: '[PRE36]'
+  id: totrans-172
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'You can go as deep as you’d like with these: you could index `"x.y.z.w.a.b.c"`
+    (and so on) if you wanted.'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您愿意，您可以深入到`"x.y.z.w.a.b.c"`（等等）进行索引。
+- en: 'Note that indexing the embedded document itself (`"loc"`) has very different
+    behavior than indexing a field of that embedded document (`"loc.city"`). Indexing
+    the entire subdocument will only help queries that are querying for the entire
+    subdocument. The query optimizer could only use an index on `"loc"` for queries
+    that described the whole subdocument with fields in the correct order (e.g., `db.users.find({"loc"
+    : {"ip" : "123.456.789.000", "city" : "Shelbyville", "state" : "NY"}}})`). It
+    could not use the index for queries that looked like `db.users.find({"loc.city"
+    : "Shelbyville"})`.'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '注意，索引嵌入文档本身（`"loc"`）与索引该嵌入文档的字段（`"loc.city"`）有非常不同的行为。仅对整个子文档进行索引将仅帮助查询整个子文档的情况。查询优化器只能在描述整个子文档且字段顺序正确的查询中使用`"loc"`上的索引（例如，`db.users.find({"loc"
+    : {"ip" : "123.456.789.000", "city" : "Shelbyville", "state" : "NY"}})`）。对于类似于`db.users.find({"loc.city"
+    : "Shelbyville"})`的查询，它无法使用该索引。'
+- en: Indexing arrays
+  id: totrans-175
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 索引数组
+- en: You can also index arrays, which allows you to use the index to search for specific
+    array elements efficiently.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以对数组进行索引，这使您能够高效地搜索特定的数组元素。
+- en: 'Suppose we have a collection of blog posts where each document is a post. Each
+    post has a `"comments"` field, which is an array of `"comment"` subdocuments.
+    If we wanted to be able to find the most recently commented-on blog posts, we
+    could create an index on the `"date"` key in the array of embedded `"comments"`
+    documents of our blog post collection:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们有一个博客文章的集合，每个文档都是一篇帖子。每篇帖子都有一个`"comments"`字段，其中包含嵌套的`"comment"`子文档数组。如果我们希望能够找到最近评论的博客文章，我们可以在博客文章集合的嵌入式`"comments"`文档数组中的`"date"`键上创建一个索引：
+- en: '[PRE37]'
+  id: totrans-178
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'Indexing an array creates an index entry for each element of the array, so
+    if a post had 20 comments, it would have 20 index entries. This makes array indexes
+    more expensive than single-value ones: for a single insert, update, or remove,
+    every array entry might have to be updated (potentially thousands of index entries).'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对数组进行索引会为数组的每个元素创建一个索引条目，因此如果一篇帖子有20条评论，它将有20个索引条目。这使得数组索引比单值索引更昂贵：对于单个插入、更新或删除操作，可能需要更新每个数组条目（潜在的数千个索引条目）。
+- en: 'Unlike the `"loc"` example in the previous section, you cannot index an entire
+    array as a single entity: indexing an array field indexes each element of the
+    array, not the array itself.'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不像前一节中的`"loc"`示例，您不能将整个数组作为单个实体进行索引：对数组字段的索引会索引数组的每个元素，而不是数组本身。
+- en: 'Indexes on array elements do not keep any notion of position: you cannot use
+    an index for a query that is looking for a specific array element, such as `"comments.4"`.'
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数组元素的索引不保留位置概念：您不能使用索引来查询特定的数组元素，比如`"comments.4"`。
+- en: 'You can, incidentally, index a specific array entry, as in:'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 顺便说一句，您可以像这样对特定数组条目进行索引：
+- en: '[PRE38]'
+  id: totrans-183
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: However, this index would only be useful for queries for exactly the 11th array
+    element (arrays start at index 0).
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，这个索引仅对查询第11个数组元素的情况有用（数组从索引0开始）。
+- en: 'Only one field in an index entry can be from an array. This is to avoid the
+    explosive number of index entries you’d get from multiple multikey indexes: every
+    possible pair of elements would have to be indexed, causing indexes to be *n*m*
+    entries per document. For example, suppose we had an index on `{"x" : 1, "y" :
+    1}`:'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '索引条目中只能有一个字段来自数组。这是为了避免多个多键索引产生爆炸性的索引条目数量：每个文档将产生*n*m*个索引条目。例如，假设我们在`{"x" :
+    1, "y" : 1}`上有一个索引：'
+- en: '[PRE39]'
+  id: totrans-186
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'Were MongoDB to index the final example, it would have to create index entries
+    for `{"x" : 1, "y" : 4}`, `{"x" : 1, "y" : 5}`, `{"x" : 1, "y" : 6}`, `{"x" :
+    2, "y" : 4}`, `{"x" : 2, "y" : 5}`, `{"x" : 2, "y" : 6}`, `{"x" : 3, "y" : 4}`,
+    `{"x" : 3, "y" : 5}`, and `{"x" : 3, "y" : 6}` (and these arrays are only three
+    elements long).'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '如果MongoDB要对最终示例创建索引，它必须为`{"x" : 1, "y" : 4}`, `{"x" : 1, "y" : 5}`, `{"x" :
+    1, "y" : 6}`, `{"x" : 2, "y" : 4}`, `{"x" : 2, "y" : 5}`, `{"x" : 2, "y" : 6}`,
+    `{"x" : 3, "y" : 4}`, `{"x" : 3, "y" : 5}`, 和 `{"x" : 3, "y" : 6}`创建索引条目（这些数组只有三个元素长）。'
+- en: Multikey index implications
+  id: totrans-188
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 多键索引的影响
+- en: 'If any document has an array field for the indexed key, the index immediately
+    is flagged as a multikey index. You can see whether an index is multikey from
+    `explain`’s output: if a multikey index was used, the `"isMultikey"` field will
+    be `true`. Once an index has been flagged as multikey, it can never be un-multikeyed,
+    even if all of the documents containing arrays in that field are removed. The
+    only way to un-multikey it is to drop and recreate it.'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果任何文档具有一个数组字段作为索引键，则该索引立即被标记为多键索引。您可以从`explain`的输出中看到索引是否是多键的：如果使用了多键索引，那么`"isMultikey"`字段将为`true`。一旦索引被标记为多键索引，即使移除了该字段中包含数组的所有文档，它也永远无法取消多键标记。唯一的解除多键标记方法是删除并重新创建索引。
+- en: Multikey indexes may be a bit slower than non-multikey indexes. Many index entries
+    can point at a single document, so MongoDB may need to do some deduplication before
+    returning results.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 多键索引可能比非多键索引稍慢一些。许多索引条目可以指向同一个文档，因此MongoDB在返回结果之前可能需要进行一些去重操作。
+- en: Index Cardinality
+  id: totrans-191
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 索引基数
+- en: '*Cardinality* refers to how many distinct values there are for a field in a
+    collection. Some fields, such as `"gender"` or `"newsletter opt-out"`, might only
+    have two possible values, which is considered a very low cardinality. Others,
+    such as `"username"` or `"email"`, might have a unique value for every document
+    in the collection, which is high cardinality. Still others fall somewhere in between,
+    such as `"age"` or `"zip code"`.'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*基数* 指集合中字段的不同值数量。一些字段，如`"gender"`或`"newsletter opt-out"`，可能只有两个可能的值，这被认为是非常低的基数。而其他一些字段，如`"username"`或`"email"`，可能在集合中每个文档中有唯一的值，这是高基数。还有一些字段介于两者之间，如`"age"`或`"zip
+    code"`。'
+- en: In general, the greater the cardinality of a field, the more helpful an index
+    on that field can be. This is because the index can quickly narrow the search
+    space to a much smaller result set. For a low-cardinality field, an index generally
+    cannot eliminate as many possible matches.
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，字段的基数越大，索引在该字段上就越有帮助。这是因为索引可以快速缩小搜索空间，得到一个更小的结果集。对于低基数字段，索引通常无法消除许多可能的匹配。
+- en: For example, suppose we had an index on `"gender"` and were looking for women
+    named Susan. We could only narrow down the result space by approximately 50% before
+    referring to individual documents to look up `"name"`. Conversely, if we indexed
+    by `"name"`, we could immediately narrow down our result set to the tiny fraction
+    of users named Susan, and then we could refer to those documents to check the
+    gender.
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设我们在`"gender"`上建立了一个索引，并正在寻找名为Susan的女性。在查看个别文档之前，我们只能将结果空间缩小约50%。相反，如果我们按`"name"`索引，我们可以立即将结果集缩小到名为Susan的极小用户群体，然后可以参考这些文档以检查性别。
+- en: As a rule of thumb, try to create indexes on high-cardinality keys or at least
+    put high-cardinality keys first in compound indexes (before low-cardinality keys).
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为一个经验法则，尽量在高基数键上创建索引，或者至少将高基数键放在复合索引的前面（低基数键之前）。
+- en: explain Output
+  id: totrans-196
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: explain 输出
+- en: As you’ve seen, `explain` gives you lots of information about your queries.
+    It’s one of the most important diagnostic tools there is for slow queries. You
+    can find out which indexes are being used and how by looking at a query’s `"explain"`
+    output. For any query, you can add a call to `explain` at the end (the way you
+    would add a `sort` or `limit`, but `explain` must be the last call).
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如你所见，`explain` 为你的查询提供了大量信息。它是慢查询中最重要的诊断工具之一。通过查看查询的 `"explain"` 输出，你可以找出哪些索引被使用以及它们如何被使用。对于任何查询，你可以在末尾添加一个
+    `explain` 调用（就像你会添加 `sort` 或 `limit` 一样，但 `explain` 必须是最后一个调用）。
+- en: 'There are two types of `explain` output that you’ll see most commonly: for
+    indexed and nonindexed queries. Special index types may create slightly different
+    query plans, but most fields should be similar. Also, sharding returns a conglomerate
+    of `explain`s (as covered in [Chapter 14](ch14.xhtml#chapter_d1e10482)), as it
+    runs the query on multiple servers.'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有两种常见的 `explain` 输出类型：对于使用索引和未使用索引的查询。特殊的索引类型可能会创建略有不同的查询计划，但大多数字段应该是相似的。此外，分片会返回一个
+    `explain` 的总合（如 [第 14 章](ch14.xhtml#chapter_d1e10482) 中所述），因为它在多个服务器上运行查询。
+- en: The most basic type of `explain` is on a query that doesn’t use an index. You
+    can tell that a query doesn’t use an index because it uses a `"COLLSCAN"`.
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`explain` 最基本的类型是在不使用索引的查询上。你可以通过它使用了 `"COLLSCAN"` 来判断一个查询是否使用了索引。'
+- en: 'The output of an `explain` on a query that uses an index varies, but in the
+    simplest case it looks something like this if we add an index on `imdb.rating`:'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对使用索引的查询进行 `explain` 的输出有所不同，但在最简单的情况下，如果我们在 `imdb.rating` 上添加了索引，它看起来会像这样：
+- en: '[PRE40]'
+  id: totrans-201
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'This output first tells you what index was used: `imdb.rating`. Next is how
+    many documents were actually returned as a result: `"nReturned"`. Note that this
+    doesn’t necessarily reflect how much work MongoDB did to answer the query (i.e.,
+    how many indexes and documents it had to search). `"totalKeysExamined"` reports
+    the number of index entries scanned while `"totalDocsExamined"` indicates how
+    many documents were scanned. The number of documents scanned is reflected in `"nscannedObjects"`.'
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出首先告诉你使用了哪个索引：`imdb.rating`。接下来是作为结果实际返回的文档数：`"nReturned"`。请注意，这不一定反映了 MongoDB
+    为回答查询所做的工作量（即它必须搜索多少个索引和文档）。`"totalKeysExamined"` 报告了扫描的索引条目数，而 `"totalDocsExamined"`
+    表示扫描的文档数。扫描的文档数反映在 `"nscannedObjects"` 中。
+- en: The output also shows that there were no `rejectedPlans` and that it used a
+    bounded search on the index within the value 42.0.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输出还显示没有 `rejectedPlans`，并且它在索引中使用了有界搜索，搜索值为 42.0。
+- en: '`"executionTimeMillis"` reports how fast the query was executed, from the server
+    receiving the request to when it sent a response. However, it may not always be
+    the number you are looking for. If MongoDB tried multiple query plans, `"executionTimeMillis"`
+    will reflect how long it took all of them to run, not the one chosen as the best.'
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"executionTimeMillis"` 报告了查询执行的速度，从服务器接收请求到发送响应为止。然而，它可能并不总是你要找的数字。如果 MongoDB
+    尝试了多个查询计划，`"executionTimeMillis"` 将反映所有计划运行的时间，而不是选择的最佳计划的时间。'
+- en: 'Now that you know the basics, here is a breakdown of some of the more important
+    fields in more detail:'
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在你已经了解了基础知识，接下来详细解释一些更重要的字段的分解：
+- en: '`"isMultiKey" : false`'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"isMultiKey" : false`'
+- en: If this query used a multikey index (see [“Indexing Objects and Arrays”](#sect2_d1e5358)).
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果此查询使用了多键索引（参见 [“对象和数组的索引”](#sect2_d1e5358)）。
+- en: '`"nReturned" : 8449`'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"nReturned" : 8449"`'
+- en: The number of documents returned by the query.
+  id: totrans-209
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询返回的文档数。
+- en: '`"totalDocsExamined" : 8449`'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"totalDocsExamined" : 8449`'
+- en: The number of times MongoDB had to follow an index pointer to the actual document
+    on disk. If the query contains criteria that are not part of the index or requests
+    fields that aren’t contained in the index, MongoDB must look up the document each
+    index entry points to.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 必须跟随索引指针到实际存储在磁盘上的文档的次数。如果查询包含不是索引的一部分的条件或请求不包含在索引中的字段，那么 MongoDB 必须查找每个索引条目指向的文档。
+- en: '`"totalKeysExamined" : 8449`'
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"totalKeysExamined" : 8449"`'
+- en: The number of index entries looked at, if an index was used. If this was a table
+    scan, it is the number of documents examined.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果使用了索引，则查看的索引条目数。如果这是表扫描，则是扫描的文档数。
+- en: '`"stage" : "IXSCAN"`'
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"stage" : "IXSCAN"`'
+- en: If MongoDB was able to fulfill this query using an index; if not `"COLSCAN"`
+    would indicate it had to perform a collection scan to fulfill the query.
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果 MongoDB 能够使用索引来完成此查询；否则 `"COLSCAN"` 将表明它必须执行集合扫描来完成查询。
+- en: In this example, MongoDB found all matching documents using the index, which
+    we know because `"totalKeysExamined"` is the same as `"totalDocsExamined"`. However,
+    the query was told to return every field in the matching documents and the index
+    only contained the `"age"` and `"username"` fields.
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个例子中，MongoDB 使用索引找到了所有匹配的文档，我们知道这一点是因为 `"totalKeysExamined"` 等于 `"totalDocsExamined"`。然而，查询被告知返回匹配文档的每个字段，而索引只包含
+    `"age"` 和 `"username"` 字段。
+- en: '`"needYield" : 0`'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"needYield" : 0`'
+- en: The number of times this query yielded (paused) to allow a write request to
+    proceed. If there are writes waiting to go, queries will periodically release
+    their lock and allow them to continue. On this system, there were no writes waiting
+    so the query never yielded.
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此查询暂停的次数（让步）以允许写入请求继续。如果有待写入的内容，查询会定期释放其锁并允许其继续。在此系统中，没有待写入内容，因此查询从未让步。
+- en: '`"executionTimeMillis" : 15`'
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"executionTimeMillis" : 15`'
+- en: The number of milliseconds it took the database to execute the query. The lower
+    this number is, the better.
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库执行查询所需的毫秒数。此数值越低越好。
+- en: '`"indexBounds" : {...}`'
+  id: totrans-221
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"indexBounds" : {...}`'
+- en: 'A description of how the index was used, giving ranges of the index traversed.
+    In this example, as the first clause in the query was an exact match, the index
+    only needed to look at that value: `42`. The second index key was a free variable,
+    because the query didn’t specify any restrictions to it. Thus, the database looked
+    for values between negative infinity (`` `"$minElement" : 1` ``) and infinity
+    (`` `"$maxElement" : 1` ``) for usernames within `"age" : 42`.'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '描述索引使用方式的说明，给出索引遍历的范围。在此示例中，由于查询的第一个子句是精确匹配，因此索引只需要查看该值：`42`。第二个索引键是自由变量，因为查询没有指定任何对它的限制。因此，数据库寻找了用户名在
+    `"age" : 42` 内的 `-无穷大（`` `"$minElement" : 1` ``）到无穷大（`` `"$maxElement" : 1` ``）之间的值。'
+- en: 'Let’s take a look at a slightly more complicated example. Suppose you have
+    an index on `{"username" : 1, "age" : 1}` and an index on `{"age" : 1, "username"
+    : 1}`. What happens if you query for `"username"` and `"age"`? Well, it depends
+    on the query:'
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '让我们看一个稍微复杂的例子。假设您在 `{"username" : 1, "age" : 1}` 和 `{"age" : 1, "username"
+    : 1}` 上都有索引。如果查询 `"username"` 和 `"age"`，会发生什么？好吧，这取决于查询：'
+- en: '[PRE41]'
+  id: totrans-224
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'We are querying for an exact match on `"username"` and a range of values for
+    `"age"`, so the database chooses to use the `{"username" : 1, "age" : 1}` index,
+    reversing the terms of the query. If, on the other hand, we query for an exact
+    age and a range of names, MongoDB will use the other index:'
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '我们正在查询 `"username"` 的精确匹配和 `"age"` 的一系列值，因此数据库选择使用 `{"username" : 1, "age"
+    : 1}` 索引，颠倒查询的条件。另一方面，如果我们查询一个确切的年龄和一系列名称，MongoDB 将使用另一个索引：'
+- en: '[PRE42]'
+  id: totrans-226
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: 'If you find that Mongo is using different indexes than you want it to for a
+    query, you can force it to use a certain index by using `hint`. For instance,
+    if you want to make sure MongoDB uses the `{"username" : 1, "age" : 1}` index
+    on the previous query, you could say the following:'
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '如果发现 Mongo 在查询时使用不同于您希望的索引，您可以通过使用 `hint` 强制其使用特定索引。例如，如果要确保 MongoDB 在上一个查询中使用
+    `{"username" : 1, "age" : 1}` 索引，可以这样说：'
+- en: '[PRE43]'
+  id: totrans-228
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: Warning
+  id: totrans-229
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: If a query is not using the index that you want it to and you use a hint to
+    change it, run an `explain` on the hinted query before deploying. If you force
+    MongoDB to use an index on a query that it does not know how to use an index for,
+    you could end up making the query less efficient than it was without the index.
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果查询没有使用您希望的索引，并且您使用提示更改它，请在部署之前对提示的查询运行 `explain`。如果强制 MongoDB 在不知道如何使用索引的查询上使用索引，可能会使查询的效率不如没有索引时高。
+- en: When Not to Index
+  id: totrans-231
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 何时不要索引
+- en: 'Indexes are most effective at retrieving small subsets of data, and some types
+    of queries are faster without indexes. Indexes become less and less efficient
+    as you need to get larger percentages of a collection because using an index requires
+    two lookups: one to look at the index entry and one following the index’s pointer
+    to the document. A collection scan only requires one: looking at the document.
+    In the worst case (returning all of the documents in a collection) using an index
+    would take twice as many lookups and would generally be significantly slower than
+    a collection scan.'
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引在检索少量数据子集时效果最佳，并且某些类型的查询在没有索引的情况下更快。随着需要获取集合较大百分比的数据时，索引效率逐渐降低，因为使用索引需要两次查找：一次查看索引条目，一次跟随索引指针查看文档。而集合扫描只需要一次查找：查看文档。在最坏的情况下（返回集合中的所有文档），使用索引将需要两倍的查找次数，并且通常比集合扫描慢得多。
+- en: Unfortunately, there isn’t a hard-and-fast rule about when an index helps and
+    when it hinders as it really depends on the size of your data, indexes, documents,
+    and average result set ([Table 5-1](#table5-1)). As a rule of thumb, an index
+    often speeds things up if the query is returning 30% or more of the collection.
+    However, this number can vary from 2% to 60%. [Table 5-1](#table5-1) summarizes
+    the conditions in which indexes or collection scans tend to work better.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，并没有一个确切的规则来说明索引何时有帮助，何时有阻碍，因为这确实取决于您的数据大小、索引、文档和平均结果集的大小（见[表5-1](#table5-1)）。作为经验法则，如果查询返回的集合占比达到30%或更多，索引通常会加速查询。但是，这个数字可以在2%到60%之间变化。[表5-1](#table5-1)总结了索引或集合扫描更有效的条件。
+- en: Table 5-1\. Properties that affect the effectiveness of indexes
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表5-1\. 影响索引效果的属性
+- en: '| Indexes often work well for | Collection scans often work well for |'
+  id: totrans-235
+  prefs: []
+  type: TYPE_TB
+  zh: '| 索引通常很有效 | 集合扫描通常很有效 |'
+- en: '| --- | --- |'
+  id: totrans-236
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| Large collections | Small collections |'
+  id: totrans-237
+  prefs: []
+  type: TYPE_TB
+  zh: '| 大型集合 | 小型集合 |'
+- en: '| Large documents | Small documents |'
+  id: totrans-238
+  prefs: []
+  type: TYPE_TB
+  zh: '| 大型文档 | 小型文档 |'
+- en: '| Selective queries | Nonselective queries |'
+  id: totrans-239
+  prefs: []
+  type: TYPE_TB
+  zh: '| 选择性查询 | 非选择性查询 |'
+- en: 'Let’s say we have an analytics system that collects statistics. Our application
+    queries the system for all documents for a given account to generate a nice graph
+    of all data from an hour ago to the beginning of time:'
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们有一个收集统计数据的分析系统。我们的应用程序查询系统，为了生成从一小时前到时间开始的所有数据的漂亮图表：
+- en: '[PRE44]'
+  id: totrans-241
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: We index "`created_at`" to speed up this query.
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们对"`created_at`"进行索引以加快此查询速度。
+- en: When we first launch, the result set is tiny and the query returns instantly.
+    But after a couple of weeks, it starts being a lot of data, and after a month
+    this query is already taking too long to run.
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们首次启动时，结果集很小，查询立即返回。但是几周后，数据量开始增加，一个月后，这个查询运行时间已经太长。
+- en: 'For most applications, this is probably the “wrong” query: do you really want
+    a query that’s returning most of your dataset? Most applications, particularly
+    those with large datasets, do not. However, there are some legitimate cases where
+    you may want most or all of your data. For example, you might be exporting this
+    data to a reporting system or using it for a batch job. In these cases, you would
+    like to return this large proportion of the dataset as fast as possible.'
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于大多数应用程序来说，这可能是“错误”的查询：您真的希望一个查询返回大部分数据集吗？大多数应用程序，特别是那些具有大型数据集的应用程序，不会这样做。但是，有一些合法的情况，您可能需要大部分或全部数据。例如，您可能正在将此数据导出到报告系统或将其用于批处理作业。在这些情况下，您希望尽快返回数据集的大部分。
+- en: Types of Indexes
+  id: totrans-245
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 索引类型
+- en: There are a few index options you can specify when building an index that change
+    the way the index behaves. The most common variations are described in the following
+    sections, and more advanced or special-case options are described in the next
+    chapter.
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在构建索引时，您可以指定几种索引选项，这些选项会改变索引的行为方式。最常见的变体在以下各节中描述，更高级或特殊情况的选项在下一章节中描述。
+- en: Unique Indexes
+  id: totrans-247
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 唯一索引
+- en: 'Unique indexes guarantee that each value will appear at most once in the index.
+    For example, if you want to make sure no two documents can have the same value
+    in the `"username"` key, you can create a unique index with a `partialFilterExpression`
+    for only documents with a `firstname` field (more on this option later in the
+    chapter):'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 唯一索引确保索引中的每个值最多只会出现一次。例如，如果您希望确保没有两个文档可以在`"username"`键中具有相同的值，您可以创建一个带有`partialFilterExpression`的唯一索引，仅适用于具有`firstname`字段的文档（关于此选项的更多信息将在本章后面介绍）：
+- en: '[PRE45]'
+  id: totrans-249
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: 'For example, suppose you tried to insert the following documents in the *users*
+    collection:'
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设您尝试将以下文档插入到*users*集合中：
+- en: '[PRE46]'
+  id: totrans-251
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: If you check the collection, you’ll see that only the first `"bob"` was stored.
+    Throwing duplicate key exceptions is not very efficient, so use the unique constraint
+    for the occasional duplicate, not to filter out zillions of duplicates a second.
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您检查集合，您会看到只存储了第一个`"bob"`。抛出重复键异常并不高效，因此请将唯一约束用于偶尔的重复，而不是过滤大量重复的数据。
+- en: A unique index that you are probably already familiar with is the index on `"_id"`,
+    which is automatically created whenever you create a collection. This is a normal
+    unique index (aside from the fact that it cannot be dropped, as other unique indexes
+    can be).
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可能已经很熟悉的一个唯一索引是在创建集合时自动创建的`"_id"`索引。这是一个普通的唯一索引（除了它不能像其他唯一索引那样被删除）。
+- en: Warning
+  id: totrans-254
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: If a key does not exist, the index stores its value as `null` for that document.
+    This means that if you create a unique index and try to insert more than one document
+    that is missing the indexed field, the inserts will fail because you already have
+    a document with a value of `null`. See [“Partial Indexes”](#sparse-indexes) for
+    advice on handling this.
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果键不存在，索引会将其值存储为该文档的 `null`。这意味着如果您创建了一个唯一索引，并尝试插入超过一个缺少索引字段的文档，插入将失败，因为您已经有一个值为
+    `null` 的文档。有关处理此问题的建议，请参阅 [“部分索引”](#sparse-indexes)。
+- en: 'In some cases a value won’t be indexed. Index buckets are of limited size and
+    if an index entry exceeds it, it just won’t be included in the index. This can
+    cause confusion as it makes a document “invisible” to queries that use the index.
+    Prior to MongoDB 4.2, a field was required to be smaller than 1,024 bytes to be
+    included in an index. In MongoDB 4.2 and later, this constraint was removed. MongoDB
+    does not return any sort of error or warning if a document’s fields cannot be
+    indexed due to size. This means that keys longer than 8 KB will not be subject
+    to the unique index constraints: you can insert identical 8 KB strings, for example.'
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某些情况下，某个值可能不会被索引。索引桶的大小是有限的，如果索引条目超出了它，它就不会被包含在索引中。这可能会导致混淆，因为它使文档对使用索引的查询“不可见”。在
+    MongoDB 4.2 之前，字段的大小必须小于 1,024 字节才能包含在索引中。在 MongoDB 4.2 及更高版本中，取消了此约束。如果文档的字段由于大小而无法索引，MongoDB
+    不会返回任何错误或警告。这意味着长度超过 8 KB 的键不会受到唯一索引约束的影响：例如，您可以插入相同的 8 KB 字符串。
+- en: Compound unique indexes
+  id: totrans-257
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 复合唯一索引
+- en: You can also create a compound unique index. If you do this, individual keys
+    can have the same values, but the combination of values across all keys in an
+    index entry can appear in the index at most once.
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您也可以创建复合唯一索引。如果这样做，单个键可以具有相同的值，但在索引条目中，跨所有键的值组合最多只能出现一次。
+- en: 'For example, if we had a unique index on `{"username" : 1, "age" : 1}`, the
+    following inserts would be legal:'
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '例如，如果我们在 `{"username" : 1, "age" : 1}` 上有一个唯一索引，则以下插入将是合法的：'
+- en: '[PRE47]'
+  id: totrans-260
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: However, attempting to insert a second copy of any of these documents would
+    cause a duplicate key exception.
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，尝试插入任何这些文档的第二份副本将引发重复键异常。
+- en: 'GridFS, the standard method for storing large files in MongoDB (see [“Storing
+    Files with GridFS”](ch06.xhtml#sect1_d1e7744)), uses a compound unique index.
+    The collection that holds the file content has a unique index on `{"files_id"
+    : 1, "n" : 1}`, which allows documents that look like (in part) the following:'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 'GridFS 是在 MongoDB 中存储大文件的标准方法（参见 [“使用 GridFS 存储文件”](ch06.xhtml#sect1_d1e7744)），它使用复合唯一索引。包含文件内容的集合在
+    `{"files_id" : 1, "n" : 1}` 上有一个唯一索引，允许部分如下所示的文档：'
+- en: '[PRE48]'
+  id: totrans-263
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: Note that all of the values for `"files_id"` are the same, but `"n"` is different.
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，“files_id” 的所有值都相同，但“n” 不同。
+- en: Dropping duplicates
+  id: totrans-265
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 去除重复项
+- en: 'If you attempt to build a unique index on an existing collection, it will fail
+    to build if there are any duplicate values:'
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您尝试在现有集合上构建唯一索引，并且存在任何重复值，则构建将失败：
+- en: '[PRE49]'
+  id: totrans-267
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: Generally, you’ll need to process your data (the aggregation framework can help)
+    and figure out where the duplicates are and what to do with them.
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一般来说，您需要处理您的数据（聚合框架可以帮助）并找出重复项及其处理方法。
+- en: Partial Indexes
+  id: totrans-269
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 部分索引
+- en: As mentioned in the previous section, unique indexes count `null` as a value,
+    so you cannot have a unique index with more than one document missing the key.
+    However, there are lots of cases where you may want the unique index to be enforced
+    only if the key exists. If you have a field that may or may not exist but must
+    be unique when it does, you can combine the `"unique"` option with the `"partial"`
+    option.
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前一节所述，唯一索引将 `null` 视为一个值，因此不能有一个缺少该键的文档的唯一索引。但是，在许多情况下，您可能希望仅在键存在时强制执行唯一索引。如果有一个字段可能存在也可能不存在，但在存在时必须是唯一的，您可以将
+    `"unique"` 选项与 `"partial"` 选项结合使用。
+- en: Note
+  id: totrans-271
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Partial indexes in MongoDB are only created on a subset of the data. This is
+    unlike sparse indexes on relational databases, which create fewer index entries
+    pointing to a block of data—however, all blocks of data will have an associated
+    sparse index entry in RDBMS.
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 中的部分索引仅在数据子集上创建。这与关系数据库中的稀疏索引不同，后者创建少量指向数据块的索引条目，但所有数据块都将在 RDBMS 中有一个关联的稀疏索引条目。
+- en: 'To create a partial index, include the `"partialFilterExpression"` option.
+    Partial indexes represent a superset of the functionality offered by sparse indexes,
+    with a document representing the filter expression you wish to create it on. For
+    example, if providing an email address was optional but, if provided, should be
+    unique, we could do:'
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要创建部分索引，请包含`"partialFilterExpression"`选项。部分索引提供了稀疏索引所提供功能的超集，使用文档表示您希望在其上创建过滤器表达式。例如，如果提供电子邮件地址是可选的但是如果提供了应该是唯一的，我们可以这样做：
+- en: '[PRE50]'
+  id: totrans-274
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: Partial indexes do not necessarily have to be unique. To make a nonunique partial
+    index, simply do not include the `"unique"` option.
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 部分索引不一定非得是唯一的。要创建非唯一的部分索引，只需不包含`"unique"`选项。
+- en: 'One thing to be aware of is that the same query can return different results
+    depending on whether or not it uses the partial index. For example, suppose we
+    have a collection where most of the documents have `"x"` fields, but one does
+    not:'
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 需要注意的一点是，同一个查询可能会根据是否使用部分索引返回不同的结果。例如，假设我们有一个集合，其中大多数文档具有`"x"`字段，但有一个文档没有：
+- en: '[PRE51]'
+  id: totrans-277
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: 'When we do a query on `"x"`, it will return all matching documents:'
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们在`"x"`上进行查询时，它将返回所有匹配的文档：
+- en: '[PRE52]'
+  id: totrans-279
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: 'If we create a partial index on `"x"`, the `"_id" : 0` document won’t be included
+    in the index. So now if we query on `"x"`, MongoDB will use the index and not
+    return the `{"_id" : 0}` document:'
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '如果我们在`"x"`上创建了部分索引，`"_id" : 0`文档将不会包含在索引中。现在如果我们在`"x"`上查询，MongoDB将使用该索引并且不返回`{"_id"
+    : 0}`文档：'
+- en: '[PRE53]'
+  id: totrans-281
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: You can use `hint` to force it to do a table scan if you need documents with
+    missing fields.
+  id: totrans-282
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果需要具有缺失字段的文档，可以使用`hint`来强制进行表扫描。
+- en: Index Administration
+  id: totrans-283
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 索引管理
+- en: As shown in the previous section, you can create new indexes using the `createIndex`
+    function. An index only needs to be created once per collection. If you try to
+    create the same index again, nothing will happen.
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前一节所示，您可以使用`createIndex`函数创建新索引。每个集合只需创建一次索引。如果尝试再次创建相同的索引，将不会发生任何操作。
+- en: All of the information about a database’s indexes is stored in the *system.indexes*
+    collection. This is a reserved collection, so you cannot modify its documents
+    or remove documents from it. You can manipulate it only through the `createIndex`,
+    `createIndexes`, and `dropIndexes` database commands.
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库索引的所有信息都存储在*system.indexes*集合中。这是一个保留集合，因此您不能修改其文档或删除其中的文档。您只能通过`createIndex`、`createIndexes`和`dropIndexes`数据库命令来操作它。
+- en: 'When you create an index, you can see its metainformation in *system.indexes*.
+    You can also run ``db.*`collectionName`*.getIndexes()`` to see information about
+    all the indexes on a given collection:'
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建索引时，可以在*system.indexes*中看到其元信息。您还可以运行``db.*`collectionName`*.getIndexes()``来查看给定集合上所有索引的信息：
+- en: '[PRE54]'
+  id: totrans-287
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: 'The important fields are `"key"` and `"name"`. The key can be used for hinting
+    and other places where an index must be specified. This is a place where field
+    order matters: an index on `{"class_id" : 1, "student_id" : 1}` is not the same
+    as an index on `{"student_id" : 1, "class_id" : 1}`. The index name is used as
+    an identifier for a lot of administrative index operations, such as `dropIndexes`.
+    Whether or not the index is multikey is not specified in its spec.'
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '重要字段是`"key"`和`"name"`。`key`可用于提示和其他需要指定索引的地方。这是字段顺序很重要的地方：`{"class_id" : 1,
+    "student_id" : 1}`的索引与`{"student_id" : 1, "class_id" : 1}`的索引不同。索引名称用作许多管理索引操作的标识符，例如`dropIndexes`。索引是否为多键未在其规范中指定。'
+- en: 'The `"v"` field is used internally for index versioning. If you have any indexes
+    that do not have at least a `` `"v"` : 1 `` field, they are being stored in an
+    older, less efficient format. You can upgrade them by ensuring that you’re running
+    at least MongoDB version 2.0 and dropping and rebuilding the indexes.'
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`"v"`字段用于索引版本管理。如果您有任何索引没有至少一个` `"v"` : 1 `字段，它们将以较旧、不太有效的格式存储。您可以通过确保运行至少MongoDB版本2.0并删除和重建索引来升级它们。'
+- en: Identifying Indexes
+  id: totrans-290
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 索引识别
+- en: 'Each index in a collection has a name that uniquely identifies that index and
+    is used by the server to delete or manipulate it. Index names are, by default,
+    ``*`keyname1`*_*`dir1`*_*`keyname2`*_*`dir2`*_..._*`keynameN`*_*`dirN`*``, where
+    ``*`keynameX`*`` is the index’s key and ``*`dirX`*`` is the index’s direction
+    (`1` or `-1`). This can get unwieldy if indexes contain more than a couple of
+    keys, so you can specify your own name as one of the options to `createIndex`:'
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 集合中的每个索引都有一个唯一标识该索引的名称，并且服务器用此名称来删除或操作它。默认情况下，索引名称为 ``*`keyname1`*_*`dir1`*_*`keyname2`*_*`dir2`*_..._*`keynameN`*_*`dirN`*``，其中
+    ``*`keynameX`*`` 是索引的键， ``*`dirX`*`` 是索引的方向（`1` 或 `-1`）。如果索引包含超过几个键，这可能会变得难以管理，因此可以在`createIndex`的选项中指定自定义名称：
+- en: '[PRE55]'
+  id: totrans-292
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: There is a limit to the number of characters in an index name, so complex indexes
+    may need custom names to be created. A call to `getLastError` will show if the
+    index creation succeeded or why it didn’t.
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 索引名称中的字符数有限，因此复杂的索引可能需要自定义名称来创建。调用`getLastError`可以显示索引创建是否成功或未成功的原因。
+- en: Changing Indexes
+  id: totrans-294
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 更改索引
+- en: 'As your application grows and changes, you may find that your data or queries
+    have changed and that indexes that used to work well no longer do. You can remove
+    unneeded indexes using the `dropIndex` command:'
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随着应用程序的增长和变化，您可能会发现数据或查询已经发生变化，过去工作良好的索引现在可能不再适用。您可以使用`dropIndex`命令删除不需要的索引：
+- en: '[PRE56]'
+  id: totrans-296
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: Use the `"name"` field from the index description to specify which index to
+    drop.
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用索引描述中的`"name"`字段来指定要删除的索引。
+- en: Building new indexes is time-consuming and resource-intensive. Prior to version
+    4.2, MongoDB will build an index as fast as possible, blocking all reads and writes
+    on a database until the index build has finished. If you would like your database
+    to remain somewhat responsive to reads and writes, use the `"background"` option
+    when building an index. This forces the index build to occasionally yield to other
+    operations, but may still have a severe impact on your application (see [“Building
+    Indexes”](ch13.xhtml#repl-building-indexes) for more information). Background
+    indexing is also much slower than foreground indexing. MongoDB version 4.2 introduced
+    a new approach, the hybrid index build. It only holds the exclusive lock at the
+    beginning and end of the index build. The rest of the build process yields to
+    interleaving read and write operations. This replaces both the foreground and
+    the background index build type in MongoDB 4.2.
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 建立新索引是耗时且资源密集的工作。在版本 4.2 之前，MongoDB 会尽可能快地构建索引，在此过程中会阻塞数据库上的所有读写操作，直到索引构建完成。如果希望数据库在构建索引过程中对读写操作保持响应性，可以在构建索引时使用`"background"`选项。这会强制索引构建偶尔让步给其他操作，但仍可能严重影响应用程序（详见[“构建索引”](ch13.xhtml#repl-building-indexes)）。与前台索引构建相比，后台索引构建速度要慢得多。MongoDB
+    4.2 版本引入了一种新方法，混合索引构建。它只在索引构建的开始和结束时持有独占锁。在其余构建过程中，允许交错读写操作。这取代了 MongoDB 4.2 中的前台和后台索引构建类型。
+- en: If you have the choice, creating indexes on existing documents is slightly faster
+    than creating the index first and then inserting all documents.
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果可以选择，直接在现有文档上创建索引比先创建索引然后插入所有文档要稍快一些。
+- en: There is more on the operational aspects of building indexes in [Chapter 19](ch19.xhtml#chapter-data-admin).
+  id: totrans-300
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于构建索引的操作方面还有更多内容请参阅[第 19 章](ch19.xhtml#chapter-data-admin)。

@@ -1,0 +1,1208 @@
+- en: Chapter 9\. Using Option Files
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第9章。使用选项文件
+- en: 'Almost every piece of software is capable of being configured, or even must
+    be configured. MySQL is not much different in this regard. While the default configuration
+    will probably suit an astonishing number of installations, more likely than not,
+    you will end up needing to configure the server, or a client. MySQL provides two
+    ways to configure itself: through command-line argument options, and through the
+    configuration file. Since this file contains only the options that could be specified
+    on the command line, it’s also called the *option* file.'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 几乎每个软件都可以进行配置，甚至必须进行配置。MySQL 在这方面并没有太大的不同。虽然默认配置可能适用于大多数安装，但很可能您最终需要配置服务器或客户端。MySQL
+    提供两种配置方式：通过命令行参数选项和配置文件。由于这个文件只包含可以在命令行上指定的选项，它也被称为*选项*文件。
+- en: The option file is not exclusive to MySQL Server. It’s also not strictly correct
+    to talk about the option *file*, as pretty much every installation of MySQL will
+    have multiple option files. Most MySQL software supports inclusion in the option
+    files, and we’ll cover that, too.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选项文件不仅适用于 MySQL Server。严格来说，讨论选项*文件*也不完全正确，因为几乎每个 MySQL 的安装都会有多个选项文件。大多数 MySQL
+    软件支持在选项文件中包含内容，我们也会涵盖这部分内容。
+- en: Knowing your way around an option file—understanding its sections and option
+    precedence—is an important part of efficiently working with MySQL Server and related
+    software. After going through this chapter, you should feel comfortable configuring
+    MySQL Server and other programs that use option files. This chapter will focus
+    on the files themselves. The configuration of the server itself and some tuning
+    ideas are discussed in depth in Chapter 11.
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 熟悉选项文件——理解其节和选项优先级——是有效地使用 MySQL Server 和相关软件的重要部分。通过本章的学习，您应该能够轻松配置 MySQL Server
+    和其他使用选项文件的程序。本章将专注于文件本身。服务器本身的配置和一些调优思路在第11章中深入讨论。
+- en: Structure of the Option File
+  id: totrans-4
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 选项文件的结构
+- en: Configuration files in MySQL follow the ubiquitous INI file scheme. In short,
+    they are regular text files that are intended to be edited manually. Of course,
+    you can automate the editing process, but the structure of these files is purposefully
+    very simple. Almost every MySQL configuration file can be created and modified
+    with any text editor. There are just two exceptions to this rule, reviewed in
+    [“Special Option Files”](#CH-OPTIONS-FILE-SPECIAL).
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 中的配置文件遵循普遍存在的 INI 文件方案。简而言之，它们是普通文本文件，旨在手动编辑。当然，您可以自动化编辑过程，但这些文件的结构故意设计得非常简单。几乎每个
+    MySQL 配置文件都可以使用任何文本编辑器创建和修改。这条规则只有两个例外，详细介绍在[“特殊选项文件”](#CH-OPTIONS-FILE-SPECIAL)中。
+- en: 'To give you an idea of the file structure, let’s take a look at a configuration
+    file shipped with MySQL 8 on Fedora Linux (note that the exact contents of the
+    option files on your system may be different). We’ve redacted a few lines for
+    brevity:'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了让你了解文件结构，让我们来看看 Fedora Linux 上 MySQL 8 随附的配置文件（请注意，您系统上选项文件的确切内容可能有所不同）。为简洁起见，我们对一些行进行了编辑：
+- en: '[PRE0]'
+  id: totrans-7
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Tip
+  id: totrans-8
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: On some Linux distributions, such as Ubuntu, the */etc/my.cnf* configuration
+    file doesn’t exist in a default MySQL installation. Look for */etc/mysql/my.cnf*
+    on those systems, or refer to [“Search Order for Option Files”](#CH-OPTIONS-FILE-ORDER)
+    for a way to get a full list of option files `mysqld` reads.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在某些 Linux 发行版（如 Ubuntu）中，默认的 MySQL 安装中不存在 */etc/my.cnf* 配置文件。在这些系统上，请查找 */etc/mysql/my.cnf*，或者参考[“选项文件搜索顺序”](#CH-OPTIONS-FILE-ORDER)获取
+    `mysqld` 读取的完整选项文件列表的方法。
+- en: 'There are a few main parts to the file structure:'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文件结构的几个主要部分：
+- en: Section (group) headers
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 部分（组）标题
+- en: These are the values in square brackets preceding the configuration parameters.
+    All programs using option files look for parameters in one or more named sections.
+    For example, `[mysqld]` is a section used by the MySQL server, and `[mysql]` is
+    used by the `mysql` CLI program. The name of the sections are, strictly speaking,
+    arbitrary, and you can put anything there. However, if you change `[mysqld]` to
+    `[section]`, your MySQL server will ignore all the options following that header.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些是配置参数前面的方括号中的值。所有使用选项文件的程序都会在一个或多个命名的节中寻找参数。例如，`[mysqld]` 是 MySQL 服务器使用的节，而
+    `[mysql]` 是 `mysql` CLI 程序使用的节。严格来说，节的名称是任意的，你可以在那里放任何东西。但是，如果你将 `[mysqld]` 改为
+    `[section]`，你的 MySQL 服务器将忽略在该头部之后的所有选项。
+- en: MySQL documentation calls sections *groups*, but both terms can be used interchangeably.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 文档将节称为*组*，但两个术语可以互换使用。
+- en: 'Headers control how the files are parsed, and by which programs. Each option
+    after a section header and before the next section header will be attributed to
+    the first header. An example will make this clearer:'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 标头控制文件如何解析，以及由哪些程序解析。在部分标头之后和下一个部分标头之前的每个选项都将归属于第一个标头。示例将更清楚地说明这一点：
+- en: '[PRE1]'
+  id: totrans-15
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: Here, the `datadir` and `socket` options are under (and will be attributed to)
+    the `[mysqld]` section, whereas the `default-character-set` option is under `[mysql]`.
+    Note that some MySQL programs read multiple sections; but we’ll talk about that
+    later.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，`datadir`和`socket`选项位于（并将被归属于）`[mysqld]`部分，而`default-character-set`选项位于`[mysql]`下。注意，某些MySQL程序读取多个部分；但我们稍后会讨论这个问题。
+- en: 'Section headers can be intertwined. The following example is completely valid:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 部分标头可以交织。以下示例完全有效：
+- en: '[PRE2]'
+  id: totrans-18
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Such a configuration might be difficult for a person to read, but programs that
+    parse the file will not care about the order. Still, it’s probably best to keep
+    the configuration files as human-readable as possible.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这样的配置可能对人来说阅读起来很困难，但解析文件的程序不会关心顺序。不过，尽可能保持配置文件对人类可读可能是最好的。
+- en: Option-value pairs
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选项值对
+- en: 'This is the main part of the option file, consisting of the configuration variables
+    themselves and their values. Each of these pairs is defined on a new line and
+    follows one of two general patterns. In addition to the `*option=value*` pattern
+    shown in the previous example, there’s also just the `*option*` pattern. For example,
+    the same standard MySQL 8 configuration file has the following lines:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是选项文件的主要部分，由配置变量本身及其值组成。这些对都在新行上定义，并遵循两种一般模式之一。除了前面示例中显示的`*option=value*`模式之外，还有只有`*option*`模式。例如，标准MySQL
+    8配置文件具有以下行：
+- en: '[PRE3]'
+  id: totrans-22
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: '`disable_log_bin` is an option without a value. If we uncomment it, MySQL Server
+    will apply the option.'
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`disable_log_bin`是一个没有值的选项。如果我们取消注释，MySQL服务器将应用该选项。'
+- en: With the `*option*=*value*` pattern, you can add spaces around the equals sign
+    for readability if you prefer. Any whitespace preceding and following the option
+    name and value will be truncated automatically.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`*option*=*value*`模式时，如果您喜欢，可以在等号周围添加空格以提高可读性。自动截断选项名称和值前后的任何空白。
+- en: Option values can also be enclosed in single or double quote characters. That
+    is useful if you’re not sure whether the value is going to be interpreted correctly.
+    For example, on Windows, paths contain the `\` symbol, which is treated like an
+    escape symbol. Thus, you should put paths on Windows in double quotes (although
+    you could also escape each `\` by doubling it as `\\`). Quoting the option values
+    is required when the value includes the `#` symbol, which would otherwise be treated
+    as indicating the start of a comment.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选项值也可以用单引号或双引号括起来。如果您不确定值是否会被正确解释，这很有用。例如，在Windows上，路径包含`\`符号，该符号被视为转义符号。因此，您应该在Windows上将路径放在双引号中（尽管也可以通过加倍每个`\`来转义）。引用选项值在值包含`#`符号时是必需的，否则该符号将被视为评论的开始。
+- en: 'The rule of thumb that we recommend is to use quotes when you’re not sure.
+    Here are some valid option/value pairs that illustrate the previous points:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们建议的经验法则是在不确定时使用引号。以下是一些有效的选项/值对，说明了前面的观点：
+- en: '[PRE4]'
+  id: totrans-27
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'When setting values for numerical options, like the sizes of different buffers
+    and files, working with bytes can get tedious. To make life easier, MySQL understands
+    a variety of suffixes standing in for different units. For example, the following
+    are all equivalent and define a buffer pool of the same size (268,435,456 bytes):'
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在设置数值选项（如不同缓冲区和文件的大小）的值时，使用字节可能会很繁琐。为了简化生活，MySQL理解多种代表不同单位的后缀。例如，以下几种定义了相同大小的缓冲池（268,435,456字节）：
+- en: '[PRE5]'
+  id: totrans-29
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'You can also specify `G`, `GB`, and `GiB` for gigabytes and `T`, `TB`, and
+    `TiB` for terabytes if you have a server large enough. Of course, `K` and other
+    forms are also accepted. MySQL always uses base-2 units: 1 GB is 1,024 MB, not
+    1,000 MB.'
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果服务器足够大，您还可以指定`G`、`GB`和`GiB`表示吉字节，以及`T`、`TB`和`TiB`表示太字节。当然，还接受`K`和其他形式。MySQL始终使用基于2的单位：1
+    GB是1,024 MB，而不是1,000 MB。
+- en: You cannot specify fractional values for options. So, for example, `0.25G` is
+    an incorrect value for the `innodb_buffer_pool_size` variable. Also, unlike when
+    setting values from the `mysql` CLI or another client connection, you cannot use
+    mathematical notation for option values. You can run `SET GLOBAL max_heap_table_size=16*1024*1024;`,
+    but you cannot put the same value in the option file.
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你不能为选项指定小数值。例如，`0.25G` 对于 `innodb_buffer_pool_size` 变量是一个不正确的值。此外，不像从 `mysql`
+    CLI 或其他客户端连接设置值时那样，你不能使用数学符号来表示选项值。你可以运行 `SET GLOBAL max_heap_table_size=16*1024*1024;`，但不能将相同的值放入选项文件中。
+- en: You can even configure the same option multiple times, as we did with `innodb_buffer_pool_size`.
+    The last setting will take precedence over the previous ones, and the files are
+    scanned from top to bottom. Option files have a global order of precedence as
+    well; we’ll talk about that in [“Search Order for Option Files”](#CH-OPTIONS-FILE-ORDER).
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你甚至可以多次配置相同的选项，就像我们在 `innodb_buffer_pool_size` 中所做的那样。最后的设置将覆盖之前的设置，并且文件从上到下进行扫描。选项文件也有全局优先顺序；我们将在
+    [“选项文件的搜索顺序”](#CH-OPTIONS-FILE-ORDER) 中讨论这一点。
+- en: A very important thing to remember is that setting an incorrect option name
+    will lead to programs not starting. Of course, if the incorrect option is under
+    a section that particular program doesn’t read, it’s fine. But `mysqld` will fail
+    if it finds an option it doesn’t know under `[mysqld]`. In MySQL 8.0 you can validate
+    some of the changes you make in option files by using the `--validate-config`
+    command-line argument with `mysqld`. However, that validation will cover only
+    core server functionality and won’t verify storage engine options.
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 非常重要的一点是，设置不正确的选项名称将导致程序无法启动。当然，如果不正确的选项在特定程序不读取的部分下，那没问题。但是如果 `mysqld` 在 `[mysqld]`
+    下找到一个它不认识的选项，将导致启动失败。在 MySQL 8.0 中，你可以使用 `mysqld` 的 `--validate-config` 命令行参数验证部分选项文件中所做的更改。然而，这种验证仅涵盖核心服务器功能，不会验证存储引擎选项。
+- en: 'Sometimes you’ll need to set an option that MySQL doesn’t know at startup time.
+    For example, this can be useful when configuring plugins that may be loaded after
+    startup. You can prepend such options with the `loose-` prefix (or `--loose-`
+    on the command line), and MySQL will only output a warning when it sees these
+    but not fail to start. Here’s an example with an unknown option:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时候你需要在 MySQL 启动时设置一个 MySQL 不认识的选项。例如，在配置可能在启动后加载的插件时这将很有用。你可以在这些选项前加上 `loose-`
+    前缀（或在命令行上使用 `--loose-`），当 MySQL 看到这些选项时只会输出警告而不是启动失败。以下是一个使用未知选项的示例：
+- en: '[PRE6]'
+  id: totrans-35
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'After the option is changed to `loose-audit_log_format`, we see the following
+    instead. No output means that all the options were successfully validated:'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当选项更改为 `loose-audit_log_format` 后，我们看到以下内容。没有输出意味着所有选项都成功验证：
+- en: '[PRE7]'
+  id: totrans-37
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Comments
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注释
+- en: 'An often overlooked but important feature of MySQL option files is the ability
+    to add comments. Comments allow you to include arbitrary text, usually a description
+    of why the setting is here, that will not be parsed by any MySQL programs. As
+    you saw in the `disable_log_bin` example, comments are lines starting with `#`.
+    You can also create comments that start with semicolon (`;`); either is accepted.
+    You don’t necessarily need to have a whole line dedicated to a comment: they can
+    also appear at the end of a line, although in this case they must start with a
+    `#`, not a `;`. Once MySQL finds a `#` on a line (unless it’s escaped), everything
+    beyond that point is treated as a comment. The following line is a valid configuration:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 选项文件经常被忽视但却非常重要的一个特性是能够添加注释。注释允许你包含任意文本，通常是该设置存在的描述，不会被任何 MySQL 程序解析。正如你在
+    `disable_log_bin` 示例中看到的，以 `#` 开头的行被视为注释。你也可以创建以分号 (`;`) 开头的注释；两者都被接受。你不一定需要一整行来写注释：它们也可以出现在行尾，尽管在这种情况下，它们必须以
+    `#` 而不是 `;` 开头。一旦 MySQL 在一行上找到 `#`（除非它被转义），那么在这个点之后的所有内容都将被视为注释。以下是一个有效的配置行：
+- en: '[PRE8]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Inclusion directives
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 包含指令
+- en: 'Configuration files (and whole directories) can be included within other config
+    files. This can make it easier to manage complex configurations, but it also makes
+    reading the options more difficult, because humans, unlike programs, can’t really
+    merge the files together easily. Still, it’s useful to be able to separate the
+    configurations of different MySQL programs. The `xtrabackup` utility (see [Chapter 10](ch10.xhtml#CH10_BACKUP)),
+    for example, doesn’t have any special config file and reads standard system option
+    files. With inclusion, you can have `xtrabackup`’s configs neatly organized in
+    a dedicated file and declutter your main MySQL option file. You can then include
+    it as follows:'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 配置文件（以及整个目录）可以在其他配置文件中包含。这样可以更轻松地管理复杂的配置，但也使得阅读选项更加困难，因为与程序不同，人类不能轻松地将文件合并在一起。然而，能够分离不同MySQL程序的配置是很有用的。例如，`xtrabackup`实用程序（见[第10章](ch10.xhtml#CH10_BACKUP)）没有任何特殊的配置文件，并读取标准系统选项文件。通过包含，您可以将`xtrabackup`的配置整齐地组织在一个专用文件中，并清理主要的MySQL选项文件。然后可以这样包含它：
+- en: '[PRE9]'
+  id: totrans-43
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: You can see that */etc/my.cnf* includes the */etc/mysql.d/xtrabackup.cnf* file,
+    which in turn has a few configuration options listed in the `[xtrabackup]` section.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以看到*/etc/my.cnf*包含*/etc/mysql.d/xtrabackup.cnf*文件，该文件反过来在`[xtrabackup]`部分列出了一些配置选项。
+- en: It is not necessary to have different sections in different files, though. For
+    example, Percona XtraDB Cluster has `wsrep` library configuration options under
+    the `[mysqld]` section. There are plenty of such configurations, and they aren’t
+    necessarily useful to have in your *my.cnf*. You could create a separate file—for
+    example, */etc/mysql.d/wsrep.conf*—and list the `wsrep` variables under the `[mysqld]`
+    section there. Any program reading the main *my.cnf* file will also read all of
+    the included files and only then parse the variables under the different sections.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不需要在不同的文件中拥有不同的部分。例如，Percona XtraDB Cluster在`[mysqld]`部分下有`wsrep`库配置选项。有许多这样的配置，并且它们在您的*my.cnf*中并不一定有用。您可以创建一个单独的文件，例如*/etc/mysql.d/wsrep.conf*，并在那里列出`[mysqld]`部分下的`wsrep`变量。任何读取主*my.cnf*文件的程序也将读取所有包含的文件，然后才解析不同部分下的变量。
+- en: 'When a lot of such extra configuration files are created, you may want to just
+    go ahead and include the whole directory or directories that contain them instead
+    of including each individual option file. That’s done with another directive,
+    `includedir`, that expects a directory path as an argument:'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当创建了大量此类额外的配置文件时，您可能希望直接包含包含它们的整个目录或目录，而不是包含每个单独的选项文件。可以通过另一个指令`includedir`来实现，它期望一个目录路径作为参数：
+- en: '[PRE10]'
+  id: totrans-47
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: MySQL programs will understand that path as a directory and try to include every
+    option file in that directory’s tree. On Unix-like systems, *.cnf* files are included;
+    on Windows, both *.cnf* and *.ini* files are included.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL程序将把该路径理解为一个目录，并尝试包含该目录树中的每个选项文件。在类Unix系统上，包括*.cnf*文件；在Windows上，包括*.cnf*和*.ini*文件。
+- en: Usually, inclusions are defined at the beginning of a particular config file,
+    but that isn’t mandatory. You can think of the inclusion as appending the contents
+    of the included file or files to the parent file; wherever an inclusion is defined
+    in the file, the included file’s contents will be placed right under that inclusion.
+    In reality, things are a bit more complicated, but this mental model works when,
+    for example, thinking about option precedence, which we cover in [“Search Order
+    for Option Files”](#CH-OPTIONS-FILE-ORDER).
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，包含是在特定配置文件的开头定义的，但这并非强制要求。您可以将包含视为将包含文件的内容附加到父文件中的任何位置；在文件中定义包含的位置，将包含文件的内容放在其下。实际上，事情会更加复杂，但这种心理模型在例如思考选项优先级时是有效的，我们在[“选项文件搜索顺序”](#CH-OPTIONS-FILE-ORDER)中讨论了这一点。
+- en: Each included file must have at least one configuration section defined. For
+    example, it may have `[mysqld]` at the beginning.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个包含的文件必须至少定义一个配置部分。例如，它可能在开头有`[mysqld]`。
+- en: Empty lines
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 空行
+- en: There’s no meaning to empty lines in the option files. You can use them to separate
+    the sections or individual options visually to make the file easier to read.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在选项文件中空行没有意义。您可以使用它们在视觉上分隔部分或单独的选项，以使文件更易于阅读。
+- en: Scope of Options
+  id: totrans-53
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 选项的作用域
+- en: We can talk about option scope in MySQL from two perspectives. First, each individual
+    option can have global scope, session scope, or both, and can be set dynamically
+    or statically. Second, we can talk about how options set in option files are scoped
+    through sections and what the scope and order of precedence of the option files
+    themselves is.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以从两个角度谈论MySQL中的选项作用域。首先，每个单独的选项可以具有全局作用域、会话作用域或两者兼有，并且可以动态或静态设置。其次，我们可以讨论在选项文件中设置的选项如何通过部分作用域以及选项文件本身的作用域和优先级顺序。
+- en: We mentioned that section headers define which particular program (or programs,
+    as nothing prevents one from reading multiple sections) is intended to be reading
+    the options under a particular header. Some configuration options do not make
+    sense outside of their sections, but some can be defined under multiple sections
+    and do not necessarily need to be set equally.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 部分标题定义了特定程序（或多个程序，因为没有什么能阻止一个程序读取多个部分）意图在特定标题下读取选项。一些配置选项在其部分之外是没有意义的，但有些可以在多个部分下定义，并不一定需要设置相同的值。
+- en: 'Let’s consider an example where we have a MySQL server configured with the
+    `latin1` character set for legacy reasons. However, there are now newer tables
+    with the `utf8mb4` charset. We want our `mysqldump` logical dumps to just be in
+    UTF-8, so we want to override the charset for this program. Conveniently, `mysqldump`
+    reads its own configuration section, so we can write an option file like this:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们考虑一个示例，在此示例中，我们有一个MySQL服务器为了兼容性原因配置为`latin1`字符集。然而，现在有新的表使用了`utf8mb4`字符集。我们希望我们的`mysqldump`逻辑导出仅使用UTF-8，因此我们希望为这个程序覆盖字符集设置。方便的是，`mysqldump`读取自己的配置部分，因此我们可以编写如下的选项文件：
+- en: '[PRE11]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'This small example shows how options can be set on different levels. In this
+    particular case we used different options, but it could be the same one in different
+    scopes. For example, suppose we want to limit the future size of `BLOB` and `TEXT`
+    values (see [“String types”](ch04.xhtml#SEC-STRING-COLUMN-TYPES)) to 32 MiB, but
+    we already have rows of up to 256 MiB in size. We can add an artificial barrier
+    for local clients using a configuration like this:'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个小例子展示了如何在不同的层级上设置选项。在这个特定的案例中，我们使用了不同的选项，但也可以在不同的作用域中使用相同的选项。例如，假设我们想要限制未来的`BLOB`和`TEXT`值（参见[“字符串类型”](ch04.xhtml#SEC-STRING-COLUMN-TYPES)）的大小为32
+    MiB，但我们已经有大小达到256 MiB的行。我们可以通过如下配置为本地客户端添加一个人为的屏障：
+- en: '[PRE12]'
+  id: totrans-59
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: The MySQL server’s `max_allowed_packet` value will be set on a global scope
+    and will act as a hard limit on the maximum query size (and also on `BLOB` or
+    `TEXT` field size). The client’s value will be set on a session scope and will
+    act as a soft limit. If a particular client requires a larger value (to read an
+    old row, for example), it can use the `SET` statement to go up to the server’s
+    limit.
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL服务器的`max_allowed_packet`值将在全局作用域上设置，并作为最大查询大小的硬限制（也作用于`BLOB`或`TEXT`字段大小）。客户端的值将在会话作用域上设置，并作为软限制。如果特定客户端需要更大的值（例如读取旧行），可以使用`SET`语句提升到服务器的限制。
+- en: 'The option files themselves also have different scopes. MySQL option files
+    can be divided by scope into a few groups: global, client, server, and extra.
+    Global option files are read by all or most MySQL programs, whereas client and
+    server files are only read by client programs and `mysqld`, respectively. Since
+    it’s possible to specify an extra configuration file to be read by a program,
+    we’re also listing the “extra” category.'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选项文件本身也有不同的作用域。MySQL选项文件可以按全局、客户端、服务器和额外分组：全局选项文件被所有或大多数MySQL程序读取，而客户端和服务器文件分别仅被客户端程序和`mysqld`读取。由于可以指定额外的配置文件供程序读取，我们也列出了“额外”类别。
+- en: Let’s outline the option files installed and read on Linux and Windows by a
+    regular MySQL 8.0 installation. We’ll start with Windows, in [Table 9-1](#mysql_options_files_on_windows).
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们概述一下常规MySQL 8.0安装在Linux和Windows上安装和读取的选项文件。我们将从Windows开始，在[表 9-1](#mysql_options_files_on_windows)中详细说明。
+- en: Table 9-1\. MySQL option files on Windows
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 9-1\. Windows上的MySQL选项文件
+- en: '| Filename | Scope and purpose |'
+  id: totrans-64
+  prefs: []
+  type: TYPE_TB
+  zh: '| 文件名 | 作用域和目的 |'
+- en: '| --- | --- |'
+  id: totrans-65
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| *%WINDIR%\my.ini*, *%WINDIR%\my.cnf* | Global options read by all programs
+    |'
+  id: totrans-66
+  prefs: []
+  type: TYPE_TB
+  zh: '| *%WINDIR%\my.ini*, *%WINDIR%\my.cnf* | 全程序读取的全局选项 |'
+- en: '| *C:\my.ini*, *C:\my.cnf* | Global options read by all programs |'
+  id: totrans-67
+  prefs: []
+  type: TYPE_TB
+  zh: '| *C:\my.ini*, *C:\my.cnf* | 全程序读取的全局选项 |'
+- en: '| *BASEDIR**\my.ini*, *BASEDIR**\my.cnf* | Global options read by all programs
+    |'
+  id: totrans-68
+  prefs: []
+  type: TYPE_TB
+  zh: '| *BASEDIR**\my.ini*, *BASEDIR**\my.cnf* | 全程序读取的全局选项 |'
+- en: '| Extra config file | File optionally specified with `--defaults-extra-file`
+    |'
+  id: totrans-69
+  prefs: []
+  type: TYPE_TB
+  zh: '| 额外配置文件 | 可选指定的文件，使用`--defaults-extra-file` |'
+- en: '| *%APPDATA%\MySQL\.mylogin.cnf* | Login path config file |'
+  id: totrans-70
+  prefs: []
+  type: TYPE_TB
+  zh: '| *%APPDATA%\MySQL\.mylogin.cnf* | 登录路径配置文件 |'
+- en: '| *DATADIR**\mysqld-auto.cnf* | Option file for persisted variables |'
+  id: totrans-71
+  prefs: []
+  type: TYPE_TB
+  zh: '| *DATADIR**\mysqld-auto.cnf* | 用于持久化变量的选项文件 |'
+- en: '[Table 9-2](#mysql_options_files_one_fedora_linux) breaks down the option files
+    for a typical installation on Fedora Linux.'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[表 9-2](#mysql_options_files_one_fedora_linux) 将 Fedora Linux 上典型安装的选项文件进行了详细拆解。'
+- en: Table 9-2\. MySQL option files on Fedora Linux
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 9-2\. Fedora Linux 上的 MySQL 选项文件
+- en: '| Filename | Scope and purpose |'
+  id: totrans-74
+  prefs: []
+  type: TYPE_TB
+  zh: '| 文件名 | 范围和目的 |'
+- en: '| --- | --- |'
+  id: totrans-75
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| */etc/my.cnf*, */etc/mysql/my.cnf*, */usr/etc/my.cnf* | Global options read
+    by all programs |'
+  id: totrans-76
+  prefs: []
+  type: TYPE_TB
+  zh: '| */etc/my.cnf*, */etc/mysql/my.cnf*, */usr/etc/my.cnf* | 所有程序读取的全局选项 |'
+- en: '| *$MYSQL_HOME/my.cnf* | Server options, only read if the variable is set |'
+  id: totrans-77
+  prefs: []
+  type: TYPE_TB
+  zh: '| *$MYSQL_HOME/my.cnf* | 只有在变量设置时才会读取的服务器选项 |'
+- en: '| *~/.my.cnf* | Global options read by all programs run by a particular OS
+    user |'
+  id: totrans-78
+  prefs: []
+  type: TYPE_TB
+  zh: '| *~/.my.cnf* | 特定操作系统用户运行的所有程序读取的全局选项 |'
+- en: '| Extra config file | File optionally specified with `--defaults-extra-file`
+    |'
+  id: totrans-79
+  prefs: []
+  type: TYPE_TB
+  zh: '| 额外配置文件 | 可以通过 `--defaults-extra-file` 指定的文件 |'
+- en: '| *~/.mylogin.cnf* | Login path config file under a particular OS user |'
+  id: totrans-80
+  prefs: []
+  type: TYPE_TB
+  zh: '| *~/.mylogin.cnf* | 特定操作系统用户下的登录路径配置文件 |'
+- en: '| *DATADIR**/mysqld-auto.cnf* | Option file for persisted variables |'
+  id: totrans-81
+  prefs: []
+  type: TYPE_TB
+  zh: '| *DATADIR**/mysqld-auto.cnf* | 用于持久化变量的选项文件 |'
+- en: With Linux, it’s difficult to identify a universal, complete list of configuration
+    files, as MySQL packages for different Linux distributions may read slightly different
+    files or locations. As a rule of thumb, */etc/my.cnf* is a good starting point
+    on Linux, and either *%WINDIR%\my.cnf* or *BASEDIR**\my.cnf* on Windows.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Linux 上，很难找到一个通用的完整的配置文件列表，因为不同 Linux 发行版的 MySQL 包可能会读取略有不同的文件或位置。作为一条经验法则，在
+    Linux 上，*/etc/my.cnf* 是一个很好的起点，而在 Windows 上则是 *%WINDIR%\my.cnf* 或 *BASEDIR**\my.cnf*。
+- en: A couple of the configuration files we’ve listed may differ in their paths between
+    different systems. */usr/etc/my.cnf* can be also written as *SYSCONFIGDIR**/my.cnf*,
+    and the path is defined at compilation time. *$MYSQL_HOME/my.cnf* is only read
+    if the variable is set. The default packaged `mysqld_safe` program (used to start
+    the `mysqld` daemon) will set `$MYSQL_HOME` to *BASEDIR* before running `mysqld`.
+    You won’t find `$MYSQL_HOME` set for any of the OS users, and setting that variable
+    is relevant only if you’re starting `mysqld` manually—in other words, not using
+    the `service` or `systemctl` commands.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们列出的一些配置文件在不同系统中的路径可能略有不同。*/usr/etc/my.cnf* 也可以写成 *SYSCONFIGDIR**/my.cnf*，路径在编译时定义。*$MYSQL_HOME/my.cnf*
+    只有在设置了该变量时才会读取。默认打包的 `mysqld_safe` 程序（用于启动 `mysqld` 守护进程）在运行 `mysqld` 前会将 `$MYSQL_HOME`
+    设置为 *BASEDIR*。你不会在任何操作系统用户的环境中找到设置了 `$MYSQL_HOME`，该变量的设置仅在手动启动 `mysqld` 时有效—也就是说，不使用
+    `service` 或 `systemctl` 命令。
+- en: There’s one peculiar difference between Windows and Linux. On Linux, MySQL programs
+    read some configuration files located under the given OS user’s home directory.
+    In [Table 9-2](#mysql_options_files_one_fedora_linux), the home directory is represented
+    by `~`. MySQL on Windows lacks this ability. One frequent use case for such config
+    files is controlling options for clients based on their OS user. Usually, they
+    will contain credentials. However, the login path facility described in [“Special
+    Option Files”](#CH-OPTIONS-FILE-SPECIAL) makes this redundant.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Windows 和 Linux 之间有一个显著的差异。在 Linux 上，MySQL 程序会读取位于给定操作系统用户家目录下的一些配置文件。在 [表 9-2](#mysql_options_files_one_fedora_linux)
+    中，家目录用 `~` 表示。而在 Windows 上，MySQL 则缺乏这种能力。这类配置文件的一个常见用途是基于其操作系统用户控制客户端选项。通常，它们会包含凭据。但是，在
+    [“特殊选项文件”](#CH-OPTIONS-FILE-SPECIAL) 中描述的登录路径工具使这种功能变得多余。
+- en: An extra config file, specified on the command line with `--defaults-extra-file`,
+    will be read after every other global file is read, according to its position
+    in the table. This is a useful option when you want to do a one-off run of a program
+    to test new variables, for example. Overusing this option, though, can lead to
+    trouble in understanding the current set of options in effect (see [“Determining
+    the Options in Effect”](#CH-OPTIONS-FILE-EFFECT)). The `--defaults-extra-file`
+    option is not the only one that alters option file handling. `--no-defaults` prevents
+    the program from reading *any* configuration files at all. `--defaults-file` forces
+    the program to read a single file, which can be useful if you have your custom
+    configuration all in one place.
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`--defaults-extra-file`在每次读取全局文件后读取额外的配置文件，在表中的位置。例如，当您想要运行程序以测试新变量时，这是一个有用的选项。但是，过度使用此选项可能会导致难以理解当前生效的选项集（请参阅[“确定生效的选项”](#CH-OPTIONS-FILE-EFFECT)）。`--defaults-extra-file`选项并非唯一可以修改选项文件处理方式的选项。`--no-defaults`阻止程序完全读取*任何*配置文件。`--defaults-file`强制程序读取单个文件，如果您将自定义配置全部放在一个地方，这将非常有用。
+- en: By now you should have a firm grasp on what option files most installations
+    of MySQL use. The next section talks more about how different programs read different
+    files, in which order, and what specific group or groups they read from those
+    files.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止，您应该对大多数 MySQL 安装使用的选项文件有了牢固的理解。下一节将更详细地讨论不同程序如何按不同顺序读取不同文件，并从这些文件中读取哪些特定组或组。
+- en: Search Order for Option Files
+  id: totrans-87
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 选项文件搜索顺序
+- en: At this point you should know the structure of an option file and where to find
+    them. Most MySQL programs read one or more option files, and it’s important to
+    know in which specific order a program searches for these files and reads them.
+    This section covers the topics of search order and options precedence and discusses
+    their importance.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此时，您应该了解选项文件的结构以及它们的位置。大多数 MySQL 程序都会读取一个或多个选项文件，了解程序搜索和读取这些文件的特定顺序非常重要。本节涵盖了搜索顺序和选项优先级的主题，并讨论了它们的重要性。
+- en: 'If a MySQL program reads any option files, you can find the specific files
+    it reads, as well as the order in which it reads them. The general order of the
+    configuration files read will be either exactly the same or very similar to that
+    outlined in Tables [9-1](#mysql_options_files_on_windows) and [9-2](#mysql_options_files_one_fedora_linux).
+    You can use the following command to see the exact order:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果 MySQL 程序读取任何选项文件，您可以找到它读取的具体文件以及读取它们的顺序。配置文件的一般顺序将与[表9-1](#mysql_options_files_on_windows)和[表9-2](#mysql_options_files_one_fedora_linux)中概述的完全相同或非常相似。您可以使用以下命令查看确切的顺序：
+- en: '[PRE13]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'On Windows you need to run `mysqld.exe` instead of `mysqld`, but the output
+    will stay the same. That output includes the list of configuration files read,
+    and their order. You can also see the list of option groups read by `mysqld`:
+    `[mysqld]`, `[server]`, and `[mysqld-8.0]`. Note that you can alter the list of
+    option groups that any program reads by adding the `--defaults-group-suffix` option:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Windows 上，您需要运行`mysqld.exe`而不是`mysqld`，但输出将保持不变。该输出包括读取的配置文件列表及其顺序。您还可以看到`mysqld`读取的选项组列表：`[mysqld]`、`[server]`和`[mysqld-8.0]`。请注意，您可以通过添加`--defaults-group-suffix`选项修改任何程序读取的选项组列表：
+- en: '[PRE14]'
+  id: totrans-92
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'You know at this point what option files and option groups are read. However,
+    it’s also important to know the order of precedence for those option files. Nothing
+    prevents you from setting one or more options in multiple configuration files,
+    after all. In the case of MySQL programs, the order of precedence for config files
+    is simple: options from files read later take precedence over options in previously
+    read files. Options passed to commands directly as command-line arguments take
+    precedence over any configuration options in any config files.'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您现在知道哪些选项文件和选项组被读取了。但是，了解这些选项文件的优先级顺序也很重要。毕竟，不会阻止您在多个配置文件中设置一个或多个选项。对于 MySQL
+    程序而言，配置文件的优先级顺序很简单：稍后读取的文件中的选项优先于先前读取的文件中的选项。直接作为命令行参数传递给命令的选项优先于任何配置文件中的配置选项。
+- en: In Tables [9-1](#mysql_options_files_on_windows) and [9-2](#mysql_options_files_one_fedora_linux),
+    the files are read in order from top to bottom. The lower the config file in the
+    list, the higher the “weight” of options there. For example, for any programs
+    that are not `mysqld`, values in *.mylogin.cnf* take precedence over those in
+    any other config files, and only have lower precedence than values set through
+    command-line arguments. For `mysqld`, the same is true for persisted variables
+    set in `*DATADIR*` */mysqld-auto.cnf*.
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在表[9-1](#mysql_options_files_on_windows)和表[9-2](#mysql_options_files_one_fedora_linux)中，文件按从上到下的顺序读取。列表中配置文件越低，该处选项的“权重”越高。例如，对于非`mysqld`程序，*.mylogin.cnf*中的值优先于任何其他配置文件中的值，并且仅低于通过命令行参数设置的值。对于`mysqld`，在`*DATADIR*`
+    */mysqld-auto.cnf*中设置的持久变量也是如此。
+- en: The ability to include configuration files in other files through inclusion
+    directives makes things slightly more complicated, but you always include extras
+    within one or more of the option files listed in Tables [9-1](#mysql_options_files_on_windows)
+    and [9-2](#mysql_options_files_one_fedora_linux). You can think of this as MySQL
+    appending the included files to the parent config file just before reading it,
+    inserting each one into the file just after its inclusion directive. Thus, the
+    precedence of the options globally is that of the parent configuration file. Within
+    the resulting file itself (with all the included files added in order), options
+    defined later take precedence over ones defined earlier.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过包含指令在其他文件中包含配置文件的能力使事情变得稍微复杂了些，但您始终可以在表[9-1](#mysql_options_files_on_windows)和表[9-2](#mysql_options_files_one_fedora_linux)中列出的一个或多个选项文件中包含额外的文件。您可以将此视为MySQL在读取父配置文件之前将包含的文件附加到其父配置文件的过程中，将每个文件插入到包含指令之后。因此，全局选项的优先级是父配置文件的优先级。在生成的文件本身中（按顺序添加了所有包含的文件），后定义的选项优先于先定义的选项。
+- en: Special Option Files
+  id: totrans-96
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 特殊选项文件
+- en: There are two special configuration files used by MySQL, which are exceptions
+    to the structure outlined in [“Structure of the Option File”](#CH-OPTIONS-FILE-STRUCTURE).
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL使用两个特殊配置文件，这两个文件是与[“选项文件结构”](#CH-OPTIONS-FILE-STRUCTURE)中概述的结构不同的例外情况。
+- en: Login Path Configuration File
+  id: totrans-98
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 登录路径配置文件
+- en: First, there’s a *.mylogin.cnf* file, which is used as part of the *login path*
+    system. Even though you can think of its structure as similar to that of a regular
+    option file, this particular file is not a regular text file. In fact, it’s an
+    encrypted text file. This file is intended to be created and modified through
+    use of the special `mysql_config_editor` program, which is supplied with MySQL,
+    usually in the client package. It is encrypted because the purpose of *.mylogin.cnf*
+    (and the whole login path system) is to store MySQL connection options, including
+    passwords, in a convenient and secure manner.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，有一个*.mylogin.cnf*文件，它作为*登录路径*系统的一部分。尽管您可以认为其结构类似于常规选项文件，但这个特定文件不是常规文本文件。事实上，它是一个加密的文本文件。该文件旨在通过MySQL提供的特殊程序`mysql_config_editor`创建和修改，通常在客户端包中提供。它是加密的，因为*.mylogin.cnf*（以及整个登录路径系统）的目的是以方便和安全的方式存储MySQL连接选项，包括密码。
+- en: By default, `mysql_config_editor` and other MySQL programs will look for *.mylogin.cnf*
+    in the *$HOME* of the current user on Linux and various Unix flavors, and in *%APPDATA%\MySQL*
+    on Windows. It is possible to change the location and name of the file by setting
+    the `MYSQL_TEST_LOGIN_FILE` environment variable.
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，`mysql_config_editor`和其他MySQL程序将在Linux和各种Unix版本的当前用户的*HOME*中以及Windows的*%APPDATA%\MySQL*中查找*.mylogin.cnf*。可以通过设置`MYSQL_TEST_LOGIN_FILE`环境变量来更改文件的位置和名称。
+- en: 'You can create this file, if it doesn’t already exist, by storing a password
+    for the `root` user in it:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果尚不存在此文件，您可以通过在其中存储`root`用户的密码来创建此文件：
+- en: '[PRE15]'
+  id: totrans-102
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'After entering the password and confirming the input, we can take a look at
+    the file’s contents:'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 输入密码并确认输入后，我们可以查看文件的内容：
+- en: '[PRE16]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'As you can see, on the surface at least, *.mylogin.cnf* is for sure not a regular
+    configuration file. As such, it requires special treatment. In addition to creating
+    the file, you can view and modify *.mylogin.cnf* with the `mysql_config_editor`.
+    Let’s start with how to actually see what’s inside. The option for that is `print`:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如您所见，*.mylogin.cnf*至少在表面上不是常规配置文件。因此，它需要特殊处理。除了创建文件外，您还可以使用`mysql_config_editor`查看和修改*.mylogin.cnf*。让我们从如何实际查看其中内容开始。该选项是`print`：
+- en: '[PRE17]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: '`client` is a default login path. All operations done with `mysql_config_editor`
+    without an explicit login path specification affect the `client` login path. We
+    didn’t specify any login path when running `set` earlier, so `root`’s credentials
+    were written under the `client` path. It’s possible to specify a specific login
+    path for any operation, though. Let’s put `root`’s credentials under a login path
+    named `root`:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`client`是默认的登录路径。在没有显式登录路径规范的情况下使用`mysql_config_editor`执行的所有操作都会影响`client`登录路径。在之前运行`set`时我们没有指定任何登录路径，所以`root`的凭据被写入`client`路径下。但是，可以针对任何操作指定特定的登录路径。让我们将`root`的凭据放在名为`root`的登录路径下：'
+- en: '[PRE18]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'To specify the login path, use the `--login-path` or `-G` option, and to view
+    all the paths when using `print`, add the `--all` option:'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要指定登录路径，请使用`--login-path`或`-G`选项，并在使用`print`时添加`--all`选项查看所有路径：
+- en: '[PRE19]'
+  id: totrans-110
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: You can see that the output resembles an option file, so you can think of *.mylogin.cnf*
+    as an option file with some special treatment. Just don’t edit it manually. Speaking
+    of editing, let’s add a few more options to the `set` command as `mysql_config_editor`
+    calls it. We’ll create a new login path in the process.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到输出结果类似于选项文件，因此可以将*.mylogin.cnf*视为一个具有特殊处理的选项文件。只是不要手动编辑它。说到编辑，让我们在`set`命令中添加一些更多选项，正如`mysql_config_editor`所称呼的那样。我们将在此过程中创建一个新的登录路径。
+- en: '`mysql_config_editor` supports the `--help` (or `-?`) argument, which can be
+    combined with other options to get help specifically on `print` or `set`, for
+    example. Let’s start by looking at a slightly truncated help output for `set`:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`mysql_config_editor`支持`--help`（或`-?`）参数，可以与其他选项结合使用，以获取有关`print`或`set`的帮助。让我们从查看稍微缩短的`set`的帮助输出开始：'
+- en: '[PRE20]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'You can see here another interesting property of *.mylogin.cnf*: you can’t
+    put arbitrary parameters into it. Now we know that we can basically set only a
+    few options related to logging into a MySQL instance or instances—which is, of
+    course, to be expected of the “login path” file. Now, let’s get back to editing
+    the file:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里你可以看到*.mylogin.cnf*的另一个有趣属性：你不能随意向其中添加参数。现在我们知道，我们基本上只能设置与登录到MySQL实例或实例相关的少量选项，这当然是“登录路径”文件的预期。现在，让我们回到编辑文件：
+- en: '[PRE21]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'Here we’ve shown all the behaviors that `mysql_config_editor` can exhibit when
+    modifying or creating a login path. If the login path doesn’t yet exist, no warning
+    is produced. If there’s already such a path, a warning and confirmation will be
+    printed, but only if `--skip-warn` is not specified. Note that we’re talking here
+    in terms of the whole login path! It is not possible to modify a single property
+    of the path: the whole login path is written out every time. If you want to change
+    a single property, you’ll need to specify all the other properties that you need
+    too.'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，我们展示了`mysql_config_editor`在修改或创建登录路径时可能表现出的所有行为。如果登录路径尚不存在，则不会产生警告。如果已经存在这样的路径，则会打印警告和确认，但仅当未指定`--skip-warn`时。请注意，我们在这里讨论的是整个登录路径！不可能修改路径的单个属性：每次都会写出整个登录路径。如果要更改单个属性，您需要同时指定所有其他需要的属性。
+- en: 'Let’s add some more details and view the result:'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们添加一些更多细节并查看结果：
+- en: '[PRE22]'
+  id: totrans-118
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: Persistent System Variables Configuration File
+  id: totrans-119
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 持久系统变量配置文件
+- en: 'The second special file is *mysqld-auto.cnf*, which has resided in the data
+    directory since MySQL 8.0\. It is a part of the new persisted system variables
+    feature, which allows you to update MySQL options on disk using regular `SET`
+    statements. Before, you could not change MySQL’s configuration from within a database
+    connection. The usual flow was to change the option files on disk and then run
+    a `SET GLOBAL` statement to change the configuration variables online. As you
+    can imagine, this can lead to mistakes and to changes only being made online,
+    for example. The new `SET PERSIST` statement takes care of both tasks: variables
+    updated online are also updated on disk. It’s also possible to update a variable
+    on disk only.'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二个特殊文件是*mysqld-auto.cnf*，自MySQL 8.0以来一直存在于数据目录中。它是新持久系统变量功能的一部分，允许您使用常规的`SET`语句在磁盘上更新MySQL选项。在此之前，您无法从数据库连接中更改MySQL的配置。通常的流程是在磁盘上更改选项文件，然后运行`SET
+    GLOBAL`语句以在线更改配置变量。正如您可以想象的那样，这可能会导致错误，例如仅在线进行更改。新的`SET PERSIST`语句负责处理这两个任务：在线更新的变量也会在磁盘上更新。还可以仅在磁盘上更新变量。
+- en: 'The file itself is, surprisingly, not like any other configuration file in
+    MySQL at all. Whereas *.mylogin.cnf* was an encrypted but still regular option
+    file, *mysqld-auto.cnf* uses a common but completely different format: JSON.'
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该文件本身出人意料地与MySQL中的任何其他配置文件都不同。虽然 *.mylogin.cnf* 是一个加密但仍然是常规选项文件，*mysqld-auto.cnf*
+    使用了一个常见但完全不同的格式：JSON。
+- en: 'Before you persist anything, *mysqld-auto.cnf* doesn’t exist. So, we’ll start
+    by changing a system variable:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在持久化任何内容之前，*mysqld-auto.cnf* 不存在。因此，我们将首先更改一个系统变量：
+- en: '[PRE23]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: '[PRE24]'
+  id: totrans-124
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: '[PRE25]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: '[PRE26]'
+  id: totrans-126
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: '[PRE27]'
+  id: totrans-127
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: '[PRE28]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'As expected, the variable was updated on a global scope online. Let’s now explore
+    the resulting config file. Since we know that the contents are in JSON format,
+    we’ll use the `jq` utility to format it nicely. That’s not necessary, but makes
+    the file easier to read:'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 预期地，在全局范围内在线更新了变量。现在让我们来探索生成的配置文件。因为我们知道内容以JSON格式存在，我们将使用 `jq` 实用程序对其进行良好格式化。这不是必需的，但可以使文件更易于阅读：
+- en: '[PRE29]'
+  id: totrans-130
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'Just by looking at this file containing a single variable value, you can see
+    why plain *.ini* is used for config files that are intended to be edited by humans.
+    This is verbose! However, JSON is excellent for reading by computers, so it’s
+    a good match for a configuration written and read by MySQL itself. As an added
+    benefit, you get auditing of the changes: as you can see, the `max_connection`
+    property has metadata containing the time when the change occurred and the author
+    of the change.'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 只需查看包含单个变量值的此文件，您就可以看到为什么纯 *.ini* 用于预计由人类编辑的配置文件。这太冗长了！但是，JSON对计算机的阅读非常好，因此非常适合MySQL本身编写和读取的配置文件。作为附加好处，您还可以获得更改的审核：正如您所看到的，`max_connection`
+    属性包含元数据，其中包含更改发生的时间和更改的作者。
+- en: Since this is a text file, unlike the login path config file, which is binary,
+    it’s possible to edit *mysqld-auto.cnf* manually. However, it’s unlikely that
+    there will be many cases where that’s needed.
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于这是一个文本文件，与二进制的登录路径配置文件不同，可以手动编辑 *mysqld-auto.cnf*。但是，不太可能有许多需要这样做的情况。
+- en: Determining the Options in Effect
+  id: totrans-133
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 确定正在生效的选项
+- en: The last routine task that pretty much anyone working with MySQL will face is
+    finding out values for the variables, and in what option files they are set (and
+    why, but no amount of technology can help with human reasoning sometimes!).
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 几乎所有与MySQL一起工作的人都会面临的最后例行任务是查找变量的值，以及它们在哪些选项文件中设置（以及为什么，但有时没有技术可以帮助人类的推理！）。
+- en: At this point, we know what files MySQL programs read, in what order, and their
+    precedence. We also know that command-line arguments override any other settings.
+    Still, understanding where exactly some variable is set can be a daunting task.
+    Multiple files scanned, potentially with nested inclusions, can make for a long
+    investigation.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到此为止，我们知道MySQL程序读取的文件、读取顺序及其优先级。我们还知道命令行参数会覆盖任何其他设置。但是，理解某个变量确切设置在哪里可能是一项艰巨的任务。多个文件被扫描，可能存在嵌套包含，这可能导致长时间的调查。
+- en: Let’s start by looking at how to determine the options currently used by a program.
+    For some, like MySQL Server (`mysqld`), that is easy. You can get the list of
+    current values used by `mysqld` by running `SHOW GLOBAL VARIABLES`. It’s impossible
+    to change an option value that `mysqld` uses and not see the effect reflected
+    in the global variables’ state. For other programs, things get more complicated.
+    To understand what options are used by `mysql`, you’d have to run it and then
+    check the outputs of `SHOW VARIABLES` and `SHOW GLOBAL VARIABLES` to see which
+    options are overridden on the session level. But even before a successful connection
+    to the server is established, `mysql` must read or receive connection information.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们从查看当前程序使用的选项开始。对于一些程序，如MySQL服务器（`mysqld`），这很容易。您可以通过运行 `SHOW GLOBAL VARIABLES`
+    来获取 `mysqld` 使用的当前值列表。无法更改 `mysqld` 使用的选项值而不在全局变量状态中看到影响的效果。对于其他程序，情况变得更加复杂。要了解
+    `mysql` 使用的选项，请运行它，然后检查 `SHOW VARIABLES` 和 `SHOW GLOBAL VARIABLES` 的输出，以查看哪些选项在会话级别上被覆盖。但即使在成功连接到服务器之前，`mysql`
+    必须读取或接收连接信息。
+- en: 'There are two easy ways to determine the list of options in effect when the
+    program starts: by passing the `--print-defaults` argument to that program or
+    by using the special `my_print_defaults` program. Let’s take a look at the former
+    option as executed on Linux. You can ignore the `sed` part, but it makes the output
+    slightly nicer for human eyes:'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在程序启动时确定正在生效的选项列表有两种简单的方法：通过向该程序传递`--print-defaults`参数或使用特殊的`my_print_defaults`程序。让我们看看在Linux上执行的前一选项。您可以忽略`sed`部分，但这可以使输出对人眼更加友好：
+- en: '[PRE30]'
+  id: totrans-138
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: '[PRE31]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'The variables picked up here come from all the option files we discussed before.
+    If a variable value was set multiple times, the last occurrence will take precedence.
+    However, `--print-defaults` will actually output every option set. For example,
+    the output could look like this—even though `innodb_buffer_pool_size` is set five
+    times, the value in effect will be 384 M:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里获取的变量来自我们之前讨论过的所有选项文件。如果一个变量值被多次设置，最后出现的值将优先生效。然而，`--print-defaults`实际上会输出每个设置的选项。例如，尽管`innodb_buffer_pool_size`设置了五次，但实际生效的值将是384
+    M：
+- en: '[PRE32]'
+  id: totrans-141
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'You can also combine `--print-defaults` with other command-line arguments.
+    For example, if you intend to run a program with command-line arguments, you can
+    see whether they will override or repeat already set values for configuration
+    options for a particular session:'
+  id: totrans-142
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你也可以将`--print-defaults`与其他命令行参数组合使用。例如，如果你打算使用命令行参数运行程序，你可以查看它们是否会覆盖或重复已设置的配置选项值：
+- en: '[PRE33]'
+  id: totrans-143
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'The other way to print variables is using the `my_print_defaults` program.
+    It takes one or more section headers as arguments and will print all options it
+    finds in scanned files that fall into the requested groups. That can be better
+    than using `--print-defaults` when you just need to review one option group. In
+    MySQL 8.0, the `[mysqld]` program reads the following groups: `[mysqld]`, `[server]`,
+    and `[mysqld-8.0]`. The combined output of options may be lengthy, but what if
+    we only need to view options specifically set for 8.0? For this example, we’ve
+    added the `[mysqld-8.0]` option group to the option file and put a couple of configuration
+    parameter values there:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 打印变量的另一种方式是使用`my_print_defaults`程序。它将一个或多个部分头作为参数，并打印在扫描的文件中落入请求组的所有选项。这可能比仅需要查看一个选项组时使用`--print-defaults`更好。在MySQL
+    8.0中，`[mysqld]`程序读取以下组：`[mysqld]`、`[server]`和`[mysqld-8.0]`。选项的组合输出可能很长，但如果我们只需要查看专门为8.0设置的选项怎么办？例如，我们已将`[mysqld-8.0]`选项组添加到选项文件中，并在那里放置了一些配置参数值：
+- en: '[PRE34]'
+  id: totrans-145
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'That can also help with other software, like PXC, or with the MariaDB flavor
+    of MySQL, both of which include multiple configuration groups. In particular,
+    you would likely want to review the `[wsrep]` section without any other options.
+    `my_print_defaults` can, of course, be used to output a complete set of options
+    too; it just needs to be passed all the section headers a program reads. For example,
+    the `[mysql]` program reads the `[mysql]` and `[client]` option groups, so we
+    could use:'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这也可以帮助其他软件，如PXC，或者MySQL的MariaDB版本，它们都包括多个配置组。特别是，你可能希望查看`[wsrep]`部分而不包含其他选项。当然，`my_print_defaults`也可以用来输出完整的选项集；只需传递程序读取的所有部分头。例如，`[mysql]`程序读取`[mysql]`和`[client]`选项组，因此我们可以使用：
+- en: '[PRE35]'
+  id: totrans-147
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: The user and password definitions come from the client group in the login path
+    config we set before, and the charset from the `[mysql]` option group in the regular
+    *.my.cnf*. Note that we added that group and charset config manually; by default
+    that option is not set.
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用户和密码定义来自我们之前设置的登录路径配置中的客户端组，而字符集来自常规*.my.cnf*文件中的`[mysql]`选项组。请注意，我们手动添加了该组和字符集配置；默认情况下，该选项未设置。
+- en: You can see that while both ways to read options talk of *defaults*, they actually
+    output the options that we have explicitly set, making them nondefault. This is
+    an interesting tidbit, but it doesn’t change anything in the grand scheme of things.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以看到，虽然两种读取选项的方式都谈论*默认值*，但它们实际上输出了我们已经显式设置的选项，使它们变成了非默认值。这是一个有趣的细节，但在整体计划中并不会改变任何事情。
+- en: Unfortunately, neither of these ways of reviewing options is perfect at determining
+    the complete set of options in effect. The problem is they only read the configuration
+    files listed in Tables [9-1](#mysql_options_files_on_windows) and [9-2](#mysql_options_files_one_fedora_linux),
+    but it’s possible for MySQL programs to read other config files or to be started
+    with command-line arguments. Additionally, the variables persisted in `*DATADIR*`
+    */mysqld-auto.cnf* through `SET PERSIST` are not provided by defaults-printing
+    routines.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不幸的是，这两种查看选项的方式都无法完美确定生效的完整选项集。问题在于它们只会读取表格[9-1](#mysql_options_files_on_windows)和[9-2](#mysql_options_files_one_fedora_linux)中列出的配置文件，但MySQL程序可能会读取其他配置文件或者通过命令行参数启动。此外，通过`SET
+    PERSIST`持久化在`*DATADIR*` */mysqld-auto.cnf*中的变量不会被默认打印例程提供。
+- en: We mentioned that MySQL programs do not read options from any other files than
+    the ones that were listed in Tables [9-1](#mysql_options_files_on_windows) and
+    [9-2](#mysql_options_files_one_fedora_linux). However, those lists do include
+    the “extra config file,” which can be in an arbitrary location. Unless you specify
+    the same extra file when invoking `my_print_defaults` or another program with
+    `--print-defaults`, options from that extra file won’t be read. The extra file
+    is specified with the command-line argument, `--defaults-extra-file`, and can
+    be specified for most if not all MySQL programs. The two defaults-printing routines
+    only read predefined config files and will miss that file. You can, however, specify
+    `--defaults-extra-file` both for `my_print_defaults` and for the program invoked
+    with `--print-defaults`, and both will read the extra file then. The same applies
+    to the `--defaults-file` option we mentioned earlier, which basically forces the
+    MySQL program to only read the single file passed as a value for this option.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们提到 MySQL 程序不会从除了在 [9-1](#mysql_options_files_on_windows) 和 [9-2](#mysql_options_files_one_fedora_linux)
+    中列出的文件之外的任何其他文件中读取选项。然而，这些列表包括“额外配置文件”，它可以位于任意位置。除非在调用 `my_print_defaults` 或带有
+    `--print-defaults` 的另一个程序时指定了相同的额外文件，否则不会读取来自该额外文件的选项。额外文件通过命令行参数 `--defaults-extra-file`
+    指定，大多数（如果不是所有）MySQL 程序都可以指定。两个默认打印例程只读预定义的配置文件，并且会忽略该文件。但是，您可以为 `my_print_defaults`
+    和使用 `--print-defaults` 调用的程序都指定 `--defaults-extra-file`，那么两者都将读取额外的文件。我们前面提到的
+    `--defaults-file` 选项也是如此，它基本上强制 MySQL 程序只读取作为此选项值传递的单个文件。
+- en: 'Both `--defaults-extra-file` and `--defaults-file` share a thing in common:
+    they are command-line arguments. Command-line arguments passed to a MySQL program
+    override any options read from configuration files, but at the same time you can
+    miss them when you do `--print-defaults` or `my_print_defaults`, as they are coming
+    from outside of any config files. To put it more concisely: a particular MySQL
+    program, such as `mysqld`, can be started by someone with unknown and arbitrary
+    command-line arguments. Thus, when we’re talking about options, in effect we must
+    also consider the presence of such arguments.'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`--defaults-extra-file` 和 `--defaults-file` 共享一个共同点：它们都是命令行参数。传递给 MySQL 程序的命令行参数会覆盖从配置文件中读取的任何选项，但同时你可能会在执行
+    `--print-defaults` 或 `my_print_defaults` 时忽略它们，因为它们来自于配置文件之外。更简洁地说：特定的 MySQL 程序，如
+    `mysqld`，可能会被某人使用未知和任意的命令行参数启动。因此，在讨论选项时，实际上我们必须考虑这些参数的存在。'
+- en: 'On Linux and Unix-like systems, you can use the `ps` utility (or an equivalent)
+    to view information on currently running processes, including their full command
+    lines. Let’s see an example on Linux where `mysqld` was started with `--no-defaults`
+    and with all config options passed as arguments:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 Linux 和类 Unix 系统上，您可以使用 `ps` 实用程序（或等效工具）查看当前运行进程的信息，包括它们的完整命令行。让我们看一个在 Linux
+    上的例子，其中 `mysqld` 使用 `--no-defaults` 启动，并且所有配置选项都作为参数传递：
+- en: '[PRE36]'
+  id: totrans-154
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'Or, if we print just the command line for the `mysqld` process and make it
+    cleaner with `sed`:'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，如果我们只打印 `mysqld` 进程的命令行并使用 `sed` 来使其更清晰：
+- en: '[PRE37]'
+  id: totrans-156
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: Note that for this example we started `mysqld` without using any of the provided
+    scripts. You won’t often see this way of starting the MySQL server, but it’s possible.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，对于这个示例，我们启动了 `mysqld` 而没有使用任何提供的脚本。你不经常会看到以这种方式启动 MySQL 服务器，但这是可能的。
+- en: You can pass any configuration option as an argument, so the output can be quite
+    lengthy. However, when you’re not sure how exactly `mysqld` or another program
+    was executed, that’s an important thing to check. On Windows, you can view the
+    command-line arguments of a running program either by opening the Task Manager
+    and adding a Command Line column to the Processes tab (through the View menu)
+    or by using the Process Explorer tool from the `sysinternals` package.
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以将任何配置选项作为参数传递，因此输出可能会非常长。然而，当您不确定 `mysqld` 或另一个程序的执行方式时，这是一个重要的检查点。在 Windows
+    上，您可以通过打开任务管理器并在进程选项卡（通过查看菜单）中添加一个“命令行”列，或者使用 `sysinternals` 包中的 Process Explorer
+    工具来查看正在运行程序的命令行参数。
+- en: If your MySQL program is started from within a script, you should inspect that
+    script to find all the arguments used. While this is probably going to be a rare
+    occasion for `mysqld`, it’s a common practice to run `mysql`, `mysqldump`, and
+    `xtrabackup` from custom scripts.
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您的 MySQL 程序是从脚本中启动的，您应该检查该脚本以查找所有使用的参数。虽然这对于 `mysqld` 可能会是一个罕见的情况，但是从自定义脚本运行
+    `mysql`、`mysqldump` 和 `xtrabackup` 是一个常见的做法。
+- en: Understanding the currently used options can be a daunting task, but it’s extremely
+    important at times. Hopefully, these guidelines and hints will help you.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理解当前使用的选项可能是一项艰巨的任务，但有时非常重要。希望这些指南和提示能够帮助你。

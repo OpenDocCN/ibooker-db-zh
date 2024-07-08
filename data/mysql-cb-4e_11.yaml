@@ -1,0 +1,1812 @@
+- en: Chapter 11\. Using Stored Routines, Triggers, and Scheduled Events
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第11章。使用存储例程、触发器和预定事件
+- en: 11.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 11.0 简介
+- en: In this book, the term <q>stored program</q> refers collectively to stored routines,
+    triggers, and events, and <q>stored routine</q> refers collectively to stored
+    functions and procedures.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本书中，“存储程序”一词指的是存储例程、触发器和事件的总称，“存储例程”一词指的是存储函数和存储过程的总称。
+- en: 'This chapter discusses stored programs, which come in several varieties:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章讨论多种存储程序：
+- en: Stored functions and procedures
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储函数和存储过程
+- en: A stored function or procedure object encapsulates the code for performing an
+    operation, enabling you to invoke the object easily by name rather than repeat
+    all its code each time it’s needed. A stored function performs a calculation and
+    returns a value that can be used in expressions just like a built-in function
+    such as `RAND()`, `NOW()`, or `LEFT()`. A stored procedure performs operations
+    for which no return value is needed. Procedures are invoked with the `CALL` statement,
+    not used in expressions. A procedure might update rows in a table or produce a
+    result set that is sent to the client program.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储函数或过程对象封装了执行操作的代码，使您可以通过名称轻松调用对象，而不是每次需要时重复所有代码。存储函数执行计算并返回一个值，可以像内置函数（如`RAND()`、`NOW()`或`LEFT()`）一样在表达式中使用。存储过程执行不需要返回值的操作。使用`CALL`语句调用过程，不在表达式中使用。过程可能会更新表中的行或生成发送到客户端程序的结果集。
+- en: Triggers
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 触发器
+- en: A trigger is an object that activates when a table is modified by an `INSERT`,
+    `UPDATE`, or `DELETE` statement. For example, you can check values before they
+    are inserted into a table, or specify that any row deleted from a table should
+    be logged to another table that serves as a journal of data changes. Triggers
+    automate these actions.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 触发器是一个对象，当表通过`INSERT`、`UPDATE`或`DELETE`语句修改时被激活。例如，可以在将值插入表之前检查它们，或者指定从表中删除的任何行应记录到另一个作为数据变更日志的表中。触发器自动化这些操作。
+- en: Scheduled events
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 预定事件
+- en: An event is an object that executes SQL statements at a scheduled time or times.
+    Think of a scheduled event as something like a Unix *cron* job that runs within
+    MySQL. For example, events can help you perform administrative tasks such as deleting
+    old table rows periodically or creating nightly summaries.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事件是在预定时间或多个时间点执行SQL语句的对象。将预定事件视为MySQL内部类似Unix *cron*作业的内容。例如，事件可帮助您执行如定期删除旧表行或创建每夜摘要等管理任务。
+- en: 'Stored programs are database objects that are user-defined but stored on the
+    server side for later execution. This differs from sending an SQL statement from
+    the client to the server for immediate execution. Each object also has the property
+    that it is defined in terms of other SQL statements to be executed when the object
+    is invoked. The object body is a single SQL statement, but that statement can
+    use compound-statement syntax (a `BEGIN` … `END` block) that contains multiple
+    statements. Thus, the body can range from very simple to extremely complex. The
+    following stored procedure is a trivial routine that does nothing but display
+    the current MySQL version, using a body that consists of a single `SELECT` statement:'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储程序是用户定义的数据库对象，但存储在服务器端以便以后执行。这与从客户端向服务器发送SQL语句进行即时执行不同。每个对象还具有其被调用时执行的其他SQL语句的属性。对象体是一个单一的SQL语句，但该语句可以使用复合语句语法（一个`BEGIN`
+    … `END`块），其中包含多个语句。因此，对象体可以从非常简单到极其复杂不等。下面的存储过程是一个微不足道的例程，只显示当前MySQL版本，使用的是一个包含单个`SELECT`语句的体：
+- en: '[PRE0]'
+  id: totrans-11
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'More complex operations use a `BEGIN` … `END` compound statement:'
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更复杂的操作使用`BEGIN` … `END`复合语句：
+- en: '[PRE1]'
+  id: totrans-13
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: Here, the `BEGIN` … `END` block contains multiple statements, but is itself
+    considered to constitute a single statement. Compound statements enable you to
+    declare local variables and to use conditional logic and looping constructs. These
+    capabilities provide considerably more flexibility for algorithmic expression
+    than when you write inline expressions in noncompound statements such as `SELECT`
+    or `UPDATE`.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，`BEGIN` … `END`块包含多个语句，但本身被视为单个语句。复合语句使您能够声明局部变量，并使用条件逻辑和循环结构。这些功能为算法表达提供了比在非复合语句（如`SELECT`或`UPDATE`）中编写内联表达式时更大的灵活性。
+- en: Each statement within a compound statement must be terminated by a `;` character.
+    That requirement causes a problem if you use the *mysql* client to define an object
+    that uses compound statements because *mysql* itself interprets `;` to determine
+    statement boundaries. The solution is to redefine *mysql*’s statement delimiter
+    while you define a compound-statement object. [Recipe 11.1](#nch-routines-routines-compound-statement)
+    covers how to do this; be sure to read that recipe before proceeding to those
+    that follow it.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复合语句中的每个语句必须以`;`字符结尾。如果您使用*mysql*客户端定义使用复合语句的对象，则此要求会引起问题，因为*mysql*本身会解释`;`以确定语句的边界。解决方案是在定义复合语句对象时重新定义*mysql*的语句分隔符。[第11.1节](#nch-routines-routines-compound-statement)介绍了如何做到这一点；确保在继续后面的部分之前阅读该章节。
+- en: This chapter illustrates stored routines, triggers, and events by example, but
+    due to space limitations does not otherwise go into much detail about their extensive
+    syntax. For complete syntax descriptions, see the *MySQL Reference Manual*.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章通过示例说明存储例程、触发器和事件，但由于空间限制，未详细介绍它们的广泛语法。有关完整的语法描述，请参阅*MySQL参考手册*。
+- en: Scripts for the examples shown in this chapter are located in the *routines*,
+    *triggers*, and *events* directories of the `recipes` distribution. Scripts to
+    create example tables are located in the *tables* directory.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章示例中显示的脚本位于`recipes`分发的*例程*、*触发器*和*事件*目录中。用于创建示例表的脚本位于*表*目录中。
+- en: In addition to the stored programs shown in this chapter, others can be found
+    elsewhere in this book. See, for example, [Recipe 7.6](ch07.xhtml#nch-strings-strings-lettercase-changing),
+    [Recipe 8.3](ch08.xhtml#nch-dates-dates-format), [Recipe 16.8](ch16.xhtml#nch-multi-multi-fill-hole),
+    and [Recipe 24.2](ch24.xhtml#nch-security-account-management).
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了本章中显示的存储程序外，还可以在本书的其他地方找到其他存储程序。例如，请参阅[第7.6节](ch07.xhtml#nch-strings-strings-lettercase-changing)、[第8.3节](ch08.xhtml#nch-dates-dates-format)、[第16.8节](ch16.xhtml#nch-multi-multi-fill-hole)和[第24.2节](ch24.xhtml#nch-security-account-management)。
+- en: 'Stored programs used here are created and invoked under the assumption that
+    `cookbook` is the default database. To invoke a program from another database,
+    qualify its name with the database name:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此处使用的存储程序是在假设`cookbook`是默认数据库的情况下创建和调用的。要从另一个数据库调用程序，请使用数据库名称限定其名称：
+- en: '[PRE2]'
+  id: totrans-20
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: Alternatively, create a database specifically for your stored programs, create
+    them in that database, and always invoke them qualified with that name. Remember
+    to grant users who will use them the `EXECUTE` privilege for that database.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，为您的存储程序创建一个专门的数据库，在该数据库中创建它们，并始终使用该名称调用它们。请记住为将使用它们的用户授予该数据库的`EXECUTE`权限。
+- en: 11.1 Creating Compound-Statement Objects
+  id: totrans-22
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 11.1 创建复合语句对象
+- en: Problem
+  id: totrans-23
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to define a stored program, but its body contains instances of the
+    `;` statement terminator. The *mysql* client program uses the same terminator
+    by default, so *mysql* misinterprets the definition and produces an error.
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想定义一个存储程序，但其主体包含`；`语句终止符的实例。*mysql*客户端程序默认使用相同的终止符，因此*mysql*会误解定义并产生错误。
+- en: Solution
+  id: totrans-25
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Redefine the *mysql* statement terminator with the `delimiter` command.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`delimiter`命令重新定义*mysql*语句终止符。
+- en: Discussion
+  id: totrans-27
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Each stored program is an object with a body that must be a single SQL statement.
+    However, these objects often perform complex operations that require several statements.
+    To handle this, write the statements within a `BEGIN` … `END` block that forms
+    a compound statement. That is, the block is itself a single statement but can
+    contain multiple statements, each terminated by a `;` character. The `BEGIN` …
+    `END` block can contain statements such as `SELECT` or `INSERT`, but compound
+    statements also permit conditional statements such as `IF` or `CASE`, looping
+    constructs such as `WHILE` or `REPEAT`, or other `BEGIN` … `END` blocks.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个存储程序都是一个具有主体的对象，该主体必须是一个单个SQL语句。然而，这些对象经常执行需要多个语句的复杂操作。为了处理这种情况，将语句写在形成复合语句的`BEGIN`
+    … `END`块内。也就是说，该块本身是一个单一语句，但可以包含多个语句，每个语句以`;`字符结尾。`BEGIN` … `END`块可以包含诸如`SELECT`或`INSERT`之类的语句，但复合语句还允许条件语句（如`IF`或`CASE`）、循环结构（如`WHILE`或`REPEAT`）或其他`BEGIN`
+    … `END`块。
+- en: 'Compound-statement syntax provides flexibility, but if you define compound-statement
+    objects within the *mysql* client, you quickly encounter a problem: each statement
+    within a compound statement must be terminated by a `;` character, but *mysql*
+    itself interprets `;` to figure out where statements end so that it can send them
+    one at a time to the server to be executed. Consequently, *mysql* stops reading
+    the compound statement when it sees the first `;` character, which is too early.
+    To handle this, tell *mysql* to recognize a different statement delimiter so that
+    it ignores `;` characters within the object body. Terminate the object itself
+    with the new delimiter, which *mysql* recognizes and then sends the entire object
+    definition to the server. You can restore the *mysql* delimiter to its original
+    value after defining the compound-statement object.'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复合语句语法提供了灵活性，但如果在*mysql*客户端内定义复合语句对象，您会很快遇到问题：每个复合语句对象内部的语句必须以`；`字符结尾，但*mysql*本身解释`；`以确定语句的结束位置，从而逐一将其发送到服务器执行。因此，当*mysql*看到第一个`；`字符时，它会停止读取复合语句，这太早了。为了解决这个问题，告诉*mysql*识别不同的语句分隔符，以便忽略对象主体内部的`；`字符。使用新的分隔符终止对象本身，*mysql*会识别并将整个对象定义发送到服务器。在定义复合语句对象后，可以将*mysql*分隔符恢复为其原始值。
+- en: The following example uses a stored function to illustrate how to change the
+    delimiter, but the principles apply to defining any type of stored program.
+  id: totrans-30
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下示例使用存储函数说明如何更改分隔符，但原则适用于定义任何类型的存储程序。
+- en: 'Suppose that you want to create a stored function that calculates and returns
+    the average size in bytes of mail messages listed in the `mail` table. The function
+    can be defined like this, where the body consists of a single SQL statement:'
+  id: totrans-31
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您想创建一个存储函数，计算并返回`mail`表中列出的邮件消息的平均大小（以字节为单位）。可以像这样定义函数，其中主体由单个SQL语句组成：
+- en: '[PRE3]'
+  id: totrans-32
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'The `RETURNS` `FLOAT` clause indicates the type of the function’s return value,
+    and `READS` `SQL` `DATA` indicates that the function reads but does not modify
+    data. The function body follows those clauses: a single `RETURN` statement that
+    executes a subquery and returns the resulting value to the caller. (Every stored
+    function must have at least one `RETURN` statement.)'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`RETURNS FLOAT`子句指示函数返回值的类型，而`READS SQL DATA`指示函数读取但不修改数据。函数主体遵循这些子句：一个执行子查询并将结果值返回给调用者的单个`RETURN`语句。（每个存储函数必须至少有一个`RETURN`语句。）'
+- en: 'In *mysql*, you can enter that statement as shown and there is no problem.
+    The definition requires just the single terminator at the end and none internally,
+    so no ambiguity arises. But suppose instead that you want the function to take
+    an argument naming a user that it interprets as follows:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在*mysql*中，您可以如上所示输入该语句，没有问题。定义只需要在末尾的单个终止符，而不需要内部终止符，因此不会产生歧义。但是，假设您希望函数接受一个用户命名的参数，并按以下方式解释它：
+- en: If the argument is `NULL`, the function returns the average size for all messages
+    (as before).
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果参数为`NULL`，函数返回所有消息的平均大小（与以前相同）。
+- en: If the argument is non-`NULL`, the function returns the average size for messages
+    sent by that user.
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果参数非`NULL`，函数返回该用户发送消息的平均大小。
+- en: 'To accomplish this, the function has a more complex body that uses a `BEGIN`
+    … `END` block:'
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了实现这一点，函数具有更复杂的主体，使用`BEGIN` … `END`块：
+- en: '[PRE4]'
+  id: totrans-38
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'If you try to define the function within *mysql* by entering that definition
+    as just shown, *mysql* improperly interprets the first semicolon in the function
+    body as ending the definition. Instead, use the `delimiter` command to change
+    the *mysql* delimiter, then restore the delimiter to its default value:'
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您尝试仅输入所示的定义在*mysql*内部定义函数，*mysql*会错误地将函数体中的第一个分号解释为结束定义。相反，使用`delimiter`命令更改*mysql*分隔符，然后将分隔符恢复为其默认值：
+- en: '[PRE5]'
+  id: totrans-40
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'After defining the stored function, invoke it the same way as a built-in function:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 定义存储函数后，调用它的方式与内置函数相同：
+- en: '[PRE6]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 11.2 Using Stored Functions to Simplify Calculations
+  id: totrans-43
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用存储函数简化计算（11.2章节）
+- en: Problem
+  id: totrans-44
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: A particular calculation to produce a value must be performed frequently by
+    different applications, but you don’t want to write the expression for it each
+    time it’s needed. Or a calculation is difficult to perform inline within an expression
+    because it requires conditional or looping logic. Or, if a calculation logic changes,
+    you do not want to perform changes in each applications that uses it.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 特定的计算以产生值必须由不同的应用程序频繁执行，但您不希望每次需要时都编写表达式来执行它。或者计算在表达式内联中难以执行，因为它需要条件或循环逻辑。或者，如果计算逻辑发生变化，您不希望在每个使用它的应用程序中进行更改。
+- en: Solution
+  id: totrans-46
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a stored function to have these details defined in the single place and
+    make the calculation easy to perform.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用存储函数可以在单个位置定义这些详细信息，并使计算变得简单易行。
+- en: Discussion
+  id: totrans-48
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Stored functions enable you to simplify your applications. Write the code that
+    produces a calculation result once in a function definition, then simply invoke
+    the function whenever you need to perform the calculation. Stored functions also
+    enable you to use more complex algorithmic constructs than are available when
+    you write a calculation inline within an expression. This section illustrates
+    how stored functions can be useful in these ways. (Granted, the example is not
+    *that* complex, but the principles used here apply to writing much more elaborate
+    functions.)
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储函数使您能够简化应用程序。编写一次在函数定义中生成计算结果的代码，然后在需要执行计算时简单调用该函数。存储函数还使您能够使用比在表达式内联写计算更复杂的算法结构。本节说明存储函数在这些方面如何有用。（当然，这个例子不是*那么*复杂，但这里使用的原则同样适用于编写更复杂的函数。）
+- en: Different states in the US charge different rates for sales tax. If you sell
+    goods to people from different states, you must charge tax using the rate appropriate
+    for customer state of residence. To handle tax computations, use a table that
+    lists the sales tax rate for each state, and a stored function that looks up the
+    tax rate given a state.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 美国不同州对销售税收取不同的费率。如果向来自不同州的人们销售商品，则必须使用适合客户居住州的税率来收税。要处理税收计算，使用一个列出每个州销售税率的表，并使用一个存储函数来查找给定州的税率。
+- en: 'To set up the `sales_tax_rate` table, use the *sales_tax_rate.sql* script in
+    the *tables* directory of the `recipes` distribution. The table has two columns:
+    `state` (a two-letter abbreviation), and `tax_rate` (a `DECIMAL` value rather
+    than a `FLOAT`, to preserve accuracy).'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要设置`sales_tax_rate`表，请使用`recipes`分发中`tables`目录下的*sales_tax_rate.sql*脚本。该表有两列：`state`（两字母缩写）和`tax_rate`（`DECIMAL`值而不是`FLOAT`，以保证精度）。
+- en: 'Define the rate-lookup function, `sales_tax_rate()`, as follows:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 定义查找税率的函数`sales_tax_rate()`如下：
+- en: '[PRE7]'
+  id: totrans-53
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: 'Suppose that the tax rates for Vermont and New York are 1 and 9 percent, respectively.
+    Try the function to check whether the tax rate is returned correctly:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设佛蒙特州和纽约州的税率分别为1%和9%。尝试函数以检查是否正确返回了税率：
+- en: '[PRE8]'
+  id: totrans-55
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'If you take sales from a location not listed in the table, the function cannot
+    determine the rate for it. In this case, the function assumes a tax rate of 0
+    percent:'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您从未在表中列出的位置进行销售，函数无法确定其税率。在这种情况下，函数假定税率为0%：
+- en: '[PRE9]'
+  id: totrans-57
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'The function handles states not listed using a `CONTINUE` handler for `NOT`
+    `FOUND`, which executes if a “No Data” condition occurs: if there is no row for
+    the given `state_param` value, the `SELECT` statement fails to find a sales tax
+    rate, the `CONTINUE` handler sets the rate to 0, and continues execution with
+    the next statement after the `SELECT`. (This handler is an example of stored routine
+    logic not available in inline expressions. [“Handling Errors Within Stored Programs”](#nch-routines-routines-handlers)
+    discusses handlers further.)'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果给定的`state_param`值没有行，`SELECT`语句无法找到销售税率，`CONTINUE`处理程序会设置税率为0，并在`SELECT`后继续执行下一个语句。（这个处理程序是内联表达式中不可用的存储例程逻辑的示例。[“在存储程序中处理错误”](#nch-routines-routines-handlers)进一步讨论了处理程序。）
+- en: 'To compute sales tax for a purchase, multiply the purchase price by the tax
+    rate. For example, for Vermont and New York, tax on a $150 purchase is:'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要计算购买的销售税，将购买价格乘以税率。例如，对于佛蒙特州和纽约州，对于一笔$150的购买，税额为：
+- en: '[PRE10]'
+  id: totrans-60
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'Or write another function that computes the tax for you:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者编写另一个函数来为您计算税款：
+- en: '[PRE11]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'And use it like this:'
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并像这样使用它：
+- en: '[PRE12]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 11.3 Using Stored Procedures to Produce Multiple Values
+  id: totrans-65
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 11.3 使用存储过程生成多个值
+- en: Problem
+  id: totrans-66
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to produce multiple values for an operation, but a stored function
+    can only return a single value.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望为操作生成多个值，但存储函数只能返回单个值。
+- en: Solution
+  id: totrans-68
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a stored procedure that has `OUT` or `INOUT` parameters, and pass user-defined
+    variables for those parameters when you invoke the procedure. A procedure does
+    not <q>return</q> a value the way a function does, but it can assign values to
+    those parameters so that the user-defined variables have the desired values when
+    the procedure returns.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用具有 `OUT` 或 `INOUT` 参数的存储过程，并在调用过程时为这些参数传递用户定义的变量。存储过程不像函数那样返回一个值，但它可以将值分配给这些参数，以便在过程返回时用户定义的变量具有所需的值。
+- en: Discussion
+  id: totrans-70
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Unlike stored function parameters, which are input values only, a stored procedure
+    parameter can be any of three types:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与仅限于输入值的存储函数参数不同，存储过程参数可以是以下三种类型之一：
+- en: An `IN` parameter is for input only. This is the default if you specify no type.
+  id: totrans-72
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`IN` 参数仅用于输入。如果未指定类型，则默认为此。'
+- en: An `INOUT` parameter is used to pass a value in, and can also pass a value out.
+  id: totrans-73
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`INOUT` 参数用于传递一个值进入，并且也可以传递一个值出去。'
+- en: An `OUT` parameter is used to pass a value out.
+  id: totrans-74
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`OUT` 参数用于传递一个值出去。'
+- en: Thus, to produce multiple values from an operation, you can use `INOUT` or `OUT`
+    parameters. The following example illustrates this, using an `IN` parameter for
+    input, and passing back three values via `OUT` parameters.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，为了从操作中生成多个值，您可以使用 `INOUT` 或 `OUT` 参数。以下示例说明了这一点，使用 `IN` 参数作为输入，并通过 `OUT`
+    参数传回三个值。
+- en: '[Recipe 11.1](#nch-routines-routines-compound-statement) shows an `avg_mail_size()`
+    function that returns the average mail message size for a given sender. The function
+    returns a single value. To produce additional information, such as the number
+    of messages and total message size, a function will not work. You could write
+    three separate functions, but that is cumbersome. Instead, use a single procedure
+    that retrieves multiple values about a given mail sender. The following procedure,
+    `mail_sender_stats()`, runs a query on the `mail` table to retrieve mail-sending
+    statistics about a given username, which is the input value. The procedure determines
+    how many messages that user sent, and the total and average sizes of the messages
+    in bytes, which it returns through three `OUT` parameters:'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[Recipe 11.1](#nch-routines-routines-compound-statement) 展示了一个 `avg_mail_size()`
+    函数，返回给定发件人的平均邮件大小。该函数只返回一个值。要生成额外的信息，例如消息数量和总消息大小，函数无法胜任。您可以编写三个单独的函数，但这很麻烦。相反，请使用一个单独的过程来检索关于给定发件人的多个值。以下过程
+    `mail_sender_stats()` 在 `mail` 表上运行查询，以获取有关输入值（用户名）的邮件发送统计信息，通过三个 `OUT` 参数返回该用户发送的消息数量，以及消息的总大小和平均大小（以字节为单位）：'
+- en: '[PRE13]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'To use the procedure, pass a string containing the username, and three user-defined
+    variables to receive the `OUT` values. After the procedure returns, access the
+    variable values:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用该过程，请传递包含用户名和三个用户定义变量以接收 `OUT` 值的字符串。过程返回后，访问变量值：
+- en: '[PRE14]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: This routine passes back calculation results. It’s also common to use `OUT`
+    parameters for diagnostic purposes such as status or error indicators.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此例程返回计算结果。通常也会使用 `OUT` 参数用于诊断目的，例如状态或错误指示器。
+- en: If you call `mail_sender_stats()` from within a stored program, you can pass
+    variables to it using routine parameters or program local variables, not just
+    user-defined variables.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果在存储程序中调用 `mail_sender_stats()`，您可以使用例程参数或程序本地变量传递变量给它，而不仅限于用户定义的变量。
+- en: 11.4 Using Triggers to Log Changes to a Table
+  id: totrans-82
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 11.4 使用触发器记录表格更改
+- en: Problem
+  id: totrans-83
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You have a table that maintains current values of items that you track (such
+    as auctions being bid on), but you’d also like to maintain a journal (history)
+    of changes to the table.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您有一个表格，用于维护您跟踪的项目（如正在竞标的拍卖）的当前值，但您还希望维护表格更改的日志（历史记录）。
+- en: Solution
+  id: totrans-85
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use triggers to <q>catch</q> table changes and write them to a separate log
+    table.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用触发器来捕获表格更改并将其写入单独的日志表。
+- en: Discussion
+  id: totrans-87
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Suppose that you conduct online auctions, and that you maintain information
+    about each currently active auction in a table that looks like this:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您进行在线拍卖，并在类似以下表格中维护每个当前活动拍卖的信息：
+- en: '[PRE15]'
+  id: totrans-89
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: The `auction` table contains information about the currently active auctions
+    (items being bid on and the current bid for each auction). When an auction begins,
+    insert a row into the table. For each bid on an item, update its `bid` column
+    so that as the auction proceeds, the `ts` column updates to reflect the most recent
+    bid time. When the auction ends, the `bid` value is the final price and the row
+    can be removed from the table.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`auction`表包含关于当前活动拍卖的信息（正在竞价的物品以及每个拍卖的当前出价）。当拍卖开始时，向表中插入一行。对于物品的每次出价，更新其`bid`列，以便随着拍卖的进行，`ts`列更新以反映最近的出价时间。当拍卖结束时，`bid`值是最终价格，并且可以从表中删除该行。'
+- en: To maintain a journal that shows all changes to auctions as they progress from
+    creation to removal, set up another table that serves to record a history of changes
+    to the auctions. This strategy can be implemented with triggers.
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了维护一个展示从创建到移除的拍卖所有变化的日志，设置另一个表，用于记录拍卖变化的历史。可以通过触发器来实现这一策略。
+- en: 'To maintain a history of how each auction progresses, use an `auction_log`
+    table with the following columns:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了记录每次拍卖的进展历史，请使用一个`auction_log`表，其包含以下列：
+- en: '[PRE16]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'The `auction_log` table differs from the `auction` table in two ways:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`auction_log`表与`auction`表有两个不同之处：'
+- en: It contains an `action` column to indicate for each row what kind of change
+    was made.
+  id: totrans-95
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 它包含一个`action`列，用于指示每行所做的变更类型。
+- en: The `id` column has a nonunique index (rather than a primary key, which requires
+    unique values). This permits multiple rows per `id` value because a given auction
+    can generate many rows in the log table.
+  id: totrans-96
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`id`列具有非唯一索引（而不是需要唯一值的主键）。这允许每个`id`值有多行，因为一个拍卖可以在日志表中生成多行。'
+- en: 'To ensure that changes to the `auction` table are logged to the `auction_log`
+    table, create a set of triggers. The triggers write information to the `auction_log`
+    table as follows:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了确保将`auction`表的更改记录到`auction_log`表中，请创建一组触发器。这些触发器将信息写入`auction_log`表，如下所示：
+- en: For inserts, log a row-creation operation showing the values in the new row.
+  id: totrans-98
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于插入操作，记录一次行创建操作，显示新行中的值。
+- en: For updates, log a row-update operation showing the new values in the updated
+    row.
+  id: totrans-99
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于更新操作，记录一次行更新操作，显示更新行中的新值。
+- en: For deletes, log a row-removal operation showing the values in the deleted row.
+  id: totrans-100
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于删除操作，记录一次行删除操作，显示已删除行中的值。
+- en: 'For this application, `AFTER` triggers are used because they activate only
+    after successful changes to the `auction` table. (`BEFORE` triggers might activate
+    even if the row-change operation fails for some reason.) The trigger definitions
+    look like this:'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于此应用程序，使用`AFTER`触发器，因为它们仅在对`auction`表的更改成功后激活。（如果某些原因导致行更改操作失败，则`BEFORE`触发器可能会激活。）触发器定义如下：
+- en: '[PRE17]'
+  id: totrans-102
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: The `INSERT` and `UPDATE` triggers use `NEW.`*`col_name`* to access the new
+    values being stored in rows. The `DELETE` trigger uses `OLD.`*`col_name`* to access
+    the existing values from the deleted row. The `INSERT` and `UPDATE` triggers use
+    `NOW()` to get the row-modification times; the `ts` column is initialized automatically
+    to the current date and time, but `NEW.ts` will not contain that value.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INSERT`和`UPDATE`触发器使用`NEW.`*`col_name`*来访问存储在行中的新值。`DELETE`触发器使用`OLD.`*`col_name`*来访问已删除行中的现有值。`INSERT`和`UPDATE`触发器使用`NOW()`来获取行修改时间；`ts`列会自动初始化为当前日期和时间，但`NEW.ts`不会包含该值。'
+- en: 'Suppose that an auction is created with an initial bid of five dollars:'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设拍卖以五美元的初始出价创建：
+- en: '[PRE18]'
+  id: totrans-105
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'The `SELECT` statement fetches the auction ID value to use for subsequent actions
+    on the auction. Then the item receives three more bids before the auction ends
+    and is removed:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SELECT`语句获取拍卖ID值，用于后续对拍卖的操作。然后物品在拍卖结束前接收到另外三个出价，并被移除：'
+- en: '[PRE19]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'At this point, no trace of the auction remains in the `auction` table, but
+    the `auction_log` table contains a complete history of what occurred:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此时，在`auction`表中不再有拍卖的痕迹，但是`auction_log`表中包含了发生的所有操作历史：
+- en: '[PRE20]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: With the strategy just outlined, the `auction` table remains relatively small,
+    and you can always find information about auction histories as necessary by looking
+    in the `auction_log` table.
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用刚刚概述的策略，`auction`表保持相对较小，您始终可以通过查看`auction_log`表来找到必要的拍卖历史信息。
+- en: 11.5 Using Events to Schedule Database Actions
+  id: totrans-111
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 11.5 使用事件调度数据库操作
+- en: Problem
+  id: totrans-112
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to set up a database operation that runs periodically without user
+    intervention.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望设置一个定期运行的数据库操作，无需用户干预。
+- en: Solution
+  id: totrans-114
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: MySQL provides an event scheduler that enables you to set up database operations
+    that run at times that you define. Create an event that executes according to
+    a schedule.
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL提供了一个事件调度器，使您能够设置在您定义的时间运行的数据库操作。创建一个根据时间表执行的事件。
+- en: Discussion
+  id: totrans-116
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: This section describes what you must do to use events, beginning with a simple
+    event that writes a row to a table at regular intervals.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节描述了使用事件所必须做的事情，从一个简单的事件开始，以便在规则间隔时间内向表中写入一行。
+- en: 'Begin with a table to hold the mark rows. It contains a `TIMESTAMP` column
+    (which MySQL will initialize automatically) and a column to store a message:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从一个表开始来保存标记行。它包含一个`TIMESTAMP`列（MySQL会自动初始化），还有一个用来存储消息的列：
+- en: '[PRE21]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'Our logging event will write a string to a new row. To set it up, use a `CREATE`
+    `EVENT` statement:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的日志事件将会向新行写入一个字符串。要设置它，使用`CREATE EVENT`语句：
+- en: '[PRE22]'
+  id: totrans-121
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: The `mark_insert` event causes the message `'-- MARK --'` to be logged to the
+    `mark_log` table every five minutes. Use a different interval for more or less
+    frequent logging.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`mark_insert`事件导致消息`''-- MARK --''`每五分钟记录到`mark_log`表中。为了更频繁或更少频繁地记录，可以使用不同的间隔。'
+- en: This event is simple and its body contains only a single SQL statement. For
+    an event body that executes multiple statements, use `BEGIN` … `END` compound-statement
+    syntax. In that case, if you use *mysql* to create the event, change the statement
+    delimiter while you define the event, as discussed in [Recipe 11.1](#nch-routines-routines-compound-statement).
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此事件很简单，其主体仅包含一个单个SQL语句。对于执行多个语句的事件主体，请使用`BEGIN`…`END`复合语句语法。在这种情况下，如果您使用*mysql*来创建事件，请在定义事件时更改语句分隔符，如[Recipe
+    11.1](#nch-routines-routines-compound-statement)所讨论的那样。
+- en: 'At this point, you should wait a few minutes and then select the contents of
+    the `mark_log` table to verify that new rows are being written on schedule. However,
+    if this is the first event that you’ve set up, you might find that the table remains
+    empty no matter how long you wait:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此时，您应该等待几分钟，然后选择`mark_log`表的内容，以验证是否按计划写入了新行。但是，如果这是您设置的第一个事件，无论等待多长时间，该表可能仍然为空：
+- en: '[PRE23]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'If that’s the case, very likely the event scheduler isn’t running (which was
+    its default state until version 8.0). Check the scheduler status by examining
+    the value of the `event_scheduler` system variable:'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果情况如此，很可能事件调度器未运行（这是其默认状态，直到版本8.0）。通过检查`event_scheduler`系统变量的值来检查调度器状态：
+- en: '[PRE24]'
+  id: totrans-127
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'To enable the scheduler interactively if it’s not running, execute the following
+    statement (which requires the `SYSTEM_VARIABLES_ADMIN` or, before version 8.0,
+    `SUPER` privilege):'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果调度器未运行，可以通过执行以下语句来交互地启用它（这需要`SYSTEM_VARIABLES_ADMIN`或在版本8.0之前需要`SUPER`权限）：
+- en: '[PRE25]'
+  id: totrans-129
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'That statement enables the scheduler, but only until the server shuts down.
+    To start the scheduler each time the server starts, enable the system variable
+    in your *my.cnf* option file:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那个语句启用调度器，但仅在服务器关闭之前。要在每次服务器启动时启动调度器，请在您的*my.cnf*选项文件中启用系统变量：
+- en: '[PRE26]'
+  id: totrans-131
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'Or use `SET PERSIST` statement to store the modified value of the variable:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或使用`SET PERSIST`语句存储变量的修改值：
+- en: '[PRE27]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'When the event scheduler is enabled, the `mark_insert` event eventually creates
+    many rows in the table. There are several ways that you can affect event execution
+    to prevent the table from growing forever:'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当事件调度器被启用时，`mark_insert`事件最终会在表中创建许多行。有几种方法可以影响事件执行，以防止表无限增长：
+- en: 'Drop the event:'
+  id: totrans-135
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 删除事件：
+- en: '[PRE28]'
+  id: totrans-136
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: This is the simplest way to stop an event from occurring. But if you want it
+    to resume later, you must re-create it.
+  id: totrans-137
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这是停止事件发生的最简单方法。但是，如果你希望稍后恢复它，必须重新创建它。
+- en: 'Disable event execution:'
+  id: totrans-138
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 禁用事件执行：
+- en: '[PRE29]'
+  id: totrans-139
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'That leaves the event in place but causes it not to run until you reactivate
+    it:'
+  id: totrans-140
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这样会保留事件但导致其不运行，直到您重新激活它：
+- en: '[PRE30]'
+  id: totrans-141
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'Let the event continue to run, but set up another event that <q>expires</q>
+    old `mark_log` rows. This second event need not run so frequently (perhaps once
+    a day). Its body should remove rows older than a given threshold. The following
+    definition creates an event that deletes rows that are more than two days old:'
+  id: totrans-142
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 让事件继续运行，但设置另一个事件来`<q>过期</q>`旧的`mark_log`行。这第二个事件不需要运行得如此频繁（也许一天运行一次）。其主体应删除超过给定阈值的旧行。以下定义创建一个事件，删除两天以上的行：
+- en: '[PRE31]'
+  id: totrans-143
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'If you adopt this strategy, you have cooperating events: one event that adds
+    rows to the `mark_log` table, and another that removes them. They act together
+    to maintain a log that contains recent rows but does not become too large.'
+  id: totrans-144
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如果采用这种策略，您有协作事件：一个事件向 `mark_log` 表添加行，另一个事件将其移除。它们共同维护一个包含最近行但不会变得过大的日志。
+- en: 11.6 Writing Helper Routines for Executing Dynamic SQL
+  id: totrans-145
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 11.6 为执行动态 SQL 编写辅助例程
+- en: Problem
+  id: totrans-146
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: 'Prepared SQL statements enable you to construct and execute SQL statements
+    on the fly, but you want to run them in one step instead of executing three commands:
+    `PREPARE`, `EXECUTE` and `DEALLOCATE PREPARE`.'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 准备好的 SQL 语句使您能够即兴构造和执行 SQL 语句，但您希望在一个步骤中运行它们，而不是执行三个命令：`PREPARE`、`EXECUTE` 和
+    `DEALLOCATE PREPARE`。
+- en: Solution
+  id: totrans-148
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Write a helper procedure that handles the drudgery.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 编写一个处理单调工作的辅助过程。
+- en: Discussion
+  id: totrans-150
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Using a prepared SQL statement involves three steps: preparation, execution,
+    and deallocation. For example, if the `@tbl_name` and `@val` variables hold a
+    table name and a value to insert into the table, you can create the table and
+    insert the value like this:'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用准备的 SQL 语句涉及三个步骤：准备、执行和释放。例如，如果 `@tbl_name` 和 `@val` 变量分别保存表名和要插入表中的值，您可以这样创建表并插入值：
+- en: '[PRE32]'
+  id: totrans-152
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'To ease the burden of going through those steps for each dynamically created
+    statement, use a helper routine that, given a statement string, prepares, executes,
+    and deallocates it:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了简化为每个动态创建的语句执行这些步骤的负担，使用一个辅助例程，它接受一个语句字符串，准备、执行和释放它：
+- en: '[PRE33]'
+  id: totrans-154
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'The `exec_stmt()` routine enables the same statements to be executed much more
+    simply:'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`exec_stmt()` 例程使得执行相同的语句变得更加简单：'
+- en: '[PRE34]'
+  id: totrans-156
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: '`exec_stmt()` uses an intermediary user-defined variable, `@_stmt_str`, because
+    `PREPARE` accepts a statement only when specified using either a literal string
+    or a user-defined variable. A statement stored in a routine parameter does not
+    work. (Avoid using `@_stmt_str` for your own purposes, at least if you expect
+    its value to persist across `exec_stmt()` invocations.)'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`exec_stmt()` 使用一个中间的用户定义变量 `@_stmt_str`，因为 `PREPARE` 只接受一个文字字符串或用户定义变量指定的语句。存储在例程参数中的语句不起作用。（至少在期望其值跨
+    `exec_stmt()` 调用持续时，避免将 `@_stmt_str` 用于您自己的目的。）'
+- en: 'Now, how about making it safer to construct statement strings that incorporate
+    values that might come from external sources, such as web-form input or command-line
+    arguments? Such information cannot be trusted and should be treated as a potential
+    SQL injection attack vector:'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，怎样才能更安全地构造包含可能来自外部源（如 Web 表单输入或命令行参数）的值的语句字符串？这些信息不能信任，应视为潜在的 SQL 注入攻击向量：
+- en: The `QUOTE()` function is available for quoting data values.
+  id: totrans-159
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`QUOTE()` 函数用于引用数据值。'
+- en: 'There is no corresponding function for identifiers, but it’s easy to write
+    one that doubles internal backticks and adds a backtick at the beginning and end:'
+  id: totrans-160
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于标识符没有相应的函数，但很容易编写一个函数，将内部反引号加倍，并在开头和结尾添加一个反引号：
+- en: '[PRE35]'
+  id: totrans-161
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'Revising the preceding example to ensure the safety of data values and identifiers,
+    we have:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 修改前述示例以确保数据值和标识符的安全性，我们有：
+- en: '[PRE36]'
+  id: totrans-163
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: A constraint on use of `exec_stmt()` is that not all SQL statements are eligible
+    for execution as prepared statements. See the *MySQL Reference Manual* for the
+    limitations.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `exec_stmt()` 的限制是并非所有的 SQL 语句都可以作为准备语句执行。有关限制，请参阅*MySQL参考手册*。
+- en: 11.7 Detecting <q>No More Rows</q> Conditions Using Condition Handlers
+  id: totrans-165
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 11.7 使用条件处理程序检测<q>没有更多的行</q>条件
+- en: Problem
+  id: totrans-166
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to detect <q>no more rows</q> conditions and gracefully handle them
+    instead of interrupting the stored program execution.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望检测到<q>没有更多的行</q>条件，并优雅地处理它们，而不是中断存储程序的执行。
+- en: Solution
+  id: totrans-168
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: 'One common use of condition handlers is to detect <q>no more rows</q> conditions.
+    To process a query result one row at a time, use a cursor-based fetch loop in
+    conjunction with a condition handler that catches the end-of-data condition. The
+    technique has these essential elements:'
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 条件处理程序的一个常见用途是检测<q>没有更多的行</q>条件。为了一次处理一个查询结果行，请与捕获数据结束条件的条件处理程序结合使用基于游标的取行循环。该技术具有这些基本元素：
+- en: A cursor associated with a `SELECT` statement that reads rows. Open the cursor
+    to start reading, and close it to stop.
+  id: totrans-170
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 与读取行的 `SELECT` 语句相关联的游标。打开游标开始读取，关闭游标停止。
+- en: A condition handler that activates when the cursor reaches the end of the result
+    set and raises an end-of-data condition (`NOT` `FOUND`). We used a similar handler
+    in [Recipe 11.2](#nch-routines-routines-encapsulation).
+  id: totrans-171
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当游标到达结果集末尾并引发数据末尾条件（`NOT FOUND`）时激活的条件处理程序。我们在[Recipe 11.2](#nch-routines-routines-encapsulation)中使用了类似的处理程序。
+- en: A variable that indicates loop termination. Initialize the variable to `FALSE`,
+    then set it to `TRUE` within the condition handler when the end-of-data condition
+    occurs.
+  id: totrans-172
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个指示循环终止的变量。将该变量初始化为`FALSE`，然后在条件处理程序中，当出现数据末尾条件时将其设置为`TRUE`。
+- en: A loop that uses the cursor to fetch each row and exits when the loop-termination
+    variable becomes `TRUE`.
+  id: totrans-173
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用游标的循环，逐行抓取并在循环终止变量变为`TRUE`时退出。
+- en: Discussion
+  id: totrans-174
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'The following example implements a fetch loop that processes the _ch `states`
+    table row by row to calculate the total US population:'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下示例实现了一个抓取循环，逐行处理_ch `states`表以计算总的美国人口：
+- en: '[PRE37]'
+  id: totrans-176
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: '[![1](Images/1.png)](#co_nch-routines-routines-end-of-data_done_co)'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![1](Images/1.png)](#co_nch-routines-routines-end-of-data_done_co)'
+- en: Variable `done` is used as a flag that checked when the procedure decides if
+    it needs to continue executing or stop.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 变量`done`用作标志，当过程决定是否继续执行或停止时进行检查。
+- en: '[![2](Images/2.png)](#co_nch-routines-routines-end-of-data_query_co)'
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![2](Images/2.png)](#co_nch-routines-routines-end-of-data_query_co)'
+- en: The cursor for the query that fetching each state population.
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用于抓取每个州人口的查询的游标。
+- en: '[![3](Images/3.png)](#co_nch-routines-routines-end-of-data_ch_co)'
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![3](Images/3.png)](#co_nch-routines-routines-end-of-data_ch_co)'
+- en: When MySQL encounters not found error it stops execution. To prevent this we
+    declared a `CONTINUE` handler that sets value of the variable `done` to value
+    `TRUE`.
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当MySQL遇到未找到错误时，它会停止执行。为了防止这种情况，我们声明了一个`CONTINUE`处理程序，该处理程序将变量`done`的值设置为`TRUE`。
+- en: '[![4](Images/4.png)](#co_nch-routines-routines-end-of-data_fetch_co)'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![4](Images/4.png)](#co_nch-routines-routines-end-of-data_fetch_co)'
+- en: We fetch each state population into variable `state_pop`.
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将每个州的人口抓取到变量`state_pop`中。
+- en: '[![5](Images/5.png)](#co_nch-routines-routines-end-of-data_leave_co)'
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![5](Images/5.png)](#co_nch-routines-routines-end-of-data_leave_co)'
+- en: If variable `done` is not true we continue the loop, otherwise leaving it.
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果变量`done`不为真，则继续循环，否则退出循环。
+- en: '[![6](Images/6.png)](#co_nch-routines-routines-end-of-data_total_co)'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![6](Images/6.png)](#co_nch-routines-routines-end-of-data_total_co)'
+- en: We add value of the variable `state_pop` to the variable `total_pop` that represents
+    population of the United States.
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将变量`state_pop`的值添加到代表美国人口的变量`total_pop`中。
+- en: '[![7](Images/7.png)](#co_nch-routines-routines-end-of-data_result_co)'
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![7](Images/7.png)](#co_nch-routines-routines-end-of-data_result_co)'
+- en: After leaving the loop we print value of the variable `total_pop`.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 离开循环后，打印变量`total_pop`的值。
+- en: 'While this example is mostly for the illustration because in any real application
+    you’d use an aggregate function to calculate the total. But that also gives us
+    an independent check on whether the fetch loop calculates the correct value:'
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然此示例主要用于说明，在任何实际应用程序中，您将使用聚合函数来计算总数。但这也为我们提供了一个独立的检查，以确定抓取循环是否计算了正确的值：
+- en: '[PRE38]'
+  id: totrans-192
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: '`NOT` `FOUND` handlers are also useful for checking whether `SELECT` … `INTO`
+    *`var_name`* statements return any results. [Recipe 11.2](#nch-routines-routines-encapsulation)
+    shows an example.'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`NOT FOUND`处理程序也非常有用，用于检查`SELECT ... INTO *var_name*`语句是否返回任何结果。[Recipe 11.2](#nch-routines-routines-encapsulation)显示了一个示例。'
+- en: 11.8 Catching and Ignoring Errors with Condition Handlers
+  id: totrans-194
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 11.8 捕获并忽略带条件处理程序的错误
+- en: Problem
+  id: totrans-195
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to ignore benign errors or prevent errors from nonexistent users.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望忽略良性错误或防止不存在用户的错误。
+- en: Solution
+  id: totrans-197
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a condition handler to catch and handle the error you want to ignore.
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用条件处理程序捕获和处理您想要忽略的错误。
+- en: Discussion
+  id: totrans-199
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'If you consider an error benign, you can use a handler to ignore it. For example,
+    many `DROP` statements in MySQL have an `IF` `EXISTS` clause to suppress errors
+    if objects to be dropped do not exist. But some `DROP` statements have no such
+    clause and thus no way to suppress errors. `DROP` `INDEX` is one of these:'
+  id: totrans-200
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您认为错误是良性的，可以使用处理程序来忽略它。例如，MySQL中的许多`DROP`语句都有一个`IF EXISTS`子句，以便在要删除的对象不存在时抑制错误。但有些`DROP`语句没有这样的子句，因此无法抑制错误。`DROP
+    INDEX`就是其中之一：
+- en: '[PRE39]'
+  id: totrans-201
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'To prevent errors from occurring for nonexistent users, invoke `DROP` `INDEX`
+    within a stored procedure that catches code 1091 and ignores it:'
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了防止针对不存在用户出现错误，请在捕获代码1091并忽略它的存储过程中调用`DROP INDEX`：
+- en: '[PRE40]'
+  id: totrans-203
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'If the index does not exist, `drop_index()` writes a message within the condition
+    handler, but no error occurs:'
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果索引不存在，`drop_index()`在条件处理程序中写入消息，但不会发生错误：
+- en: '[PRE41]'
+  id: totrans-205
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'To ignore the error completely, write the handler using an empty `BEGIN` …
+    `END` block:'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要完全忽略错误，请使用空的`BEGIN` … `END`块编写处理程序：
+- en: '[PRE42]'
+  id: totrans-207
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: Another approach is to generate a warning, as demonstrated in the next recipe.
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种方法是生成警告，如下一个示例所示。
+- en: 11.9 Raising Errors and Warnings
+  id: totrans-209
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 11.9 抛出错误和警告
+- en: Problem
+  id: totrans-210
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to raise error for statements, valid for MySQL but not valid for the
+    application you are working on.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望对语句引发错误，对MySQL有效但不适用于您正在处理的应用程序。
+- en: Solution
+  id: totrans-212
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: To produce your own errors within a stored program when you detect something
+    awry, use the `SIGNAL` statement.
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在检测到异常情况时，在存储程序内部生成自己的错误，请使用`SIGNAL`语句。
+- en: Discussion
+  id: totrans-214
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: This recipe shows some examples, and [Recipe 11.11](#nch-routines-preprocess-reject)
+    demonstrates use of `SIGNAL` within a trigger to reject bad data.
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本示例展示了一些示例，而[第11.11节](#nch-routines-preprocess-reject)展示了在触发器中使用`SIGNAL`拒绝错误数据的用法。
+- en: 'Suppose that an application performs a division operation for which you expect
+    that the divisor will never be zero, and that you want to produce an error otherwise.
+    You might expect that since version 5.7.4 SQL Mode `ERROR_FOR_DIVISION_BY_ZERO`
+    is enabled by default you will get this behavior automatically. But that works
+    only within the context of data-modification operations such as `INSERT`. In other
+    contexts, division by zero produces only a warning:'
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设一个应用程序执行除法操作，您期望除数永远不为零，否则您希望引发错误。 您可能希望自从版本5.7.4起，默认启用SQL模式`ERROR_FOR_DIVISION_BY_ZERO`将自动执行此行为。
+    但是，仅在数据修改操作（例如`INSERT`）的上下文中，除零会产生警告：
+- en: '[PRE43]'
+  id: totrans-217
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'To ensure a divide-by-zero error in any context, write a function that performs
+    the division but checks the divisor first and uses `SIGNAL` to raise an error
+    if the <q>can’t happen</q> condition occurs:'
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确保在任何情况下出现除零错误，请编写一个函数执行除法，但首先检查除数，并使用`SIGNAL`在出现“无法发生”条件时引发错误：
+- en: '[PRE44]'
+  id: totrans-219
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: 'Test the function in a nonmodification context to verify that it produces an
+    error:'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在非修改上下文中测试该函数，以验证它是否会产生错误：
+- en: '[PRE45]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: The `SIGNAL` statement specifies a SQLSTATE value plus an optional `SET` clause
+    you can use to assign values to error attributes. `MYSQL_ERRNO` corresponds to
+    the MySQL-specific error code, and `MESSAGE_TEXT` is a string of your choice.
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SIGNAL`语句指定了SQLSTATE值以及一个可选的`SET`子句，您可以使用它来分配错误属性的值。 `MYSQL_ERRNO`对应于MySQL特定的错误代码，而`MESSAGE_TEXT`是您选择的字符串。'
+- en: '`SIGNAL` can also raise warning conditions, not just errors. The following
+    routine, `drop_user_warn()`, is similar to the `drop_user()` routine shown earlier,
+    but instead of printing a message for nonexistent users, it generates a warning
+    that can be displayed with `SHOW` `WARNINGS`. SQLSTATE value `01000` and error
+    1642 indicate a user-defined unhandled exception, which the routine signals along
+    with an appropriate message:'
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`SIGNAL`还可以引发警告条件，而不仅仅是错误。 下面的例程`drop_user_warn()`类似于之前显示的`drop_user()`例程，但是不会为不存在的用户打印消息，而是生成一个警告，可以使用`SHOW`
+    `WARNINGS`显示。 SQLSTATE值`01000`和错误1642指示用户定义的未处理异常，该例程会发出该异常，并附上适当的消息：'
+- en: '[PRE46]'
+  id: totrans-224
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: 'Give it a test:'
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 进行测试：
+- en: '[PRE47]'
+  id: totrans-226
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: 11.10 Logging Errors by Accessing the Diagnostic Area
+  id: totrans-227
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 11.10 通过访问诊断区域记录错误
+- en: Problem
+  id: totrans-228
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to log all errors that your stored routine hits.
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望记录存储过程遇到的所有错误。
+- en: Solution
+  id: totrans-230
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Access the diagnostic area using the *GET DIAGNOSTICS*statement. Then, save
+    the error information into variables, and use them to log errors..
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用*GET DIAGNOSTICS*语句访问诊断区域。 然后，将错误信息保存到变量中，并使用它们来记录错误。
+- en: Discussion
+  id: totrans-232
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: You may not only gracefully handle errors inside the stored routine but also
+    log them, so you can examine them and fix your application to prevent similar
+    ones in the future.
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您不仅可以在存储过程内部优雅地处理错误，还可以记录这些错误，以便查看并修复应用程序，以防止将来出现类似的错误。
+- en: Table `movies_actors_link` is used in the recipe [Recipe 16.6](ch16.xhtml#nch-multi-multi-many-to-many)
+    to demonstrate many-to-many relationship. It contains `id` of the movies and movie
+    actors that are stored in tables `movies` and `movies_actors`. Both columns are
+    defined with the property `NOT NULL`. Each combination of `movie_id` and `actor_id`
+    should be unique. While [Recipe 16.6](ch16.xhtml#nch-multi-multi-many-to-many)
+    does not define foreign keys ([“Using Foreign Keys to Enforce Referential Integrity
+    and Prevent Mismatches”](ch16.xhtml#nch-multi-multi-fks)) we may define them,
+    so MySQL will reject values that do not have corresponding entries in the referenced
+    tables.
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表`movies_actors_link`在配方[Recipe 16.6](ch16.xhtml#nch-multi-multi-many-to-many)中用于演示多对多关系。它包含存储在表`movies`和`movies_actors`中的电影和电影演员的`id`。这两列都使用属性`NOT
+    NULL`定义。每个`movie_id`和`actor_id`的组合应该是唯一的。虽然[Recipe 16.6](ch16.xhtml#nch-multi-multi-many-to-many)没有定义外键（[“使用外键强制执行引用完整性并防止不匹配”](ch16.xhtml#nch-multi-multi-fks)），但我们可以定义它们，这样MySQL会拒绝没有对应条目的值。
+- en: '[PRE48]'
+  id: totrans-235
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: When we execute a statement in the *mysql* client.
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当我们在*mysql*客户端执行语句时。
+- en: '[PRE49]'
+  id: totrans-237
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: Additionally, MySQL provides access to the diagnostic area, so you can store
+    values from it in the user-defined variables. Use command *GET DIAGNOSTICS* to
+    access the diagnostic area.
+  id: totrans-238
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另外，MySQL提供对诊断区域的访问，因此您可以将其值存储在用户定义的变量中。使用命令*GET DIAGNOSTICS*来访问诊断区域。
+- en: '[PRE50]'
+  id: totrans-239
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: Clause `CONDITION` specifies the condition number. Our query returned only one
+    condition, therefore we used number 1\. If a query returns multiple conditions
+    diagnostic area would contain data for each of conditions. It could happen, for
+    example, if a query produces multiple warnings.
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 条件`CONDITION`指定条件号码。我们的查询仅返回一个条件，因此我们使用编号1。如果查询返回多个条件，诊断区域将包含每个条件的数据。例如，如果查询生成多个警告，则可能会发生这种情况。
+- en: To access data, retrieved by the *GET DIAGNOSTICS*, simply select values of
+    the user-defined variables.
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要访问由*GET DIAGNOSTICS*检索的数据，只需选择用户定义变量的值。
+- en: '[PRE51]'
+  id: totrans-242
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: 'To record all such errors that users make when insert data into the table `movies_actors_link`
+    create a procedure that takes two arguments: `movie_id` and `actor_id` and store
+    error information in the log table.'
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记录所有这些错误，当用户插入数据到表`movies_actors_link`时，创建一个过程，它接受两个参数：`movie_id`和`actor_id`，并将错误信息存储在日志表中。
+- en: First create the table that will store information about errors.
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先创建将存储有关错误信息的表。
+- en: '[PRE52]'
+  id: totrans-245
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: Then define the procedure that will insert a row into the table `movies_actors_link`
+    and in case of an error will log details into the table `movies_actors_log`.
+  id: totrans-246
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后定义一个过程，将向表`movies_actors_link`插入一行，并在出现错误时将详细信息记录到表`movies_actors_log`中。
+- en: '[PRE53]'
+  id: totrans-247
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: '[![1](Images/1.png)](#co_nch-routines-routines-diagnostic-area-gd_declare_co)'
+  id: totrans-248
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![1](Images/1.png)](#co_nch-routines-routines-diagnostic-area-gd_declare_co)'
+- en: Declare variables that will store error number, SQLSTATE and the error message.
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 声明变量，用于存储错误编号、SQLSTATE和错误消息。
+- en: '[![2](Images/2.png)](#co_nch-routines-routines-diagnostic-area-gd_handler_co)'
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![2](Images/2.png)](#co_nch-routines-routines-diagnostic-area-gd_handler_co)'
+- en: Create a `CONTINUE HANDLER` for `SQLEXCEPTION`, so the procedure will first
+    log the error, then continue executing.
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为`SQLEXCEPTION`创建一个`CONTINUE HANDLER`，因此过程首先记录错误，然后继续执行。
+- en: '[![3](Images/3.png)](#co_nch-routines-routines-diagnostic-area-gd_store_co)'
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![3](Images/3.png)](#co_nch-routines-routines-diagnostic-area-gd_store_co)'
+- en: Store diagnostic information in the variables.
+  id: totrans-253
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将诊断信息存储在变量中。
+- en: '[![4](Images/4.png)](#co_nch-routines-routines-diagnostic-area-gd_log_co)'
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![4](Images/4.png)](#co_nch-routines-routines-diagnostic-area-gd_log_co)'
+- en: Log details about the error into the table `movies_actors_log`.
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 记录有关错误的详细信息到表`movies_actors_log`中。
+- en: '[![5](Images/5.png)](#co_nch-routines-routines-diagnostic-area-gd_resignal_co)'
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![5](Images/5.png)](#co_nch-routines-routines-diagnostic-area-gd_resignal_co)'
+- en: Use command *RESIGNAL* to raise the error for the client that called the procedure.
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用命令*RESIGNAL*来为调用过程的客户端引发错误。
+- en: '[![6](Images/6.png)](#co_nch-routines-routines-diagnostic-area-gd_insert_co)'
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[![6](Images/6.png)](#co_nch-routines-routines-diagnostic-area-gd_insert_co)'
+- en: The *INSERT* into the table `movies_actors_link` that will either succeeds or
+    raise an error.
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*INSERT*到表`movies_actors_link`，可能成功，也可能引发错误。'
+- en: To test the procedure call it few times with different parameters.
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了测试过程，用不同的参数调用它几次。
+- en: '[PRE54]'
+  id: totrans-261
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: As expected, because we used `RESIGNAL`, the procedure failed with errors. Still
+    all the errors were logged into the table `movies_actors_log` together with the
+    values that we tried and failed to insert and a timestamp when such a try happened.
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 预期地，因为我们使用了 `RESIGNAL`，该过程失败并显示错误。所有错误均已记录在 `movies_actors_log` 表中，连同我们尝试但未能插入的值及其尝试发生的时间戳。
+- en: '[PRE55]'
+  id: totrans-263
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: See Also
+  id: totrans-264
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: For additional information about diagnostic area, see [GET DIAGNOSTICS Statement](https://dev.mysql.com/doc/refman/8.0/en/get-diagnostics.html).
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关诊断区域的更多信息，请参阅 [GET DIAGNOSTICS 语句](https://dev.mysql.com/doc/refman/8.0/en/get-diagnostics.html)。
+- en: 11.11 Using Triggers to Preprocess or Reject Data
+  id: totrans-266
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 11.11 使用触发器预处理或拒绝数据
+- en: Problem
+  id: totrans-267
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: There are conditions you want to check for data entered into a table, but you
+    don’t want to write the validation logic for every `INSERT`.
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有些条件您希望检查插入表中的数据，但又不想为每个 `INSERT` 编写验证逻辑。
+- en: Solution
+  id: totrans-269
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Centralize the input-testing logic into a `BEFORE` `INSERT` trigger.
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将输入测试逻辑集中到 `BEFORE INSERT` 触发器中。
+- en: Discussion
+  id: totrans-271
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'You can use triggers to perform several types of input checks:'
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用触发器执行多种类型的输入检查：
+- en: Reject bad data by raising a signal. This gives you access to stored program
+    logic for more latitude in checking values than is possible with static constraints
+    such as `NOT` `NULL`.
+  id: totrans-273
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过引发信号来拒绝不良数据。这使您可以访问存储的程序逻辑，以便在检查值方面比使用静态约束（如 `NOT NULL`）更加宽松。
+- en: Preprocess values and modify them, if you won’t want to reject them outright.
+    For example, map out-of-range values to be in range or sanitize values to put
+    them in canonical form, if you permit entry of close variants.
+  id: totrans-274
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 预处理值并修改它们，如果您不想直接拒绝它们的话。例如，将超出范围的值映射到范围内，或者清理值以将其放置为规范形式，如果允许输入接近的变体。
+- en: 'Suppose that you have a table of contact information such as name, state of
+    residence, email address, and website URL:'
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您有一个包含姓名、居住州、电子邮件地址和网站 URL 的联系信息表：
+- en: '[PRE56]'
+  id: totrans-276
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: 'For entry of new rows, you want to enforce constraints or perform preprocessing
+    as follows:'
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于新行的输入，您希望强制执行约束或执行预处理如下：
+- en: State of residence values are two-letter US state codes, valid only if present
+    in the `states` table. (In this case, you could declare the column as an `ENUM`
+    with 50 members, so it’s more likely you’d use this lookup-table technique with
+    columns for which the set of valid values is arbitrarily large or changes over
+    time.)
+  id: totrans-278
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 居住州的值是两位字母的美国州代码，仅当其存在于 `states` 表中时才有效。（在这种情况下，您可以将列声明为具有 50 个成员的 `ENUM`，因此更有可能使用此查找表技术，用于列的有效值集合任意大或随时间变化的情况。）
+- en: Email address values must contain an `@` character to be valid.
+  id: totrans-279
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 电子邮件地址的值必须包含 `@` 字符才有效。
+- en: For website URLs, strip any leading `http://` or `https://` to save space.
+  id: totrans-280
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于网站 URL，去掉任何前导的 `http://` 或 `https://` 以节省空间。
+- en: 'To handle these requirements, create a `BEFORE` `INSERT` trigger:'
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了处理这些要求，创建一个 `BEFORE INSERT` 触发器：
+- en: '[PRE57]'
+  id: totrans-282
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: To also handle updates, define a `BEFORE` `UPDATE` trigger with the same body
+    as `bi_contact_info`.
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要同时处理更新，可以定义一个与 `bi_contact_info` 相同体的 `BEFORE UPDATE` 触发器。
+- en: 'Test the trigger by executing some `INSERT` statements to verify that it accepts
+    valid values, rejects bad ones, and trims URLs:'
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过执行一些 `INSERT` 语句来测试触发器，以验证它接受有效值，拒绝不良值并修剪 URL：
+- en: '[PRE58]'
+  id: totrans-285
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'

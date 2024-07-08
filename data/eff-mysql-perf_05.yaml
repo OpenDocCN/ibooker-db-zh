@@ -1,0 +1,1657 @@
+- en: Chapter 5\. Sharding
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第5章\. 分片
+- en: On a single instance of MySQL, performance depends on queries, data, access
+    patterns, and hardware. When direct and indirect query optimization—assiduously
+    applied—no longer deliver acceptable performance, you have reached the relative
+    limit of single-instance MySQL performance for the application workload. To surpass
+    that relative limit, you must divide the application workload across multiple
+    instances of MySQL to achieve MySQL at scale.
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在单个 MySQL 实例上，性能取决于查询、数据、访问模式和硬件。当直接和间接的查询优化—认真应用后—不能提供可接受的性能时，你已经达到了应用负载下单实例
+    MySQL 性能的相对极限。为了超越这个相对极限，你必须将应用负载分布到多个 MySQL 实例中，以实现 MySQL 的扩展。
+- en: '*Sharding* a database is the common and widely used technique of *scaling out*
+    (or, *horizontal scaling*): increasing performance by distributing the workload
+    across multiple databases. (By contrast, *scaling up*, or *vertical scaling*,
+    increases performance by increasing hardware capacity.) Sharding divides one database
+    into many databases. Each database is a shard, and each shard is typically stored
+    on a separate MySQL instance running on separate hardware. Shards are physically
+    separate but logically the same (very large) database.'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*分片* 是常用的、广泛使用的技术，用于 *扩展* （或 *水平扩展* ）：通过在多个数据库之间分配工作负载来提高性能。相比之下， *扩展* （或 *垂直扩展*
+    ）通过增加硬件容量来提高性能。分片将一个数据库分成多个数据库。每个数据库都是一个分片，每个分片通常存储在运行在独立硬件上的独立 MySQL 实例上。分片在物理上是分开的，但在逻辑上是相同的（非常大的）数据库。'
+- en: 'MySQL at scale requires sharding. I’m going to repeat that sentence several
+    times in this chapter because it’s a fact that engineers hesitate to accept. Why?
+    Because sharding is not an intrinsic feature or capability of MySQL. Consequently,
+    sharding is complex and entirely application-specific, which means there’s no
+    easy solution. But don’t be discouraged: sharding is a solved problem. Engineers
+    have been scaling out MySQL for decades.'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 的扩展需要分片。在本章中，我将重复这句话多次，因为这是工程师不愿意接受的事实。为什么呢？因为分片不是 MySQL 的固有特性或能力。因此，分片是复杂的，并且完全依赖于应用程序，这意味着没有简单的解决方案。但不要气馁：分片是一个已解决的问题。几十年来，工程师们一直在扩展
+    MySQL。
+- en: 'This chapter introduces the basic mechanics of sharding to achieve MySQL at
+    scale. There are four major sections. The first explains why a single database
+    does not scale—why sharding is necessary. The second completes the analogy from
+    Chapters [3](ch03.html#ch03) and [4](ch04.html#ch04): why pebbles (database shards)
+    are better than boulders (huge databases). The third is a brief introduction to
+    the complex topic of relational database sharding. The fourth presents alternatives
+    to sharding.'
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章介绍了分片的基本机制，以实现 MySQL 的扩展。有四个主要部分。第一部分解释了为什么单个数据库不可扩展—为什么分片是必要的。第二部分完成了从第[3](ch03.html#ch03)章和第[4](ch04.html#ch04)章的类比：为什么小石子（数据库分片）比大石块（巨大数据库）更好。第三部分是关系数据库分片复杂主题的简要介绍。第四部分介绍了分片的替代方案。
+- en: Why a Single Database Does Not Scale
+  id: totrans-5
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 为什么单一数据库不可扩展
+- en: 'Nobody questions that a single application can overload a single server—that’s
+    why scaling out is necessary for all types of servers and applications, not just
+    MySQL. Sharding is therefore necessary because it’s how MySQL scales out: more
+    databases. But it’s reasonable to wonder why a single MySQL database does not
+    scale given that very powerful hardware is available and some benchmarks demonstrate
+    incredible performance on that hardware. Five reasons follow, beginning with the
+    most fundamental: the application workload can significantly outpace the speed
+    and capacity of single-server hardware.'
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 没有人质疑单个应用程序可能会使单个服务器超负荷—这就是为什么对所有类型的服务器和应用程序，不仅仅是 MySQL，都需要扩展的原因。因此，分片是必要的，因为这是
+    MySQL 扩展的方法：更多数据库。但合理地怀疑为什么单个 MySQL 数据库不可扩展，尤其是在有着非常强大的硬件和一些基准测试显示出色性能的情况下，是完全合理的。以下是五个原因，从最基本的开始：应用负载可能会显著超过单服务器硬件的速度和容量。
+- en: Application Workload
+  id: totrans-7
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 应用负载
+- en: '[Figure 5-1](#hw-no-load) is a simple illustration of hardware capacity on
+    a single server with zero load.'
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 5-1](#hw-no-load) 是在单个服务器上没有负载的硬件容量的简单说明。'
+- en: '![emsp 0501](assets/emsp_0501.png)'
+  id: totrans-9
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0501](assets/emsp_0501.png)'
+- en: Figure 5-1\. Hardware without load
+  id: totrans-10
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图5-1\. 无负载的硬件
+- en: '[Figure 5-1](#hw-no-load) is intentionally simple—but not simplistic—because
+    it subtly conveys a critically important point: *hardware capacity is finite and
+    limited*. The circle represents the limits of the hardware. Let’s presume the
+    hardware is dedicated to running a single MySQL instance for one application—no
+    virtualization, crypto coin mining, or other load. Everything that runs on the
+    hardware must fit inside the circle. Since this is dedicated hardware, the only
+    thing running on it is the application workload shown in [Figure 5-2](#hw-normal-load):
+    queries, data, and access patterns.'
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 5-1](#hw-no-load) 故意简单——但不简单——因为它微妙地传达了一个非常重要的观点：*硬件容量是有限的*。圆圈表示硬件的极限。假设硬件专门用于运行单个应用的
+    MySQL 实例——没有虚拟化、加密货币挖矿或其他负载。运行在硬件上的所有内容必须适合圆圈内。由于这是专用硬件，唯一运行的是显示在 [图 5-2](#hw-normal-load)
+    中的应用工作负载：查询、数据和访问模式。'
+- en: '![emsp 0502](assets/emsp_0502.png)'
+  id: totrans-12
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0502](assets/emsp_0502.png)'
+- en: Figure 5-2\. Hardware with standard MySQL workload
+  id: totrans-13
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 5-2\. 标准 MySQL 工作负载
+- en: 'It’s no coincidence that *Queries* refer to [Chapter 2](ch02.html#ch02), *Data*
+    to [Chapter 3](ch03.html#ch03), and *Access Patterns* to [Chapter 4](ch04.html#ch04).
+    These constitute the application workload: everything that causes load on MySQL
+    which, in turn, causes load on the hardware (CPU utilization, disk I/O, and so
+    forth). The box sizes are important: the bigger the box, the bigger the load.
+    In [Figure 5-2](#hw-normal-load), the workload is within the capacity of the hardware,
+    with a little room to spare because the operating system needs hardware resources,
+    too.'
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*查询* 指的是不是偶然的 [第二章](ch02.html#ch02)，*数据* 指的是 [第三章](ch03.html#ch03)，*访问模式* 指的是
+    [第四章](ch04.html#ch04)。这些构成了应用的工作负载：所有导致 MySQL 负载的因素，进而影响硬件（CPU 利用率、磁盘 I/O 等）。方框的大小很重要：方框越大，负载越重。在
+    [图 5-2](#hw-normal-load) 中，工作负载在硬件容量内，并且还有一些空余，因为操作系统也需要硬件资源。'
+- en: Queries, data, and access patterns are inextricable with respect to performance.
+    (I proved this with `TRUNCATE TABLE` in [“Indirect Query Optimization”](ch01.html#indirect-query-optimization).)
+    Data size is a common reason for scaling out because, as shown in [Figure 5-3](#hw-too-much-data),
+    it causes the workload to exceed the capacity of a single server.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询、数据和访问模式与性能密切相关。（我在 [“间接查询优化”](ch01.html#indirect-query-optimization) 中用 `TRUNCATE
+    TABLE` 证明了这一点。）数据大小是扩展的常见原因，因为正如 [图 5-3](#hw-too-much-data) 所示，它使工作负载超出了单个服务器的容量。
+- en: '![emsp 0503](assets/emsp_0503.png)'
+  id: totrans-16
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0503](assets/emsp_0503.png)'
+- en: Figure 5-3\. Hardware with too much data
+  id: totrans-17
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 5-3\. 数据过多的硬件
+- en: Data size cannot increase without eventually affecting queries and access patterns.
+    Buying a bigger hard drive won’t solve the problem because, as [Figure 5-3](#hw-too-much-data)
+    shows, there’s plenty of capacity for the data, but the data is not the only part
+    of the workload.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据大小的增加最终会影响查询和访问模式。购买更大的硬盘不会解决问题，因为正如 [图 5-3](#hw-too-much-data) 所示，虽然数据的容量充足，但数据并非工作负载的唯一部分。
+- en: '[Figure 5-4](#hw-all-data) illustrates a common misconception that leads engineers
+    to think that a single database can scale to maximum data size, which is currently
+    64 TB for a single InnoDB table.'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[图 5-4](#hw-all-data) 描述了一种常见的误解，即工程师们认为单个数据库可以扩展到最大数据大小，目前单个 InnoDB 表的最大大小为
+    64 TB。'
+- en: '![emsp 0504](assets/emsp_0504.png)'
+  id: totrans-20
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0504](assets/emsp_0504.png)'
+- en: Figure 5-4\. Hardware with only data (scaling misconception)
+  id: totrans-21
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 5-4\. 只有数据的硬件（缩放误解）
+- en: Data is only one part of the workload, and the other two parts (queries and
+    access patterns) cannot be ignored. Realistically, for acceptable performance
+    with a lot of data on a single sever, the workload must look like [Figure 5-5](#hw-large-data).
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据仅是工作负载的一部分，另外两部分（查询和访问模式）也不可忽视。实际上，为了在单个服务器上处理大量数据以获得可接受的性能，工作负载必须类似于 [图 5-5](#hw-large-data)。
+- en: '![emsp 0505](assets/emsp_0505.png)'
+  id: totrans-23
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0505](assets/emsp_0505.png)'
+- en: Figure 5-5\. Hardware with large data
+  id: totrans-24
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 5-5\. 数据量大的硬件
+- en: If the queries are simple and have exceptionally good indexes, and the access
+    patterns are trivial (for example, very low-throughput reads), then a single server
+    can store a lot of data. This isn’t just a clever illustration; real applications
+    have workloads like [Figure 5-5](#hw-large-data).
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果查询简单且具有异常良好的索引，并且访问模式是微不足道的（例如，非常低吞吐量的读取），那么单个服务器可以存储大量数据。这不仅仅是一个巧妙的插图；真实的应用程序具有类似
+    [图 5-5](#hw-large-data) 的工作负载。
+- en: These five illustrations reveal that a single database cannot scale because
+    the application workload—which comprises queries, data, and access patterns—must
+    fit within the capacity of the hardware. After [“Better, Faster Hardware!”](ch02.html#better-faster-hardware)
+    and [“Better, Faster Hardware?”](ch04.html#better-faster-hardware-again), you
+    already know that hardware won’t solve this problem.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这五个例子揭示了单个数据库无法扩展的原因，因为应用程序工作负载——包括查询、数据和访问模式——必须适应硬件的容量。在[“更好、更快的硬件！”](ch02.html#better-faster-hardware)和[“更好、更快的硬件？”](ch04.html#better-faster-hardware-again)之后，您已经知道硬件无法解决这个问题。
+- en: MySQL at scale requires sharding because application workloads can significantly
+    outpace the speed and capacity of single-server hardware.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL在规模化时需要分片，因为应用程序工作负载可能远远超过单台服务器硬件的速度和容量。
+- en: Benchmarks Are Synthetic
+  id: totrans-28
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 基准测试是合成的。
+- en: Benchmarks use synthetic (fake) queries, data, and access patterns. These are
+    necessarily fake because they’re not real applications and certainly not your
+    application. Therefore, benchmarks cannot tell you—or even suggest—how your application
+    will perform and scale—even on the same hardware. Moreover, benchmarks largely
+    focus on one or more access pattern (see [“Data Access Patterns”](ch04.html#access-patterns)),
+    which produces a workload like the one pictured in [Figure 5-6](#hw-benchmark).
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基准测试使用合成（虚假）查询、数据和访问模式。这些是必然虚假的，因为它们不是真正的应用程序，当然也不是您的应用程序。因此，基准测试不能告诉您——甚至也不能建议——您的应用程序将如何执行和扩展——即使在相同的硬件上。此外，基准测试主要集中在一个或多个访问模式（参见[“数据访问模式”](ch04.html#access-patterns)），这会产生一个类似于[图5-6](#hw-benchmark)中所示的工作负载。
+- en: '![emsp 0506](assets/emsp_0506.png)'
+  id: totrans-30
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0506](assets/emsp_0506.png)'
+- en: Figure 5-6\. Hardware with benchmark workload
+  id: totrans-31
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图5-6\. 带有基准工作负载的硬件
+- en: Most applications don’t have a workload where performance is dominated by one
+    or more access pattern. But it’s common for benchmarks because it allows MySQL
+    experts to stress and measure a particular aspect of MySQL. For example, if a
+    MySQL expert wants to measure the effectiveness of a new page flushing algorithm,
+    they might use a 100% write-only workload with a few perfectly optimized queries
+    and very little data.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数应用程序的工作负载并不是性能由一个或多个访问模式主导的情况。但基准测试却很常见，因为它允许MySQL专家对MySQL的特定方面进行压力测试和测量。例如，如果一个MySQL专家想要评估新页面刷新算法的有效性，他们可能会使用一个完全优化的写入工作负载，包含几个完美优化的查询和非常少的数据。
+- en: 'But let me be perfectly clear: benchmarks are important and necessary for MySQL
+    experts and the MySQL industry. (As mentioned in [“MySQL Tuning”](ch02.html#mysql-tuning),
+    benchmarking is laboratory work.) Benchmarks are used to do the following:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但让我非常清楚：对于MySQL专家和MySQL行业来说，基准测试非常重要且必不可少。（如[“MySQL调优”](ch02.html#mysql-tuning)中提到，基准测试是实验室工作。）基准测试用于以下目的：
+- en: Compare hardware (one storage device against another)
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 比较硬件（比较一个存储设备和另一个）
+- en: Compare server optimizations (one flushing algorithm against another)
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 比较服务器优化（比较一个刷新算法和另一个）
+- en: Compare different data stores (MySQL versus PostgreSQL—the classic rivalry)
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 比较不同的数据存储（MySQL与PostgreSQL——经典竞争）
+- en: Test MySQL at the limit (see [“Performance Destabilizes at the Limit”](ch04.html#perf-at-the-limit))
+  id: totrans-37
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在极限条件下测试MySQL（见[“性能在极限条件下不稳定”](ch04.html#perf-at-the-limit)）
+- en: 'That work is incredibly important for MySQL, and it’s why MySQL is capable
+    of amazing performance. But conspicuously absent from that list is anything related
+    to your application and its particular workload. Consequently, whatever amazing
+    MySQL performance you read or hear about in benchmarks will not translate to your
+    application, and the very same experts producing those benchmarks will tell you:
+    MySQL at scale requires sharding.'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这项工作对MySQL非常重要，也是MySQL能够实现惊人性能的原因。但在那份清单中显著缺失的是与您的应用程序及其特定工作负载相关的内容。因此，无论您在基准测试中读到或听到的MySQL性能有多惊人，都不会转化为您的应用程序，而且制作这些基准测试的专家也会告诉您：MySQL在规模化时需要分片。
+- en: Writes
+  id: totrans-39
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 写入
+- en: 'Writes are difficult to scale on a single MySQL instance for several reasons:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 单个MySQL实例上的写入因多种原因而难以扩展：
+- en: Single writable (source) instance
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 单个可写实例（源）。
+- en: 'For high availability, MySQL in production employs several instances connected
+    in a replication topology. But writes are effectively limited to a single MySQL
+    instance to avoid *write conflicts*: multiple writes to the same row at the same
+    time. MySQL supports multiple writable instances, but you will have a difficult
+    time finding anyone who uses this feature because write conflicts are too troublesome.'
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了实现高可用性，MySQL在生产环境中使用多个实例连接成复制拓扑。但写入实际上限制在单个MySQL实例，以避免*写入冲突*：同时向同一行进行多次写入。MySQL支持多个可写实例，但很难找到使用此功能的人，因为写入冲突太麻烦了。
+- en: Transactions and locking
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务和锁定
+- en: Transactions use locking to guarantee consistency—the *C* in an ACID-compliant
+    database. Writes must acquire row locks, and sometimes they lock significantly
+    more rows than you might expect—[“Row Locking”](ch08.html#row-locking) explains
+    why. Locks lead to lock contention, which makes access pattern trait [“Concurrency”](ch04.html#ap-concurrency)
+    a critical factor in how well writes scale. If the workload is write-heavy on
+    the same data, even the best hardware in the world won’t help.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务使用锁定来保证一致性——ACID兼容数据库中的*C*。写入必须获取行锁定，有时它们会锁定比预期更多的行——[“行锁定”](ch08.html#row-locking)解释了其中的原因。锁定会导致锁争用，这使得访问模式特征[“并发性”](ch04.html#ap-concurrency)成为评估写入扩展性的关键因素。如果工作负载在相同数据上写入较多，即使使用世界上最好的硬件也无济于事。
+- en: Page flushing (durability)
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 页面刷新（持久性）
+- en: '*Page flushing* is the delayed process by which MySQL persists changes (from
+    writes) to disk. The entire process is too complex to explain in this section,
+    but the salient point is: page flushing is the bottleneck of write performance.
+    Although MySQL is very efficient, the process is inherently slow because it must
+    ensure that data is *durable*: persisted to disk. Without durability, writes are
+    incredibly fast due to caching, but durability is a requirement because all hardware
+    crashes eventually.'
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*页面刷新*是MySQL将更改（来自写入）延迟持久化到磁盘的过程。整个过程过于复杂，无法在本节中详细解释，但关键点在于：页面刷新是写入性能的瓶颈。尽管MySQL非常高效，但这个过程本质上很慢，因为它必须确保数据是*持久*的：持久化到磁盘。没有持久性，由于缓存，写入速度非常快，但持久性是必需的，因为所有硬件最终都会崩溃。'
+- en: Write amplification
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 写入放大
+- en: '*Write amplification* refers to writes requiring more writes. Secondary indexes
+    are the simplest example. If a table has 10 secondary indexes, a single write
+    could write 10 additional writes to update those indexes. Page flushing (durability)
+    incurs additional writes, and replication incurs even more writes. This is not
+    unique to MySQL; it affects other data stores, too.'
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*写入放大*是指需要更多写入的写入过程。次要索引是最简单的例子。如果一个表有10个次要索引，一次写入可能需要写入额外的10次以更新这些索引。页面刷新（持久性）会导致额外的写入，复制甚至会导致更多的写入。这不仅仅适用于MySQL；其他数据存储系统也会受到影响。'
+- en: Replication
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制
+- en: 'Replication is required for high availability, so all writes must replicate
+    to other MySQL instances—replicas. [Chapter 7](ch07.html#ch07) addresses replication,
+    but here are a few salient points with respect to scaling writes. MySQL supports
+    asynchronous replication, semisynchronous replication, and [Group Replication](https://oreil.ly/oeJtD).
+    Asynchronous replication has a small effect on write performance because data
+    changes are written and flushed to binary logs on transaction commit—but after
+    that, there’s no effect. Semisynchronous replication has a greater effect on write
+    performance: it attenuates transaction throughput to network latency because every
+    commit must be acknowledged by at least one replica. Since network latency measures
+    in milliseconds, the effect on write performance is noticeable, but it’s a worthwhile
+    trade-off because it guarantees that no committed transactions are lost, which
+    is not true for asynchronous replication. Group Replication is more complex and
+    it’s more difficult to scale writes. For various reasons explained in [Chapter 7](ch07.html#ch07),
+    I do not cover Group Replication in this book.'
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 备份对高可用性至关重要，因此所有写操作必须复制到其他MySQL实例（副本）。[第7章](ch07.html#ch07)讨论了复制，但以下是关于扩展写入的几个关键点。MySQL支持异步复制、半同步复制和[Group
+    Replication](https://oreil.ly/oeJtD)。异步复制对写入性能影响较小，因为数据更改在事务提交时写入和刷新到二进制日志，但此后没有影响。半同步复制对写入性能影响更大：它通过每次提交必须由至少一个副本确认来减弱事务吞吐量到网络延迟。由于网络延迟以毫秒计，这对写入性能的影响是显著的，但这是一个值得的权衡，因为它保证了没有提交的事务会丢失，而异步复制则不能保证。Group
+    Replication更为复杂，扩展写入更为困难。由于在[第7章](ch07.html#ch07)中解释的各种原因，本书不涵盖Group Replication。
+- en: These five reasons are formidable challenges to scaling writes on a single MySQL
+    instance—even for MySQL experts. MySQL at scale requires sharding to overcome
+    these challenges and scale write performance.
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这五个原因对于在单个MySQL实例上扩展写入是巨大的挑战，即使对于MySQL专家也是如此。在规模化的MySQL中，需要分片来克服这些挑战并扩展写入性能。
+- en: Schema Changes
+  id: totrans-52
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 模式更改
+- en: Schema changes are more than routine; they’re practically required. Furthermore,
+    it’s not uncommon for the largest tables to change frequently because their size
+    reflects their usage, and usage leads to development, which leads to changes.
+    Even if you manage to overcome all other obstacles and scale a single table to
+    an enormous size, the time required to change that table will be untenable. How
+    long? It can take days or weeks to alter a large table.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 模式更改不仅仅是例行事务；实际上，它们几乎是必须的。此外，最大的表经常发生变化并不罕见，因为它们的大小反映了它们的使用情况，而使用情况则导致开发，从而导致变化。即使您设法克服所有其他障碍并将单个表扩展到极大的大小，更改该表所需的时间也将是不可行的。需要多长时间？更改大表可能需要数天甚至数周。
+- en: The long wait is not a problem for MySQL or the application because online schema
+    change (OSC) tools like [pt-online-schema-change](https://oreil.ly/tSrrr) and
+    [`gh-ost`](https://oreil.ly/nUuvv) and certain built-in [online DDL operations](https://oreil.ly/5KiA7)
+    can run for days or weeks while allowing the application to function normally—​which
+    is why they’re called *online*. But it is a problem for engineers developing the
+    application because waiting that long does not go unnoticed; rather, it tends
+    to become an increasingly annoying blocker to you, other engineers, and possibly
+    other teams.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对MySQL或应用程序来说，长时间等待不是问题，因为在线模式更改（OSC）工具如[pt-online-schema-change](https://oreil.ly/tSrrr)和[`gh-ost`](https://oreil.ly/nUuvv)，以及某些内置的[在线DDL操作](https://oreil.ly/5KiA7)可以运行数天或数周，同时允许应用程序正常运行—​这就是为什么称之为*在线*。但对于开发应用程序的工程师来说，等待时间过长是个问题，因为这样做不仅不会被忽视，而且还会成为越来越让人恼火的障碍，影响你、其他工程师，甚至可能影响其他团队。
+- en: 'For example, just a few weeks ago I helped a team alter several tables, each
+    with one *billion* rows, that had failed to complete after nearly two weeks of
+    trying (for various technical reasons not related to MySQL). The blocker went
+    far beyond the table or the team: long story short, it blocked an organization-level
+    goal—months of work by several other teams. Luckily, the needed schema change
+    happened to be an instant [online DDL operation](https://oreil.ly/5KiA7). But
+    instant schema changes are exceedingly rare, so don’t count on them. Instead,
+    don’t let a table become so large that you cannot alter it in a reasonable amount
+    of time—whatever you, your team, and your company deem *reasonable*.'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，就在几周前，我帮助一个团队修改了几个表，每个表都有**十亿**行数据，尝试了近两周仍未成功（由于各种与 MySQL 无关的技术原因）。这个阻碍不仅仅影响了表或团队：长话短说，它阻碍了组织级别的目标——数月来其他几个团队的工作。幸运的是，需要的模式变更恰好是一个即时的[在线
+    DDL 操作](https://oreil.ly/5KiA7)。但即时的模式变更极为罕见，所以不要指望它们。相反，不要让一个表变得如此庞大，以至于你无法在合理的时间内进行修改——无论你、你的团队和你的公司认为什么是“合理”的。
+- en: MySQL at scale requires sharding because engineers cannot wait days or weeks
+    to change a schema.
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 的扩展需要分片，因为工程师不能等待几天或几周来修改模式。
+- en: Operations
+  id: totrans-57
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 操作
+- en: 'If you directly and indirectly optimize queries with exacting precision and
+    unmitigated meticulousness, you can scale up a single database to a size that
+    people won’t believe until you show them. But the illustrations of hardware and
+    workload in [“Application Workload”](#scale-up-app-workload) do not depict the
+    following *operations* (or *ops* as they’re more commonly called):'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您精确而严谨地优化查询，您可以将单个数据库扩展到人们看了都不会相信的大小。但在[“应用工作负载”](#scale-up-app-workload)中的硬件和工作负载的例子并未描述以下*操作*（或通常被称为*ops*）：
+- en: Backup and restore
+  id: totrans-59
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 备份和恢复
+- en: Rebuilding failed instances
+  id: totrans-60
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 重建失败的实例
+- en: Upgrading MySQL
+  id: totrans-61
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 升级 MySQL
+- en: MySQL shutdown, startup, and crash recovery
+  id: totrans-62
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL 的关闭、启动和崩溃恢复
+- en: The larger the database, the longer those operations take. As an application
+    developer, you might not manage any of those operations, but they will affect
+    you unless the engineers managing the database are exceptionally adept at—and
+    deeply committed to—zero-downtime operations. Cloud providers, for example, are
+    neither adept nor committed; they only attempt to minimize downtime, which can
+    mean anything from 20 seconds to hours of the database being offline.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库越大，这些操作就需要越长时间。作为应用程序开发人员，您可能不会管理这些操作中的任何一个，但除非管理数据库的工程师异常熟练并且深刻致力于零停机操作，否则它们将影响到您。例如，云提供商既不熟练也不致力于零停机操作；它们只试图将数据库的停机时间最小化，这可能意味着从
+    20 秒到几小时的数据库离线时间。
+- en: 'MySQL at scale requires sharding to efficiently manage the data, which leads
+    us to the next section: pebbles, not boulders.'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 的扩展需要分片来有效管理数据，这引导我们来到下一部分：鹅卵石，而非巨石。
+- en: Pebbles, Not Boulders
+  id: totrans-65
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 鹅卵石，而非巨石
+- en: 'It’s significantly easier to move pebbles than boulders. I belabor this analogy
+    because it’s apt: MySQL at scale is achieved by using many small instances. (To
+    refresh your memory on the analogy, read the introductory sections of Chapters
+    [3](ch03.html#ch03) and [4](ch04.html#ch04).)'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 移动鹅卵石比移动巨石要容易得多。我反复强调这个类比是因为它非常贴切：MySQL 的扩展是通过使用许多小实例来实现的。（想要回顾这个类比，请阅读第 [3](ch03.html#ch03)
+    和第 [4](ch04.html#ch04) 章的介绍部分。）
+- en: '*Small*, in this context, means two things:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个语境中，“小”有两个意思：
+- en: The application workload runs with acceptable performance on the hardware.
+  id: totrans-68
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 应用工作负载在硬件上以可接受的性能运行。
+- en: Standard operations (including OSC) take an acceptable amount of time.
+  id: totrans-69
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 标准操作（包括 OSC）需要合理的时间。
+- en: 'At first glance, that makes *small* seem so relative that it’s useless, but
+    in practice the limited range of hardware capacity significantly narrows the scope
+    to an almost objective measure. For example, at the time of this writing, I advise
+    engineers to limit the total data size of a single MySQL instance to 2 or 4 TB:'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 乍一看，这使得“小”看起来如此相对而毫无用处，但在实践中，有限的硬件容量显著缩小了范围，几乎成为客观衡量的标准。例如，在撰写本文时，我建议工程师将单个
+    MySQL 实例的总数据大小限制在 2 或 4 TB：
+- en: 2 TB
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 2 TB
+- en: For average queries and access patterns, commodity hardware is sufficient for
+    acceptable performance, and operations complete in reasonable time.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于平均查询和访问模式，通用硬件足以提供可接受的性能，并且操作在合理的时间内完成。
+- en: 4 TB
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 4 TB
+- en: For exceptionally optimized queries and access patterns, mid- to high-end hardware
+    is sufficient for acceptable performance, but operations might take slightly longer
+    than acceptable.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于经过特别优化的查询和访问模式，中高端硬件足以保证可接受的性能，但操作可能比预期稍慢一些。
+- en: These limits only reflect the hardware capacity that you can readily purchase
+    today (December 2021). Years ago, the limits were significantly lower. (Remember
+    when disks would physically spin and make crackling sounds? Weird.) Years from
+    now, the limits will be significantly greater.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些限制仅反映了您可以随时购买的硬件容量（2021年12月）。多年前，限制显著较低。（还记得磁盘物理旋转并发出咔哒声的时候吗？奇怪。）多年后，限制将显著增加。
+- en: 'Once a database is sharded, the number of shards is trivial to the application
+    because it accesses them programmatically. But to operations—especially the engineers
+    operating the MySQL instances—the *size* of shards is critically important: it’s
+    significantly easier to manage a 500 GB database than a 7 TB database. And since
+    operations are automated, it’s easy to mange any number of small databases.'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦数据库被分片，应用程序对分片数量的访问是程序化的。但对于运维人员——尤其是操作MySQL实例的工程师来说——分片的*大小*至关重要：管理一个500GB数据库比管理一个7TB数据库要容易得多。由于运维是自动化的，管理任意数量的小数据库也很容易。
+- en: MySQL performance is truly unlimited when sharded and operated as many small
+    databases—pebbles, not boulders.
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL在进行分片和操作许多小数据库（鹅卵石而非巨石）时的性能确实是无限的。
+- en: 'Sharding: A Brief Introduction'
+  id: totrans-78
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 分片：简介
+- en: The solution and implementation of sharding are necessarily coupled to the application
+    workload. This is true even for the alternative solutions presented in the next
+    section, [“Alternatives”](#shard-alt). Consequently, no one can tell you how to
+    shard, and there are no fully-automated solutions. Prepare for a long but worthwhile
+    journey.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分片的解决方案和实施与应用程序工作负载紧密相关。即使是下一节提到的替代解决方案[“替代方案”](#shard-alt)，情况也是如此。因此，没有人可以告诉您如何进行分片，并且没有完全自动化的解决方案。做好漫长但值得的旅程准备。
+- en: 'Sharding has two paths from idea to implementation:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分片有两种从想法到实施的路径：
+- en: Designing a new application for sharding
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 设计用于分片的新应用程序
+- en: The first and rarest path is when an application is designed from the beginning
+    for sharding. If you’re developing a new application, I highly encourage you to
+    take this path *if needed* because it’s incomparably easier to shard from the
+    start than to migrate later.
+  id: totrans-82
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一种也是最罕见的路径是从一开始就为分片设计应用程序。如果您正在开发新应用程序，我强烈建议您选择*如果需要*采用这种方法，因为从一开始进行分片比以后迁移要容易得多。
+- en: 'To determine whether sharding is needed, estimate data size and growth for
+    the next four years. If the estimated data size in four years fits within the
+    capacity of your hardware *today*, then sharding might not be needed. I call this
+    the *four-year fit*. Also try to estimate the four-year fit for the other two
+    aspects of the application workload: queries and access patterns. These are difficult
+    to estimate (and likely to change) for a new application, but you should have
+    some ideas and expectations because they’re a necessary part of designing and
+    implementing an application.'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定是否需要分片，请估算未来四年的数据大小和增长情况。如果估算的四年后数据大小仍在您*今天*硬件的容量范围内，则可能不需要分片。我称之为*四年适配*。还要尝试估算应用工作负载的另外两个方面的四年适配：查询和访问模式。对于新应用程序来说，这些很难估算（而且可能会变化），但您应该有一些想法和期望，因为它们是设计和实施应用程序的必要部分。
+- en: 'Also consider whether the data set is bounded or unbounded. A *bounded data
+    set* has an intrinsic maximum size or intrinsically slow growth. For example,
+    the number of new smart phones released every year is very small, and its growth
+    is intrinsically slow because there’s no reason to believe that manufacturers
+    will ever release thousands of new phones per year. An *unbounded data set* has
+    no intrinsic limits. For example, pictures are unbounded: people can post unlimited
+    pictures. Since hardware capacity is bounded, applications should always define
+    and impose extrinsic limits on unbounded data sets. Never let data grow unbounded.
+    An unbounded data set strongly indicates the need for sharding, unless old data
+    is frequently deleted or archived (see [“Delete or Archive Data”](ch03.html#delete-or-archive)).'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还要考虑数据集是有界还是无界。*有界数据集*具有固有的最大大小或固有的缓慢增长。例如，每年发布的新智能手机数量非常少，其增长本质上很慢，因为没有理由认为制造商会每年发布成千上万款新手机。*无界数据集*没有固有限制。例如，图片是无界的：人们可以发布无限数量的图片。由于硬件容量有限，应用程序应始终为无界数据集定义和施加外部限制。永远不要让数据无限增长。无界数据集强烈表明需要分片，除非经常删除或存档旧数据（参见[“删除或存档数据”](ch03.html#delete-or-archive)）。
+- en: Migrating an existing application to sharding
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将现有应用程序迁移到分片
+- en: The second and more common path is migrating an existing database and application
+    to sharding. This path is significantly more difficult, time-consuming, and risky
+    because, by the time it’s required, the database is large—MySQL is hauling a boulder
+    uphill. With a team of experienced developers, plan for the migration to take
+    a year or longer.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二条更常见的路径是将现有的数据库和应用程序迁移到分片。这条路径显著更加困难、耗时和风险，因为到达这一点时，数据库已经很大——MySQL正在推着一个巨石上山。与一队经验丰富的开发人员一起，计划迁移可能需要一年甚至更长时间。
+- en: 'In this book, I cannot cover how to migrate a single database to a sharded
+    database because it’s a bespoke process: it depends on the sharding solution and
+    application workload. But one thing is certain: you will copy data from the original
+    (single) database to the new shards—probably many times—because the initial migration
+    is essentially the first resharding, which is a challenge addressed in [“Resharding”](#resharding).'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本书中，我无法涵盖如何将单个数据库迁移到分片数据库，因为这是一个定制过程：它取决于分片解决方案和应用程序工作负载。但有一点是确定的：您将从原始（单个）数据库复制数据到新的分片中——可能多次——因为初始迁移本质上是第一次重新分片，这是[“重新分片”](#resharding)中讨论的挑战。
+- en: 'Sharding is a complex process for either path. To begin, choose a shard key
+    and strategy, and understand the challenges that you will face. This knowledge
+    gives the journey a destination: a sharded database that you can operate with
+    relative ease. Then chart a path from one database to that destination.'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于任何一种路径，分片都是一个复杂的过程。首先，选择一个分片键和策略，并了解将面临的挑战。这些知识为旅程设定了目标：一个您可以相对轻松操作的分片数据库。然后制定从一个数据库到达那个目标的路径。
+- en: Shard Key
+  id: totrans-89
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 分片键
+- en: 'To shard MySQL, the application must programmatically map data to shards. Therefore,
+    the most fundamental decision is the *shard key*: the column (or columns) by which
+    the data is sharded. The shard key is used with a sharding strategy (discussed
+    in the next section) to map data to shards. The application, not MySQL, is responsible
+    for mapping and accessing data by shard key because MySQL has no built-in concept
+    of sharding—MySQL is oblivious to sharding.'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将MySQL进行分片，应用程序必须以编程方式将数据映射到分片。因此，最基本的决定是*分片键*：数据按照其列（或列）进行分片。分片键与分片策略（在下一节讨论）一起使用，将数据映射到分片中。应用程序负责根据分片键映射和访问数据，因为MySQL没有内置的分片概念——MySQL对分片一无所知。
+- en: Note
+  id: totrans-91
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The term *shard* is used interchangeably for the database or the MySQL instance
+    where the database is stored.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 术语*分片*可在数据库或存储数据库的MySQL实例中互换使用。
+- en: 'An ideal shard key has three properties:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理想的分片键具有三个特性：
+- en: '*High cardinality*'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*高基数*'
+- en: 'An ideal shard key has high cardinality (see [“Extreme Selectivity”](ch02.html#extreme-selectivity))
+    so that data is evenly distributed across shards. A great example is a website
+    that lets you watch videos: it could assign each video a unique identifier like
+    `dQw4w9WgXcQ`. The column that stores that identifier is an ideal shard key because
+    every value is unique, therefore cardinality is maximal.'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理想的分片键具有高基数（参见[“极端选择性”](ch02.html#extreme-selectivity)），以便数据在分片中均匀分布。一个很好的例子是允许您观看视频的网站：它可以为每个视频分配一个类似`dQw4w9WgXcQ`的唯一标识符。存储该标识符的列是理想的分片键，因为每个值都是唯一的，因此基数是最大的。
+- en: '*Reference application entities*'
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*引用应用实体*'
+- en: 'An ideal shard key references application entities so that access patterns
+    do *not* cross shards. A great example is an application that stores payments:
+    although each payment is unique (maximal cardinality), the customer is the application
+    entity. Therefore, the primary access pattern for the application is by customer,
+    not by payment. Sharding by customer is ideal because all payments for a single
+    customer should be located on the same shard.'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理想的分片键引用应用实体，以便访问模式*不*跨越分片。一个很好的例子是存储支付的应用程序：尽管每笔支付是唯一的（最大基数），但客户是应用实体。因此，该应用程序的主要访问模式是按客户而不是按支付。按客户分片是理想的，因为单个客户的所有支付应位于同一个分片上。
+- en: '*Small*'
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*小*'
+- en: 'An ideal shard key is as small as possible because it’s heavily used: most—if
+    not all—queries include the shard key to avoid scatter queries—one of several
+    [“Challenges”](#sharding-challenges).'
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 理想的分片键尽可能小，因为它被广泛使用：大多数——如果不是全部——查询都包括分片键，以避免分散查询——多个[“挑战”](#sharding-challenges)之一。
+- en: 'It should go without saying, but to ensure that it has been said: an ideal
+    shard key, in combination with the sharding strategy, avoids or mitigates the
+    [“Challenges”](#sharding-challenges), especially transactions and joins.'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 毫无疑问，但为了确保已经说过：理想的分片键，与分片策略结合使用，避免或减轻[“挑战”](#sharding-challenges)，尤其是事务和连接。
+- en: 'Spend ample time to identify or create the ideal shard key for your application.
+    This decision is half of the foundation: the other half is the sharding strategy
+    that uses the shard key.'
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 花费足够的时间来识别或创建适合你的应用的理想分片键。这个决策是基础的一半：另一半是使用分片键的分片策略。
+- en: Strategies
+  id: totrans-102
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 策略
+- en: A sharding strategy maps data to shards by shard key value. The application
+    implements the sharding strategy to route queries to the shard with the data corresponding
+    to the shard key value. This decision is the other half of the foundation. Once
+    the shard key and strategy are implemented, it’s exceedingly difficult to change,
+    so choose very carefully.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分片策略通过分片键值将数据映射到分片。应用实现分片策略以将查询路由到具有与分片键值相对应数据的分片。这个决策是基础的另一半。一旦实现了分片键和策略，就极为难以更改，所以选择非常谨慎。
+- en: 'There are three common strategies: hash, range, and lookup (or directory).
+    All three are widely used. The best choice depends on the application access patterns—especially
+    row access (see [“Row Access”](ch04.html#ap-row-access)), as mentioned in the
+    next three sections.'
+  id: totrans-104
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有三种常见的策略：哈希、范围和查找（或目录）。所有三种都被广泛使用。最佳选择取决于应用访问模式，尤其是行访问（见[“行访问”](ch04.html#ap-row-access)），如下三节所述。
+- en: Hash
+  id: totrans-105
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 哈希
+- en: Hash sharding maps hash key values to shards using a hashing algorithm (to produce
+    an integer hash value), the modulo operator (`mod`), and the number of shards
+    (`N`). [Figure 5-7](#hash-sharding-img) depicts the strategy starting with the
+    hash key value at top and following the solid arrows to a shard at bottom.
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 哈希分片使用哈希算法（生成整数哈希值）、取模运算符（`mod`）和分片数（`N`）将哈希键值映射到分片。[图 5-7](#hash-sharding-img)
+    描述了从顶部开始使用哈希键值并沿着实线箭头到达底部的策略。
+- en: '![emsp 0507](assets/emsp_0507.png)'
+  id: totrans-107
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0507](assets/emsp_0507.png)'
+- en: Figure 5-7\. Hash sharding
+  id: totrans-108
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图5-7\. 哈希分片
+- en: 'A hashing algorithm outputs a hash value using the shard key value as input.
+    The hash value (which is an integer) `mod` the number of shards (`N`) returns
+    the shard number: an integer between zero and N – 1, inclusive. In [Figure 5-7](#hash-sharding-img),
+    the hash value `75482 mod 3 = 2`, so the data for the shard key value is located
+    on shard `2`.'
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 哈希算法使用分片键值作为输入输出哈希值。哈希值（一个整数）`mod`分片数（`N`）返回分片编号：介于0和N – 1之间的整数。在[图 5-7](#hash-sharding-img)中，哈希值`75482
+    mod 3 = 2`，所以分片键值对应的数据位于分片`2`。
+- en: Note
+  id: totrans-110
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: How to map shard numbers to MySQL instances is your choice. For example, you
+    could deploy a map of shard numbers to MySQL hostnames with each application instance.
+    Or, applications could query a service like [etcd](https://etcd.io) to discover
+    how shard numbers map to MySQL instances.
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如何将分片编号映射到MySQL实例是你的选择。例如，你可以部署一个将分片编号映射到MySQL主机名的映射表，并与每个应用实例一起使用。或者，应用程序可以查询像[etcd](https://etcd.io)这样的服务，以发现分片编号如何映射到MySQL实例。
+- en: 'If you’re thinking, “Won’t changing the number of shards (`N`) affect the mapping
+    of data to shards?” you are correct. For example, `75483 mod 3 = 0`, but increase
+    the number of shards to five and the same shard key value maps to a new shard
+    number: `75483 mod 5 = 3`. Luckily, this is a solved problem: a *consistent hashing
+    algorithm* outputs a consistent hash value independent of `N`. The key word is
+    *consistent*: it’s still possible, but far less likely, that hash values will
+    change when shards change. Since shards are likely to change, you should choose
+    a consistent hashing algorithm.'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您在想，“改变分片数（`N`）不会影响数据映射到分片吗？”您是正确的。例如，`75483 mod 3 = 0`，但如果将分片数增加到五，相同的分片键值将映射到新的分片号码：`75483
+    mod 5 = 3`。幸运的是，这是一个已解决的问题：*一致性哈希算法*输出独立于`N`的一致哈希值。关键词是*一致性*：当分片变化时哈希值可能会改变，但可能性要小得多。由于分片可能会变化，您应选择一种一致性哈希算法。
+- en: Hash sharding works for all shard keys because it abstracts the value to an
+    integer. That doesn’t mean it’s better or faster, only that it’s easier because
+    the hashing algorithm automatically maps all shard key values. However, *automatically*
+    is also its downside because, as [“Rebalancing”](#rebalancing) discusses, it’s
+    virtually impossible to manually relocate data.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 哈希分片适用于所有分片键，因为它将值抽象为整数。这并不意味着它更好或更快，只是因为哈希算法自动映射所有分片键值，所以更容易。然而，“自动化”也是它的缺点，正如[“重新平衡”](#rebalancing)所讨论的，手动重新定位数据几乎是不可能的。
+- en: Point access (see [“Row Access”](ch04.html#ap-row-access)) works well with hash
+    sharding because one row can map to only one shard. By contrast, range access
+    is probably infeasible with hash sharding—unless the ranges are *very* small—because
+    of [“Cross-shard queries”](#cross-shard-queries) (one of the common challenges).
+    Random access is probably infeasible, too, for the same reason.
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 点访问（参见[“行访问”](ch04.html#ap-row-access)）与哈希分片很搭配，因为一个行只能映射到一个分片。相比之下，范围访问可能在哈希分片中不可行——除非范围非常小——因为[“跨分片查询”](#cross-shard-queries)（其中一个常见挑战）的原因。随机访问可能也不可行，原因相同。
+- en: Range
+  id: totrans-115
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 范围
+- en: Range sharding defines contiguous key value ranges and maps a shard to each,
+    as depicted in [Figure 5-8](#range-sharding-img).
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 范围分片定义了连续的键值范围，并将每个范围映射到一个分片，如[图 5-8](#range-sharding-img)所示。
+- en: '![emsp 0508](assets/emsp_0508.png)'
+  id: totrans-117
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0508](assets/emsp_0508.png)'
+- en: Figure 5-8\. Range sharding
+  id: totrans-118
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 5-8\. 范围分片
+- en: You must define the key value ranges in advance. This gives you flexibility
+    when mapping data to shards, but it requires a thorough knowledge of data distribution
+    to ensure that the data is evenly distributed across shards. Since data distribution
+    changes, expect to deal with resharding (see [“Resharding”](#resharding)). A benefit
+    to range sharding is that, unlike hash sharding, you can change (redefine) the
+    ranges, which helps to manually relocate data.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您必须事先定义键值范围。这样做可以在将数据映射到分片时提供灵活性，但需要对数据分布有深入的了解，以确保数据均匀分布在分片之间。由于数据分布会发生变化，预计需要处理重新分片（参见[“重新分片”](#resharding)）。范围分片的一个好处是，与哈希分片不同，您可以更改（重新定义）范围，这有助于手动重新定位数据。
+- en: 'All data can be sorted and divided into ranges, but this doesn’t make sense
+    for some data, like random identifiers. And some data appears random but, upon
+    closer inspection, is actually closely ordered. For example, here are three UUIDs
+    generated by MySQL:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有数据都可以排序并分成范围，但对于一些数据，如随机标识符，这是没有意义的。而一些看似随机的数据，经过仔细检查后实际上是接近有序的。例如，这里是MySQL生成的三个UUID：
+- en: '[PRE0]'
+  id: totrans-121
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'Can you spot the differences? Those three UUIDs appear random but would most
+    likely sort into the same range, depending on the range size. At scale, this would
+    map most data to the same shard, thereby defeating the purpose of sharding. (UUID
+    algorithms vary: some intentionally generate closely ordered values, while others
+    intentionally generate randomly ordered values.)'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你能发现其中的区别吗？这三个UUID看起来随机，但很可能根据范围大小会排序到同一个范围内。在大规模情况下，这将导致大部分数据映射到同一个分片，从而失去了分片的目的。（UUID算法各不相同：有些故意生成接近有序的值，而其他则故意生成随机排序的值。）
+- en: 'Range sharding works best when:'
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 范围分片在以下情况下效果最佳：
+- en: The range of shard key values is bounded
+  id: totrans-124
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 分片键值范围是有界的
+- en: You can determine the range (minimum and maximum values)
+  id: totrans-125
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您可以确定范围（最小和最大值）
+- en: You know the distribution of values, and it’s mostly even
+  id: totrans-126
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您了解值的分布，并且它大部分是均匀的
+- en: The range and distribution are unlikely to change
+  id: totrans-127
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 范围和分布不太可能改变
+- en: For example, stock data could be sharded by stock symbols ranging from `AAAA`
+    to `ZZZZ`. Although the distribution is probably less in the `Z` range, overall
+    it will be even enough to ensure that one shard is not significantly larger or
+    accessed more frequently than the other shards.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，股票数据可以根据从`AAAA`到`ZZZZ`的股票符号进行分片。尽管在`Z`范围内分布可能较少，总体上确保每个分片不会显著大于或比其他分片访问频率更高。
+- en: 'Point access (see [“Row Access”](ch04.html#ap-row-access)) works well with
+    range sharding as long as row access distributes evenly over the ranges, avoiding
+    hot shards—a common challenge discussed in [“Rebalancing”](#rebalancing). Range
+    access works well with range sharding as long as the row ranges are within the
+    shard ranges; if not, [“Cross-shard queries”](#cross-shard-queries) become a problem.
+    Random access is probably infeasible for the same reason: cross-shard queries.'
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 点访问（参见[“行访问”](ch04.html#ap-row-access)）与范围分片结合使用时效果良好，只要行访问在范围内分布均匀，避免热分片——这是[“重平衡”](#rebalancing)讨论的常见挑战。范围访问与范围分片结合使用时，只要行范围在分片范围内，如果不在，则[“跨分片查询”](#cross-shard-queries)会成为一个问题。由于同样的原因，随机访问可能不可行：跨分片查询。
+- en: Lookup
+  id: totrans-130
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 查找
+- en: Lookup (or directory) sharding is custom mapping of shard key values to shards.
+    [Figure 5-9](#lookup-sharding-img) depicts a lookup table that maps country code
+    top-level domains to shards.
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查找（或目录）分片是将分片键值自定义映射到分片的过程。[图 5-9](#lookup-sharding-img) 描述了一个查找表，将国家代码顶级域名映射到分片上。
+- en: '![emsp 0509](assets/emsp_0509.png)'
+  id: totrans-132
+  prefs: []
+  type: TYPE_IMG
+  zh: '![emsp 0509](assets/emsp_0509.png)'
+- en: Figure 5-9\. Lookup (directory) sharding
+  id: totrans-133
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 图 5-9\. 查找（目录）分片
+- en: 'Lookup sharding is the most flexible, but it requires maintaining a lookup
+    table. A *lookup table* functions as a key-value map: shard key values are the
+    keys, and database shards are the values. You can implement a lookup table as
+    a database table, a data structure in a durable cache, a configuration file deployed
+    with the application, and so forth.'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查找分片是最灵活的，但需要维护一个查找表。*查找表*作为键值映射功能：分片键值是键，数据库分片是值。您可以将查找表实现为数据库表、持久性缓存中的数据结构、应用程序部署的配置文件等等。
+- en: 'The keys in the lookup table can be singular values (as shown in [Figure 5-9](#lookup-sharding-img))
+    or ranges. If the keys are ranges, then it’s essentially range sharding, but the
+    lookup table gives you more control of the ranges. But that control has a cost:
+    changing ranges means resharding—one of the common challenges. If the keys are
+    singular values, then lookup sharding is sensible when the number of unique shard
+    key values is manageable. For example, a website that stores public health statistics
+    in the United States could shard by state and county name because there are fewer
+    than 3,500 counties total, and they almost never change.^([1](ch05.html#idm45829111349312))
+    Lookup sharding has an advantage that makes it a good choice for this example:
+    it’s trivial to map all the counties with very low population to one shard, whereas
+    this custom mapping isn’t possible with hash or range sharding.'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查找表中的键可以是单个值（如[图 5-9](#lookup-sharding-img)所示）或范围。如果键是范围，则本质上是范围分片，但查找表使您可以更好地控制这些范围。但这种控制有成本：更改范围意味着重新分片——这是常见的挑战之一。如果键是单个值，则当唯一分片键值的数量可管理时，查找分片是合理的选择。例如，存储美国公共健康统计数据的网站可以根据州和县名进行分片，因为总共不到3500个县，它们几乎不会更改。^([1](ch05.html#idm45829111349312))
+    查找分片具有一个优势，使其成为此示例的良好选择：可以轻松将所有人口非常少的县映射到一个分片，而哈希或范围分片不可能实现这种自定义映射。
+- en: 'All three row access patterns (see [“Row Access”](ch04.html#ap-row-access))
+    work with lookup sharding, but how well they work depends on the size and complexity
+    of the lookup table you need to create and maintain to map shard key values to
+    database shards. The notable mention is random access: lookup sharding allows
+    you to map (or remap) shard key values to alleviate cross-shard queries caused
+    by random access, which is nearly impossible with hash and range sharding.'
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 所有三种行访问模式（参见[“行访问”](ch04.html#ap-row-access)）都适用于查找分片，但它们的效果取决于您需要创建和维护的查找表的大小和复杂性，以将分片键值映射到数据库分片上。特别提到的是随机访问：查找分片允许您映射（或重新映射）分片键值以缓解随机访问引起的跨分片查询问题，而这几乎是使用哈希和范围分片几乎不可能做到的。
+- en: Challenges
+  id: totrans-137
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 挑战
+- en: 'If sharding were perfect, you would shard only once, and every shard would
+    have equal data size and access. That might be the case when you first shard,
+    but it won’t remain the case. The following challenges will affect your application
+    and sharded database, so plan ahead: know how you will avoid or mitigate them.'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果分片是完美的，您只需分片一次，每个分片的数据大小和访问都相等。这可能在您首次进行分片时是成立的，但以后不会再是这样。以下挑战会影响您的应用程序和分片数据库，因此请提前规划：了解如何避免或减轻它们。
+- en: Transactions
+  id: totrans-139
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 事务
+- en: Transactions do not work across shards. This is more of a blocker than a challenge
+    because there is essentially no workaround short of implementing a two-phase commit
+    in the application, which is perilous and far beyond the scope of this book.
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 事务无法跨分片工作。这比挑战更像是一个阻碍，因为除了在应用程序中实施两阶段提交外，没有其他解决方案，而这种方式又十分危险，远超出本书的范围。
+- en: I strongly recommend that you avoid this blocker. Review your application transactions
+    (see [“Reporting”](ch08.html#trx-reporting)) and the data they access. Then choose
+    a shard key and strategy that work given how the transactions access data.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我强烈建议您避免这种阻碍。审查您的应用程序事务（参见[“报告”](ch08.html#trx-reporting)），以及它们访问的数据。然后根据事务访问数据的方式选择适合的分片键和策略。
+- en: Joins
+  id: totrans-142
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 连接
+- en: 'A SQL statement cannot join tables across shards. The solution is a *cross-shard
+    join*: the application join results from multiple queries executed on multiple
+    shards. It’s not a trivial solution—it might even be complex depending on the
+    join—but it’s feasible. Apart from complexity, the main concern is consistency:
+    since transactions do not work across shards, the results from each shard are
+    not a consistent view of all data.'
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQL 语句无法在分片之间连接表。解决方案是 *跨分片连接*：应用程序连接在多个分片上执行的多个查询的结果。这不是一个简单的解决方案——甚至可能是复杂的，取决于连接的复杂性——但是它是可行的。除了复杂性，主要关注点是一致性：由于事务无法跨分片工作，每个分片的结果不是所有数据的一致视图。
+- en: A cross-shard join is a special-purpose cross-shard query (joining the results
+    is the special purpose); therefore, it’s susceptible to the same challenges.
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 跨分片连接是一种特殊目的的跨分片查询（连接结果是特殊目的）；因此，它同样容易受到相同的挑战影响。
+- en: Cross-shard queries
+  id: totrans-145
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 跨分片查询
+- en: A *cross-shard query* requires the application to access more than one shard.
+    The term refers to application access, not literal queries, because a single query
+    cannot execute on more than one MySQL instance. (A more accurate term would be
+    *cross-shard application access*.)
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*跨分片查询* 要求应用程序访问多个分片。该术语指的是应用程序访问，而非字面上的查询，因为单个查询无法在多个 MySQL 实例上执行。（更准确的术语应为
+    *跨分片应用程序访问*。）'
+- en: 'Cross-shard queries incur latency: delay inherent to accessing multiple MySQL
+    instances. Sharding is most effective when cross-shard queries are the exception,
+    not the norm.'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 跨分片查询会产生延迟：这是访问多个 MySQL 实例时固有的延迟。分片在跨分片查询作为异常而非常规情况时效果最佳。
+- en: 'If sharding were perfect, every application request would access *only one*
+    shard. That’s the goal, but don’t drive yourself crazy trying to achieve it because
+    some applications, even when efficiently sharded, must access multiple shards
+    to accomplish certain requests. A peer-to-peer payment application is a good example.
+    Each customer is a well delineated application entity: all data related to a customer
+    should be located on the same shard, which entails that the data is sharded by
+    customer. But customers interact by sending and receiving money. Inevitably, the
+    application will access at least two shards: one for the customer sending money,
+    and another for the customer receiving the money. Cross-shard queries should be
+    minimized, but again: don’t drive yourself crazy trying to eliminate them, especially
+    if the application logic necessitates them for certain requests.'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果分片是完美的，每个应用程序请求只会访问 *一个* 分片。这是目标，但不要因为某些应用程序即使经过有效分片，也必须访问多个分片才能完成某些请求而感到苦恼。点对点支付应用程序就是一个很好的例子。每个客户都是一个明确的应用程序实体：与客户相关的所有数据都应位于同一个分片上，这意味着数据按客户分片。但客户通过发送和接收资金进行互动。不可避免地，应用程序将至少访问两个分片：一个用于发送资金的客户，另一个用于接收资金的客户。应尽量减少跨分片查询，但同样地，请不要因为某些请求的应用逻辑要求而试图消除它们而感到疯狂。
+- en: 'A related challenge is *scatter queries* (or *scatter-gather queries*): queries
+    that require the application to access many (or all) shards. (Again, the term
+    refers to application access, not literal queries.) A moderate number of cross-shard
+    queries is inevitable and acceptable, but scatter queries are antithetical to
+    the purpose and benefits of sharding. Therefore, you should both prevent and eliminate
+    scatter queries. If you cannot—if the application requires scatter queries—then
+    sharding is probably not the correct solution, or the access pattern needs to
+    be changed (see [“Data Access Patterns”](ch04.html#access-patterns)).'
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相关挑战之一是*分散查询*（或*分散-聚合查询*）：需要应用程序访问许多（或所有）分片的查询。这里的“分散”是指应用程序访问，而不是字面上的查询。跨分片查询的适度数量是不可避免且可接受的，但分散查询与分片的目的和优势背道而驰。因此，你应该预防并消除分散查询。如果无法做到
+    —— 如果应用程序需要分散查询 —— 那么分片可能不是正确的解决方案，或者访问模式需要更改（参见[“数据访问模式”](ch04.html#access-patterns)）。
+- en: Resharding
+  id: totrans-150
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 重新分片
+- en: '*Resharding* (or a *shard split*) divides one shard into two or more new shards.
+    Resharding is necessary to accommodate data growth, and it can also be used to
+    redistribute data across shards. If and when resharding is necessary depends on
+    capacity planning: the estimated rate of data growth and how many shards are created
+    initially. For example, I’ve seen a team split a database into four shards then
+    reshard less than two years later because data size increased much faster than
+    estimated. By contrast, I’ve seen a team split a database into 64 shards to accommodate
+    more than five years of estimated data growth. If you can afford extra shards
+    at the beginning (when you first shard), then create enough shards for at least
+    four years of data growth—don’t wildly overestimate, but estimate generously.'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*重新分片*（或*分片拆分*）将一个分片划分为两个或更多新分片。重新分片是为了适应数据增长，也可以用来在分片之间重新分配数据。是否需要进行重新分片取决于容量规划：预计的数据增长速度以及最初创建了多少分片。例如，我见过一个团队将数据库分割成四个分片，然后不到两年后就重新分片，因为数据大小增长速度远远超过了预期。相比之下，我见过一个团队将数据库分割成64个分片，以应对超过五年预期的数据增长。如果在初始分片时你有能力承担额外的分片，那么至少创建足够支持四年数据增长的分片数
+    —— 不要过度估计，但要大方地估计。'
+- en: 'This is the dark secret of sharding: sharding begets more sharding. If you’re
+    wondering, “Can I shard once and be done?” the answer is “probably not.” Since
+    your database grew to the point of needing to shard, it’s likely to keep growing
+    and keep needing more shards—unless you become fervent about the idea that less
+    data is better (see [“Less Data Is Better”](ch03.html#less-data-is-better)).'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是分片的暗藏秘密：分片会引发更多分片。如果你在想，“我可以分片一次就完事了吗？”答案可能是“可能不行”。因为你的数据库已经发展到需要分片的程度，它可能会继续增长，并且需要更多的分片
+    —— 除非你深信少数据才是更好的理念（参见[“少数据更好”](ch03.html#less-data-is-better)）。
+- en: 'Resharding is a challenge because it requires a data migration process from
+    the old shard to the new shards. Describing how to migrate data is beyond the
+    scope of this book, but I will point out three high-level requirements:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重新分片是一个挑战，因为它需要从旧分片向新分片进行数据迁移。描述如何迁移数据超出了本书的范围，但我会指出三个高层次的要求：
+- en: An initial bulk data copy from old to new shards
+  id: totrans-154
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 从旧分片到新分片的初始批量数据复制
+- en: Sync changes on old shard to new shards (during and after data copy)
+  id: totrans-155
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将旧分片上的更改同步到新分片（在数据复制期间和之后）
+- en: Cutover process to switch to new shards
+  id: totrans-156
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 切换到新分片的过程
+- en: Deep MySQL expertise is required to migrate data safely and correctly. Since
+    data migrations are specific to the application and infrastructure, you won’t
+    find any books or other resources that detail the process. If necessary, hire
+    a MySQL consultant to help design a process. Also check out [Ghostferry](https://oreil.ly/7aM3I)
+    by the engineers at Shopify who are experts in MySQL sharding.
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 安全且正确地迁移数据需要深厚的MySQL专业知识。由于数据迁移与应用程序和基础设施相关，你不会在任何书籍或其他资源中找到详细的过程。如果需要，可以聘请MySQL顾问来帮助设计流程。还可以查看由Shopify工程师编写的[Ghostferry](https://oreil.ly/7aM3I)，他们是MySQL分片领域的专家。
+- en: Rebalancing
+  id: totrans-158
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 重新平衡
+- en: '*Rebalancing* relocates data in order to distribute access more evenly. Rebalancing
+    is necessary to handle *hot shards*: shards with significantly more access than
+    other shards. Although the shard key and sharding strategy determine how data
+    is distributed, the application and its users determine how data is accessed.
+    If one shard (a hot shard) contains all the most frequently accessed data, then
+    performance is not evenly distributed, which defeats the purpose of scaling out.
+    The goal is equal access—and equal performance—on all shards.'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*重新平衡* 重新定位数据以更均匀地分配访问。重新平衡是处理*热分片*所必需的：比其他分片有显着更多访问的分片。尽管分片键和分片策略决定了数据的分布方式，但应用程序及其用户决定了数据的访问方式。如果一个分片（热分片）包含所有最频繁访问的数据，那么性能就不会均匀分布，这违背了扩展的目的。目标是在所有分片上实现平等的访问和性能。'
+- en: 'Rebalancing depends on the sharding strategy:'
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重新平衡取决于分片策略：
+- en: Hash
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Hash
+- en: 'It’s virtually impossible to relocate data with hash sharding because the hashing
+    algorithm automatically maps data to shards. One solution (or workaround) is to
+    use a lookup table that contains relocated shard keys. The application checks
+    the lookup table first: if the shard key is present, it uses the shard indicated
+    by the lookup table; otherwise, it uses the hashing algorithm.'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用哈希分片几乎不可能重新定位数据，因为哈希算法会自动将数据映射到分片。一种解决方案（或解决方法）是使用包含重新定位分片键的查找表。应用程序首先检查查找表：如果存在分片键，则使用查找表指示的分片；否则，使用哈希算法。
+- en: Range
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 范围
+- en: Relocating data with range sharding is possible (but nontrivial) by redefining
+    the ranges to divide the hot shard into smaller, separate shards. This is the
+    same process as resharding.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用范围分片重新定位数据是可能的（但不是微不足道的），方法是重新定义范围以将热分片划分为更小的独立分片。这与重新分片的过程相同。
+- en: Lookup
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查找
+- en: Relocating data with lookup sharding is relatively easy because you control
+    the mapping of data to shards. Therefore, you update the lookup table to remap
+    the shard key value corresponding to the hot data.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 用查找分片重新定位数据相对容易，因为您控制数据到分片的映射。因此，您更新查找表以重新映射与热数据对应的分片键值。
+- en: Physically relocating the hot data requires the same (or similar) data migration
+    process used for resharding.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 物理上重新定位热数据需要与用于重新分片的数据迁移过程相同（或类似）。
+- en: Online schema changes
+  id: totrans-168
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 在线模式更改
+- en: Altering a table on one database is easy, but how do you alter it on every shard?
+    You run the OSC on each shard, but that’s not the challenge. The challenge is
+    automating the OSC process to run on multiple shards, and keeping track of which
+    shards have been altered. For MySQL, there are no open source solutions at the
+    time of this writing; you must develop a solution. (However, a couple of the alternatives
+    to MySQL in the next section have a solution.) This is the least complex challenge
+    of sharding, but it’s a challenge nevertheless. It cannot be overlooked because
+    schema changes are routine.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在一个数据库上更改表很容易，但如何在每个分片上更改呢？您在每个分片上运行OSC，但这不是挑战。挑战是自动化OSC流程以在多个分片上运行，并跟踪已更改的分片。对于MySQL，在撰写本文时没有开源解决方案；您必须开发一个解决方案。（然而，在下一节中的一些MySQL替代方案中有解决方案。）这是分片中最不复杂的挑战，但它仍然是一个挑战。不能忽视这一点，因为模式更改是例行公事。
+- en: Alternatives
+  id: totrans-170
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 替代方案
+- en: Sharding is complex, and it’s not directly valuable to users or customers. It’s
+    valuable to the application to keep scaling, but it’s exacting work for engineers.
+    Unsurprisingly, alternative solutions are increasingly popular and robust. However,
+    don’t be too quick to trust your data to new technology. MySQL is eminently reliable
+    and deeply understood—a very mature technology—which makes it a safe and reasonable
+    choice.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分片是复杂的，对用户或客户并不直接有价值。对于应用程序来说，保持扩展是有价值的，但对工程师来说是苛刻的工作。不足为奇，替代解决方案越来越受欢迎和稳健。但是，不要太快将您的数据信任给新技术。MySQL极其可靠且深入理解——这是一项非常成熟的技术——这使得它成为一个安全和合理的选择。
+- en: NewSQL
+  id: totrans-172
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: NewSQL
+- en: '*NewSQL* refers to a relational, ACID-compliant data store with built-in support
+    for scaling out. In other words, it’s a SQL database that you don’t have to shard.
+    If you’re thinking, “Wow! Then why use MySQL at all?” the following five points
+    explain why MySQL—sharded or not—is still the most popular open source database
+    in the world:'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*NewSQL* 是指具有内置支持扩展的关系型、ACID兼容的数据存储。换句话说，它是一个不需要分片的SQL数据库。如果你在想：“哇！那为什么还要使用MySQL呢？”以下五点解释了为什么MySQL——无论是否分片——仍然是全球最流行的开源数据库：'
+- en: '*Maturity*'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*成熟度*'
+- en: 'SQL hails from the 1970s and MySQL from the 1990s. Database maturity means
+    two things: you can trust the data store not to lose or corrupt your data, and
+    there is deep knowledge about every aspect of the data store. Pay close attention
+    to the maturity of NewSQL data stores: when was the first truly stable GA (generally
+    available) release? What has the cadence and quality of releases been since then?
+    What deep and authoritative knowledge is publicly available?'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQL起源于1970年代，MySQL起源于1990年代。数据库成熟意味着两件事：你可以信任数据存储不会丢失或损坏你的数据，并且对数据存储的每个方面都有深入的了解。要特别注意NewSQL数据存储的成熟度：首个真正稳定的GA（普遍可用）版本是何时发布的？自那时以来发布的节奏和质量如何？公开可用的深度和权威知识是什么？
+- en: SQL compatibility
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: SQL兼容性
+- en: NewSQL data stores use SQL (it’s in the name, after all) but compatibility varies
+    significantly. Do not expect any NewSQL data store to be a drop-in replacement
+    for MySQL.
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: NewSQL数据存储使用SQL（毕竟名字中就有），但兼容性差异很大。不要指望任何NewSQL数据存储可以直接替代MySQL。
+- en: '*Complex operations*'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*复杂操作*'
+- en: Built-in support for scaling out is achieved with a distributed system. That
+    usually entails multiple different yet coordinated components. (If MySQL is as
+    a solo saxophonist, then NewSQL is as a five-piece band.) If the NewSQL data store
+    is fully managed, then perhaps its complexity doesn’t matter. But if you have
+    to manage it, then read its documentation to understand how it’s operated.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 内置的支持通过分布式系统实现横向扩展。通常涉及多个不同但协调的组件。（如果MySQL是独奏的萨克斯手，那么NewSQL就是五人乐队。）如果NewSQL数据存储完全托管，那么也许它的复杂性并不重要。但如果你需要管理它，那么阅读其文档以了解其运行方式是很重要的。
+- en: '*Distributed system performance*'
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*分布式系统性能*'
+- en: 'Recall the Universal Scalability Law ([Equation 4-1](ch04.html#usl)):'
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 回想一下通用可扩展性定律（[Equation 4-1](ch04.html#usl)）：
+- en: <math><mrow><mi>X</mi> <mrow><mo>(</mo> <mi>N</mi> <mo>)</mo></mrow> <mo>=</mo>
+    <mfrac><mrow><mi>γ</mi><mi>N</mi></mrow> <mrow><mn>1</mn><mo>+</mo><mi>α</mi><mo>(</mo><mi>N</mi><mo>-</mo><mn>1</mn><mo>)</mo><mo>+</mo><mi>β</mi><mi>N</mi><mo>(</mo><mi>N</mi><mo>-</mo><mn>1</mn><mo>)</mo></mrow></mfrac></mrow></math>
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: <math><mrow><mi>X</mi> <mrow><mo>(</mo> <mi>N</mi> <mo>)</mo></mrow> <mo>=</mo>
+    <mfrac><mrow><mi>γ</mi><mi>N</mi></mrow> <mrow><mn>1</mn><mo>+</mo><mi>α</mi><mo>(</mo><mi>N</mi><mo>-</mo><mn>1</mn><mo>)</mo><mo>+</mo><mi>β</mi><mi>N</mi><mo>(</mo><mi>N</mi><mo>-</mo><mn>1</mn><mo>)</mo></mrow></mfrac></mrow></math>
+- en: '`N` represents software load (concurrent requests, running processes, and forth),
+    or hardware processors, *or nodes in a distributed system*. If the application
+    has queries that require a response time less than 10 milliseconds, a NewSQL data
+    store might not work because of the latency inherent in distributed systems. But
+    that level of response time is not the bigger, more common problem that NewSQL
+    solves: built-in scale out to large data size (relative to a single instance)
+    with reasonable response time (75 ms, for example).'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`N`代表软件负载（并发请求、运行进程等），或者硬件处理器，*或分布式系统中的节点*。如果应用程序需要的查询响应时间少于10毫秒，NewSQL数据存储可能不适合，因为分布式系统固有的延迟。但这个响应时间级别并非NewSQL解决的更大、更常见的问题：内置的横向扩展到大数据量（相对于单个实例）与合理的响应时间（例如75毫秒）。'
+- en: '*Performance characteristics*'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*性能特征*'
+- en: What accounts for the response time (performance) of a query? For MySQL, the
+    high-level constituents are indexes, data, access patterns, and hardware—everything
+    in the previous four chapters. Add to those some lower-level details—like [“Leftmost
+    Prefix Requirement”](ch02.html#LPR), [“Working set size”](ch03.html#working-set-size),
+    and [“MySQL Does Nothing”](ch04.html#mysql-does-nothing)—and you understand MySQL
+    performance and how to improve it. A NewSQL data store will have new and different
+    performance characteristics. For example, indexes always provide the most and
+    the best leverage, but they can work differently for a NewSQL data store because
+    of how the data is stored and accessed in the distributed system. Likewise, some
+    access patterns that are good on MySQL are bad on NewSQL, and vice versa.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询的响应时间（性能）是由什么组成？对于MySQL，高级组成部分包括索引、数据、访问模式和硬件——这些都在前面的四章中。再加上一些低级细节——比如[“最左前缀要求”](ch02.html#LPR)、[“工作集大小”](ch03.html#working-set-size)和[“MySQL
+    什么也不做”](ch04.html#mysql-does-nothing)——你就能理解MySQL的性能及其改进方法。NewSQL数据存储将具有新的和不同的性能特征。例如，索引总是提供最大和最好的
+    leverage，但它们在NewSQL数据存储中可能以不同的方式工作，这是因为数据在分布式系统中的存储和访问方式不同。同样，对MySQL有效的某些访问模式在NewSQL上可能不好，反之亦然。
+- en: 'Those five points are a disclaimer: NewSQL is a promising technology that you
+    should investigate as an alternative to sharding MySQL, but NewSQL is not an effortless
+    drop-in replacement for MySQL.'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这五点是一个免责声明：NewSQL 是一项有前途的技术，您应该将其视为替代分片 MySQL 的选择，但 NewSQL 并非 MySQL 的轻松替代品。
+- en: 'At the time of this writing, there are only two viable open source NewSQL solutions
+    that are MySQL-compatible: [TiDB](https://oreil.ly/GSCc0) and [CockroachDB](https://oreil.ly/wKZ2Z).
+    Both of these solutions are exceptionally new for a data store: CockroachDB v1.0
+    GA released May 10, 2017; and TiDB v1.0 GA released October 16, 2017. Therefore,
+    be cautious and diligent using TiDB and CockroachDB until at least 2027—even MySQL
+    was 10 years old by the time it was mainstream in the early 2000s. If you use
+    TiDB or CockroachDB, please write about what you learn and, if possible, contribute
+    to these open source projects.'
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在撰写本文时，仅有两个可行的开源 NewSQL 解决方案与 MySQL 兼容：[TiDB](https://oreil.ly/GSCc0) 和 [CockroachDB](https://oreil.ly/wKZ2Z)。
+    这两个解决方案对于数据存储来说都是非常新的：CockroachDB v1.0 GA 于2017年5月10日发布；而 TiDB v1.0 GA 于2017年10月16日发布。
+    因此，使用 TiDB 和 CockroachDB 时请谨慎小心，至少到2027年之前——即使 MySQL 在2000年初被广泛采用时也已经有10年历史。 如果您使用
+    TiDB 或 CockroachDB，请写下您所学到的内容，并且如果可能，为这些开源项目做出贡献。
+- en: Middleware
+  id: totrans-188
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 中间件
+- en: A middleware solution works between the application and the MySQL shards. It
+    attempts to hide or abstract the details of sharding, or at least make sharding
+    easier. When direct, manual sharding is too difficult, and NewSQL is infeasible,
+    a middleware solution could help bridge the gap. The two leading open source solutions
+    are [Vitess](https://oreil.ly/6AvRY) and [ProxySQL](https://oreil.ly/5iTkH), and
+    they are entirely different. ProxySQL *can* shard and Vitess *is* sharding.
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 中间件解决方案位于应用程序和 MySQL 分片之间。 它试图隐藏或抽象分片的细节，或者至少使分片变得更容易。 当直接、手动分片太困难，而 NewSQL
+    不可行时，中间件解决方案可以帮助填补这一空白。 两个领先的开源解决方案分别是 [Vitess](https://oreil.ly/6AvRY) 和 [ProxySQL](https://oreil.ly/5iTkH)，它们完全不同。
+    ProxySQL *可以* 分片，而 Vitess *是* 分片。
+- en: 'ProxySQL, as its name suggests, is a proxy that supports sharding by several
+    mechanisms. To get an idea how it works, read [“Sharding in ProxySQL”](https://oreil.ly/N0eYa)
+    and [“MySQL Sharding with ProxySQL”](https://oreil.ly/KDvjE). Using a proxy in
+    front of MySQL is similar to the classic Vim versus Emacs rift minus all the vitriol:
+    engineers do a lot of great work with both editors; it’s just a matter of personal
+    preference. Likewise, companies are successful with and without a proxy; it’s
+    just a matter of personal preference.'
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ProxySQL，顾名思义，是通过多种机制支持分片的代理。 想要了解它的工作原理，请阅读 [“在 ProxySQL 中进行分片”](https://oreil.ly/N0eYa)
+    和 [“使用 ProxySQL 进行 MySQL 分片”](https://oreil.ly/KDvjE)。 在 MySQL 前使用代理类似于经典的 Vim
+    对 Emacs 的分歧，不过没有所有的恶意：工程师们在这两个编辑器上都做了大量优秀的工作；这只是个人偏好的问题。 同样地，有公司成功使用和不使用代理；这只是个人偏好的问题。
+- en: Vitess is a purpose-built MySQL sharding solution. Since sharding is complex,
+    Vitess is not without its own complexity, but its greatest advantage is that it
+    addresses all challenges, especially resharding and rebalancing. Moreover, Vitess
+    was created by MySQL experts at YouTube who deeply understand MySQL at massive
+    scale.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Vitess 是一种专为 MySQL 分片而构建的解决方案。 由于分片是复杂的，Vitess 本身也不乏复杂性，但其最大优势在于它解决了所有挑战，特别是重新分片和重新平衡。
+    此外，Vitess 是由 YouTube 的 MySQL 专家团队创建的，他们对大规模 MySQL 有深入理解。
+- en: Before you shard, be sure to evaluate ProxySQL and Vitess. Any middleware solution
+    entails additional infrastructure to learn and maintain, but the benefits can
+    outweigh the costs because manually sharding MySQL also costs significant engineering
+    time, effort, and serenity.
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在分片之前，请务必评估 ProxySQL 和 Vitess。 任何中间件解决方案都需要额外的基础设施来学习和维护，但是其好处可能超过成本，因为手动分片
+    MySQL 也会耗费大量的工程时间、精力和平静。
+- en: Microservices
+  id: totrans-193
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 微服务
+- en: 'Sharding focuses on one application (or service) and its data, especially data
+    size and access. But sometimes the real problem is the application: it has too
+    much data or access because it serves too many purposes or business functions.
+    Avoiding monolithic applications is standard engineering design and practice,
+    but that doesn’t mean it’s always achieved. Before you shard, review the application
+    design and its data to ensure that parts cannot be factored out into a separate
+    microservice. This is a lot easier than sharding because the new microservice
+    and its database are completely independent—no shard key or strategy required.
+    It might also be the case that the new microservice has completely different access
+    patterns (see [“Data Access Patterns”](ch04.html#access-patterns)) that allow
+    it to use less hardware while storing more data—or perhaps the new microservice
+    doesn’t need a relational data store.'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分片关注一个应用程序（或服务）及其数据，特别是数据大小和访问。但有时真正的问题是应用程序本身：它具有太多的数据或访问，因为它服务于太多目的或业务功能。避免单片应用是标准的工程设计和实践，但这并不意味着总能实现。在进行分片之前，需审查应用程序设计及其数据，确保部分不能拆分为独立的微服务要容易得多，因为新的微服务及其数据库完全独立——不需要分片键或策略。新的微服务可能也具有完全不同的访问模式（见[“数据访问模式”](ch04.html#access-patterns)），使其可以在存储更多数据的同时使用更少的硬件——或者新的微服务根本不需要关系型数据存储。
+- en: Don’t Use MySQL
+  id: totrans-195
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 不要使用 MySQL
+- en: 'Similar to [“Don’t Use MySQL”](ch04.html#dont-use-mysql), a completely honest
+    assessment of the alternatives to sharding MySQL must conclude with: don’t use
+    MySQL if another data store or technology works better. If your path is designing
+    a new application for sharding, then definitely evaluate other solutions. Sharding
+    MySQL is a solved problem, but it’s never a quick or easy solution. If your path
+    is migrating an existing application to sharding, then you should still consider
+    the trade-offs of sharding MySQL against migrating to another solution. That sounds
+    burdensome at scale—and it is—but companies do it all the time, and so can you.'
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与[“不要使用 MySQL”](ch04.html#dont-use-mysql)类似，对 MySQL 分片的替代方案进行完全诚实的评估必须得出结论：如果其他数据存储或技术效果更好，就不要使用
+    MySQL。如果您的路径是为分片设计新应用程序，那么绝对要评估其他解决方案。MySQL 的分片问题已经解决，但这绝不是一个快速或简单的解决方案。如果您的路径是将现有应用程序迁移到分片，那么您仍应考虑将
+    MySQL 分片的权衡与迁移到其他解决方案的权衡。这听起来在规模上是繁重的，而且确实如此，但公司经常这样做，你也可以。
+- en: Summary
+  id: totrans-197
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 总结
+- en: 'This chapter introduced the basic mechanics of sharding MySQL to achieve MySQL
+    at scale. The essential takeaway points are:'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章介绍了分片 MySQL 的基本机制，以实现 MySQL 的扩展。其关键要点如下：
+- en: MySQL scales out by sharding.
+  id: totrans-199
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MySQL 通过分片进行扩展。
+- en: Sharding divides one database into many databases.
+  id: totrans-200
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 分片将一个数据库分成多个数据库。
+- en: A single database does not scale primarily because the combination of queries,
+    data, and access patterns—the application workload—significantly outpace the speed
+    and capacity of single-server hardware.
+  id: totrans-201
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 单个数据库主要因为查询、数据和访问模式的组合——即应用程序工作负载——远远超过单服务器硬件的速度和容量而不能扩展。
+- en: It’s significantly easier to manage many small databases (shards) than one huge
+    database—pebbles, not boulders.
+  id: totrans-202
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 管理许多小数据库（分片）比管理一个巨大的数据库要容易得多——小石子，而不是大石头。
+- en: Data is sharded (divided) by a shard key, which you must choose carefully.
+  id: totrans-203
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据通过分片键分片（分割），您必须谨慎选择。
+- en: The shard key is used with a sharding strategy to map data (by shard key) to
+    shards.
+  id: totrans-204
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用分片策略与分片键一起映射数据（按分片键）到分片。
+- en: The most common sharding strategies are hash (a hashing algorithm), range, and
+    lookup (directory).
+  id: totrans-205
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 最常见的分片策略是哈希（哈希算法）、范围和查找（目录）。
+- en: Sharding has several challenges that must be addressed.
+  id: totrans-206
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 分片面临多个必须解决的挑战。
+- en: There are alternatives to sharding that you should evaluate.
+  id: totrans-207
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 存在替代分片的选择，你应该评估。
+- en: The next chapter looks into MySQL server metrics.
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下一章将深入研究 MySQL 服务器指标。
+- en: 'Practice: Four-Year Fit'
+  id: totrans-209
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 实践：四年适合
+- en: 'The goal of this practice is to determine the four-year fit of the data size.
+    From [“Sharding: A Brief Introduction”](#sharding-intro), the four-year fit is
+    an estimate of data size or access in four years applied to the capacity of your
+    hardware *today*. Sharding might not be required if the estimated data size or
+    access fits (figuratively) within your hardware capacity today. (Refer back to
+    [“Application Workload”](#scale-up-app-workload) for the discussion of hardware
+    fit.)'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个练习的目标是确定数据大小的四年适配性。从 [“分片：简介”](#sharding-intro) 中，四年适配是将四年后的数据大小或访问量估计应用到今天硬件的容量上。如果估计的数据大小或访问量（比喻地）符合今天的硬件容量，则可能不需要分片。（参考
+    [“应用工作负载”](#scale-up-app-workload) 讨论硬件适配性。）
+- en: You will need historical data sizes to complete this practice. If you’re not
+    already measuring and recording data sizes, then jump ahead to [“Data Size”](ch06.html#metrics-data-size)
+    to learn how.
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你将需要历史数据大小来完成这个练习。如果你还没有在测量和记录数据大小，那么可以直接跳转到 [“数据大小”](ch06.html#metrics-data-size)
+    了解如何进行。
+- en: 'The simplest possible calculation is sufficient. If, for example, a database
+    has historically increased by 10 GB every month, then the database will be 12
+    months × 4 years × 10 GB/month = 480 GB *larger* in four years—if no data is deleted
+    or archived (see [“Delete or Archive Data”](ch03.html#delete-or-archive)). If
+    the database is 100 GB today, then 580 GB in four years fits: you don’t need to
+    shard any time soon (four-year fit for access load notwithstanding) because MySQL
+    on hardware *today* can easily handle 580 GB of data.'
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最简单的计算已经足够了。例如，如果一个数据库历史上每个月增加 10 GB，那么四年后数据库将增加 12 个月 × 4 年 × 10 GB/月 = 480
+    GB *更大* ——如果没有数据被删除或归档（参见 [“删除或归档数据”](ch03.html#delete-or-archive)）。如果数据库今天是 100
+    GB，那么四年后的 580 GB 是合适的：你不需要很快进行分片（尽管需要四年内适应访问负载），因为今天的 MySQL 在硬件上轻松处理 580 GB 的数据。
+- en: 'If your four-year fit for data size indicates that you might need to shard,
+    take it seriously and dive deeper to determine for sure: is the database on a
+    steady path to becoming too large for a single MySQL instance? If yes, then *shard
+    early* because sharding is essentially a complex data migration process; therefore,
+    the less data, the easier the process. If not, then congratulations: ensuring
+    that the system will continue to scale for years to come is an expert practice
+    in all fields of engineering.'
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你的四年数据大小适配表明可能需要分片，那么请认真对待并深入研究以确定确切的情况：数据库是否正在稳定地变得过大以至于单个 MySQL 实例无法处理？如果是，那么*早点分片*，因为分片本质上是一个复杂的数据迁移过程；因此，数据越少，这个过程就越容易。如果不是，那么恭喜：确保系统将来几年继续扩展是所有工程领域的专家实践。
+- en: ^([1](ch05.html#idm45829111349312-marker)) County names are unique only within
+    a state, which is why the state name is required.
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch05.html#idm45829111349312-marker)) 县名在一个州内是唯一的，这就是为什么需要州名的原因。

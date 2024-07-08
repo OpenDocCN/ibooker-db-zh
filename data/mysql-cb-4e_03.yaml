@@ -1,0 +1,4453 @@
+- en: Chapter 3\. MySQL Replication
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第三章 MySQL 复制
+- en: 3.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.0 介绍
+- en: MySQL replication provides a way to setup a copy (replica) server of the active
+    (source) database, then automatically continuously update such a copy applying
+    all changes which source server receives.
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 复制提供了一种设置活动（源）数据库的副本服务器（复制）的方式，然后自动持续更新此类副本，应用源服务器接收的所有更改。
+- en: 'Replica is useful in many situations, particularly:'
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 副本在许多情况下都很有用，特别是：
+- en: Hot Standby
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 热备份
+- en: A server, normally idle, which replaces an active one in case of a failure.
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在故障发生时，通常处于空闲状态的服务器可以替代活动服务器。
+- en: Read scale
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 读取扩展
+- en: Multiple servers, replicating from the same source, can process more parallel
+    read requests than a single machine.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 多台服务器从同一源复制时，可以比单台机器处理更多的并行读取请求。
+- en: Geographical distribution
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 地理分布
+- en: When application serves users in different regions having database server, located
+    locally can help to retrieve data faster.
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当应用程序为不同区域的用户提供服务时，位于本地的数据库服务器可以帮助更快地检索数据。
+- en: Analytics server
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分析服务器
+- en: Complicated analytics queries may take hours to run, set plenty of locks and
+    use a lot of resources. Running them on the replica minimizes impact on other
+    parts of the application.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复杂的分析查询可能需要几小时才能运行，设置大量锁定并使用大量资源。在副本上运行它们可以最小化对应用程序其他部分的影响。
+- en: Backup server
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 备份服务器
+- en: Taking backups from a live database involves high IO resource usage and locking,
+    which is necessary to avoid data inconsistencies between backup and active data
+    set. Taking backups from the dedicated replica reduces impact on production.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从活动数据库获取备份涉及高 IO 资源使用和锁定，这是必要的，以避免备份数据集与活动数据集之间的数据不一致性。从专用副本获取备份可以减少对生产环境的影响。
+- en: Delayed copy
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 延迟副本
+- en: A replica, applying updates with a delay, configured by the `SOURCE_DELAY` (`MASTER_DELAY`)
+    option, allows to rollback human errors, such as removal of an important table.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `SOURCE_DELAY`（`MASTER_DELAY`）选项配置的延迟应用更新的副本允许回滚人为错误，例如重要表的删除。
+- en: Note
+  id: totrans-16
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Historically source server was called a master and replica server was called
+    a slave. Lately it was discovered that terminology master and slave do not correctly
+    reflect how replication works while the words themselves maybe insulting. In the
+    last few years most of the software vendors are performing switch from the old
+    to the new terminology. For MySQL this change started from version 8.0.22 and
+    is still in progress. Not all option names and commands support new syntax. There
+    are also good change that even if your MySQL version fully supports new syntax,
+    you may find legacy terminology on public forums and books, printed earlier. Therefore
+    in this book we use terms source and replica when discuss replication roles. For
+    the commands and variable names that support new syntax we provide both syntaxes
+    first time, the use new syntax. We use legacy syntax if the change is still in
+    progress.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在历史上，源服务器被称为主服务器，副本服务器被称为从服务器。最近发现，主从这些术语并不正确地反映了复制的工作方式，而这些术语本身可能是侮辱性的。在过去几年中，大多数软件供应商开始从旧术语转向新术语。对于
+    MySQL，这种变化从版本 8.0.22 开始，并仍在进行中。并非所有选项名称和命令都支持新语法。即使您的 MySQL 版本完全支持新语法，您在公共论坛和早期印刷书籍中可能会找到遗留术语。因此，在本书中讨论复制角色时，我们使用源和副本这些术语。对于支持新语法的命令和变量名称，我们首次提供新语法。如果变更仍在进行中，我们使用旧的语法。
+- en: MySQL Replication requires special activities on both servers.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL 复制需要在两台服务器上进行特殊操作。
+- en: Source server stores all updates in binary log files. These files contain encoded
+    update events. Source server writes to a single binary log file at the moment.
+    Once it reaches `max_binlog_size` the binary log is rotated and a new file is
+    created.
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 源服务器将所有更新存储在二进制日志文件中。这些文件包含编码的更新事件。源服务器在某一时刻写入单个二进制日志文件。一旦达到 `max_binlog_size`，则会旋转二进制日志，并创建一个新文件。
+- en: 'The binary log file supports two formats: `STATEMENT` and `ROW`. In the `STATEMENT`
+    format SQL statements are written as they are and then encoded into binary format.
+    In the `ROW` format SQL statements are not recorded. Instead, actual updates to
+    table rows are stored. The `ROW` binary log format is preferred'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二进制日志文件支持两种格式：`STATEMENT` 和 `ROW`。在 `STATEMENT` 格式中，SQL 语句按原样编写，然后编码为二进制格式。在
+    `ROW` 格式中，SQL 语句不记录，而是存储实际的表行更新。首选 `ROW` 二进制日志格式。
+- en: Tip
+  id: totrans-21
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: When using binary log format `ROW` it could be useful, when troubleshooting
+    replication errors, to know the actual statement received by the source server.
+    Use option `binlog_rows_query_log_events` to store the information log event with
+    the original query. Such an event is not participating in replication and could
+    be retrieved for informational purposes only.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当使用二进制日志格式 `ROW` 时，在排查复制错误时，知道源服务器收到的实际语句可能很有用。使用选项 `binlog_rows_query_log_events`
+    将信息记录事件与原始查询一起存储。这样的事件不参与复制，仅供信息目的检索。
+- en: Replica server continuously requests binary log events from the source server,
+    then stores them in the special files, called relay log files. It has a separate
+    thread, called IO, or connection thread, which is doing only this job. Another
+    thread, or threads, called SQL or applier thread, read events from the relay logs
+    and apply them to the tables.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 副本服务器持续从源服务器请求二进制日志事件，然后将它们存储在特殊文件中，称为中继日志文件。它有一个独立的线程，称为 IO 或连接线程，专门负责此任务。另一个线程或线程组，称为
+    SQL 或应用程序线程，从中继日志中读取事件并将它们应用到表中。
+- en: 'Each event in the binary log has its own unique identifier: position. Position
+    is unique per file and resets when a new one is created. Replica may use the binary
+    log file name and position as a unique identifier of the event.'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二进制日志中的每个事件都有其自己的唯一标识符：位置。位置对每个文件都是唯一的，并在创建新文件时重置。副本可以使用二进制日志文件名和位置作为事件的唯一标识符。
+- en: While binary log position uniquely identifies event in a particular file it
+    cannot be used to identify if particular event was applied on the replica or not.
+    To resolve this problem Global Transaction Identifiers (GTIDs) were introduced.
+    These are unique identifiers, assigned to each transaction. They are unique across
+    all the life of a MySQL installation. They also use mechanism to uniquely identify
+    server, therefore are safe to use even if replication is possible from multiple
+    sources.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然二进制日志位置唯一标识特定文件中的事件，但不能用于确定特定事件是否已在副本上应用。为解决此问题，引入了全局事务标识符 (GTID)。这些是唯一标识符，分配给每个事务。它们在
+    MySQL 安装的整个生命周期内都是唯一的。它们还使用机制唯一标识服务器，因此即使从多个源进行复制也是安全的。
+- en: Replica stores information about source binary log coordinates in the special
+    repository, defined by a variable `master_info_repository`. Such a repository
+    can be stored either in a table or in a file.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 副本在特殊存储库中存储有关源二进制日志坐标的信息，由变量 `master_info_repository` 定义。此类存储库可以存储在表中或文件中。
+- en: 'This chapter describes how to setup and use MySQL Replication. It covers all
+    typical replication scenarios, including:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章描述了如何设置和使用 MySQL 复制。它涵盖了所有典型的复制场景，包括：
+- en: Two servers one-way source-replica setup.
+  id: totrans-28
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 两台服务器单向源-副本设置。
+- en: Circular replication
+  id: totrans-29
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 循环复制
+- en: Multi-source replication
+  id: totrans-30
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 多源复制
+- en: Semisynchronous replication
+  id: totrans-31
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 半同步复制
+- en: Group replication
+  id: totrans-32
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 组复制
+- en: 3.1 Configuring the Basic Replication between One Source and One Replica
+  id: totrans-33
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.1 配置一源一副本之间的基本复制
+- en: Problem
+  id: totrans-34
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to prepare two servers for the replication.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望为复制准备两台服务器。
+- en: Solution
+  id: totrans-36
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Add configuration option `log-bin` into the source configuration file, specify
+    unique `server_id` for both servers, add options to support GTIDs and/or non-default
+    binary log format and create a user with `REPLICATION SLAVE` privilege on the
+    source.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在源配置文件中添加配置选项 `log-bin`，为两台服务器指定唯一的 `server_id`，添加支持 GTID 和/或非默认二进制日志格式的选项，并在源上创建一个具有
+    `REPLICATION SLAVE` 权限的用户。
+- en: Discussion
+  id: totrans-38
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: First you need to prepare both servers to be able to handle replication events.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，您需要准备两台服务器以处理复制事件。
+- en: 'On the source server:'
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在源服务器上：
+- en: Enable binary log by adding option `log-bin` into configuration file. Changing
+    this option requires restart. Binary log is enabled by default since version 8.0.
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 通过在配置文件中添加选项 `log-bin` 来启用二进制日志。更改此选项需要重新启动。自版本 8.0 起，默认情况下启用二进制日志。
+- en: Set unique `server_id`. `server_id` is dynamic variable and could be changed
+    without taking the server offline, but we strongly recommend to set it in the
+    configuration file too, so it would not be overridden after restart.
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 设置唯一的 `server_id`。`server_id` 是动态变量，可以在不关闭服务器的情况下更改，但我们强烈建议在配置文件中设置它，这样在重新启动后不会被覆盖。
+- en: 'Create a replication user and grant `REPLICATION SLAVE` to it:'
+  id: totrans-43
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 创建一个复制用户，并授予 `REPLICATION SLAVE` 权限：
+- en: '[PRE0]'
+  id: totrans-44
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: Warning
+  id: totrans-45
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: In MySQL 8.0 default authentication plugin is `caching_sha2_password` which
+    requires TLS connection or the source public key. Therefore, if you want to use
+    this plugin, you need to enable TLS connection for the replica as described in
+    [Recipe 3.14](#nch-replication-replication-ssl) or use option `SOURCE_PUBLIC_KEY_PATH=1`
+    (`GET_MASTER_PUBLIC_KEY=1`) of the *CHANGE REPLICATION SOURCE* (*CHANGE MASTER*)
+    command.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MySQL 8.0 中，默认的认证插件是 `caching_sha2_password`，它要求 TLS 连接或源公钥。因此，如果您想使用此插件，需要按照
+    [Recipe 3.14](#nch-replication-replication-ssl) 中描述的方法为副本启用 TLS 连接，或使用 *CHANGE
+    REPLICATION SOURCE* (*CHANGE MASTER*) 命令的选项 `SOURCE_PUBLIC_KEY_PATH=1` (`GET_MASTER_PUBLIC_KEY=1`)。
+- en: Alternatively you can use authentication plugin, allowing insecure connections.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者您可以使用认证插件，允许不安全的连接。
+- en: '[PRE1]'
+  id: totrans-48
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: On the replica just set unique `server_id`.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在副本上只需设置唯一的 `server_id`。
+- en: Tip
+  id: totrans-50
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: 'Since version 8.0 you can use *SET PERSIST* to save dynamically changed variable
+    permanently:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自版本 8.0 起，您可以使用 *SET PERSIST* 将动态更改的变量永久保存：
+- en: '[PRE2]'
+  id: totrans-52
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: See [Persisted System Variables in the MySQL User Reference Manual](https://dev.mysql.com/doc/refman/8.0/en/persisted-system-variables.html)
+    for details.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 详细信息请参阅 [MySQL 用户手册中的持久化系统变量](https://dev.mysql.com/doc/refman/8.0/en/persisted-system-variables.html)。
+- en: 'At this stage you can tune other options, which affect replication safety and
+    performance, particularly:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此阶段，您可以调整其他选项，这些选项会影响复制的安全性和性能，特别是：
+- en: '`binlog_format`'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`binlog_format`'
+- en: Binary log format
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二进制日志格式
+- en: GTID support
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GTID 支持
+- en: Support for global transaction identifiers
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 支持全局事务标识符
+- en: '`replica_parallel_type` (`slave_parallel_type`) and `replica_parallel_workers`
+    ( `slave_parallel_workers`)'
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`replica_parallel_type` (`slave_parallel_type`) 和 `replica_parallel_workers`
+    (`slave_parallel_workers`)'
+- en: Multi-threaded replica support
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 多线程副本支持
+- en: Binary log on the replica
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 副本上的二进制日志
+- en: Define if and how replica will use binary log.
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 定义副本是否以及如何使用二进制日志。
+- en: We will cover these options in the following recipes.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将在接下来的几个步骤中详细介绍这些选项。
+- en: 3.2 Position-Based Replication in the New Installation Environment
+  id: totrans-64
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.2 在新安装环境中基于位置的复制
+- en: Problem
+  id: totrans-65
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to setup a replica of the just installed MySQL server, using position-based
+    configuration.
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要设置一个刚安装的 MySQL 服务器的副本，使用基于位置的配置。
+- en: Solution
+  id: totrans-67
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Prepare source and replica servers as described in [Recipe 3.1](#nch-replication-replication-configuration),
+    then obtain current binary log position using *SHOW MASTER STATUS* command on
+    the source server and point the replica to the appropriate position using *CHANGE
+    REPLICATION SOURCE ... source_log_file='BINARY LOG FILE NAME', source_log_pos=POSITION;*
+    (*CHANGE MASTER ... master_log_file='BINARY LOG FILE NAME', master_log_pos=POSITION;*)
+    command.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如 [Recipe 3.1](#nch-replication-replication-configuration) 中描述的准备源和副本服务器，然后在源服务器上使用
+    *SHOW MASTER STATUS* 命令获取当前二进制日志位置，并使用 *CHANGE REPLICATION SOURCE ... source_log_file='BINARY
+    LOG FILE NAME', source_log_pos=POSITION;* (*CHANGE MASTER ... master_log_file='BINARY
+    LOG FILE NAME', master_log_pos=POSITION;*) 命令将副本指向适当的位置。
+- en: Discussion
+  id: totrans-69
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: For this recipe we assume that you have two freshly installed servers with no
+    user data in them. There is no write activity on any of the servers.
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于此示例，我们假设您有两台刚安装的服务器，其中没有任何用户数据。任何服务器上都没有写活动。
+- en: 'First, prepare them for the replication use as described at [Recipe 3.1](#nch-replication-replication-configuration).
+    Then, on the source, run command *SHOW MASTER STATUS*:'
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，按照 [Recipe 3.1](#nch-replication-replication-configuration) 中的描述准备它们以供复制使用。然后，在源上运行
+    *SHOW MASTER STATUS* 命令：
+- en: '[PRE3]'
+  id: totrans-72
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: Field `File` contains name of the current binary log and field `Position` contains
+    current position. Record values of these fields.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`File` 字段包含当前二进制日志的名称，而 `Position` 字段包含当前位置。记录这些字段的值。'
+- en: 'On the replica run [*CHANGE REPLICATION SOURCE* (*CHANGE MASTER*)](https://dev.mysql.com/doc/refman/8.0/en/change-replication-source-to.html)
+    command:'
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在副本上运行 [*CHANGE REPLICATION SOURCE* (*CHANGE MASTER*)](https://dev.mysql.com/doc/refman/8.0/en/change-replication-source-to.html)
+    命令：
+- en: '[PRE4]'
+  id: totrans-75
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'To start replica use command *START REPLICA* (*START SLAVE*):'
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要启动副本，请使用命令 *START REPLICA* (*START SLAVE*)：
+- en: '[PRE5]'
+  id: totrans-77
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'To check if replica is running use *SHOW REPLICA STATUS* (*SHOW SLAVE STATUS*):'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要检查副本是否正在运行，请使用 *SHOW REPLICA STATUS* (*SHOW SLAVE STATUS*)：
+- en: '[PRE6]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: Listing above confirms that both IO (connection) and SQL (applier) replica threads
+    are running and replication state is fine. We will discuss full output of the
+    *SHOW REPLICA STATUS* command in [Recipe 3.15](#nch-replication-replication-troubleshooting)
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上面的列表确认了 IO（连接）和 SQL（应用程序）副本线程都在运行，并且复制状态良好。我们将在 [Recipe 3.15](#nch-replication-replication-troubleshooting)
+    中讨论 *SHOW REPLICA STATUS* 命令的完整输出。
+- en: Now you can enable writes on the source server.
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在您可以在源服务器上启用写入。
+- en: 3.3 Setting Up a Position-Based Replica of a MySQL Installation that is Already
+    in Use
+  id: totrans-82
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.3 设置一个基于位置的 MySQL 安装的副本，该安装已在使用中
+- en: Problem
+  id: totrans-83
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Setting up a replica for the new installed server is different from the case
+    when the future source already has data. In the latter case you need to be especially
+    careful to do not introduce data inconsistency by specifying wrong starting position.
+    In this recipe we provide instructions on how to setup a replica of the MySQL
+    installation in use.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 设置新安装服务器的副本与未来源已经具有数据的情况不同。在后一种情况下，特别注意不要通过指定错误的起始位置引入数据不一致性。在本文中，我们提供了如何设置正在使用的
+    MySQL 安装的副本的详细说明。
+- en: Solution
+  id: totrans-85
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Prepare source and replica servers as described in [Recipe 3.1](#nch-replication-replication-configuration),
+    stop all writes on the source server, back it up, then obtain current binary log
+    position using *SHOW MASTER STATUS* command that will be used for pointing the
+    replica to the appropriate position using *CHANGE REPLICATION SOURCE ... source_log_file='BINARY
+    LOG FILE NAME', source_log_pos=POSITION;* command.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 按照 [Recipe 3.1](#nch-replication-replication-configuration) 中描述的方法准备源服务器和副本服务器，停止源服务器上的所有写操作，进行备份，然后使用
+    *SHOW MASTER STATUS* 命令获取当前二进制日志位置，此位置将用于使用 *CHANGE REPLICATION SOURCE ... source_log_file='BINARY
+    LOG FILE NAME', source_log_pos=POSITION;* 命令将副本指向适当位置。
+- en: Discussion
+  id: totrans-87
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: As in case of installing a new replica, both servers need to be configured for
+    the replication use as described in [Recipe 3.1](#nch-replication-replication-configuration).
+    Before initiating setup you need to ensure that both servers have unique `server_id`
+    and source server has binary logging enabled. You can create replication user
+    at this moment or you can do it before setting up a replica.
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与安装新副本的情况类似，两台服务器都需要按照 [Recipe 3.1](#nch-replication-replication-configuration)
+    中描述的方式配置复制使用。在启动设置之前，您需要确保两台服务器都具有唯一的 `server_id`，并且源服务器已启用二进制日志记录。您可以在此时创建复制用户，或者在设置副本之前执行此操作。
+- en: 'If you have a server which was already running for a while and want to set
+    up a replica of it you need to take backup first, restore it on the replica, then
+    point the replica to the source server. Challenge for this setup is to use correct
+    binary log position: if the server is accepting writes while backup is running
+    position consistently changing. As a result command *SHOW MASTER STATUS* will
+    return wrong result unless you stop all writes while taking backup.'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您有一个已经运行一段时间的服务器，并希望设置其副本，您需要首先进行备份，然后在副本上恢复，并将副本指向源服务器。此设置的挑战在于使用正确的二进制日志位置：如果服务器在备份运行时接受写入，则位置会一直变化。因此，*SHOW
+    MASTER STATUS* 命令将返回错误的结果，除非您在进行备份时停止所有写操作。
+- en: Standard backup tools support special options when taking backup of the future
+    source server for a replica to bypass this issue.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 标准备份工具在备份未来源服务器用于副本时支持特殊选项，以绕过此问题。
+- en: '*mysqldump*, described in [Recipe 6.6](ch06.xhtml#nch-tblmgmt-tblmgmt-copy-mysqldump),
+    has the option `--source-data` (`--master-data`). If set to 1 *CHANGE REPLICATION
+    SOURCE* statement with coordinates at the time of the backup start will be written
+    into resulting dump file and executed when the dump is loaded.'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mysqldump*，在 [Recipe 6.6](ch06.xhtml#nch-tblmgmt-tblmgmt-copy-mysqldump) 中描述，具有选项
+    `--source-data` (`--master-data`)。如果设置为 1，在备份开始时将写入 *CHANGE REPLICATION SOURCE*
+    语句和坐标到结果转储文件中，并在加载转储时执行。'
+- en: '[PRE7]'
+  id: totrans-92
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Tip
+  id: totrans-93
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: 'If you want to have replication position in the resulting dump file, but do
+    not want *CHANGE REPLICATION SOURCE* command to be automatically executed, set
+    option `--source-data` to 2: in this case the statement will be written as a comment.
+    You may later execute it manually.'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您希望在生成的转储文件中包含复制位置，但不希望自动执行 *CHANGE REPLICATION SOURCE* 命令，请将选项 `--source-data`
+    设置为 2：在这种情况下，该语句将作为注释写入。稍后可以手动执行它。
+- en: Tools, which make online binary backups, such as [Percona XtraBackup](https://www.percona.com/doc/percona-xtrabackup/8.0/index.html)
+    or [MySQL Enterprise Backup](https://dev.mysql.com/doc/mysql-enterprise-backup/8.0/en/),
+    store binary log coordinates in special metadata files. Consult documentation
+    of your backup tool to find out how to safely backup source server.
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 像 [Percona XtraBackup](https://www.percona.com/doc/percona-xtrabackup/8.0/index.html)
+    或 [MySQL Enterprise Backup](https://dev.mysql.com/doc/mysql-enterprise-backup/8.0/en/)
+    这样的在线二进制备份工具，在特殊的元数据文件中存储二进制日志坐标。请参考您的备份工具文档，了解如何安全地备份源服务器。
+- en: Tip
+  id: totrans-96
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: There several kinds of backups for MySQL. Tools that perform online backups,
+    do not require you to stop MySQL server. Logical backups result in a file with
+    set of commands, that allow to restore data. Binary backups copy physical database
+    files. Binary backups are usually much faster than logical. Restore of binary
+    backups is dramatically faster if compare with restore of the logical backups.
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL有几种备份方式。执行在线备份的工具无需停止MySQL服务器。逻辑备份生成一组命令的文件，允许恢复数据。二进制备份复制物理数据库文件。与逻辑备份相比，二进制备份通常要快得多。与逻辑备份相比，二进制备份的恢复速度大大加快。
+- en: The simplest and fastest binary backup utility is *cp* that requires MySQL server
+    to be stopped. Online backup tools allows you to copy binary data while server
+    is running and preferable solution for large data sets.
+  id: totrans-98
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最简单和最快的二进制备份实用程序是*cp*，需要停止MySQL服务器。在线备份工具允许在服务器运行时复制二进制数据，适合大数据集的首选解决方案。
+- en: Logical backup solutions, however, are compatible with higher differences between
+    versions and could be used to recover data. They are also handy when you need
+    to migrate small part of data, such as a table or even part of the table.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 逻辑备份解决方案，对版本之间的差异更兼容，可以用来恢复数据。在需要迁移小部分数据时，如表格或表格的一部分，它们也非常方便。
+- en: 'Once you have a backup restore it on the replica. For *mysqldump* use *mysql*
+    client to load the dump:'
+  id: totrans-100
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦有备份，请在副本上恢复它。对于*mysqldump*，请使用*mysql*客户端加载转储：
+- en: '[PRE8]'
+  id: totrans-101
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: Once backup is restored start replication using *START REPLICA* command.
+  id: totrans-102
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 恢复备份后，使用*START REPLICA*命令启动复制。
+- en: 3.4 Setting Up GTID-Based Replication
+  id: totrans-103
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.4 设置基于GTID的复制
+- en: Problem
+  id: totrans-104
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to setup a replica using global transaction identifiers (GTIDs).
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想使用全局事务标识符（GTIDs）设置副本。
+- en: Solution
+  id: totrans-106
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Add options `gtid_mode=ON` and `enforce_gtid_consistency=ON` into both source
+    and replica configuration files, then point the replica to the source server using
+    *CHANGE REPLICATION SOURCE ... SOURCE_AUTO_POSITION=1* command.
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在源和副本配置文件中添加选项`gtid_mode=ON`和`enforce_gtid_consistency=ON`，然后使用*CHANGE REPLICATION
+    SOURCE ... SOURCE_AUTO_POSITION=1*命令将副本指向源服务器。
+- en: Discussion
+  id: totrans-108
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Position-based replication is easy to setup, but is error-prone. What if you
+    mix up and specify a position in the future? In this case some transactions will
+    be missed. Or, what will happen if you specify a position in the past? In this
+    case the same transaction will be applied twice. You will end up with duplicated,
+    missed or corrupted rows.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于位置的复制设置很容易，但容易出错。如果您混淆并指定未来的位置会怎样？在这种情况下，一些事务将被跳过。或者，如果您指定过去的位置会发生什么？在这种情况下，同一事务将被应用两次。您最终会得到重复的、丢失的或损坏的行。
+- en: 'To solve this issue Global Transaction Identifiers, or GTIDs, were introduced
+    to uniquely identify each transaction on the server. GTID consists of two parts:
+    unique ID of the server where this transaction were executed first time and unique
+    ID of the transaction on this server. The source server ID is usually the value
+    of the `server_uuid` global variable and transaction ID is a number, starting
+    from 1.'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了解决这个问题，引入了全局事务标识符（GTIDs），用于唯一标识服务器上的每个事务。GTID由两部分组成：首次执行此事务的服务器的唯一ID和此服务器上的事务唯一ID。源服务器ID通常是`server_uuid`全局变量的值，事务ID是从1开始的数字。
+- en: '[PRE9]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: Transactions, executed by the server, are stored in GTID sets and their GTIDs
+    are visible in the *SHOW MASTER STATUS* output as well as value of `gtid_executed`
+    variable. The set contains unique ID of the originating server and range of transaction
+    numbers.
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务器执行的事务存储在GTID集中，它们的GTID在*SHOW MASTER STATUS*输出中可见，以及`gtid_executed`变量的值。该集包含原始服务器的唯一ID和事务编号范围。
+- en: In the example below `467ccf91-0341-11eb-a2ae-0242dc638c6c` is the source server
+    unique ID and `1-299` is a range of transaction numbers, which were executed on
+    this server.
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在下面的示例中，`467ccf91-0341-11eb-a2ae-0242dc638c6c`是源服务器的唯一标识，`1-299`是在此服务器上执行的事务编号范围。
+- en: '[PRE10]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'GTID sets can contain ranges, individual transactions and groups of them, separated
+    by a colon symbol. GTIDs with different source ids are separated by a comma:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: GTID集可以包含范围、单个事务和以冒号分隔的事务组。具有不同源ID的GTID由逗号分隔：
+- en: '[PRE11]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: Normally GTIDs are automatically assigned and you do not need to care about
+    their values.
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常情况下，GTIDs会自动分配，您不需要关注它们的值。
+- en: However, in order to use GTIDs you need to add additional preparation steps
+    for your servers.
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，要使用GTIDs，您需要为您的服务器添加额外的准备步骤。
+- en: 'Two configuration options are required to enable GTIDs: `gtid_mode=ON` and
+    `enforce-gtid-consistency=ON`. They must be enabled on both servers before starting
+    replication.'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 启用GTID需要两个配置选项：`gtid_mode=ON`和`enforce-gtid-consistency=ON`。在启动复制之前，这两个选项必须在两个服务器上启用。
+- en: 'If you are setting up a new replica of a source that is running with GTIDs
+    enabled, just adding these options into the configuration file and restarting
+    the servers is enough. Once done you can enable replication using *CHANGE REPLICATION
+    SOURCE ... SOURCE_AUTO_POSITION=1* command and start it:'
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您正在设置一个新的副本，源端启用了GTID，则只需将这些选项添加到配置文件中并重新启动服务器即可。完成后，您可以使用*CHANGE REPLICATION
+    SOURCE ... SOURCE_AUTO_POSITION=1*命令启用复制并启动它：
+- en: '[PRE12]'
+  id: totrans-121
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'However, if replication was already running using position-based setup you
+    need to perform additional steps:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，如果复制已经使用基于位置的设置运行，则需要执行其他步骤：
+- en: 'Stop all updates, making both servers read only:'
+  id: totrans-123
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 停止所有更新，使两个服务器都变为只读状态：
+- en: '[PRE13]'
+  id: totrans-124
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'Wait until replica catches up with all updates from the source server: values
+    of `File` and `Position` from the *SHOW MASTER STATUS* output on the source server
+    should match values of `Relay_Source_Log_File` and `Exec_Source_Log_Pos` of the
+    *SHOW REPLICA STATUS*, taken on the replica.'
+  id: totrans-125
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 等待副本从源服务器上的所有更新追赶上来：源服务器上*SHOW MASTER STATUS*输出的`File`和`Position`值应与副本上*SHOW
+    REPLICA STATUS*中的`Relay_Source_Log_File`和`Exec_Source_Log_Pos`值匹配。
+- en: Warning
+  id: totrans-126
+  prefs:
+  - PREF_IND
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Do not rely on the `Seconds_Behind_Source` value, because it is inaccurate.
+  id: totrans-127
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 不要依赖于`Seconds_Behind_Source`值，因为它不准确。
+- en: 'For example, in the following output on the source server:'
+  id: totrans-128
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 例如，在源服务器上的以下输出中：
+- en: '[PRE14]'
+  id: totrans-129
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: binary log position is 7090\.
+  id: totrans-130
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 二进制日志位置为7090。
+- en: '[PRE15]'
+  id: totrans-131
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'On the replica, instead, position `Read_Source_Log_Pos` that read by the IO
+    thread, is same as on the source server while value position of the latest executed
+    event `Exec_Source_Log_Pos` is 7308: somewhere earlier in the binary log file.
+    Value of `Seconds_Behind_Source` is 0 is normal, because MySQL server can execute
+    thousands of updates per second. Still this does not mean that the replica fully
+    catches up the source server.'
+  id: totrans-132
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在副本上，IO线程读取的`Read_Source_Log_Pos`位置与源服务器上的值相同，而最新执行事件`Exec_Source_Log_Pos`的位置为7308：在二进制日志文件中稍早的位置。
+    `Seconds_Behind_Source`的值为0是正常的，因为MySQL服务器可以每秒执行数千次更新。但这并不意味着副本完全追赶上了源服务器。
+- en: 'Once the replica has caught up, stop both servers, enable `gtid_mode=ON` and
+    `enforce-gtid-consistency=ON` options, start them and enable replication:'
+  id: totrans-133
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 一旦副本追赶上，停止两个服务器，启用`gtid_mode=ON`和`enforce-gtid-consistency=ON`选项，然后启动它们并启用复制：
+- en: '[PRE16]'
+  id: totrans-134
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: Tip
+  id: totrans-135
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: You may omit replication source connection options if they were already known
+    to the replica before you started switching replication from position-based to
+    GTID-based.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果在开始从基于位置到基于GTID的复制切换之前，副本已知复制源连接选项，则可以省略它们。
+- en: Note
+  id: totrans-137
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: You are not required to enable binary logging on the replica in order to use
+    GTIDs. But if you are going to write to replica outside of the replication its
+    transactions would not have own GTID assigned. GTIDs will be used only for the
+    replicated events.
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您无需在复制中启用二进制日志记录以使用GTID。但如果您要在复制外写入副本，则其事务将不具有自己的GTID分配。 GTID仅用于复制事件。
+- en: See Also
+  id: totrans-139
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: For additional information about setting up MySQL replication with GTIDs, see
+    [MySQL User Reference Manual](https://dev.mysql.com/doc/refman/8.0/en/replication-gtids-howto.html).
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于如何设置带GTID的MySQL复制的更多信息，请参见[MySQL用户参考手册](https://dev.mysql.com/doc/refman/8.0/en/replication-gtids-howto.html)。
+- en: 3.5 Configuring a Binary Log Format
+  id: totrans-141
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.5 配置二进制日志格式
+- en: Problem
+  id: totrans-142
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to use a binary log format that is the most suitable for your application.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望使用最适合您应用程序的二进制日志格式。
+- en: Solution
+  id: totrans-144
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Decide which format best suites your needs and set it using configuration option
+    `binlog_format`.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 决定哪种格式最适合您的需求，并使用配置选项`binlog_format`进行设置。
+- en: Discussion
+  id: totrans-146
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Default MySQL binary log format is `ROW` since version 5.7.7\. This is the safest
+    possible format, fitting most applications. It stores encoded table row, modified
+    by the binary log event.
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认的MySQL二进制日志格式自版本5.7.7起为`ROW`。这是最安全的格式，适合大多数应用程序。它存储由二进制日志事件修改的编码表行。
+- en: 'However, binary log format `ROW` may generate more disk and network traffic
+    than `STATEMENT` format. This happens, because it stores into binary log file
+    two copies of the modified row: before changes and after the changes. If a table
+    has many columns, values for all of them will be logged two times even if only
+    one column was modified.'
+  id: totrans-148
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，`ROW`格式的二进制日志可能会产生比`STATEMENT`格式更多的磁盘和网络流量。这是因为它将修改后的行存储到二进制日志文件中两次：变更前和变更后。如果一个表有很多列，即使只修改了一列，所有列的值也会被记录两次。
+- en: If you want binary log to store only changed column and column which could be
+    used to identify changed rows (normally Primary Key) you can use configuration
+    option `binlog_row_image=minimal`. This will work perfectly if tables on the source
+    server and its replica are identical, but may cause issues if number of columns,
+    their data types or primary key definitions do not match.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果希望二进制日志仅存储修改的列和用于唯一标识修改行的列（通常是主键），可以使用配置选项`binlog_row_image=minimal`。这在源服务器和其复制件的表完全相同的情况下可以完美工作，但如果列数、数据类型或主键定义不匹配可能会导致问题。
+- en: To store full row, except `TEXT` or `BLOB` columns which were not changed by
+    the statement and are not required to uniquely identify modified row use option
+    `binlog_row_image=noblob`.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要存储完整行，除非语句未更改`TEXT`或`BLOB`列并且不需要唯一标识修改行，请使用选项`binlog_row_image=noblob`。
+- en: If row format still generates too much traffic you may switch it to the `STATEMENT`.
+    In this case statements, modifying rows, will be recorded, then executed by the
+    replica. To use binary log format `STATEMENT` set option `binlog_format=STATEMENT`.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果行格式仍然产生过多流量，可以将其切换到`STATEMENT`。在这种情况下，修改行的语句将被记录，然后由复制件执行。要使用二进制日志格式`STATEMENT`，请设置选项`binlog_format=STATEMENT`。
+- en: '`STATEMENT` format is not recommended safe to use, because some statements
+    can produce different updates on different servers, even if data originally was
+    identical. These statements are called as nondeterministic. In order to deal with
+    this downside MySQL has a special binary log format: `MIXED` that normally logs
+    events in the `STATEMENT` format and automatically switches to `ROW` if a statement
+    is nondeterministic.'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不推荐使用`STATEMENT`格式是因为某些语句可能会在不同的服务器上产生不同的更新，即使数据最初是相同的。这些语句被称为非确定性的。为了解决这个缺点，MySQL有一个特殊的二进制日志格式：`MIXED`，它通常以`STATEMENT`格式记录事件，并在语句是非确定性的时候自动切换到`ROW`格式。
+- en: Warning
+  id: totrans-153
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: If binary log is enabled on replica it should use either the same binary log
+    format as its source server or `MIXED` unless you disabled binary logging of the
+    replicated events using option `log_replica_updates=OFF` (`log_slave_updates=OFF`).
+    This is required, because replica does not convert binary log format and simply
+    copies received events into its own binary log file. If formats do not match replication
+    will stop with an error.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果在复制件上启用了二进制日志，它应该使用与源服务器相同的二进制日志格式或者`MIXED`，除非你使用选项`log_replica_updates=OFF`（`log_slave_updates=OFF`）禁用了复制事件的二进制日志记录。这是必须的，因为复制件不会转换二进制日志格式，而只是将接收到的事件复制到自己的二进制日志文件中。如果格式不匹配，复制过程将因错误而停止。
+- en: 'Binary log format can be changed dynamically on the global or session level.
+    To change format on the global level run:'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以动态地在全局或会话级别更改二进制日志格式。要在全局级别更改格式，请运行：
+- en: '[PRE17]'
+  id: totrans-156
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'To change format on the global level and store it permanently use:'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在全局级别更改格式并永久存储，请使用：
+- en: '[PRE18]'
+  id: totrans-158
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'Note that this will not change binary logging format for the existent connections.
+    To change format on the session level execute:'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，这不会更改现有连接的二进制日志记录格式。要在会话级别更改格式，请执行：
+- en: '[PRE19]'
+  id: totrans-160
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: While format `STATEMENT` usually generates less traffic than `ROW` this is not
+    always the case. For example, complicated statements with long `WHERE` or `IN`
+    clauses that modify just a few rows, generate a bigger binary log event with format
+    `STATEMENT`.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管`STATEMENT`格式通常产生的流量比`ROW`少，但并非总是如此。例如，具有长`WHERE`或`IN`子句的复杂语句，仅修改少数行，使用`STATEMENT`格式会生成更大的二进制日志事件。
+- en: Another issue with the `STATEMENT` format is that the replica executes receieved
+    events the same way they were running on the source server. Therefore, if a statement
+    is not effective it will run slow on replica too. For example, statements on large
+    tables which have `WHERE` clause which cannot be resolved using indexes, usually
+    are slow. In this case switching to `ROW` format may improve performance.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个使用`STATEMENT`格式的问题是，复制件会像源服务器上运行的方式一样执行接收到的事件。因此，如果一个语句在原地无效，复制件上也会运行缓慢。例如，对于那些含有`WHERE`子句并且无法使用索引解析的大型表，通常会很慢。在这种情况下，切换到`ROW`格式可能会提高性能。
+- en: Warning
+  id: totrans-163
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Normally `ROW` events use primary key to find the row on the replica that needs
+    to be updated. If a table has no primary key `ROW` format can work extremely slow.
+    Older versions of MySQL even could update wrong row, because of, now fixed, bugs.
+    Auto-generated primary key which is used by the InnoDB storage engine is no help
+    here, because it may generate different values on the source and replica servers
+    for the same row. Therefore it is mandatory to define primary key for tables when
+    use binary log format `ROW`.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，`ROW`事件使用主键在副本上查找需要更新的行。如果表没有主键，`ROW`格式可能工作非常缓慢。旧版的MySQL甚至可能由于已修复的错误而更新错误的行。InnoDB存储引擎使用的自动生成的主键在这里无济于事，因为它可能会为源服务器和副本服务器上的同一行生成不同的值。因此，在使用二进制日志格式`ROW`时，定义表的主键是强制性的。
+- en: 3.6 Using Replication Filters
+  id: totrans-165
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.6 使用复制过滤器
+- en: Problem
+  id: totrans-166
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to replicate only events for specific databases or tables.
+  id: totrans-167
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望仅复制特定数据库或表的事件。
+- en: Solution
+  id: totrans-168
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use replication filters on the source, replica, or both sides.
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在源、副本或两者上使用复制过滤器。
+- en: Discussion
+  id: totrans-170
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL can filter updates to the specific databases or tables. You can setup
+    such filters on the source server to prevent them from being recorded in the binary
+    log or on the replica server, so replication would not execute them.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL可以过滤特定数据库或表的更新。您可以在源服务器上设置这些过滤器，以防止它们记录在二进制日志中，或者在副本服务器上，以便复制不会执行它们。
+- en: Filtering on the source server
+  id: totrans-172
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 在源服务器上进行过滤
+- en: Warning
+  id: totrans-173
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Replication filters can cause data loss if setup incorrectly. Study this recipe
+    very carefully and always test how they work for your setup before deploying on
+    production.
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果错误设置，复制过滤器可能导致数据丢失。非常仔细地研究这个配方，并且在将其部署到生产环境之前，始终测试它们在您的设置中的工作方式。
+- en: 'To log only updates to a specific database use configuration option `binlog-do-db=db_name`.
+    There is no corresponding variable for this option, therefore changing binary
+    log filter requires restart. To log updates for two or more specific databases
+    specify option `binlog-do-db` as many times as needed:'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要仅记录对特定数据库的更新，请使用配置选项`binlog-do-db=db_name`。对于此选项，没有相应的变量，因此更改二进制日志过滤器需要重新启动。要记录对两个或更多特定数据库的更新，请多次指定`binlog-do-db`选项：
+- en: '[PRE20]'
+  id: totrans-176
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: Binary log filters behave differently for `ROW` and `STATEMENT` binary log formats.
+    For the statement-based logging only the default database is taken into account.
+    If you are using fully qualified table names, such as `mydatabase.mytable` they
+    will be logged based on the default database value and not on the database part
+    of the update.
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ROW`和`STATEMENT`二进制日志格式的二进制日志过滤器行为不同。对于基于语句的日志记录，只考虑默认数据库。如果您使用全限定表名，例如`mydatabase.mytable`，它们将基于默认数据库值而不是更新的数据库部分进行记录。'
+- en: 'Thus, for the configuration file snippet above the following three updates
+    will be logged in the binary log:'
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，对于上述配置文件片段，以下三个更新将在二进制日志中记录：
+- en: '[PRE21]'
+  id: totrans-179
+  prefs:
+  - PREF_UL
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: '[PRE22]'
+  id: totrans-180
+  prefs:
+  - PREF_UL
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: '[PRE23]'
+  id: totrans-181
+  prefs:
+  - PREF_UL
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'However, this update on the cookbook database would not be logged:'
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，对于食谱数据库的此更新将不会被记录：
+- en: '[PRE24]'
+  id: totrans-183
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 'When binary log format `ROW` is used the default database is ignored for fully
+    qualified table names. Thus, all these updates will be logged:'
+  id: totrans-184
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当使用二进制日志格式`ROW`时，将忽略默认数据库以获取完全合格的表名。因此，所有这些更新都将被记录：
+- en: '[PRE25]'
+  id: totrans-185
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'However, this statement will not be logged:'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，此语句将不会被记录：
+- en: '[PRE26]'
+  id: totrans-187
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'For multiple table updates only updates to tables belonging to databases specified
+    by filters are logged. In the following examples only updates to table `cookbook.limbs`
+    are logged:'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于多表更新，只有属于过滤器指定数据库的表的更新才会被记录。在以下示例中，仅记录对表`cookbook.limbs`的更新：
+- en: '[PRE27]'
+  id: totrans-189
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: Warning
+  id: totrans-190
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: DDL statements, such as `ALTER TABLE` are always replicated in the `STATEMENT`
+    format. Therefore filtering rules for this format applies to them no matter the
+    value of the variable `binlog_format`.
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: DDL语句，例如`ALTER TABLE`，始终以`STATEMENT`格式复制。因此，不管`binlog_format`变量的值如何，这种格式的过滤规则都适用于它们。
+- en: If you want to log updates to all databases on your server and skip only a few
+    of them use `binlog-ignore-db` filters. Specify filter multiple times to ignore
+    multiple databases.
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您希望记录服务器上所有数据库的更新，并仅跳过其中的一些，请使用`binlog-ignore-db`过滤器。多次指定以忽略多个数据库。
+- en: '[PRE28]'
+  id: totrans-193
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: '`binlog-ignore-db` filters work similarly to `binlog-do-db` filters. In case
+    of `STATEMENT` binary logging they honor default database and ignore it if `ROW`
+    binary log format is used. If you did not specify default database and use `STATEMENT`
+    binary log format all updates will be logged.'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`binlog-ignore-db`过滤器与`binlog-do-db`过滤器类似。在`STATEMENT`二进制日志记录的情况下，它们遵循默认数据库，并在使用`ROW`二进制日志格式时忽略它。如果未指定默认数据库并且使用`STATEMENT`二进制日志格式，将记录所有更新。'
+- en: If you use binary log format `MIXED` filtering rules will be applied depending
+    if the update is stored in the `STATEMENT` or `ROW` format.
+  id: totrans-195
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果使用二进制日志格式`MIXED`，则根据更新存储在`STATEMENT`或`ROW`格式中应用过滤规则。
+- en: 'To find out which binary log filters are currently in use run *SHOW MASTER
+    STATUS* command:'
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查找当前正在使用的二进制日志过滤器，请运行*SHOW MASTER STATUS*命令：
+- en: '[PRE29]'
+  id: totrans-197
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: Warning
+  id: totrans-198
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: 'Binary log files are often used not only for the replication, but also for
+    point-in-time recovery (PITR) from failure. In this case filtered updates cannot
+    be restored, because they are not stored anywhere. If you want to use binary logs
+    for PITR and still filter some databases: log everything on the source server
+    and filter on the replica.'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二进制日志文件不仅用于复制，还用于故障时的时间点恢复（PITR）。在这种情况下，过滤后的更新无法恢复，因为它们没有存储在任何地方。如果要将二进制日志用于PITR并且仍要过滤某些数据库：请在源服务器上记录所有内容，并在副本上进行过滤。
+- en: Filtering on the replica
+  id: totrans-200
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 在副本上的过滤器
+- en: Replica has more options to filter events. You can filter either specific databases
+    or tables. You can also use wildcards.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 副本有更多选项来过滤事件。您可以过滤特定数据库或表。您还可以使用通配符。
+- en: Filtering on the database level works in same fashion as on the source server.
+    It is controlled by options `replicate-do-db` and `replicate-ignore-db`. If you
+    want to filter multiple databases specify these option as many times as you need.
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库级别的过滤与源服务器上的过滤相同。由选项`replicate-do-db`和`replicate-ignore-db`控制。如果要过滤多个数据库，请多次指定这些选项。
+- en: To filter specific tables use options `replicate-do-table` and `replicate-ignore-table`.
+    They take fully qualified table name as an argument.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要过滤特定表，请使用选项`replicate-do-table`和`replicate-ignore-table`。它们将完全限定的表名作为参数。
+- en: '[PRE30]'
+  id: totrans-204
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: But most flexible and safe syntax for replication filters is `replicate-wild-do-table`
+    and `replicate-wild-ignore-table`. As the name suggests they accept wildcards
+    in the arguments. Wildcard syntax is the same as used for the `LIKE` clause. Refer
+    to [Recipe 7.10](ch07.xhtml#nch-strings-strings-pat-sql) for details on the `LIKE`
+    clause syntax.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但复制过滤的最灵活和安全的语法是`replicate-wild-do-table`和`replicate-wild-ignore-table`。顾名思义，它们在参数中接受通配符。通配符语法与`LIKE`子句中使用的相同。有关`LIKE`子句语法的详细信息，请参阅[Recipe
+    7.10](ch07.xhtml#nch-strings-strings-pat-sql)。
+- en: Symbol `_` replaces exactly one single character. Thus `replicate-wild-ignore-table=cookbook.standings_`
+    filters tables `cookbook.standings1` and `cookbook.standings2`, but does not filter
+    `cookbook.standings12` and `cookbook.standings`.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 符号`_`替换正好一个字符。因此，`replicate-wild-ignore-table=cookbook.standings_`过滤表`cookbook.standings1`和`cookbook.standings2`，但不过滤`cookbook.standings12`和`cookbook.standings`。
+- en: Symbol `%` replaces zero or more characters. Thus `replicate-wild-do-table=cookbook.movies%`
+    instructs replica to apply updates to tables `cookbook.movies`, `cookbook.movies_actors`
+    and `cookbook.movies_actors_link`.
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 符号`%`替换零个或多个字符。因此，`replicate-wild-do-table=cookbook.movies%`指示副本将更新应用于表`cookbook.movies`、`cookbook.movies_actors`和`cookbook.movies_actors_link`。
+- en: If a table name itself contains a wildcard character which you do not want to
+    replace you need to escape it. Thus option `replicate-wild-ignore-table=cookbook.trip_l_g`
+    will filter tables `cookbook.trip_leg`, `cookbook.trip_log`, but also `cookbook.tripslag`
+    while `replicate-wild-ignore-table=cookbook.trip\_l_g` will only filter updates
+    to tables `cookbook.trip_leg` and `cookbook.trip_log`. Note, if you specify this
+    option on the command line you may need to double escape wildcard characters depending
+    of the `SHELL` version you use.
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果表名本身包含您不希望替换的通配符字符，则需要对其进行转义。因此，选项`replicate-wild-ignore-table=cookbook.trip_l_g`将过滤表`cookbook.trip_leg`、`cookbook.trip_log`，但也会过滤`cookbook.tripslag`。而`replicate-wild-ignore-table=cookbook.trip\_l_g`只会过滤更新到表`cookbook.trip_leg`和`cookbook.trip_log`。注意，如果在命令行上指定此选项，可能需要根据使用的`SHELL`版本对通配符字符进行双重转义。
+- en: Tip
+  id: totrans-209
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: 'Table-level fitlers are independent from the default database regardless of
+    the binary log format. Therefore it is safer to use them. If you want to filter
+    all tables in the specific database or databases use wildcards:'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表级过滤器与二进制日志格式无关，与默认数据库无关。因此使用它们更安全。如果要在特定数据库或多个数据库中过滤所有表，请使用通配符：
+- en: '[PRE31]'
+  id: totrans-211
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: However, unlike database filters, `replicate-wild-do-table` and `replicate-wild-ignore-table`
+    cannot filter stored routines or events. If you need to filter them you have to
+    use database-level filters.
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，与数据库过滤器不同，`replicate-wild-do-table`和`replicate-wild-ignore-table`无法过滤存储过程或事件。如果您需要过滤它们，必须使用数据库级别的过滤器。
+- en: 'Replication filters can be set for the specific replication channel ([Recipe
+    3.10](#nch-replication-replication-multisource)). To specify per-channel filter
+    prefix database, table name or wildcard expression with the channel name, followed
+    by a colon:'
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以为特定的复制通道设置复制过滤器（[Recipe 3.10](#nch-replication-replication-multisource)）。要指定每个通道的过滤器前缀数据库、表名或通配符表达式，后跟冒号：
+- en: '[PRE32]'
+  id: totrans-214
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'You can specify replication filters not only via configuration options, but
+    also using *CHANGE REPLICATION FILTER* command:'
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过*CHANGE REPLICATION FILTER*命令指定复制过滤器，不仅可以通过配置选项。
+- en: '[PRE33]'
+  id: totrans-216
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: Tip
+  id: totrans-217
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: You need to stop replication using *STOP REPLICA* (*STOP SLAVE*) command each
+    time when change replication parameters.
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每次更改复制参数时，您需要使用*STOP REPLICA*（*STOP SLAVE*）命令停止复制。
+- en: To find out which replication filters are currently applied use *SHOW REPLICA
+    STATUS\G* command or query tables `replication_applier_filters` and `replication_applier_global_filters`
+    in Performance Schema.
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看当前应用的复制过滤器，请使用*SHOW REPLICA STATUS\G*命令或查询Performance Schema中的`replication_applier_filters`和`replication_applier_global_filters`表。
+- en: '[PRE34]'
+  id: totrans-220
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: See Also
+  id: totrans-221
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: For additional information about replication filters, see [How Servers Evaluate
+    Replication Filtering Rules](https://dev.mysql.com/doc/refman/8.0/en/replication-rules.html).
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关复制过滤器的更多信息，请参阅[服务器如何评估复制过滤规则](https://dev.mysql.com/doc/refman/8.0/en/replication-rules.html)。
+- en: 3.7 Rewriting a Database on the Replica
+  id: totrans-223
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.7 在副本上重写数据库
+- en: Problem
+  id: totrans-224
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to replicate to a database on replica that has different name from
+    the one used on the source server.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望将数据复制到副本上的数据库，该数据库与源服务器上使用的数据库名称不同。
+- en: Solution
+  id: totrans-226
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use option `replicate-rewrite-db` on the replica server.
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在副本服务器上使用`replicate-rewrite-db`选项。
+- en: Discussion
+  id: totrans-228
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL allows rewriting database name on the fly if use replication filter `replicate-rewrite-db`.
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL允许在使用复制过滤器`replicate-rewrite-db`时动态重写数据库名称。
+- en: 'You can set such a filter in the configuration file, command line:'
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以在配置文件、命令行中设置这样的过滤器。
+- en: '[PRE35]'
+  id: totrans-231
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'or via *CHANGE REPLICATION FILTER* command:'
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或通过*CHANGE REPLICATION FILTER*命令：
+- en: '[PRE36]'
+  id: totrans-233
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'Or, for the multiple-channel replica:'
+  id: totrans-234
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，对于多通道副本：
+- en: '[PRE37]'
+  id: totrans-235
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'or via *CHANGE REPLICATION FILTER* command:'
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或通过*CHANGE REPLICATION FILTER*命令：
+- en: '[PRE38]'
+  id: totrans-237
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: Warning
+  id: totrans-238
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Mind double brackets for the filter value and quotes for the channel name.
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为过滤器值使用双括号和频道名称使用引号。
+- en: MySQL does not support `RENAME DATABASE` operation. Therefore to rename the
+    database you need to create database with the different name first, then restore
+    data of the original database into this new database.
+  id: totrans-240
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL不支持`RENAME DATABASE`操作。因此，要重命名数据库，您需要首先创建一个具有不同名称的数据库，然后将原始数据库的数据恢复到这个新数据库中。
+- en: '[PRE39]'
+  id: totrans-241
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: You need to take dump with the command *mysqldump* of the single database. If
+    you are dumping with option `--databases` also specify option `--no-create-db`,
+    so resulting file would not contain *CREATE DATABASE* statement.
+  id: totrans-242
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要使用*mysqldump*命令对单个数据库进行导出。如果您使用了`--databases`选项，则还需指定`--no-create-db`选项，以便生成的文件不包含*CREATE
+    DATABASE*语句。
+- en: 3.8 Using Multithreaded Replica
+  id: totrans-243
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.8 使用多线程副本
+- en: Problem
+  id: totrans-244
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Replica is installed on better hardware than the source, network connection
+    between servers is good, but replication lag is increasing.
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 副本安装在比源更好的硬件上，服务器之间的网络连接良好，但复制延迟正在增加。
+- en: Solution
+  id: totrans-246
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use multiple replication applier threads.
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用多个复制应用线程。
+- en: Discussion
+  id: totrans-248
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL server is multi-threaded. It applies incoming updates in highly concurrent
+    manner. By default it uses all hardware CPU cores when processing application
+    requests. However, replica by default uses single thread to apply incoming events
+    from the source server. As a result it uses less resources to process replicated
+    events and may delay even on decent hardware.
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL服务器是多线程的。它以高度并发的方式应用传入的更新。默认情况下，它在处理应用程序请求时使用所有硬件CPU核心。但是，默认情况下，副本服务器仅使用单个线程来应用来自源服务器的传入事件。因此，它使用更少的资源来处理复制事件，甚至在良好的硬件上可能会延迟。
+- en: 'To resolve this issue use multiple applier threads. To do so set variable `replica_parallel_workers`
+    to a value, greater than 1\. This specifies number of parallel threads that replica
+    will use to apply events. It makes sense to set value of this variable up to number
+    of virtual CPU cores. Variable has no immediate effect: you have to restart replication
+    to apply the change.'
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要解决这个问题，请使用多个应用线程。为此，将变量`replica_parallel_workers`设置为大于1的值。这指定副本用于应用事件的并行线程数。将此变量的值设置为虚拟CPU核心数量是有意义的。变量没有直接影响：您必须重新启动复制以应用更改。
+- en: '[PRE40]'
+  id: totrans-251
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: Not all replication events can be applied in parallel. What if the binary log
+    contains two statements, updating the same row?
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并非所有复制事件都可以并行应用。如果二进制日志包含两个更新同一行的语句，会怎样呢？
+- en: '[PRE41]'
+  id: totrans-253
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: Depending on the order of events table limbs will have either eitght or ten
+    arms for the squid. If these two statements are executed in different order on
+    the source and replica they will end up with different data.
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据事件顺序，乌贼的桌面肢体可能会有八只或十只胳膊。如果这两个语句在源端和副本上以不同顺序执行，则最终数据将不同。
+- en: MySQL uses one of special algorithms for dependency tracking. Current algorithm
+    is set by variables `replica_parallel_type` on the replica and `binlog_transaction_dependency_tracking`
+    on the source.
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL使用特殊算法之一进行依赖跟踪。当前算法由副本上的变量`replica_parallel_type`和源端的`binlog_transaction_dependency_tracking`设置。
+- en: Default value of the `replica_parallel_type` variable was `DATABASE` before
+    8.0.27 and is `LOGICAL_CLOCK` since this version. With this value, updates belonging
+    to different databases can be applied in parallel while updates to the same database
+    are applied sequentially. This value does not correlate with `binlog_transaction_dependency_tracking`
+    on the source.
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在8.0.27版本之前，变量`replica_parallel_type`的默认值是`DATABASE`，而自此版本起是`LOGICAL_CLOCK`。使用此值时，可以并行应用属于不同数据库的更新，而对同一数据库的更新则顺序应用。此值与源端的`binlog_transaction_dependency_tracking`没有相关性。
+- en: Parallelization on the database level does not perform much better for setups
+    which update less databases than number of CPU cores on the replica. To resolve
+    this issue `replica_parallel_type=LOGICAL_CLOCK` has been introduced. For this
+    type, transactions belonging to the same binary log group commit on the source
+    are applied in parallel.
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库级别的并行化对于更新数据库数量少于副本CPU核心数量的设置并不会有更好的表现。为了解决这个问题，引入了`replica_parallel_type=LOGICAL_CLOCK`。对于这种类型，属于同一二进制日志组提交的事务会在源端并行应用。
+- en: After changing variable `replica_parallel_type` you need to restart the replica.
+  id: totrans-258
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更改变量`replica_parallel_type`后，需要重新启动副本。
+- en: Value of variable `binlog_transaction_dependency_tracking` on the **source**
+    server defines which transactions belong to the same commit group. Default is
+    `COMMIT_ORDER` which is generated from the source’s timestamps. With this value
+    transactions, committed nearly at the same time on the source server, will be
+    executed in parallel on replica. This mode works perfectly if the source actively
+    executes many small transactions. However, if the source server does not commit
+    often it can happen that replica will execute sequentially even those transactions
+    that cannot interfer with each other and practically executed on the source in
+    parallel, just were committed in different times.
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '**源**服务器上变量`binlog_transaction_dependency_tracking`的值定义了哪些事务属于同一提交组。默认值是`COMMIT_ORDER`，由源端的时间戳生成。使用此值时，源服务器上几乎同时提交的事务将在副本上并行执行。如果源服务器不经常提交，则可能发生副本将在实际上可以并行执行的那些事务（尽管它们在源端被提交的时间不同）顺序执行的情况。'
+- en: To resolve this issue `binlog_transaction_dependency_tracking` modes `WRITESET`
+    and `WRITESET_SESSION` were introduced. In these modes MySQL decides if transactions
+    are depend on each other using hashing algorithm, specified by variable `transaction_write_set_extraction`
+    and can be any of `XXHASH64`(default) or `MURMUR32`. This means that if transactions
+    modify set of rows, independent from each other, they could be executed in parallel,
+    no matter how much time passed between commits on each of them.
+  id: totrans-260
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要解决这个问题，引入了`binlog_transaction_dependency_tracking`模式`WRITESET`和`WRITESET_SESSION`。在这些模式下，MySQL使用由变量`transaction_write_set_extraction`指定的哈希算法来决定事务是否相互依赖，可以是`XXHASH64`（默认）或`MURMUR32`。这意味着如果事务修改了一组行，而这些行彼此独立，那么它们可以并行执行，无论它们之间的提交时间有多长。
+- en: With `binlog_transaction_dependency_tracking` mode, set to `WRITESET` even transactions
+    originally executed within the same session could be applied in parallel. This
+    may cause issues when replica sees changes in different order than the source
+    in some periods of time. It maybe acceptable or not depending on your application
+    needs. To avoid such a situation you may enable option `replica_preserve_commit_order`
+    (`slave_preserve_commit_order`) that instructs replica to apply binary log events
+    in the same order as they were originally executed on the source server. Another
+    solutions is to set `binlog_transaction_dependency_tracking` to `WRITESET_SESSION`.
+    This mode ensures that transactions originated from the same session are never
+    applied in parallel.
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`binlog_transaction_dependency_tracking`模式设置为`WRITESET`，即使最初在同一会话中执行的事务也可以并行应用。这可能会在某些时间段内导致副本看到不同顺序的更改。根据您的应用需求，这可能是可以接受的或不可接受的。为避免这种情况，您可以启用选项`replica_preserve_commit_order`（`slave_preserve_commit_order`），指示副本按照在源服务器上最初执行它们的顺序应用二进制日志事件。另一种解决方案是将`binlog_transaction_dependency_tracking`设置为`WRITESET_SESSION`。此模式确保来自同一会话的事务永不并行应用。
+- en: Variable `binlog_transaction_dependency_tracking` is dynamic and you can modify
+    it without stopping the server. You can also set it on the session level for the
+    specific session only.
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 变量`binlog_transaction_dependency_tracking`是动态的，可以在不停止服务器的情况下进行修改。您还可以仅对特定会话设置它。
+- en: See Also
+  id: totrans-263
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 另请参阅
+- en: For additional information about multithreaded replica, see [Improving the Parallel
+    Applier with Writeset-based Dependency Tracking](https://mysqlhighavailability.com/improving-the-parallel-applier-with-writeset-based-dependency-tracking/).
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于多线程副本的更多信息，请参见[通过基于写集的依赖跟踪改进并行应用程序](https://mysqlhighavailability.com/improving-the-parallel-applier-with-writeset-based-dependency-tracking/)。
+- en: 3.9 Setting Up Circular Replication
+  id: totrans-265
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 设置环形复制
+- en: Problem
+  id: totrans-266
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to setup a chain of servers, which replicate from each other.
+  id: totrans-267
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要设置一系列相互复制的服务器。
+- en: Solution
+  id: totrans-268
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Make each server in the chain a source and a replica of its peers.
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使链中的每个服务器既是其对等体的源，又是其副本。
+- en: Discussion
+  id: totrans-270
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Sometimes you may need to write to several MySQL servers and want updates to
+    be visible on each of them. With MySQL replication this is possible. It supports
+    such popular setups as two-server, a chain of servers (`A -> B -> C -> D -> ...`
+    , circular, [star](https://en.wikipedia.org/wiki/Star_network) as well as any
+    creative setup you can imagine. For our example of the circular replication you
+    just need to setup every server as a source and replica of each other.
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时您可能需要向多个MySQL服务器写入并希望每个服务器上的更新都可见。通过MySQL复制，这是可能的。它支持诸如两个服务器、一系列服务器（`A ->
+    B -> C -> D -> ...`）、环形、[星形](https://en.wikipedia.org/wiki/Star_network)等流行设置，以及您可以想象的任何创意设置。对于环形复制的示例，您只需将每个服务器设置为彼此的源和副本即可。
+- en: You need to be very careful when use such a replication. Because updates are
+    incoming from any server they can conflict with each other.
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当使用这种复制时，您需要非常小心。因为更新来自任何服务器，它们可能会互相冲突。
+- en: Imagine two nodes insert a row with `id=42` at the same time. First, each node
+    inserts a row, then recieves exactly same event from the binary log. Replication
+    will stop with duplicate key error.
+  id: totrans-273
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 想象两个节点同时插入`id=42`的一行。首先，每个节点都插入一行，然后从二进制日志接收到完全相同的事件。复制将因重复键错误而停止。
+- en: If then you try to delete a row with `id=42` on both nodes you will receive
+    an error again! Because at the time when `DELETE` statement will be received by
+    the replication channel row already will be deleted.
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果然后您尝试在两个节点上删除`id=42`的行，则会再次收到错误！因为在接收到删除语句时，复制通道中的行已经被删除。
+- en: But the worst can happen if you update a row with same `ID`. Imagine if `node1`
+    sets value to `42` and `node2` sets value to `25`. After replication events are
+    applied `node1` will have a row with value `25` and `node2` with value `42`. Different
+    from what they initally had after local update!
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但如果您使用相同的`ID`更新一行，则可能会发生最糟糕的情况。想象一下，如果`node1`将值设置为`42`，而`node2`将值设置为`25`。在应用复制事件后，`node1`将具有值为`25`的行，而`node2`将具有值为`42`的行。这与它们在本地更新后最初拥有的值不同！
+- en: Still there can be very valid reasons to use circular replication. For example,
+    you may want to use one of nodes mostly for purposes of one application and another
+    one for another application. You can have options and hardware, most suitable
+    for both. Or you may have servers in different geographical locations (e.g. countries)
+    and want to store local data closer to users. Or you can use your servers mostly
+    for reads, but still need to update them. And, finally, you may setup a hot standby
+    server which technically allows writes, but practically receives them only when
+    the main source server dies.
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 依然可以有非常合理的理由使用循环复制。例如，您可能希望将一个节点主要用于一个应用程序，另一个节点用于另一个应用程序。您可以选择适合两者的选项和硬件。或者您可能在不同的地理位置（例如国家）有服务器，并希望将本地数据存储在离用户更近的地方。或者您可以将服务器主要用于读取，但仍然需要更新它们。最后，您可能设置一个热备用服务器，技术上允许写入，但实际上只有在主源服务器宕机时才会接收写入。
+- en: In this recipe we will discuss how to setup a chain of three servers. You can
+    modify this recipe for two or more servers. Then we will discuss safety considerations,
+    required to use replication chains.
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个方案中，我们将讨论如何设置三个服务器的链条。您可以修改此方案以适用于两个或更多服务器。然后我们将讨论使用复制链条所需的安全考虑事项。
+- en: Setting up circle replication of three servers
+  id: totrans-278
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 设置三个服务器的循环复制
+- en: Prepare servers to use in the circular replication
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 准备用于循环复制的服务器
+- en: Follow instructions in [Recipe 3.1](#nch-replication-replication-configuration)
+    for the source server
+  id: totrans-280
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 遵循[Recipe 3.1](#nch-replication-replication-configuration)中的说明为源服务器
+- en: Make sure option `log_replica_updates` is enabled. Otherwise, if your replication
+    chain includes more than two servers updates would apply only on the neighboring
+    ones.
+  id: totrans-281
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 确保选项 `log_replica_updates` 已启用。否则，如果您的复制链包括两个以上的服务器，则更新仅应用于相邻的服务器。
+- en: Ensure that option `replicate-same-server-id` is disabled. Otherwise you may
+    end up in a situation when the same update will be applying in loops forever.
+  id: totrans-282
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 确保选项 `replicate-same-server-id` 已禁用。否则，可能会出现同一更新循环应用的情况。
+- en: Point nodes to each other
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将节点互相指向
+- en: 'Run on each server *CHANGE REPLICATION SOURCE* command as described in [Recipe
+    3.2](#nch-replication-replication-position-new) or in [Recipe 3.4](#nch-replication-replication-gtid).
+    Specify correct connection values. For example, if you want to have a circle of
+    servers `hostA -> hostB -> hostC -> hostA`, you need to point `hostB` to `hostA`,
+    `hostA` to `hostC`, and `hostC` to `hostB`:'
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在每个服务器上运行*CHANGE REPLICATION SOURCE*命令，如[Recipe 3.2](#nch-replication-replication-position-new)或[Recipe
+    3.4](#nch-replication-replication-gtid)中描述的那样。指定正确的连接值。例如，如果您想要一个服务器圈 `hostA ->
+    hostB -> hostC -> hostA`，您需要将 `hostB` 指向 `hostA`，`hostA` 指向 `hostC`，`hostC` 指向
+    `hostB`：
+- en: '[PRE42]'
+  id: totrans-285
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: Start replication
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 启动复制
+- en: Start replication using *START REPLICA* command.
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用*START REPLICA*命令启动复制。
+- en: Safety considerations when using replication chains
+  id: totrans-288
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用复制链条时的安全考虑事项
+- en: When writing to multiple servers, replicating to each other, you need to logically
+    separate objects to which you are going to write. You can do it on different levels.
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当向多个相互复制的服务器写入时，需要在逻辑上分离要写入的对象。您可以在不同的级别上进行。
+- en: Business Logic
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 业务逻辑
+- en: Make sure at the application level that you do not update same rows on multiple
+    servers at the same time.
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在应用程序级别确保您不会同时在多个服务器上更新同一行。
+- en: Server
+  id: totrans-292
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务器
+- en: Write to only one server at a time. This is good solution for creating a Hot
+    Standby servers.
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一次只向一个服务器写入。这是创建热备用服务器的好解决方案。
+- en: Databases and Tables
+  id: totrans-294
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数据库和表格
+- en: 'In your applicaiton: assign specific set of tables to each server. For example,
+    write only to tables `movies`, `movies_actors`, `movies_actors_link` on the `nodeA`;
+    to tables `trip_leg` and `trip_log` on the `nodeB` and to tables `weatherdata`
+    and `weekday` on the `nodeC`.'
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在您的应用程序中：将特定的表集分配给每个服务器。例如，在 `nodeA` 上仅写入表 `movies`、`movies_actors`、`movies_actors_link`；在
+    `nodeB` 上写入表 `trip_leg` 和 `trip_log`；在 `nodeC` 上写入表 `weatherdata` 和 `weekday`。
+- en: Rows
+  id: totrans-296
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 行
+- en: If you still need to write to the same table on all the servers separate rows
+    which each node can update. If you use integer primary key with `AUTO_INCREMENT`
+    option you can do it by setting option `auto_increment_increment` to the number
+    of the servers and setting `auto_increment_offset` to number of the server in
+    chain, starting from one. For example, on our three-servers setup set `auto_increment_increment`
+    to 3 and `auto_increment_offset` to 1 on the `nodeA`, to 2 on the `nodeB` and
+    to 3 on the `nodeC`. We discuss how to tune `auto_increment_increment` and `auto_increment_offset`
+    in [Recipe 15.14](ch15.xhtml#nch-sequences-seq-increment_increment)
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果仍然需要在所有服务器上写入同一表，请单独为每个节点分开行。如果您使用带有 `AUTO_INCREMENT` 选项的整数主键，则可以通过将 `auto_increment_increment`
+    设置为服务器数量，并将 `auto_increment_offset` 设置为链中的服务器编号（从1开始）来完成此操作。例如，在我们的三服务器设置中，将 `auto_increment_increment`
+    设置为 3，在 `nodeA` 上将 `auto_increment_offset` 设置为 1，在 `nodeB` 上设置为 2，在 `nodeC` 上设置为
+    3。我们在 [食谱 15.14](ch15.xhtml#nch-sequences-seq-increment_increment) 中讨论了如何调整 `auto_increment_increment`
+    和 `auto_increment_offset`。
+- en: If you do not use `AUTO_INCREMENT` you need to create a rule at the application
+    level, so identifier will follow its own unique pattern on the each node.
+  id: totrans-298
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果不使用 `AUTO_INCREMENT`，则需要在应用程序级别创建规则，使标识符在每个节点上遵循其自己的唯一模式。
+- en: 3.10 Using Multisource Replication
+  id: totrans-299
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.10 使用多源复制
+- en: Problem
+  id: totrans-300
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want a replica to apply events from two or more source servers that are
+    independent from each other.
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望副本能够应用来自两个或多个相互独立的源服务器的事件。
+- en: Solution
+  id: totrans-302
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Create multiple replication channels by running command *CHANGE REPLICATION
+    SOURCE ... FOR CHANNEL ‘my source’;* for each of source servers.
+  id: totrans-303
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过运行命令 *CHANGE REPLICATION SOURCE ... FOR CHANNEL ‘my source’;* 来创建多个复制通道，针对每个源服务器。
+- en: Discussion
+  id: totrans-304
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: You may want to replicate from multiple servers to one. For example, if separate
+    source servers are updated by different applications and you want to use replica
+    for backups or for analytics. To achieve this you need to use multi-source replica.
+  id: totrans-305
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可能希望从多个服务器复制到一个服务器。例如，如果单独的源服务器由不同的应用程序更新，并且您希望使用复制进行备份或分析。要实现这一点，您需要使用多源复制。
+- en: Prepare servers for the replication
+  id: totrans-306
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 准备服务器进行复制
+- en: 'Prepare source and replica servers as described in [Recipe 3.1](#nch-replication-replication-configuration).
+    For the replica server add additional step: configure `master_info_repository`
+    and `relay_log_info_repository` to use tables:'
+  id: totrans-307
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 按照 [食谱 3.1](#nch-replication-replication-configuration) 中描述的准备源和复制服务器。对于复制服务器添加额外步骤：配置
+    `master_info_repository` 和 `relay_log_info_repository` 以使用表：
+- en: '[PRE43]'
+  id: totrans-308
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: Backup data on the source servers
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 备份源服务器上的数据
+- en: Make full backup or backup only databases which you want to replicate. E.g.,
+    if you want to replicate database `cookbook` from one server and database `production`
+    from the another one backup only these databases.
+  id: totrans-310
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建完整备份或仅备份您希望复制的数据库。例如，如果您想从一个服务器复制数据库 `cookbook`，从另一个服务器复制数据库 `production`，则仅备份这些数据库。
+- en: If you are going to use position-based replication use *mysqldump* with option
+    `--source-data=2` which instructs the tool to log `CHANGE REPLICATION SOURCE`
+    command, but comment it out.
+  id: totrans-311
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果要使用基于位置的复制，请使用 *mysqldump* 并使用选项 `--source-data=2`，该选项指示工具记录 `CHANGE REPLICATION
+    SOURCE` 命令，但将其注释掉。
+- en: '[PRE44]'
+  id: totrans-312
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: For the GTID-based replication use option `--set-gtid-purged=COMMENTED` instead.
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于基于 GTID 的复制，使用选项 `--set-gtid-purged=COMMENTED`。
+- en: '[PRE45]'
+  id: totrans-314
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: Tip
+  id: totrans-315
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: You can use position-based and GTID-based replication for different channels.
+    You can use different binary log formats on the source servers as well but in
+    this case you need to setbinary log format on the replica to `MIXED`, so it is
+    able to store updates in any format.
+  id: totrans-316
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以为不同通道使用基于位置和基于 GTID 的复制。您还可以在源服务器上使用不同的二进制日志格式，但在这种情况下，您需要将复制服务器上的二进制日志格式设置为
+    `MIXED`，以便能够以任何格式存储更新。
+- en: Restore data on the replica
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 恢复副本上的数据
+- en: Restore data, collected from the source servers.
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 恢复从源服务器收集的数据。
+- en: '[PRE46]'
+  id: totrans-319
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: Warning
+  id: totrans-320
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Ensure data on source servers do not have databases with the same name. If they
+    have you need to rename one of the databases and use `replicate-rewrite-db` filter,
+    which will rewrite database name while applying replication events. See [Recipe
+    3.7](#nch-replication-replication-db-rewrite) for details.
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确保源服务器上的数据没有相同名称的数据库。如果有，则需要重命名其中一个数据库，并使用 `replicate-rewrite-db` 过滤器，在应用复制事件时重新写入数据库名称。详细信息请参见
+    [食谱 3.7](#nch-replication-replication-db-rewrite)。
+- en: Configure replication channels
+  id: totrans-322
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 配置复制通道
+- en: 'For the position-based replication locate in the dump file `CHANGE REPLICATION
+    SOURCE` command:'
+  id: totrans-323
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于位基复制定位在转储文件 `CHANGE REPLICATION SOURCE` 命令：
+- en: '[PRE47]'
+  id: totrans-324
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: and use resulting coordinates to setup replication. Use `FOR CHANNEL` clause
+    of the `CHANGE REPLICATION SOURCE` command to specify which channel to use.
+  id: totrans-325
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 并使用结果坐标设置复制。使用`CHANGE REPLICATION SOURCE`命令的`FOR CHANNEL`子句指定要使用的通道。
+- en: '[PRE48]'
+  id: totrans-326
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: 'For the GTID-based replication first locate `SET @@GLOBAL.GTID_PURGED` statement:'
+  id: totrans-327
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用基于GTID的复制，请首先找到`SET @@GLOBAL.GTID_PURGED`语句：
+- en: '[PRE49]'
+  id: totrans-328
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'Do this for all channels which will use GTID-based replication:'
+  id: totrans-329
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对所有使用基于GTID的复制的通道执行此操作：
+- en: '[PRE50]'
+  id: totrans-330
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: 'Then combine them into single set: `''9113f6b1-0751-11eb-9e7d-0242dc638c6c:1-385,910c760a-0751-11eb-9da8-0242dc638c6c:1-385''`,
+    run *RESET MASTER* to reset GTID execution history and set `GTID_PURGED` to the
+    set you just compiled:'
+  id: totrans-331
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后将它们组合成单个集合：`'9113f6b1-0751-11eb-9e7d-0242dc638c6c:1-385,910c760a-0751-11eb-9da8-0242dc638c6c:1-385'`，运行*RESET
+    MASTER*来重置GTID执行历史记录，并将`GTID_PURGED`设置为您刚刚编译的集合：
+- en: '[PRE51]'
+  id: totrans-332
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: 'Then use `CHANGE REPLICATION SOURCE` command to setup new channel:'
+  id: totrans-333
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后使用`CHANGE REPLICATION SOURCE`命令设置新通道：
+- en: '[PRE52]'
+  id: totrans-334
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: Start replication
+  id: totrans-335
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 启动复制
+- en: 'Start replication using *START REPLICA* command:'
+  id: totrans-336
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用*START REPLICA*命令启动复制：
+- en: '[PRE53]'
+  id: totrans-337
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: Confirm replication is running
+  id: totrans-338
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确认复制正在运行
+- en: 'Run *SHOW REPLICA STATUS* and check records for all channels:'
+  id: totrans-339
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 运行*SHOW REPLICA STATUS*并检查所有通道的记录：
+- en: '[PRE54]'
+  id: totrans-340
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: 'Or query Performance Schema:'
+  id: totrans-341
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或查询性能模式：
+- en: '[PRE55]'
+  id: totrans-342
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: 3.11 Using a Semisynchronous Replication Plugin
+  id: totrans-343
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.11 使用半同步复制插件
+- en: Problem
+  id: totrans-344
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to ensure that at least one replica has the update before the client
+    recieves success for the *COMMIT* operation.
+  id: totrans-345
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在*COMMIT*操作完成之前，确保至少有一个副本已更新。
+- en: Solution
+  id: totrans-346
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use semisynchronous replication plugin.
+  id: totrans-347
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用半同步复制插件。
+- en: Discussion
+  id: totrans-348
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL replication is asynchronous. This means that the source server can accept
+    writes very fast. All it needs is to store data in the tables and write information
+    about changes into binary log file. However, it does not have any idea if any
+    of replicas recieved updates and, if recieved, applied them.
+  id: totrans-349
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL复制是异步的。这意味着源服务器可以非常快速地接受写入。它只需要将数据存储在表中，并将更改信息写入二进制日志文件。但是，它不知道副本是否接收到任何更新，如果接收到，是否已应用这些更新。
+- en: We cannot guarantee if the asynchronous replica applies updates, but we can
+    set it up to be sure that updates are received and stored in the relay log file.
+    This does not guarantee that the update will be applied or, if applied, it will
+    result in the same values as on the source server, but guarantees that at least
+    two servers will have record of the update which could be applied, say, in case
+    of a disaster recovery. To achieve this use semisynchronous replication plugin.
+  id: totrans-350
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们无法保证异步副本是否应用更新，但我们可以设置确保更新已接收并存储在中继日志文件中，以防灾难恢复。这并不保证更新将被应用，或者如果应用了更新，结果与源服务器上的值相同，但保证至少有两台服务器记录了可以应用的更新。为此，请使用半同步复制插件。
+- en: The semisynchronous replication plugin should be installed on both source and
+    replica server.
+  id: totrans-351
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 半同步复制插件应安装在源服务器和副本服务器上。
+- en: 'On the source server run:'
+  id: totrans-352
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在源服务器上运行：
+- en: '[PRE56]'
+  id: totrans-353
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: 'On the replica run:'
+  id: totrans-354
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在副本上运行：
+- en: '[PRE57]'
+  id: totrans-355
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: Once installed, you can enable semisynchronous replication. On the source set
+    global variable `rpl_semi_sync_source_enabled` to 1\. On the replica use variable
+    `rpl_semi_sync_replica_enabled`.
+  id: totrans-356
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 安装后，您可以启用半同步复制。在源端将全局变量`rpl_semi_sync_source_enabled`设置为1。在副本上使用变量`rpl_semi_sync_replica_enabled`。
+- en: Warning
+  id: totrans-357
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Semiynchronous replication works only with the default replication channel.
+    You cannot use it together with multi-source replication.
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 半同步复制仅与默认复制通道兼容。您不能与多源复制一起使用。
+- en: 'You can control semisynchronous replication behavior with help of variables,
+    as seen in [Table 3-1](#semisync_variables):'
+  id: totrans-359
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过变量来控制半同步复制的行为，如[表 3-1](#semisync_variables)所示：
+- en: Table 3-1\. Variables, controlling behavior of the semisynchronous replication
+    plugin
+  id: totrans-360
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表3-1\. 控制半同步复制插件行为的变量
+- en: '| Variable | What it controls | Default value |'
+  id: totrans-361
+  prefs: []
+  type: TYPE_TB
+  zh: '| 变量 | 控制什么 | 默认值 |'
+- en: '| --- | --- | --- |'
+  id: totrans-362
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- | --- |'
+- en: '| `rpl_semi_sync_source_timeout` | How many milliseconds to wait for response
+    from the replica. If this value is exceeded, replication silently converts to
+    the asynchronous. | 10000 |'
+  id: totrans-363
+  prefs: []
+  type: TYPE_TB
+  zh: '| `rpl_semi_sync_source_timeout` | 等待来自副本响应的毫秒数。如果超过此值，复制将静默转换为异步。 | 10000
+    |'
+- en: '| `rpl_semi_sync_source_wait_for_replica_count` | From which number of replicas
+    the source server need to receive acknowlegement before committing transaction.
+    | 1 |'
+  id: totrans-364
+  prefs: []
+  type: TYPE_TB
+  zh: '| `rpl_semi_sync_source_wait_for_replica_count` | 在提交事务之前，源服务器需要接收确认的副本数量。
+    | 1 |'
+- en: '| `rpl_semi_sync_source_wait_no_replica` | What will happen if number of connected
+    replicas fail below `rpl_semi_sync_source_wait_for_replica_count`. As long as
+    these servers later reconnect and acknowledge the transaction, semisynchronous
+    remains functional. If this variable is `OFF`, replication is converted to asynchronous
+    as soon as number of replicas drops below `rpl_semi_sync_source_wait_for_replica_count`
+    | ON |'
+  id: totrans-365
+  prefs: []
+  type: TYPE_TB
+  zh: '| `rpl_semi_sync_source_wait_no_replica` | 如果连接的副本数低于 `rpl_semi_sync_source_wait_for_replica_count`，会发生什么情况。只要这些服务器稍后重新连接并确认事务，半同步仍然可用。如果此变量为
+    `OFF`，则一旦副本数量低于 `rpl_semi_sync_source_wait_for_replica_count`，则复制转换为异步。 | ON |'
+- en: '| `rpl_semi_sync_source_wait_point` | At which moment to expect acknowledgement
+    from the replica that it recieved transaction. This variable supports two possible
+    values. In case of `AFTER_SYNC` the source writes each transaction into the binary
+    log, then syncs it to the disk. The source waits acknowledgement from the replica
+    about recieved changes, then commits the transaction. In casel of `AFTER_COMMIT`
+    the source commits the transaction, then waits acknowledgement from the replica
+    and upon success returns to the client. | `AFTER_SYNC` |'
+  id: totrans-366
+  prefs: []
+  type: TYPE_TB
+  zh: '| `rpl_semi_sync_source_wait_point` | 期望从副本接收到事务的确认的时机。该变量支持两种可能的值。在 `AFTER_SYNC`
+    的情况下，源服务器将每个事务写入二进制日志，然后将其同步到磁盘。源服务器等待副本关于已接收更改的确认，然后提交事务。在 `AFTER_COMMIT` 的情况下，源服务器提交事务，然后等待副本的确认，成功后返回给客户端。
+    | `AFTER_SYNC` |'
+- en: To find out status of the semisynchronous replication use variables `Rpl_semi_sync_*`.
+    Source server has plenty of them.
+  id: totrans-367
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看半同步复制的状态，请使用变量 `Rpl_semi_sync_*`。源服务器上有很多这样的变量。
+- en: '[PRE58]'
+  id: totrans-368
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: The most improtant is `Rpl_semi_sync_source_clients` which shows if the semisynchronous
+    is currently in use and how many semisynchronous replicas are connected. In case
+    if `Rpl_semi_sync_source_clients` is zero, no semisynchronous replica is connected
+    and asynchronous replication is used.
+  id: totrans-369
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最重要的是 `Rpl_semi_sync_source_clients`，它显示半同步是否当前正在使用以及连接了多少半同步副本。如果 `Rpl_semi_sync_source_clients`
+    为零，则没有半同步副本连接，使用异步复制。
+- en: On the replica server only variable `Rpl_semi_sync_replica_status` (`Rpl_semi_sync_slave_status`)
+    is available and can have values either `ON` or `OFF`.
+  id: totrans-370
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在副本服务器上，只有变量 `Rpl_semi_sync_replica_status` (`Rpl_semi_sync_slave_status`) 可用，并且可能的值为
+    `ON` 或 `OFF`。
+- en: Warning
+  id: totrans-371
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: 'If no replica accepts the write in `rpl_semi_sync_source_timeout` milliseconds,
+    replication will switch to the asynchronous without any message or a warning for
+    the client. Only way to figure out that the replication mode switched to asynchronous
+    is to examine value of the variable `Rpl_semi_sync_source_clients` or to check
+    error log file for messages like:'
+  id: totrans-372
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果在 `rpl_semi_sync_source_timeout` 毫秒内没有副本接受写入，则复制将切换到异步，对客户端没有任何消息或警告。唯一确定复制模式切换为异步的方法是检查变量
+    `Rpl_semi_sync_source_clients` 的值或者检查错误日志文件以查找如下消息：
+- en: '[PRE59]'
+  id: totrans-373
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: We discuss error log file at [Recipe 23.2](ch23.xhtml#nch-monitoring-monitoring-sources)
+  id: totrans-374
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在 [Recipe 23.2](ch23.xhtml#nch-monitoring-monitoring-sources) 讨论错误日志文件。
+- en: 3.12 Using Group Replication
+  id: totrans-375
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.12 使用组复制
+- en: Problem
+  id: totrans-376
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to apply updates either on all the nodes or nowhere.
+  id: totrans-377
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望将更新应用到所有节点或者不应用。
+- en: Solution
+  id: totrans-378
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use Group Replication.
+  id: totrans-379
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用组复制。
+- en: Discussion
+  id: totrans-380
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Starting from version 5.7.17 MySQL supports fully synchronous replication with
+    help of the Group Replication plugin. If the plugin is in use, MySQL servers,
+    called nodes, create a group that commits a transaction together or, if one of
+    members fails to apply transaction, rolls it back. This way the update is either
+    replicated to all group members or nowhere. High availability is ensured.
+  id: totrans-381
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从版本 5.7.17 开始，MySQL通过Group Replication插件完全支持同步复制。如果使用了该插件，MySQL服务器（称为节点）将创建一个组，共同提交或者如果其中一个成员未能应用事务，则回滚。这样，更新要么复制到所有组成员，要么不复制。确保了高可用性。
+- en: 'You can have up to nine servers in the group. More than nine is not supported.
+    There is a very good reason for this limitation: higher number of servers implies
+    higher replication delay. In case of synchronous replication, all updates are
+    applied to all the nodes before transaction completes. Each update transferred
+    to each node, waits when it is applied and only then commits. Thus replication
+    delay depends on the speed of the slowest member and network transfer rate.'
+  id: totrans-382
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 组内最多可以有九台服务器。超过九台不受支持。对于这种限制有一个非常好的理由：更多的服务器意味着更高的复制延迟。在同步复制的情况下，所有更新在事务完成之前都会应用到所有节点上。每个更新都会传输到每个节点，等待应用，然后才提交。因此，复制延迟取决于最慢节点的速度和网络传输速率。
+- en: While it is technically possible to have less than three servers in the Group
+    Replication setup, smaller number does not provide proper high availability. This
+    is because [Paxos](https://en.wikipedia.org/wiki/Paxos_(computer_science)) algorithm,
+    used by the [Group Communication Engine](https://dev.mysql.com/doc/refman/8.0/en/group-replication-plugin-architecture.html)
+    requires `2F + 1` nodes to create a quorum where `F` is any natural number. In
+    other words, in case of a disaster, the number of active nodes should be greater
+    than the number of disconnected nodes.
+  id: totrans-383
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管在组复制设置中技术上可以少于三个服务器，但更少的数量无法提供适当的高可用性。这是因为[Paxos](https://en.wikipedia.org/wiki/Paxos_(computer_science))算法，由[Group
+    Communication Engine](https://dev.mysql.com/doc/refman/8.0/en/group-replication-plugin-architecture.html)使用，需要`2F
+    + 1`个节点来创建一个仲裁，其中`F`是任意自然数。换句话说，在灾难发生时，活动节点的数量应大于断开连接的节点数量。
+- en: Group Replication has limitations. First, and the most important one, it supports
+    only storage engine InnoDB. You need to disable other storage engines before enabling
+    the plugin. Each replicated table must have primary key. You should put servers
+    into the local network. While having Group Replication across Internet is possible,
+    it may lead to longer time for applying transactions and disconnecting nodes from
+    the group due to network timeouts. Statements *LOCK TABLE* and *GET_LOCK* are
+    not taken into account for the certification process that ensures if the transaction
+    should be applied or rolled back on all nodes, that means they are local to the
+    node and error prone. You may find full list of limitations in the [Group Replication
+    Limitations](https://dev.mysql.com/doc/refman/8.0/en/group-replication-limitations.html)
+    user reference manual.
+  id: totrans-384
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 组复制有限制。首先，最重要的是，它仅支持存储引擎InnoDB。在启用插件之前，您需要禁用其他存储引擎。每个复制的表必须有主键。您应该将服务器放置在本地网络中。虽然跨互联网进行组复制是可能的，但由于网络超时，这可能导致应用事务和将节点从组中断开连接需要更长的时间。语句*LOCK
+    TABLE*和*GET_LOCK*不会考虑用于确保事务是否应在所有节点上应用或回滚的认证过程，这意味着它们是本地节点的，容易出错。您可以在[Group Replication
+    Limitations](https://dev.mysql.com/doc/refman/8.0/en/group-replication-limitations.html)用户参考手册中找到完整的限制列表。
+- en: To enable Group Replication you need to prepare all the participating servers
+    as described in [Recipe 3.1](#nch-replication-replication-configuration) as they
+    are going to act as both source and replica, and perform additional preparations.
+    Do not start repl
+  id: totrans-385
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要启用组复制，您需要按照[Recipe 3.1](#nch-replication-replication-configuration)中描述的方式准备所有参与的服务器，因为它们将作为源和副本同时运行，并进行额外的准备工作。不要启动复制。
+- en: Prepare configuration file
+  id: totrans-386
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 准备配置文件
+- en: '[PRE60]'
+  id: totrans-387
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: Start servers. Do not enable replication yet.
+  id: totrans-388
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 启动服务器。但是先不要启用复制。
+- en: Choose a node which will be the first node in the group.
+  id: totrans-389
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 选择将成为组中第一个节点的节点。
+- en: Create replication user only on the first member as described in [Recipe 3.1](#nch-replication-replication-configuration)
+    and additionally grant `BACKUP_ADMIN` to it.
+  id: totrans-390
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 仅在第一个成员上创建复制用户，如[Recipe 3.1](#nch-replication-replication-configuration)中描述的那样，并额外授予`BACKUP_ADMIN`权限。
+- en: '[PRE61]'
+  id: totrans-391
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: You do not need to create replication user on other group members, because *CREATE
+    USER* statement will be replicated.
+  id: totrans-392
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 您不需要在其他组成员上创建复制用户，因为*CREATE USER*语句将被复制。
+- en: 'Setup replication on the first member to use this user:'
+  id: totrans-393
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在第一个成员上设置复制以使用此用户：
+- en: '[PRE62]'
+  id: totrans-394
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: Channel name `group_replication_recovery` is the special built-in name of the
+    Group Replication channel.
+  id: totrans-395
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 通道名`group_replication_recovery`是组复制通道的特殊内置名称。
+- en: Tip
+  id: totrans-396
+  prefs:
+  - PREF_IND
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: If you do not want replication credentials to be stored as plain text in the
+    replication repository skip this step and provide credentials later when run *START
+    GROUP_REPLICATION*. See also [Recipe 3.13](#nch-replication-replication-security)
+  id: totrans-397
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如果您不希望复制凭证以明文形式存储在复制存储库中，请跳过此步骤，并在运行*START GROUP_REPLICATION*时稍后提供凭证。还参见[Recipe
+    3.13](#nch-replication-replication-security)
+- en: Bootstrap the node.
+  id: totrans-398
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 引导节点。
+- en: '[PRE63]'
+  id: totrans-399
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: Check Group Replication status by selecting from `performance_schema.replication_group_members`.
+  id: totrans-400
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 通过从`performance_schema.replication_group_members`中选择来检查组复制状态。
+- en: '[PRE64]'
+  id: totrans-401
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: And wait when the first member state becames `ONLINE`.
+  id: totrans-402
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 等待第一个成员状态变为`ONLINE`。
+- en: Start replication on the second and the third nodes.
+  id: totrans-403
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在第二个和第三个节点上启动复制。
+- en: '[PRE65]'
+  id: totrans-404
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: 'Once you confirm that all members are in state `ONLINE` you can use Group Replication.
+    Query table `performance_schema.replication_group_members` to get this information.
+    Healthy setup will output something like this:'
+  id: totrans-405
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦确认所有成员都处于`ONLINE`状态，您可以使用组复制。查询表`performance_schema.replication_group_members`以获取此信息。健康的设置将输出如下内容：
+- en: '[PRE66]'
+  id: totrans-406
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: Warning
+  id: totrans-407
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Command *SHOW REPLICA STATUS* does not work with Group Replication.
+  id: totrans-408
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 命令*SHOW REPLICA STATUS*在组复制中不起作用。
+- en: If you want to start Group Replication with existent data restore it on the
+    first node before bootstraping it. Data will be copied when other nodes join the
+    group.
+  id: totrans-409
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您希望使用现有数据启动组复制，请在引导第一个节点之前将其恢复。当其他节点加入组时，数据将被复制。
+- en: Finally, enable option `group_replication_start_on_boot=on` in the node configuration
+    files, so replication would be enabled after the node restart.
+  id: totrans-410
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，在节点配置文件中启用`group_replication_start_on_boot=on`选项，以便在节点重新启动后启用复制。
+- en: Tip
+  id: totrans-411
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: 'In this recipe we started Group Replication in the single-primary mode. This
+    mode allows writes only on one member of the group. This is the safest and recommended
+    option. However, if you want to write on multiple nodes, you may switch to multi-primary
+    node by using function *group_replication_switch_to_multi_primary_mode*:'
+  id: totrans-412
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在本示例中，我们在单主模式下启动了组复制。这种模式只允许在组中的一个成员上进行写操作。这是最安全和推荐的选项。然而，如果您希望在多个节点上写入，可以使用函数*group_replication_switch_to_multi_primary_mode*切换到多主节点：
+- en: '[PRE67]'
+  id: totrans-413
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: For more details check [Changing a Group’s Mode User Manual](https://dev.mysql.com/doc/refman/8.0/en/group-replication-changing-group-mode.html).
+  id: totrans-414
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 欲了解更多详情，请查看[更改组模式用户手册](https://dev.mysql.com/doc/refman/8.0/en/group-replication-changing-group-mode.html)。
+- en: See Also
+  id: totrans-415
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 另请参阅
+- en: For additional information about group replication, see [Group Replication in
+    the User Reference Manual](https://dev.mysql.com/doc/refman/8.0/en/group-replication.html).
+  id: totrans-416
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 欲了解有关组复制的更多信息，请参阅[用户参考手册中的组复制](https://dev.mysql.com/doc/refman/8.0/en/group-replication.html)。
+- en: 3.13 Storing Replication Credentials Securely
+  id: totrans-417
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.13安全存储复制凭据
+- en: Problem
+  id: totrans-418
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: By default replication credentials are visible in the replication info repository
+    if specified as part of *CHANGE REPLICATION SOURCE* command. You want to hide
+    them from the occasional access by not authorized users.
+  id: totrans-419
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，如果在*CHANGE REPLICATION SOURCE*命令中指定，则复制凭据会显示在复制信息存储库中。您希望通过不授权用户的偶发访问来隐藏它们。
+- en: Solution
+  id: totrans-420
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use options `USER` and `PASSWORD` of the *START REPLICA* command.
+  id: totrans-421
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用*START REPLICA*命令的`USER`和`PASSWORD`选项。
+- en: Discussion
+  id: totrans-422
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: When you specify replication user credentials using *CHANGE REPLICATION SOURCE*
+    command they are stored in plain text, unencrypted, regardless of the `master_info_repository`
+    option.
+  id: totrans-423
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您使用*CHANGE REPLICATION SOURCE*命令指定复制用户凭据时，无论`master_info_repository`选项如何，它们都以明文、未加密的形式存储。
+- en: 'Thus, if `master_info_repository=''TABLE''`, which is default since version
+    8.0, any user with read access to the `mysql` database can query table `slave_master_info`
+    and read the password:'
+  id: totrans-424
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，如果`master_info_repository='TABLE'`（自8.0版本起为默认设置），任何具有对`mysql`数据库的读取访问权限的用户都可以查询`slave_master_info`表并读取密码：
+- en: '[PRE68]'
+  id: totrans-425
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: 'Or, if `master_info_repository=''FILE''`, any operating system user who can
+    access the file, by default located in the MySQL data directory, can get replication
+    credentials:'
+  id: totrans-426
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，如果`master_info_repository='FILE'`，则任何可以访问该文件的操作系统用户（默认情况下位于MySQL数据目录中）都可以获取复制凭据：
+- en: '[PRE69]'
+  id: totrans-427
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: 'If this is not desirable behavior you may specify replication credentials as
+    part of the *START REPLICA* or *START GROUP_REPLICATION* command:'
+  id: totrans-428
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果这不是期望的行为，您可以在*START REPLICA*或*START GROUP_REPLICATION*命令中指定复制凭据：
+- en: '[PRE70]'
+  id: totrans-429
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: 'However, if you previously specified replication credentials as part of the
+    *CHANGE MASTER* command, they will remain visible in the master info repository.
+    To clear previously entered user and password run *CHANGE MASTER* command with
+    empty arguments for `MASTER_USER` and `MASTER_PASSWORD`:'
+  id: totrans-430
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，如果您先前在*CHANGE MASTER*命令中指定了复制凭据，它们将继续显示在主信息存储库中。要清除先前输入的用户和密码，请使用空参数运行*CHANGE
+    MASTER*命令以清除`MASTER_USER`和`MASTER_PASSWORD`：
+- en: '[PRE71]'
+  id: totrans-431
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: Warning
+  id: totrans-432
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Once you cleared replication credentials from the spurce info repository they
+    are not stored anywhere and you will need to provide them each time when restart
+    replication.
+  id: totrans-433
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦您从源信息存储库中清除了复制凭据，它们就不会存储在任何地方，您将需要每次重新启动复制时提供它们。
+- en: 3.14 Using TLS (SSL) for Replication
+  id: totrans-434
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.14使用TLS（SSL）进行复制
+- en: Problem
+  id: totrans-435
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to transfer data between source and replica securely.
+  id: totrans-436
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望在源和副本之间安全传输数据。
+- en: Solution
+  id: totrans-437
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Setup TLS ([Transport Layer Security](https://en.wikipedia.org/wiki/Transport_Layer_Security))
+    connections for the replication channel.
+  id: totrans-438
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为复制通道设置传输层安全性（[Transport Layer Security](https://en.wikipedia.org/wiki/Transport_Layer_Security)）连接。
+- en: Discussion
+  id: totrans-439
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Connection between source and replica servers is technically similar to any
+    other client connections to the MySQL server. Therefore encrypting it via TLS
+    requires preparations, similar to encrypting client connections as described in
+    [Recipe 24.10](ch24.xhtml#nch-security-security-ssl).
+  id: totrans-440
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 源服务器和复制服务器之间的连接在技术上类似于连接到MySQL服务器的任何其他客户端连接。因此，通过TLS加密它需要类似于在[Recipe 24.10](ch24.xhtml#nch-security-security-ssl)中描述的加密客户端连接的准备工作。
+- en: To create encrypted replication setup follow these steps.
+  id: totrans-441
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要创建加密复制设置，请按照以下步骤操作。
+- en: Obtain or create TLS keys and certificates as described at [Recipe 24.10](ch24.xhtml#nch-security-security-ssl).
+  id: totrans-442
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 根据[Recipe 24.10](ch24.xhtml#nch-security-security-ssl)的描述获取或创建TLS密钥和证书。
+- en: 'Ensure that the source server has TLS configuration parameters under [mysqld]
+    section:'
+  id: totrans-443
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 确保源服务器在[mysqld]部分下具有TLS配置参数：
+- en: Note
+  id: totrans-444
+  prefs:
+  - PREF_IND
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: While MySQL uses modern safer TLS protocol in the latest versions its configuration
+    options still use abbreviation SSL. MySQL User Reference Manual also often refers
+    TLS as SSL.
+  id: totrans-445
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 虽然MySQL在最新版本中使用了现代更安全的TLS协议，但其配置选项仍然使用缩写SSL。MySQL用户参考手册也经常将TLS称为SSL。
+- en: '[PRE72]'
+  id: totrans-446
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: 'You may check if TLS enabled if check value of the system variable `have_ssl`:'
+  id: totrans-447
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 您可以检查系统变量`have_ssl`的值是否启用了TLS。
+- en: '[PRE73]'
+  id: totrans-448
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: 'If insecure replication is running, stop the replica IO thread:'
+  id: totrans-449
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果运行不安全的复制，请停止复制IO线程：
+- en: '[PRE74]'
+  id: totrans-450
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: 'On the replica server put paths to TLS client key and certificate under `[client]`
+    of the configuration file:'
+  id: totrans-451
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在复制服务器上，在配置文件的`[client]`部分下放置TLS客户端密钥和证书的路径：
+- en: '[PRE75]'
+  id: totrans-452
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: 'and specify option `SOURCE_SSL=1` for the *CHANGE REPLICATION SOURCE* command:'
+  id: totrans-453
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 并为*CHANGE REPLICATION SOURCE*命令指定选项`SOURCE_SSL=1`：
+- en: '[PRE76]'
+  id: totrans-454
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: 'Alternatively you can specify paths to the client key and certificate as part
+    of the *CHANGE REPLICATION SOURCE* command:'
+  id: totrans-455
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 或者，您可以将客户端密钥和证书的路径作为*CHANGE REPLICATION SOURCE*命令的一部分指定：
+- en: '[PRE77]'
+  id: totrans-456
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: Note
+  id: totrans-457
+  prefs:
+  - PREF_IND
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: We intentionally omitted other parameters of the *CHANGE REPLICATION SOURCE*
+    command, such as `SOURCE_HOST` for brevity. But you need to use them as described
+    in [Recipe 3.2](#nch-replication-replication-position-new) or [Recipe 3.4](#nch-replication-replication-gtid)
+  id: totrans-458
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 我们出于简洁起见故意省略了*CHANGE REPLICATION SOURCE*命令的其他参数，例如`SOURCE_HOST`。但您需要按照[Recipe
+    3.2](#nch-replication-replication-position-new)或[Recipe 3.4](#nch-replication-replication-gtid)中描述的方式使用它们。
+- en: 'Start replication:'
+  id: totrans-459
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 启动复制：
+- en: '[PRE78]'
+  id: totrans-460
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: '*CHANGE REPLICATION SOURCE* command supports other TLS modifiers, compatible
+    with regular client connection encryption options. For example, you can specify
+    a gipher to use with clause `SOURCE_SSL_CIPHER` or enforce source server certificate
+    verification with clause `SOURCE_SSL_VERIFY_SERVER_CERT`.'
+  id: totrans-461
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*CHANGE REPLICATION SOURCE* 命令支持其他TLS修饰符，与常规客户端连接加密选项兼容。例如，您可以在`SOURCE_SSL_CIPHER`子句中指定要使用的密码，或者在`SOURCE_SSL_VERIFY_SERVER_CERT`子句中强制验证源服务器证书。'
+- en: See Also
+  id: totrans-462
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: For additional information about securing connections between the source and
+    replica servers, see [Setting Up Replication to Use Encrypted Connections](https://dev.mysql.com/doc/refman/8.0/en/replication-solutions-encrypted-connections.html).
+  id: totrans-463
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取有关在源和复制服务器之间设置加密连接的更多信息，请参阅[Setting Up Replication to Use Encrypted Connections](https://dev.mysql.com/doc/refman/8.0/en/replication-solutions-encrypted-connections.html)。
+- en: 3.15 Replication Troubleshooting
+  id: totrans-464
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.15 复制故障排除
+- en: Problem
+  id: totrans-465
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Replication is not working and you want to fix it.
+  id: totrans-466
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制未正常工作，您希望修复它。
+- en: Solution
+  id: totrans-467
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use *SHOW REPLICA STATUS* command, query replication tables in Performance Schema,
+    and check the error log file to undertstand why the replication failed, then fix
+    it.
+  id: totrans-468
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用*SHOW REPLICA STATUS*命令，查询Performance Schema中的复制表，并检查错误日志文件以了解复制失败的原因，然后进行修复。
+- en: Discussion
+  id: totrans-469
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Replication is managed by two kinds of threads: IO and SQL (or connection and
+    applier). IO, or connection, thread is responsible for connecting to the source
+    server, retrieving updates and storing them in the relay log file. There is always
+    one IO thread per replication channel. SQL, or applier, thread reads data from
+    the relay log file and applies changes to the tables. One replication channel
+    may have multiple SQL threads. Connection and applier threads are totally independent
+    and their errors are reported by different replication diagnostic instruments.'
+  id: totrans-470
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制由两种类型的线程管理：IO和SQL（或连接和应用）。 IO或连接线程负责连接到源服务器，检索更新并将其存储在中继日志文件中。每个复制通道始终有一个IO线程。
+    SQL或应用程序线程从中继日志文件读取数据并将更改应用于表。一个复制通道可能有多个SQL线程。连接和应用程序线程完全独立，其错误由不同的复制诊断工具报告。
+- en: 'There are two main instruments to diagnose replication errors: *SHOW REPLICA
+    STATUS* command and replication tables in Performance Schema. *SHOW REPLICA STATUS*
+    existed since very beginning while replication tables in the Performance Schema
+    were added in version 5.7\. You will get very similar information by using these
+    two instruments and which to use depends on your preferences. In our opinion *SHOW
+    REPLICA STATUS* is good for manual review in the command line while it is much
+    easier to write monitoring alerts, querying Performance Schema rather than parse
+    *SHOW REPLICA STATUS* output.'
+  id: totrans-471
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 诊断复制错误有两种主要工具：*SHOW REPLICA STATUS* 命令和性能模式中的复制表。*SHOW REPLICA STATUS* 从一开始就存在，而性能模式中的复制表是从版本
+    5.7 开始添加的。使用这两种工具可以获得非常相似的信息，使用哪种取决于个人偏好。在我们看来，*SHOW REPLICA STATUS* 适合在命令行中进行手动审查，而使用性能模式进行监控警报和查询比解析
+    *SHOW REPLICA STATUS* 输出要容易得多。
+- en: SHOW REPLICA STATUS
+  id: totrans-472
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: SHOW REPLICA STATUS
+- en: '*SHOW REPLICA STATUS* contains all the information about IO and SQL threads
+    configuration, status and errors. All data is printed in the single row. However,
+    this row is formatted with spaces and newlines. You may examine it comfortably
+    by using `\G` modifier of the *mysql* client. For multi-source replica *SHOW REPLICA
+    STATUS* prints information about each channel in the separate row.'
+  id: totrans-473
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*SHOW REPLICA STATUS* 包含有关 IO 和 SQL 线程配置、状态和错误的所有信息。所有数据都在单行中打印。但是，此行使用空格和换行符进行格式化。通过
+    *mysql* 客户端的 `\G` 修改器可以轻松地检查它。对于多源复制，*SHOW REPLICA STATUS* 分别打印每个通道的信息。'
+- en: '[PRE79]'
+  id: totrans-474
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: We intentionally skipped part of the output for brevity. We will not describe
+    each field, but only those required for handling stopped replication (see [Table 3-2](#nch-replication-replication-troubleshooting-show_slave_status-details)).
+    If you are curious what other fields mean consult [SHOW REPLICA STATUS Statement](https://dev.mysql.com/doc/refman/8.0/en/show-replica-status.html)
+    User Reference Manual.
+  id: totrans-475
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了简洁起见，我们有意跳过了部分输出。我们不会描述每个字段，只描述处理停止复制所需的字段（见 [表 3-2](#nch-replication-replication-troubleshooting-show_slave_status-details)）。如果您想了解其他字段的含义，请参阅
+    [SHOW REPLICA STATUS Statement](https://dev.mysql.com/doc/refman/8.0/en/show-replica-status.html)
+    用户参考手册。
+- en: Table 3-2\. Meaning of fields of the *SHOW REPLICA STATUS*, required to understand
+    and fix an error
+  id: totrans-476
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 3-2\. *SHOW REPLICA STATUS* 字段含义，用于理解和修复错误
+- en: '| Field | Description | Subsystem |'
+  id: totrans-477
+  prefs: []
+  type: TYPE_TB
+  zh: '| Field | 描述 | 子系统 |'
+- en: '| --- | --- | --- |'
+  id: totrans-478
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- | --- |'
+- en: '| `Replica_IO_State` (`Slave_IO_State`) | Status of the IO thread. Contains
+    information on what the connection thread is doing when running, empty if IO thread
+    is stopped and `Connecting` if connection is not yet established. | IO thread
+    status |'
+  id: totrans-479
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Replica_IO_State` (`Slave_IO_State`) | IO 线程的状态。包含连接线程运行时的信息，如果 IO 线程停止则为空，如果连接尚未建立则为
+    `Connecting`。 | IO 线程状态 |'
+- en: '| `Source_Host` (`Master_Host`) | Host of the source server. | IO thread configuration
+    |'
+  id: totrans-480
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Source_Host` (`Master_Host`) | 源服务器的主机名。 | IO 线程配置 |'
+- en: '| `Source_User` (`Master_User`) | Replication user. | IO thread configuration
+    |'
+  id: totrans-481
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Source_User` (`Master_User`) | 复制用户。 | IO 线程配置 |'
+- en: '| `Source_Port` (`Master_Port`) | Port of the source server | IO thread configuration
+    |'
+  id: totrans-482
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Source_Port` (`Master_Port`) | 源服务器的端口号。 | IO 线程配置 |'
+- en: '| `Source_Log_File` (`Master_Log_File`) | Binary log on the source server from
+    which IO thread is currently reading. | IO thread status |'
+  id: totrans-483
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Source_Log_File` (`Master_Log_File`) | IO 线程当前正在读取的源服务器的二进制日志。 | IO 线程状态
+    |'
+- en: '| `Read_Source_Log_Pos` (`Read_Master_Log_Pos`) | Position in the binary log
+    file on the source server from which IO thread is reading. | IO thread status
+    |'
+  id: totrans-484
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Read_Source_Log_Pos` (`Read_Master_Log_Pos`) | IO 线程正在读取的源服务器二进制日志文件中的位置。
+    | IO 线程状态 |'
+- en: '| `Relay_Log_File` | Current relay log file: the file the SQL thread is currently
+    executing from. | IO thread status |'
+  id: totrans-485
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Relay_Log_File` | 当前的中继日志文件：SQL 线程当前正在执行的文件。 | IO 线程状态 |'
+- en: '| `Relay_Log_Pos` | The position in the relay log file the SQL thread has executed
+    up to. | IO thread status |'
+  id: totrans-486
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Relay_Log_Pos` | SQL 线程已执行到的中继日志文件位置。 | IO 线程状态 |'
+- en: '| `Relay_Source_Log_File` (`Relay_Master_Log_File`) | Binary log on the source
+    server from which SQL thread is executing events. | SQL thead status |'
+  id: totrans-487
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Relay_Source_Log_File` (`Relay_Master_Log_File`) | SQL 线程执行事件时源服务器上的二进制日志。
+    | SQL 线程状态 |'
+- en: '| `Replica_IO_Running` (`Slave_IO_Running`) | If IO thread is running. Use
+    this field to quickly identify health of the connection thread. | IO thread status.
+    |'
+  id: totrans-488
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Replica_IO_Running` (`Slave_IO_Running`) | 指示 IO 线程是否正在运行。使用此字段快速识别连接线程的健康状态。
+    | IO 线程状态 |'
+- en: '| `Replica_SQL_Running` (`Slave_SQL_Running`) | If SQL thread is running. Use
+    to quickly identify health of the applier thread. | SQL thread status |'
+  id: totrans-489
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Replica_SQL_Running` (`Slave_SQL_Running`) | SQL 线程是否正在运行。用于快速识别应用程序线程的健康状况。
+    | SQL 线程状态 |'
+- en: '| `Replicate_*` | Replication filters. | SQL thread configuration |'
+  id: totrans-490
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Replicate_*` | 复制过滤器。 | SQL 线程配置 |'
+- en: '| `Exec_Source_Log_Pos` (`Exec_Master_Log_Pos`) | Position of the binary log
+    file on the source up to which SQL thread executed events. | SQL thread state
+    |'
+  id: totrans-491
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Exec_Source_Log_Pos` (`Exec_Master_Log_Pos`) | SQL 线程执行事件时源二进制日志文件的位置。 |
+    SQL 线程状态 |'
+- en: '| `Until_Condition` | Until conditions if any. | SQL thread configuration |'
+  id: totrans-492
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Until_Condition` | 如有任何条件，直到的条件。 | SQL 线程配置 |'
+- en: '| `Source_SSL_*` (`Master_SSL_*`) | SSL options for connecting to the source
+    server. | IO thread configuration |'
+  id: totrans-493
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Source_SSL_*` (`Master_SSL_*`) | 连接到源服务器的 SSL 选项。 | IO 线程配置 |'
+- en: '| `Seconds_Behind_Source` (`Seconds_Behind_Master`) | Estimated delay between
+    source server and replica. | SQL thread status |'
+  id: totrans-494
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Seconds_Behind_Source` (`Seconds_Behind_Master`) | 源服务器和副本之间的预估延迟时间。 | SQL
+    线程状态 |'
+- en: '| `Last_IO_Errno` | Last error number of the IO thread. Cleared once resolved.
+    | IO thread status |'
+  id: totrans-495
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Last_IO_Errno` | IO 线程的最后一个错误编号。解决后清除。 | IO 线程状态 |'
+- en: '| `Last_IO_Error` | Latest error on the IO thread. Cleared once resolved. |
+    IO thread status |'
+  id: totrans-496
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Last_IO_Error` | IO 线程上的最新错误。解决后清除。 | IO 线程状态 |'
+- en: '| `Last_Errno`, `Last_SQL_Errno` | Number of the last error, received by SQL
+    thread. Creared once resolved. | SQL thead status |'
+  id: totrans-497
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Last_Errno`, `Last_SQL_Errno` | SQL 线程接收的最后一个错误编号。解决后清除。 | SQL 线程状态 |'
+- en: '| `Last_Error`, `Last_SQL_Error` | Last error of the SQL thread. Cleared once
+    resolved. | SQL thread status |'
+  id: totrans-498
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Last_Error`, `Last_SQL_Error` | SQL 线程的最后错误。解决后清除。 | SQL 线程状态 |'
+- en: '| `Replica_SQL_Running_State` (`Slave_SQL_Running_State`) | Status of the SQL
+    thread. Empty if stopped. | SQL thread status |'
+  id: totrans-499
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Replica_SQL_Running_State` (`Slave_SQL_Running_State`) | SQL 线程的状态。如果停止则为空。
+    | SQL 线程状态 |'
+- en: '| `Last_IO_Error_Timestamp` | Time when last IO error happened. Cleared once
+    resolved. | IO thread status |'
+  id: totrans-500
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Last_IO_Error_Timestamp` | 上次 IO 错误发生的时间。解决后清除。 | IO 线程状态 |'
+- en: '| `Last_SQL_Error_Timestamp` | Time when last SQL error happened. Cleared once
+    resolved. | SQL thread state |'
+  id: totrans-501
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Last_SQL_Error_Timestamp` | 上次 SQL 错误发生的时间。解决后清除。 | SQL 线程状态 |'
+- en: '| `Retrieved_Gtid_Set` | GTIDs, retrieved by the connection thread. | IO thread
+    status |'
+  id: totrans-502
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Retrieved_Gtid_Set` | 连接线程检索的 GTID 集合。 | IO 线程状态 |'
+- en: '| `Executed_Gtid_Set` | GTIDs, executed by the SQL thread. | SQL thread state.
+    |'
+  id: totrans-503
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Executed_Gtid_Set` | SQL 线程执行的 GTID 集合。 | SQL 线程状态 |'
+- en: '| `Channel_Name` | Name of the replication channel. | IO and SQL threads configuration
+    |'
+  id: totrans-504
+  prefs: []
+  type: TYPE_TB
+  zh: '| `Channel_Name` | 复制通道的名称。 | IO 和 SQL 线程配置 |'
+- en: We will refer to this table when discuss how to deal with specific IO and SQL
+    threads errors.
+  id: totrans-505
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在讨论如何处理特定 IO 和 SQL 线程错误时，我们将参考此表格。
+- en: Replication tables in performance schema
+  id: totrans-506
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 性能模式中的复制表格
+- en: 'Alternative diagnostic solution: tables in Performance Schema, unlike *SHOW
+    REPLICA STATUS*, do not store all the information in the single place, but have
+    it in separate spaces.'
+  id: totrans-507
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种诊断解决方案：性能模式中的表格，不像 *SHOW REPLICA STATUS*，不会将所有信息存储在单个位置，而是在单独的空间中保存。
+- en: Information about IO thread configuration is stored in the table `replication_connection_configuration`
+    and information about its status is in the table `replication_connection_status`.
+  id: totrans-508
+  prefs: []
+  type: TYPE_NORMAL
+  zh: IO 线程配置信息存储在表 `replication_connection_configuration` 中，其状态信息存储在表 `replication_connection_status`
+    中。
+- en: Information about SQL threads is stored in six tables as shown in [Table 3-3](#nch-replication-replication-troubleshooting-P_S-applier)
+  id: totrans-509
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于 SQL 线程的信息存储在六个表中，如 [表 3-3](#nch-replication-replication-troubleshooting-P_S-applier)
+    所示。
+- en: Table 3-3\. Tables with information, specific to SQL thread(s)
+  id: totrans-510
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 3-3\. 包含特定 SQL 线程信息的表格
+- en: '| Table Name | Description |'
+  id: totrans-511
+  prefs: []
+  type: TYPE_TB
+  zh: 表名 | 描述 |
+- en: '| --- | --- |'
+  id: totrans-512
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `replication_applier_configuration` | SQL thread configuration. |'
+  id: totrans-513
+  prefs: []
+  type: TYPE_TB
+  zh: '| `replication_applier_configuration` | SQL 线程配置。 |'
+- en: '| `replication_applier_global_filters` | Global replication filters: filters,
+    applicable for all channels. |'
+  id: totrans-514
+  prefs: []
+  type: TYPE_TB
+  zh: '| `replication_applier_global_filters` | 全局复制过滤器：适用于所有通道。 |'
+- en: '| `replication_applier_filters` | Replication filters, specific to particular
+    channels. |'
+  id: totrans-515
+  prefs: []
+  type: TYPE_TB
+  zh: '| `replication_applier_filters` | 特定于特定通道的复制过滤器。 |'
+- en: '| `replication_applier_status` | Status for the SQL thread, global. |'
+  id: totrans-516
+  prefs: []
+  type: TYPE_TB
+  zh: '| `replication_applier_status` | SQL 线程的全局状态。 |'
+- en: '| `replication_applier_status_by_worker` | For multi-threaded replica: status
+    of each SQL thread. |'
+  id: totrans-517
+  prefs: []
+  type: TYPE_TB
+  zh: '| `replication_applier_status_by_worker` | 对于多线程副本：每个 SQL 线程的状态。 |'
+- en: '| `replication_applier_status_by_coordinator` | For multi-threaded replica:
+    status of the SQL thread as seen by the coordinator. |'
+  id: totrans-518
+  prefs: []
+  type: TYPE_TB
+  zh: '| `replication_applier_status_by_coordinator` | 对于多线程复制：协调者视角下 SQL 线程的状态。 '
+- en: Finally, you will find Group Replication network configuration and status in
+    `replication_group_members` table and statistics of the Group Replication members
+    in table `replication_group_member_stats`.
+  id: totrans-519
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，您将在 `replication_group_members` 表中找到组复制网络配置和状态，以及在 `replication_group_member_stats`
+    表中找到组复制成员的统计信息。
+- en: Troubleshooting IO thread
+  id: totrans-520
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 修复 IO 线程问题
+- en: You can find if replication IO thread is having issues by checking value of
+    the `Replica_IO_Running` field of the *SHOW REPLICA STATUS*. If value is not `Yes`
+    connection thread, likely, experiences issues. Reason why this happens could be
+    found in the `Last_IO_Errno` and `Last_IO_Error` fields.
+  id: totrans-521
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过检查 *SHOW REPLICA STATUS* 的 `Replica_IO_Running` 字段的值来查看复制 IO 线程是否存在问题。如果值不是
+    `Yes`，连接线程可能遇到问题。发生这种情况的原因可以在 `Last_IO_Errno` 和 `Last_IO_Error` 字段中找到。
+- en: '[PRE80]'
+  id: totrans-522
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: 'Like in the example above replica cannot connect to the source server, because
+    access denied for the user `''repl''@''localhost''`. IO thread is still running
+    and will retry connection attempt in 60 seconds (`retry-time: 60`). Reason for
+    such a failure is clear: either user does not exist on the source server or it
+    does not have enough privileges. You need to connect to the source server and
+    fix the user account. Once it is fixed next connection attempt will succeed.'
+  id: totrans-523
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '就像上面的示例中，副本无法连接到源服务器，因为用户 `''repl''@''localhost''` 的访问被拒绝。IO 线程仍在运行，并将在 60
+    秒后重新尝试连接（`retry-time: 60`）。导致此类失败的原因很明确：要么在源服务器上不存在该用户，要么其权限不足。您需要连接到源服务器并修复用户帐户。一旦修复，下一次连接尝试将成功。'
+- en: 'Alernatively you may query table `replication_connection_status` in Performance
+    Schema:'
+  id: totrans-524
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者，您可以查询性能模式下的 `replication_connection_status` 表：
+- en: '[PRE81]'
+  id: totrans-525
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: 'In this example field `LAST_ERROR_MESSAGE` contains the reason why the IO thread
+    failed to connect: user account on the source server uses authentication plugin
+    `caching_sha2_password` which requires secure connection. To fix this error you
+    need to stop replication, then run *CHANGE REPLICATION SOURCE* with parameters
+    either `SOURCE_SSL=1` or `GET_SOURCE_PUBLIC_KEY=1`. In the latter case traffic
+    between replica and source server will stay insecure and only password exchange
+    communication will be secured. See [Recipe 3.14](#nch-replication-replication-ssl)
+    for details.'
+  id: totrans-526
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此示例中，字段 `LAST_ERROR_MESSAGE` 包含 IO 线程无法连接的原因：源服务器上的用户帐户使用要求安全连接的身份验证插件 `caching_sha2_password`。要修复此错误，您需要停止复制，然后使用参数
+    `SOURCE_SSL=1` 或 `GET_SOURCE_PUBLIC_KEY=1` 运行 *CHANGE REPLICATION SOURCE*。在后一种情况下，副本与源服务器之间的流量将保持不安全，只有密码交换通信将得到保护。有关详细信息，请参阅
+    [Recipe 3.14](#nch-replication-replication-ssl)。
+- en: Trobuleshooting SQL thread
+  id: totrans-527
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 修复 SQL 线程问题
+- en: 'To find out why applier thread had stopped check `Replica_SQL_Running`, `Last_SQL_Errno`
+    and `Last_SQL_Error` fields:'
+  id: totrans-528
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查找为什么应用程序线程已停止，请检查 `Replica_SQL_Running`、`Last_SQL_Errno` 和 `Last_SQL_Error`
+    字段：
+- en: '[PRE82]'
+  id: totrans-529
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: In the listing above error message shows that *CREATE DATABASE* command failed,
+    because such a database already exists on the replica.
+  id: totrans-530
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上面的列表中，错误消息显示 *CREATE DATABASE* 命令失败，因为在副本上已存在这样的数据库。
+- en: 'Same information could be found in the table `replication_applier_status_by_worker`
+    in Performance Schema:'
+  id: totrans-531
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 同样的信息也可以在性能模式下的 `replication_applier_status_by_worker` 表中找到：
+- en: '[PRE83]'
+  id: totrans-532
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: 'There are few ways to resolve this issue. First, you may simply drop the database
+    on the replica and restart SQL thread:'
+  id: totrans-533
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 解决此问题的方法有几种。首先，您可以简单地在副本上删除数据库并重新启动 SQL 线程：
+- en: '[PRE84]'
+  id: totrans-534
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE84]'
+- en: Disable binary log if it is enabled on the replica.
+  id: totrans-535
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果副本上启用了二进制日志，请禁用它。
+- en: 'In case if you want to keep database on the replica: for example, in a case
+    if it supposed to have extra tables which do not exist on the source server, you
+    may skip replicated event.'
+  id: totrans-536
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您希望在副本上保留数据库：例如，如果它应该包含源服务器上不存在的额外表格，您可以跳过复制的事件。
+- en: 'If you use position-based replication use variable `sql_replica_skip_counter`
+    (`sql_slave_skip_counter`):'
+  id: totrans-537
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您使用基于位置的复制，请使用变量 `sql_replica_skip_counter`（`sql_slave_skip_counter`）：
+- en: '[PRE85]'
+  id: totrans-538
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE85]'
+- en: In this example we skipped one event from the binary log, then restarted replication.
+  id: totrans-539
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此示例中，我们跳过了二进制日志中的一个事件，然后重新启动了复制。
+- en: 'For GTID-based replication setting `sql_replica_skip_counter` would not work,
+    because it does not include GTID information. Instead, you need to generate empty
+    transaction with GTID of the transaction which replica could not execute. To find
+    out failed GTID check `Retrieved_Gtid_Set` and `Executed_Gtid_Set` fields of the
+    *SHOW REPLICA STATUS*:'
+  id: totrans-540
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于基于GTID的复制设置，`sql_replica_skip_counter`不起作用，因为它不包括GTID信息。相反，您需要生成具有无法执行的事务的GTID的空事务。要找出失败的GTID，请检查*SHOW
+    REPLICA STATUS*的`Retrieved_Gtid_Set`和`Executed_Gtid_Set`字段：
+- en: '[PRE86]'
+  id: totrans-541
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE86]'
+- en: In this example `Retrieved_Gtid_Set` contains transactions `de7e85f9-1060-11eb-8b8f-98af65266957:1-5`
+    while `Executed_Gtid_Set` only transactions `de7e85f9-1060-11eb-8b8f-98af65266957:1-4`.
+    It is clear that transcation `de7e85f9-1060-11eb-8b8f-98af65266957:5` was not
+    executed. Transactions with UUID `de8d356e-1060-11eb-a568-98af65266957` are local
+    and not executed by the replication applier thread.
+  id: totrans-542
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在此示例中，`Retrieved_Gtid_Set`包含事务`de7e85f9-1060-11eb-8b8f-98af65266957:1-5`，而`Executed_Gtid_Set`仅包含事务`de7e85f9-1060-11eb-8b8f-98af65266957:1-4`。很明显，事务`de7e85f9-1060-11eb-8b8f-98af65266957:5`未被执行。带有UUID`de8d356e-1060-11eb-a568-98af65266957`的事务是本地事务，不是由复制应用程序线程执行。
+- en: 'You may also find failing transaction if query `APPLYING_TRANSACTION` field
+    of the `replication_applier_status_by_worker` table:'
+  id: totrans-543
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以在`replication_applier_status_by_worker`表的`APPLYING_TRANSACTION`字段中找到失败的事务：
+- en: '[PRE87]'
+  id: totrans-544
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE87]'
+- en: Once failing transaction found inject empty transaction with same GTID and restart
+    the SQL thread.
+  id: totrans-545
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦找到失败的事务，插入相同的GTID为空的事务，并重新启动SQL线程。
+- en: '[PRE88]'
+  id: totrans-546
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE88]'
+- en: Warning
+  id: totrans-547
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: While skipping binary log event or transaction helps to restart replication
+    at the moment, it may cause bigger issue and lead to data inconsistency between
+    source and replica and, as a result, to future errors. Always analyze why error
+    happened in the first place and try to fix the reason, not simply skip the event.
+  id: totrans-548
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然跳过二进制日志事件或事务有助于重新启动复制，但可能会导致更大的问题，并导致源和副本之间的数据不一致，从而导致将来的错误。始终分析为什么首次发生错误并尝试修复原因，而不仅仅是跳过事件。
+- en: 'While *SHOW REPLICA STATUS* and table `replication_applier_status_by_worker`
+    both store error messages if you use multi-threaded replica the table can have
+    better information about what happened. Like in this example error message does
+    not give the full understanding of the reason for the failure:'
+  id: totrans-549
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然*SHOW REPLICA STATUS*和表`replication_applier_status_by_worker`都存储错误消息，如果使用多线程副本，则该表可以提供更详细的信息。例如，在此示例中，错误消息无法完全理解失败的原因：
+- en: '[PRE89]'
+  id: totrans-550
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE89]'
+- en: 'It reports that worker 8 failed, but does not tell why. Query on `replication_applier_status_by_worker`
+    returns this information:'
+  id: totrans-551
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 报告工作者8失败，但未说明原因。查询`replication_applier_status_by_worker`表的信息如下：
+- en: '[PRE90]'
+  id: totrans-552
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE90]'
+- en: Now it is clear that a specific table does not exist. You may analyze why this
+    is the case and correct the error.
+  id: totrans-553
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在很明显，特定的表不存在。您可以分析原因并修正错误。
+- en: Troubleshooting Group Replication
+  id: totrans-554
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 组复制故障排除
+- en: '*SHOW REPLICA STATUS* is not available for Group Replication. Therefore you
+    need to use Performance Schema to troubleshoot issues with it. Performance Schema
+    has two special tables for Group Replication only: `replication_group_members`,
+    showing details of all members and `replication_group_member_stats`, displaying
+    statistics for them. However, these tables do not have information about IO and
+    SQL thread errors. These details are available in tables which we discussed for
+    the standard asynchronous replication.'
+  id: totrans-555
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*SHOW REPLICA STATUS*对于组复制不可用。因此，您需要使用性能模式来解决与其相关的问题。性能模式仅针对组复制有两个特殊表：`replication_group_members`，显示所有成员的详细信息和`replication_group_member_stats`，显示它们的统计信息。但是，这些表没有关于IO和SQL线程错误的信息。我们讨论过的标准异步复制有这些详细信息。'
+- en: Let’s have a closer look to the Group Replication troubleshooting options.
+  id: totrans-556
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让我们更仔细地看一看组复制的故障排除选项。
+- en: Quick way to identify if something is wrong with Group replication is a `replication_group_members`
+    table.
+  id: totrans-557
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 快速识别组复制中是否出现问题的方法是检查`replication_group_members`表。
+- en: '[PRE91]'
+  id: totrans-558
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE91]'
+- en: 'In the listing above only `PRIMARY` member is in `MEMBER_STATE: ONLINE` that
+    means it is healthy. Both `SECONDARY` members are in `RECOVERING` state and are
+    having troubles to join the group.'
+  id: totrans-559
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '在上述列表中，只有`PRIMARY`成员处于`MEMBER_STATE: ONLINE`状态，这意味着它很健康。两个`SECONDARY`成员都处于`RECOVERING`状态，并且在加入组时遇到了问题。'
+- en: Failing member will stay in the `RECOVERING` state for some time, while Group
+    Replication tries to recover itself and, if the error cannot be automatically
+    recovered, leave the group and stay in the `ERROR` state.
+  id: totrans-560
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 失败的成员将在一段时间内保持`RECOVERING`状态，而组复制试图自我恢复。如果错误无法自动恢复，则离开该组并保持`ERROR`状态。
+- en: '[PRE92]'
+  id: totrans-561
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE92]'
+- en: Both listings were taken on the same secondary member of the group, but after
+    it left the group it reports only itself as a Group Replication member and does
+    not display information about other members.
+  id: totrans-562
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 两个清单都在组的同一次要成员上获取，但在它离开组后，仅报告自身为 Group Replication 成员，并且不显示有关其他成员的信息。
+- en: To find reason of the failure you need to examine tables `replication_connection_status`
+    and `replication_applier_status_by_worker`.
+  id: totrans-563
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查找失败的原因，您需要检查 `replication_connection_status` 和 `replication_applier_status_by_worker`
+    表。
+- en: 'In our example member `e9514d63-16ae-11eb-8f6e-98af65266957` stopped with SQL
+    error. You will find error details in the `replication_applier_status_by_worker`
+    table:'
+  id: totrans-564
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的示例中，成员 `e9514d63-16ae-11eb-8f6e-98af65266957` 因 SQL 错误而停止。您可以在 `replication_applier_status_by_worker`
+    表中找到错误详情：
+- en: '[PRE93]'
+  id: totrans-565
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE93]'
+- en: Error message says that the definition of the table in the transaction `de5b65cb-16ae-11eb-826c-98af65266957:15`
+    is not compatible with Group Replication plugin. To find out why check [Group
+    Replication Requirements and Limitations](https://dev.mysql.com/doc/refman/8.0/en/group-replication-requirements-and-limitations.html),
+    identify the table used in the transaction and fix the error.
+  id: totrans-566
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 错误消息表示事务中表的定义 `de5b65cb-16ae-11eb-826c-98af65266957:15` 与 Group Replication
+    插件不兼容。要查找原因，请参阅[Group Replication 要求和限制](https://dev.mysql.com/doc/refman/8.0/en/group-replication-requirements-and-limitations.html)，识别事务中使用的表并修复错误。
+- en: Error message in the `replication_applier_status_by_worker` table does not have
+    any hint on which table was used in the transaction. But error log file may have.
+    Open error log file, search for the `LAST_ERROR_TIMESTAMP` and `LAST_ERROR_NUMBER`
+    to identify the error and check if previous or next rows have more information.
+  id: totrans-567
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`replication_applier_status_by_worker` 表中的错误消息没有任何提示表明在事务中使用了哪个表。但是错误日志文件可能有。打开错误日志文件，搜索
+    `LAST_ERROR_TIMESTAMP` 和 `LAST_ERROR_NUMBER` 来识别错误，并检查前后行是否有更多信息。'
+- en: '[PRE94]'
+  id: totrans-568
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE94]'
+- en: 'In this example error message on the previous row contains the table name:
+    `al_winner`, and the reason why it is not compatible with Group Replication: the
+    table has not primary key.'
+  id: totrans-569
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个示例中，上一行的错误消息包含表名：`al_winner`，不兼容 Group Replication 的原因是表没有主键。
+- en: To fix the error you need to fix table definition on the `PRIMARY` and failing
+    `SECONDARY` node.
+  id: totrans-570
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要修复错误，您需要在 `PRIMARY` 和失败的 `SECONDARY` 节点上修复表定义。
+- en: 'First, login to the `PRIMARY` node, and add surrogate primary key:'
+  id: totrans-571
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先，登录到 `PRIMARY` 节点，并添加代理主键：
+- en: '[PRE95]'
+  id: totrans-572
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE95]'
+- en: You need to disable binary logging, because otherwise this change will be replicated
+    to the secondary members and replication will stop with the duplicate column name
+    error.
+  id: totrans-573
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要禁用二进制日志记录，否则此更改将被复制到辅助成员，并且由于重复列名错误，复制将停止。
+- en: Then run same command on the secondary to fix the table definition and restart
+    Group Replication.
+  id: totrans-574
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后在辅助节点上运行相同命令以修复表定义，并重新启动 Group Replication。
+- en: '[PRE96]'
+  id: totrans-575
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE96]'
+- en: You need to disable `super_read_only` first which is set by the Group Replication
+    plugin if nodes are running in single-primary mode.
+  id: totrans-576
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果节点在单主模式下运行，则需要首先禁用由 Group Replication 插件设置的 `super_read_only`。
+- en: Once the error is fixed the node joins the group and reports its state as `ONLINE`.
+  id: totrans-577
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦错误修复，节点将加入组，并将其状态报告为 `ONLINE`。
+- en: '[PRE97]'
+  id: totrans-578
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE97]'
+- en: Tip
+  id: totrans-579
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: 'You can find what the failing transaction is doing by running mysqlbinlog command
+    with option `verbose`:'
+  id: totrans-580
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过运行带有选项 `verbose` 的 mysqlbinlog 命令来查找失败的事务正在做什么：
+- en: '[PRE98]'
+  id: totrans-581
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE98]'
+- en: Option `verbose` required to decode row events.
+  id: totrans-582
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 解码行事件需要选项 `verbose`。
+- en: 'We fixed error on one node, but the third node did not join the group. After
+    examining content of the table `performance_schema.replication_connection_status`
+    we found that replication connection options were not setup correctly:'
+  id: totrans-583
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们在一个节点上修复了错误，但第三个节点没有加入组。在检查表 `performance_schema.replication_connection_status`
+    内容后，我们发现复制连接选项未正确设置：
+- en: '[PRE99]'
+  id: totrans-584
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE99]'
+- en: 'To fix this we need to run correct *CHANGE REPLICATION SOURCE* command:'
+  id: totrans-585
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要解决此问题，我们需要运行正确的 *CHANGE REPLICATION SOURCE* 命令：
+- en: '[PRE100]'
+  id: totrans-586
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE100]'
+- en: Once fixed the node will fail with the same SQL error as the previous one, that
+    has to be fixed the way we described above. Finally, after SQL error is recovered,
+    the node will join the cluster and will be reported as `ONLINE`.
+  id: totrans-587
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 修复后，节点将因与先前相同的 SQL 错误而失败，必须按照我们上面描述的方式进行修复。最终，在 SQL 错误恢复后，节点将加入集群并显示为 `ONLINE`。
+- en: '[PRE101]'
+  id: totrans-588
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE101]'
+- en: To check performance of the Group Replication query table `performance_schema.replication_group_member_stats`.
+  id: totrans-589
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要检查 Group Replication 查询表 `performance_schema.replication_group_member_stats`
+    的性能。
+- en: '[PRE102]'
+  id: totrans-590
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE102]'
+- en: Important fields are `COUNT_TRANSACTIONS_REMOTE_IN_APPLIER_QUEUE` that show
+    how many transactions are waiting in the queue on the secondary node to apply,
+    and `TRANSACTIONS_COMMITTED_ALL_MEMBERS` which show that transactions were applied
+    on all members. For more details consult [User Reference Manual](https://dev.mysql.com/doc/refman/8.0/en/performance-schema-replication-group-member-stats-table.html).
+  id: totrans-591
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重要的字段是`COUNT_TRANSACTIONS_REMOTE_IN_APPLIER_QUEUE`，显示在辅助节点队列中等待应用的事务数量，以及`TRANSACTIONS_COMMITTED_ALL_MEMBERS`，显示所有成员上已应用的事务数量。有关更多详细信息，请参阅[用户参考手册](https://dev.mysql.com/doc/refman/8.0/en/performance-schema-replication-group-member-stats-table.html)。
+- en: 3.16 Using Processlist to Understand Replication Performance
+  id: totrans-592
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.16 使用进程列表了解复制性能
+- en: Problem
+  id: totrans-593
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Replica is behind the source server and lag is increasing. You want to undertsand
+    what is going on.
+  id: totrans-594
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制品落后于源服务器，延迟正在增加。您想了解发生了什么。
+- en: Solution
+  id: totrans-595
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Examine status of the SQL threads using replication tables in Performance Schema
+    as well as regular MySQL performance instrumentation.
+  id: totrans-596
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用性能模式中的复制表以及常规的MySQL性能工具检查SQL线程的状态。
+- en: Discussion
+  id: totrans-597
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Replica may fall behind the source if SQL threads are applying updates slower
+    than the source server. This may happen because updates on the source are running
+    concurrently, while on the replica less threads are used to process the same workload.
+    This difference may happen even on replicas with the same or higher number of
+    CPU cores than the the source either because you set up less `replica_parallel_workers`
+    than active threads on the source server, or because they are not used fully due
+    to safety measures used to prevent replica from applying updates in the wrong
+    order.
+  id: totrans-598
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果SQL线程在应用更新时比源服务器慢，则副本可能落后于源。这可能是因为源上的更新正在并发运行，而在副本上使用的线程少于处理相同工作量的源服务器上的活动线程。即使在具有与源相同或更高CPU核心数量的副本上，这种差异也可能发生，因为您设置了比源服务器上活动线程少的`replica_parallel_workers`，或者因为由于安全措施未充分利用而未完全使用它们以防止副本以错误的顺序应用更新。
+- en: To understand how many parallel workers are active you may query table `replication_applier_status_by_worker`.
+  id: totrans-599
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要了解活动的并行工作者数量，您可以查询`replication_applier_status_by_worker`表。
+- en: '[PRE103]'
+  id: totrans-600
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE103]'
+- en: In the listing above you may notice that only three threads are currently applying
+    a transaction while others are idle. This is not stable information and you need
+    to run the same query several times to find out if this is a tendency.
+  id: totrans-601
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上面的列表中，您可能注意到目前只有三个线程正在应用事务，而其他线程处于空闲状态。这不是稳定的信息，您需要多次运行相同的查询以确定这是否是一种趋势。
+- en: Table `threads` in Performance Schema contains a list of all threads currently
+    running on the MySQL server, including background ones. It has a field `name`
+    which value is `thread/sql/replica_worker` (`thread/sql/slave_worker`) in case
+    of the replication SQL thread. You can query it and find more details on what
+    each of the SQL thread workers is doing.
+  id: totrans-602
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能模式中的`threads`表包含当前在MySQL服务器上运行的所有线程的列表，包括后台线程。它具有一个名为`name`的字段，其值为`thread/sql/replica_worker`（在复制SQL线程的情况下为`thread/sql/slave_worker`）。您可以查询它并找到每个SQL线程工作者正在执行的详细信息。
+- en: '[PRE104]'
+  id: totrans-603
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE104]'
+- en: In the listing above thread 54 is waiting for a transaction commit, threads
+    55 and 56 are applying a batch of row changes, while other threads are waiting
+    for an event from the Coordinator.
+  id: totrans-604
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上面的列表中，线程54正在等待事务提交，线程55和56正在应用一批行更改，而其他线程则在等待来自协调器的事件。
+- en: Since the source server applies changes in high number of threads we may notice
+    that the replication lag is increasing.
+  id: totrans-605
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于源服务器在大量线程中应用更改，我们可能会注意到复制延迟正在增加。
+- en: '[PRE105]'
+  id: totrans-606
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE105]'
+- en: One of the resolutions for such issues is to set option `binlog_transaction_dependency_tracking`
+    on the source server to `WRITESET_SESSION` or `WRITESET`. These options are discussed
+    in [Recipe 3.8](#nch-replication-replication-multithreaded) and allow to have
+    higher parallelization on the replica. Note that changes would not take immediate
+    effect, because replica will have to apply binary log events, recorded with default
+    `binlog_transaction_dependency_tracking` value `COMMIT_ORDER`.
+  id: totrans-607
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于此类问题的一个解决方案是在源服务器上设置选项`binlog_transaction_dependency_tracking`为`WRITESET_SESSION`或`WRITESET`。这些选项在[配方
+    3.8](#nch-replication-replication-multithreaded)中讨论，并允许在副本上实现更高的并行化。请注意，更改不会立即生效，因为副本将必须应用使用默认的`binlog_transaction_dependency_tracking`值`COMMIT_ORDER`记录的二进制日志事件。
+- en: Still, after a while, you may notice that all SQL thread workers became active
+    and replica lag started decreasing.
+  id: totrans-608
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，过了一段时间，您可能会注意到所有SQL线程工作者都变得活跃，并且复制延迟开始减少。
+- en: '[PRE106]'
+  id: totrans-609
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE106]'
+- en: 'Another common reason for the replication lag is a local command, affecting
+    tables, updated by the replication. You may notice that this is the case if query
+    table `replication_applier_status_by_worker` and compare value of the `APPLYING_TRANSACTION_START_APPLY_TIMESTAMP`
+    field with current time:'
+  id: totrans-610
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 复制滞后的另一个常见原因是本地命令，影响由复制更新的表。如果查询 `replication_applier_status_by_worker` 表，并将
+    `APPLYING_TRANSACTION_START_APPLY_TIMESTAMP` 字段的值与当前时间进行比较，则可能会注意到这种情况发生。
+- en: '[PRE107]'
+  id: totrans-611
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE107]'
+- en: In the listing above transaction execution time is similar for all threads and
+    around five minutes. That is ridiculously long!
+  id: totrans-612
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在上面的列表中，所有线程的事务执行时间都相似，大约为五分钟。这太长了！
+- en: 'To find out why transactions are executing for such a long time query table
+    `threads` in the Performance Schema:'
+  id: totrans-613
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要找出事务执行时间如此之长的原因，请查询 Performance Schema 中的 `threads` 表：
+- en: '[PRE108]'
+  id: totrans-614
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE108]'
+- en: It is clear that the replication SQL threads are not doing any useful job and
+    just waiting for a global read lock.
+  id: totrans-615
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 很明显，复制 SQL 线程并没有执行任何有用的工作，只是在等待全局读锁。
+- en: 'To find out which thread is holding a global read lock try querying table `threads`
+    in the Performance Schema, but this time filter out replica threads:'
+  id: totrans-616
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要找出哪个线程持有全局读锁，请再次查询 Performance Schema 中的 `threads` 表，但这次要过滤掉副本线程：
+- en: '[PRE109]'
+  id: totrans-617
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE109]'
+- en: In our example offending thread is the thread executed *FLUSH TABLES WITH READ
+    LOCK*. This is a common safety lock, performed by backup programs. Since we know
+    the reason of the replica stall, we can either wait until this job finishes or
+    kill the thread. Once done, replica will continue executing updates.
+  id: totrans-618
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在我们的示例中，问题线程是执行 *FLUSH TABLES WITH READ LOCK* 的线程。这是由备份程序执行的常见安全锁。既然我们知道了副本停顿的原因，我们可以选择等待此任务完成或终止该线程。完成后，副本将继续执行更新。
+- en: See Also
+  id: totrans-619
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: Troubleshooting performance is a long topic and further detail is outside the
+    scope of this book. For additional information about troubleshooting, see [MySQL
+    Troubleshooting](https://www.oreilly.com/library/view/mysql-troubleshooting/9781449317836/).
+  id: totrans-620
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 性能故障排除是一个较长的话题，本书不涵盖更多详细信息。有关故障排除的额外信息，请参阅 [MySQL 故障排除](https://www.oreilly.com/library/view/mysql-troubleshooting/9781449317836/)。
+- en: 3.17 Setting Up Automated Replication
+  id: totrans-621
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 3.17 设置自动复制
+- en: Problem
+  id: totrans-622
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to setup replication, but do not want to configure it manually.
+  id: totrans-623
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要设置复制，但不想手动配置它。
+- en: Solution
+  id: totrans-624
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use MySQL Admin API, available in MySQL Shell ([Chapter 2](ch02.xhtml#nch-mysqlshell)).
+  id: totrans-625
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 MySQL Shell 中提供的 MySQL Admin API（[第二章](ch02.xhtml#nch-mysqlshell)）。
+- en: Discussion
+  id: totrans-626
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: MySQL Shell provides MySQL Admin API that allows you to automate standard replication
+    administrative tasks, such as creating a ReplicaSet of a source server with one
+    or more replicas. Or create InnoDB Cluster, using Group Replication.
+  id: totrans-627
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL Shell 提供 MySQL Admin API，允许您自动化标准复制管理任务，例如使用一个或多个副本创建源服务器的 ReplicaSet，或使用
+    Group Replication 创建 InnoDB Cluster。
+- en: InnoDB ReplicaSet
+  id: totrans-628
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: InnoDB ReplicaSet
+- en: If you want to automate replication setup use MySQL Admin API inside MySQL Shell
+    and InnoDB ReplicaSet. InnoDB ReplicaSet allows you to create a single-primary
+    replication topology with as many secondary read-only servers as you wish. You
+    may later promote one of the secondary servers to primary. Multiple-primary setups,
+    replication filters and automatic failovers are not supported.
+  id: totrans-629
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果要自动化复制设置，请在 MySQL Shell 中使用 MySQL Admin API 和 InnoDB ReplicaSet。InnoDB ReplicaSet
+    允许您创建单主复制拓扑，以及任意数量的次要只读服务器。您稍后可以将其中一个次要服务器提升为主服务器。不支持多主设置、复制过滤器和自动故障转移。
+- en: 'First you need to prepare the servers. Ensure that:'
+  id: totrans-630
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 首先需要准备服务器。确保：
+- en: MySQL is of version 8.0 or newer
+  id: totrans-631
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: MySQL 版本为 8.0 或更新版本
+- en: GTID options `gtid_mode` and `enforce_gtid_consistency` are enabled
+  id: totrans-632
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 启用 GTID 选项 `gtid_mode` 和 `enforce_gtid_consistency`
+- en: Binary log format is `ROW`
+  id: totrans-633
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 二进制日志格式为 `ROW`
+- en: 'Default storage engine is InnoDB: set option `default_storage_engine=InnoDB`'
+  id: totrans-634
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 默认存储引擎为 InnoDB：设置选项 `default_storage_engine=InnoDB`
+- en: 'Parallel-replication related options:'
+  id: totrans-635
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 并行复制相关选项：
+- en: '[PRE110]'
+  id: totrans-636
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE110]'
+- en: '>'
+  id: totrans-637
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '>'
+- en: Warning
+  id: totrans-638
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: If you are using Ubuntu and want to setup ReplicaSet on the local machine edit
+    `/etc/hosts` file and either remove loopback address `127.0.1.1` or replace it
+    with `127.0.0.1`. Loopback addresses, other than `127.0.0.1` are not supported
+    by MySQL Shell.
+  id: totrans-639
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您使用的是 Ubuntu 并且希望在本地机器上设置 ReplicaSet，请编辑 `/etc/hosts` 文件，并删除回环地址 `127.0.1.1`
+    或替换为 `127.0.0.1`。MySQL Shell 不支持除 `127.0.0.1` 之外的回环地址。
+- en: 'Once servers are prepared for the replication you can start configuring them
+    with MySQL Shell:'
+  id: totrans-640
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦服务器为复制做好准备，您可以使用 MySQL Shell 开始配置它们：
+- en: '[PRE111]'
+  id: totrans-641
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE111]'
+- en: 'Command *dba.configureReplicaSetInstance* takes two parameters: URI to connect
+    to the server and configuration options. Option `clusterAdmin` instructs to create
+    a replication user. Then you may provide a password when prompted.'
+  id: totrans-642
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 命令 *dba.configureReplicaSetInstance* 接受两个参数：用于连接到服务器的 URI 和配置选项。选项 `clusterAdmin`
+    指示创建一个复制用户。然后在提示时提供密码。
+- en: Repeat configuration step for all servers in the ReplicaSet. Specify same replication
+    username and password.
+  id: totrans-643
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为 ReplicaSet 中的所有服务器重复配置步骤。指定相同的复制用户名和密码。
+- en: 'Once all instances are configured, create a ReplicaSet:'
+  id: totrans-644
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦所有实例配置完成，创建一个 ReplicaSet：
+- en: '[PRE112]'
+  id: totrans-645
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE112]'
+- en: Command *dba.createReplicaSet* creates named ReplicaSet and returns ReplicaSet
+    object. Save it into a variable to perform further management.
+  id: totrans-646
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 命令 *dba.createReplicaSet* 创建命名 ReplicaSet 并返回 ReplicaSet 对象。将其保存到变量中以进行进一步管理。
+- en: 'Internally it creates a database `mysql_innodb_cluster_metadata` with tables,
+    describing ReplicaSet setup in the instance MySQL Shell connected to. Same time
+    this first instance is set up as a PRIMARY ReplicaSet member. You may check it
+    if run command *rs.status()*:'
+  id: totrans-647
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在内部，它在 MySQL Shell 连接的实例中创建了一个描述 ReplicaSet 设置的 `mysql_innodb_cluster_metadata`
+    数据库和表。同时，这第一个实例设置为 PRIMARY ReplicaSet 成员。您可以通过运行命令 *rs.status()* 来检查它：
+- en: '[PRE113]'
+  id: totrans-648
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE113]'
+- en: 'Once PRIMARY instance set up add as many secondary instances as desired:'
+  id: totrans-649
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦设置了 PRIMARY 实例，请添加尽可能多的次要实例：
+- en: '[PRE114]'
+  id: totrans-650
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE114]'
+- en: Each secondary instance performs initial data copy from the PRIMARY member.
+    It can copy data using either `clone` plugin or incremental recovery from the
+    binary logs. For the server which already has data method `clone` is preferrable.
+    But you may need to manually restart the server to finish the installation. If
+    you have chosen incremental recovery ensure that no binary log, containing data,
+    is purged. Otherwise replication setup will fail.
+  id: totrans-651
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 每个次要实例从主要成员执行初始数据复制。它可以使用 `clone` 插件或从二进制日志进行增量恢复来复制数据。对于已经有数据的服务器，`clone` 方法是首选的。但您可能需要手动重新启动服务器以完成安装。如果选择增量恢复，请确保没有包含数据的二进制日志被清除。否则，复制设置将失败。
+- en: Once all secondary members are added ReplicaSet is ready and can be used for
+    writes and reads. You can check its status by running command *rs.status()*. It
+    supports option `extended`, controlling verbosity of the output. Still it does
+    not show all the information about replication health. If you want to have all
+    the details use *SHOW REPLICA STATUS* command or query Performance Schema.
+  id: totrans-652
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦添加了所有次要成员，ReplicaSet 就准备好可以用于写入和读取。您可以通过运行命令 *rs.status()* 来检查其状态。它支持选项 `extended`，控制输出的详细程度。但它不显示有关复制健康状况的所有信息。如果您希望获取所有细节，请使用
+    *SHOW REPLICA STATUS* 命令或查询性能模式。
+- en: If you want to change which server is a PRIMARY use *rs.setPrimaryInstance*
+    command. Thus, *rs.setPrimaryInstance(“127.0.0.1:13002”)* switches PRIMARY server
+    from the server, running on the port 13000 to the server, listening port 13002.
+  id: totrans-653
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您想要更改哪个服务器是 PRIMARY，请使用 *rs.setPrimaryInstance* 命令。因此，*rs.setPrimaryInstance(“127.0.0.1:13002”)*
+    将主服务器从运行在端口 13000 上的服务器切换到监听端口 13002 的服务器。
+- en: If you disconnected from a server, participating in the ReplicaSet or destroyed
+    `ReplicaSet` object, reconnect to one of ReplicaSet members and run command *rs=dba.getReplicaSet()*
+    to re-create ReplicaSet object.
+  id: totrans-654
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您从参与 ReplicaSet 的服务器断开连接或销毁了 `ReplicaSet` 对象，重新连接到 ReplicaSet 成员之一并运行命令 *rs=dba.getReplicaSet()*
+    来重新创建 ReplicaSet 对象。
+- en: Warning
+  id: totrans-655
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: If you want to manage ReplicaSet with MySQL Shell do not modify replication
+    setup directly by running *CHANGE REPLICATION SOURCE* command. All management
+    should happen via Admin API in MySQL Shell.
+  id: totrans-656
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您希望使用 MySQL Shell 管理 ReplicaSet，请不要直接通过运行 *CHANGE REPLICATION SOURCE* 命令修改复制设置。所有管理都应通过
+    MySQL Shell 中的 Admin API 进行。
+- en: InnoDB Cluster
+  id: totrans-657
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: InnoDB Cluster
+- en: To automate Group Replication create [MySQL InnoDB Cluster](https://dev.mysql.com/doc/refman/8.0/en/mysql-innodb-cluster-introduction.html).
+    InnoDB Cluster is a complete high availability solution that allows you to easily
+    configure and administer a group of at least three MySQL Servers.
+  id: totrans-658
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要自动化 Group Replication，请创建 [MySQL InnoDB Cluster](https://dev.mysql.com/doc/refman/8.0/en/mysql-innodb-cluster-introduction.html)。InnoDB
+    Cluster 是一个完整的高可用解决方案，允许您轻松配置和管理至少三个 MySQL 服务器的组。
+- en: 'Before setting up InnoDB Cluster prepare the servers. Each of the servers in
+    the group should have:'
+  id: totrans-659
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在设置 InnoDB Cluster 之前，请准备好服务器。组中的每个服务器都应具有：
+- en: Unique server id
+  id: totrans-660
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 唯一的服务器 ID
+- en: GTID enabled
+  id: totrans-661
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 启用 GTID
+- en: Option `disabled_storage_engines` set to `"MyISAM,BLACKHOLE,FEDERATED,ARCHIVE,MEMORY"`
+  id: totrans-662
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 选项 `disabled_storage_engines` 设置为 `"MyISAM,BLACKHOLE,FEDERATED,ARCHIVE,MEMORY"`
+- en: Option `log_replica_updates` enabled
+  id: totrans-663
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 选项 `log_replica_updates` 已启用
+- en: User account with administrative privileges
+  id: totrans-664
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 具有管理特权的用户帐户
+- en: 'Parallel-replication related options:'
+  id: totrans-665
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 与并行复制相关的选项：
+- en: '[PRE115]'
+  id: totrans-666
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE115]'
+- en: You may set other options ([Recipe 3.12](#nch-replication-replication-synchronous)),
+    required for the group replication, but they can also be configured by the MySQL
+    Shell.
+  id: totrans-667
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以设置其他选项（[Recipe 3.12](#nch-replication-replication-synchronous)），用于组复制，但也可以通过
+    MySQL Shell 进行配置。
+- en: Once you setup and started MySQL instances connect MySQL Shell to the one you
+    want to make PRIMARY and configure them. You need to use an account (in our case
+    `root`) with administrative privileges to start theconfiguration process.
+  id: totrans-668
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 安装并启动 MySQL 实例后，将 MySQL Shell 连接到要设置为主实例的实例。您需要使用具有管理员权限的帐户（在我们的情况下是 `root`）启动配置过程。
+- en: '[PRE116]'
+  id: totrans-669
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE116]'
+- en: Repeat configuration for other instances in the cluster.
+  id: totrans-670
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为集群中的其他实例重复配置。
+- en: Warning
+  id: totrans-671
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: If an instance is manually configured for Group Replication MySQL Shell would
+    not be able to update its options and would not ensure that the group replication
+    configuration persist after restart. Always run *dba.configureInstance* before
+    setting up InnoDB Cluster.
+  id: totrans-672
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果某个实例已手动配置为组复制，MySQL Shell 将无法更新其选项，并且不能保证组复制配置在重启后持续存在。始终在设置 InnoDB Cluster
+    之前运行 *dba.configureInstance*。
+- en: 'After instances are configured create a cluster:'
+  id: totrans-673
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在配置实例后，创建集群：
+- en: '[PRE117]'
+  id: totrans-674
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE117]'
+- en: 'Then add instances to it: *cluster.addInstance(''root@127.0.0.1:33368'', {localAddress:
+    “:34368"})*. When MySQL Shell asks you to select a recovery method choose “Clone”.
+    Then, depending if your server supports *RESTART* command either wait when it
+    is back online or start the node manually. In case of success you will see a message,
+    similar to:'
+  id: totrans-675
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '然后将实例添加到集群中：*cluster.addInstance(''root@127.0.0.1:33368'', {localAddress: “:34368"})*。当
+    MySQL Shell 要求您选择恢复方法时，请选择“克隆”。然后，根据您的服务器是否支持 *RESTART* 命令，等待其恢复在线或手动启动节点。成功后，您将看到类似以下的消息：'
+- en: '[PRE118]'
+  id: totrans-676
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE118]'
+- en: Add other instances to the cluster.
+  id: totrans-677
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将其他实例添加到集群中。
+- en: Tip
+  id: totrans-678
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 小贴士
+- en: MySQL Shell constructs a local address which Group nodes use to communicate
+    with each other by using the system variable `report_host` for the host address
+    and formula `(current port of the instance) * 10 + 1` for the port number. If
+    the auto-generated value exceeds 65535 the instance cannot be added to the cluster.
+    Therefore, if you use non-standard ports, specify the custom value for the option
+    `localAddress`.
+  id: totrans-679
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL Shell 构建了一个本地地址，组节点使用此地址通过系统变量 `report_host`（主机地址）和公式 `(当前实例端口) * 10 +
+    1`（端口号）进行通信。如果自动生成的值超过 65535，则实例无法添加到集群中。因此，如果使用非标准端口，请为选项 `localAddress` 指定自定义值。
+- en: 'After instances are added InnoDB Cluster is ready to use. To examine its status
+    use *cluster.status()* command which supports `extended` key, controlling verbosity
+    of the output. Default is 0: only basic information printed. With option 2 and
+    3 you may examine which transactions are received and applied on each member.
+    Command *cluster.describe()* gives a short overview of the cluster topology.'
+  id: totrans-680
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 添加实例后，InnoDB Cluster 已准备就绪。要查看其状态，请使用 *cluster.status()* 命令，支持 `extended` 键，控制输出的详细程度。默认为
+    0：仅打印基本信息。通过选项 2 和 3，您可以查看每个成员接收和应用的事务。命令 *cluster.describe()* 给出集群拓扑的简要概述。
+- en: '[PRE119]'
+  id: totrans-681
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE119]'
+- en: If you destroyed the Cluster object, for example, by closing the session, reconnect
+    to one of the cluster members and re-create it by running command *cluster = dba.getCluster()*.
+  id: totrans-682
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您销毁了 Cluster 对象（例如通过关闭会话），请重新连接到集群成员之一，并通过运行命令 *cluster = dba.getCluster()*
+    重新创建它。
+- en: Note
+  id: totrans-683
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: Both InnoDB ReplicaSet and InnoDB Cluster support software router [MySQL Router](https://dev.mysql.com/doc/mysql-router/8.0/en/)
+    which you can use for load balancing. We skipped this part, because this is outside
+    of the scope of the book. For the information on how to setup MySQL Router together
+    with InnoDB ReplicaSet and InnoDB Cluster consult the User Reference Manual.
+  id: totrans-684
+  prefs: []
+  type: TYPE_NORMAL
+  zh: InnoDB ReplicaSet 和 InnoDB Cluster 都支持软件路由器 [MySQL Router](https://dev.mysql.com/doc/mysql-router/8.0/en/)，您可以用它进行负载均衡。我们跳过了此部分，因为它超出了本书的范围。有关如何与
+    InnoDB ReplicaSet 和 InnoDB Cluster 设置 MySQL Router 的信息，请参阅用户参考手册。
+- en: See Also
+  id: totrans-685
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 另请参阅
+- en: For additional information about replication automation, see [MySQL Shell User
+    Reference Manual](https://dev.mysql.com/doc/mysql-shell/8.0/en/).
+  id: totrans-686
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于复制自动化的更多信息，请参阅 [MySQL Shell 用户参考手册](https://dev.mysql.com/doc/mysql-shell/8.0/en/)。

@@ -1,0 +1,1856 @@
+- en: Chapter 2\. Getting Started
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第二章。入门
+- en: 'MongoDB is powerful but easy to get started with. In this chapter we’ll introduce
+    some of the basic concepts of MongoDB:'
+  id: totrans-1
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 强大而易于上手。在本章中，我们将介绍 MongoDB 的一些基本概念：
+- en: A *document* is the basic unit of data for MongoDB and is roughly equivalent
+    to a row in a relational database management system (but much more expressive).
+  id: totrans-2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*文档* 是 MongoDB 的基本数据单元，大致相当于关系数据库管理系统中的一行（但更具表现力）。'
+- en: Similarly, a *collection* can be thought of as a table with a dynamic schema.
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 类似地，*集合* 可以被看作是具有动态模式的表。
+- en: A single instance of MongoDB can host multiple independent *databases*, each
+    of which contains its own collections.
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一个 MongoDB 实例可以托管多个独立的 *数据库*，每个数据库都包含其自己的集合。
+- en: Every document has a special key, `"_id"`, that is unique within a collection.
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 每个文档都有一个特殊的键，`"_id"`，在集合内是唯一的。
+- en: MongoDB is distributed with a simple but powerful tool called the *mongo shell*.
+    The *mongo* shell provides built-in support for administering MongoDB instances
+    and manipulating data using the MongoDB query language. It is also a fully functional
+    JavaScript interpreter that enables users to create and load their own scripts
+    for a variety of purposes.
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: MongoDB 随附一个简单但功能强大的工具，称为 *mongo shell*。*mongo* shell 提供了内置支持，用于管理 MongoDB 实例并使用
+    MongoDB 查询语言操作数据。它还是一个完全功能的 JavaScript 解释器，允许用户为各种目的创建和加载自己的脚本。
+- en: Documents
+  id: totrans-7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 文档
+- en: 'At the heart of MongoDB is the *document*: an ordered set of keys with associated
+    values. The representation of a document varies by programming language, but most
+    languages have a data structure that is a natural fit, such as a map, hash, or
+    dictionary. In JavaScript, for example, documents are represented as objects:'
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 的核心是 *文档*：一组带有关联值的有序键集。文档的表示因编程语言而异，但大多数语言都有一个自然的数据结构来适应，比如映射、哈希表或字典。例如，在
+    JavaScript 中，文档表示为对象：
+- en: '[PRE0]'
+  id: totrans-9
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'This simple document contains a single key, `"greeting"`, with a value of `"Hello,
+    world!"`. Most documents will be more complex than this simple one and often will
+    contain multiple key/value pairs:'
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个简单的文档包含一个名为 `"greeting"` 的键，其值为 `"Hello, world!"`。大多数文档会比这个简单的文档复杂，并且通常会包含多个键值对：
+- en: '[PRE1]'
+  id: totrans-11
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: As you can see, values in documents are not just “blobs.” They can be one of
+    several different data types (or even an entire embedded document—see [“Embedded
+    Documents”](#embedded-documents)). In this example the value for `"greeting"`
+    is a string, whereas the value for `"views"` is an integer.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如您所见，文档中的值不仅仅是“blob”。它们可以是几种不同的数据类型之一（甚至是整个嵌入式文档——参见 [“嵌入式文档”](#embedded-documents)）。在此示例中，`"greeting"`
+    的值是一个字符串，而 `"views"` 的值是一个整数。
+- en: 'The keys in a document are strings. Any UTF-8 character is allowed in a key,
+    with a few notable exceptions:'
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文档中的键是字符串。键中允许任何 UTF-8 字符，但有几个显著的例外：
+- en: Keys must not contain the character *\0* (the `null` character). This character
+    is used to signify the end of a key.
+  id: totrans-14
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 键不能包含字符 *\0*（空字符）。该字符用于表示键的结尾。
+- en: The *.* and *$* characters have some special properties and should be used only
+    in certain circumstances, as described in later chapters. In general, they should
+    be considered reserved, and drivers will complain if they are used inappropriately.
+  id: totrans-15
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '*.* 和 *$* 字符具有一些特殊属性，只应在特定情况下使用，如后续章节所述。一般来说，它们应被视为保留字符，如果不恰当地使用，驱动程序会报错。'
+- en: 'MongoDB is type-sensitive and case-sensitive. For example, these documents
+    are distinct:'
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB 是类型敏感和区分大小写的。例如，以下文档是不同的：
+- en: '[PRE2]'
+  id: totrans-17
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'as are these:'
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如下面这些：
+- en: '[PRE3]'
+  id: totrans-19
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'A final important thing to note is that documents in MongoDB cannot contain
+    duplicate keys. For example, the following is not a legal document:'
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后需要注意的重要事项是，MongoDB 中的文档不能包含重复的键。例如，以下内容不是合法的文档：
+- en: '[PRE4]'
+  id: totrans-21
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: Collections
+  id: totrans-22
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 集合
+- en: A *collection* is a group of documents. If a document is the MongoDB analog
+    of a row in a relational database, then a collection can be thought of as the
+    analog to a table.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一个 *集合* 是一组文档。如果文档是关系数据库中行的 MongoDB 类比，那么集合可以被看作是表的类比。
+- en: Dynamic Schemas
+  id: totrans-24
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 动态模式
+- en: 'Collections have *dynamic schemas*. This means that the documents within a
+    single collection can have any number of different “shapes.” For example, both
+    of the following documents could be stored in a single collection:'
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 集合具有 *动态模式*。这意味着单个集合中的文档可以具有任意数量的不同“形状”。例如，以下两个文档都可以存储在同一个集合中：
+- en: '[PRE5]'
+  id: totrans-26
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 'Note that the previous documents have different keys, different numbers of
+    keys, and values of different types. Because any document can be put into any
+    collection, the question often arises: “Why do we need separate collections at
+    all?” With no need for separate schemas for different kinds of documents, why
+    *should* we use more than one collection? There are several good reasons:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，前述文档具有不同的键、不同数量的键和不同类型的值。因为任何文档都可以放入任何集合中，所以常常会问：“我们到底为什么需要单独的集合？” 没有需要为不同类型的文档创建单独模式，那么我们*为什么*需要使用多个集合呢？有几个很好的理由：
+- en: Keeping different kinds of documents in the same collection can be a nightmare
+    for developers and admins. Developers need to make sure that each query is only
+    returning documents adhering to a particular schema or that the application code
+    performing a query can handle documents of different shapes. If we’re querying
+    for blog posts, it’s a hassle to weed out documents containing author data.
+  id: totrans-28
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将不同类型的文档放在同一集合中可能会给开发人员和管理员带来噩梦。开发人员需要确保每个查询仅返回符合特定模式的文档，或者应用程序代码执行查询时可以处理不同形状的文档。如果我们要查询博客文章，那么筛选掉包含作者数据的文档会很麻烦。
+- en: It’s much faster to get a list of collections than to extract a list of the
+    types of documents in a collection. For example, if we had a `"type"` field in
+    each document that specified whether the document was a “skim,” “whole,” or “chunky
+    monkey,” it would be much slower to find those three values in a single collection
+    than to have three separate collections and query the correct collection.
+  id: totrans-29
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 获取集合列表要比从集合中提取文档类型列表快得多。例如，如果每个文档都有一个 `"type"` 字段，指定文档是“浏览”、“完整”还是“大块猴子”，在单个集合中查找这三个值将会慢得多，与查询三个不同的集合相比。
+- en: Grouping documents of the same kind together in the same collection allows for
+    data locality. Getting several blog posts from a collection containing only posts
+    will likely require fewer disk seeks than getting the same posts from a collection
+    containing posts and author data.
+  id: totrans-30
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将同类文档放在同一集合中可以实现数据局部性。从仅包含帖子的集合中获取多篇博客文章可能需要的磁盘查找次数比从包含帖子和作者数据的集合中获取相同帖子少。
+- en: We begin to impose some structure on our documents when we create indexes. (This
+    is especially true in the case of unique indexes.) These indexes are defined per
+    collection. By putting only documents of a single type into the same collection,
+    we can index our collections more efficiently.
+  id: totrans-31
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当我们创建索引时，我们开始对文档施加一些结构。（特别是在唯一索引的情况下。）这些索引是针对每个集合定义的。通过将仅包含单一类型文档的文档放入同一集合，我们可以更有效地为集合建立索引。
+- en: There are sound reasons for creating a schema and for grouping related types
+    of documents together. While not required by default, defining schemas for your
+    application is good practice and can be enforced through the use of MongoDB’s
+    documentation validation functionality and object–document mapping libraries available
+    for many programming languages.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 创建模式和将相关类型的文档分组有充分的理由。虽然不是默认要求，但为您的应用程序定义模式是一个好习惯，并且可以通过 MongoDB 的文档验证功能和许多编程语言的对象-文档映射库进行强制执行。
+- en: Naming
+  id: totrans-33
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 命名
+- en: 'A collection is identified by its name. Collection names can be any UTF-8 string,
+    with a few restrictions:'
+  id: totrans-34
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 集合通过其名称来识别。集合名称可以是任何 UTF-8 字符串，但有一些限制：
+- en: The empty string (`""`) is not a valid collection name.
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 空字符串 (`""`) 不是有效的集合名称。
+- en: Collection names may not contain the character *\0* (the `null` character),
+    because this delineates the end of a collection name.
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 集合名称不得包含字符 *\0*（`null` 字符），因为这会标志集合名称的结尾。
+- en: You should not create any collections with names that start with *system.*,
+    a prefix reserved for internal collections. For example, the *system.users* collection
+    contains the database’s users, and the *system.namespaces* collection contains
+    information about all of the database’s collections.
+  id: totrans-37
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不应创建任何以 *system.* 开头的集合名称，这是为内部集合保留的前缀。例如，*system.users* 集合包含数据库的用户，*system.namespaces*
+    集合包含有关数据库所有集合的信息。
+- en: User-created collections should not contain the reserved character *$* in their
+    names. The various drivers available for the database do support using *$* in
+    collection names because some system-generated collections contain it, but you
+    should not use *$* in a name unless you are accessing one of these collections.
+  id: totrans-38
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 用户创建的集合名称不应包含保留字符 *$*。尽管各种可用于数据库的驱动程序支持在集合名称中使用 *$*，因为一些系统生成的集合中包含它，但除非您正在访问这些集合之一，否则不应在名称中使用
+    *$*。
+- en: Subcollections
+  id: totrans-39
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 子集合
+- en: One convention for organizing collections is to use namespaced subcollections
+    separated by the *.* character. For example, an application containing a blog
+    might have a collection named *blog.posts* and a separate collection named *blog.authors*.
+    This is for organizational purposes only—there is no relationship between the
+    *blog* collection (it doesn’t even have to exist) and its “children.”
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一种组织集合的常用约定是使用由 *.* 字符分隔的命名空间子集合。例如，一个包含博客的应用程序可能有一个名为 *blog.posts* 的集合和一个单独的名为
+    *blog.authors* 的集合。这仅仅是为了组织目的——*blog* 集合与其“子集合”之间没有关系（甚至 *blog* 集合本身都不一定存在）。
+- en: 'Although subcollections do not have any special properties, they are useful
+    and are incorporated into many MongoDB tools. For instance:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然子集合没有任何特殊属性，但它们非常有用，并被整合到许多 MongoDB 工具中。例如：
+- en: GridFS, a protocol for storing large files, uses subcollections to store file
+    metadata separately from content chunks (see [Chapter 6](ch06.xhtml#chapter-idx-types)
+    for more information about GridFS).
+  id: totrans-42
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: GridFS，用于存储大文件的协议，使用子集合将文件元数据与内容块分开存储（有关 GridFS 的更多信息，请参见 [第6章](ch06.xhtml#chapter-idx-types)）。
+- en: Most drivers provide some syntactic sugar for accessing a subcollection of a
+    given collection. For example, in the database shell, `db.blog` will give you
+    the *blog* collection, and `db.blog.posts` will give you the *blog.posts* collection.
+  id: totrans-43
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 大多数驱动程序提供一些语法糖来访问给定集合的子集合。例如，在数据库 shell 中，`db.blog` 将给您 *blog* 集合，而 `db.blog.posts`
+    将给您 *blog.posts* 集合。
+- en: Subcollections are a good way to organize data in MongoDB for many use cases.
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于许多用例，子集合是在 MongoDB 中组织数据的一种好方法。
+- en: Databases
+  id: totrans-45
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据库
+- en: In addition to grouping documents by collection, MongoDB groups collections
+    into *databases*. A single instance of MongoDB can host several databases, each
+    grouping together zero or more collections. A good rule of thumb is to store all
+    data for a single application in the same database. Separate databases are useful
+    when storing data for several applications or users on the same MongoDB server.
+  id: totrans-46
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了按集合分组文档外，MongoDB 还将集合分组到 *数据库* 中。MongoDB 的单个实例可以托管多个数据库，每个数据库都可以组合零个或多个集合。一个很好的经验法则是将单个应用程序的所有数据存储在同一个数据库中。在同一
+    MongoDB 服务器上存储多个应用程序或用户数据时，单独的数据库非常有用。
+- en: 'Like collections, databases are identified by name. Database names can be any
+    UTF-8 string, with the following restrictions:'
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 与集合类似，数据库通过名称标识。数据库名称可以是任何 UTF-8 字符串，但有以下限制：
+- en: The empty string (*“”*) is not a valid database name.
+  id: totrans-48
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 空字符串（*“”*）不是有效的数据库名称。
+- en: 'A database name cannot contain any of these characters: */*, *\*, *.*, *"*,
+    ***, *<*, *>*, *:*, *|*, *?*, *$*, (a single space), or *\0* (the `null` character).
+    Basically, stick with alphanumeric ASCII.'
+  id: totrans-49
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据库名称不能包含以下任何字符：*/*、*\*、*.*、*"*、***、*<*、*>*、*:*、*|*、*?*、*$*、（单个空格）或 *\0*（`null`
+    字符）。基本上，保持使用字母数字 ASCII。
+- en: Database names are case-insensitive.
+  id: totrans-50
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据库名称对大小写不敏感。
+- en: Database names are limited to a maximum of 64 bytes.
+  id: totrans-51
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 数据库名称限制为最多 64 个字节。
+- en: Historically, prior to the use of the WiredTiger storage engine, database names
+    became files on your filesystem. It is no longer the case. This explains why many
+    of the previous restrictions exist in the first place.
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在使用 WiredTiger 存储引擎之前，历史上数据库名称变成了文件名。现在不再是这种情况。这也解释了为什么先前存在这些限制。
+- en: 'There are also some reserved database names, which you can access but which
+    have special semantics. These are as follows:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 也有一些保留的数据库名称，您可以访问但它们具有特殊的语义。这些如下：
+- en: '*admin*'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*admin*'
+- en: The *admin* database plays a role in authentication and authorization. In addition,
+    access to this database is required for some administrative operations. See [Chapter 19](ch19.xhtml#chapter-data-admin)
+    for more information about the *admin* database.
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*admin* 数据库在认证和授权中起着重要作用。此外，对于某些管理操作，需要访问这个数据库。更多关于 *admin* 数据库的信息请参见 [第19章](ch19.xhtml#chapter-data-admin)。'
+- en: '*local*'
+  id: totrans-56
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*local*'
+- en: This database stores data specific to a single server. In replica sets, *local*
+    stores data used in the replication process. The *local* database itself is never
+    replicated. (See [Chapter 10](ch10.xhtml#chapter_d1e9405) for more information
+    about replication and the local database.)
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此数据库存储特定于单个服务器的数据。在副本集中，*local*存储用于复制过程中使用的数据。*local*数据库本身永远不会被复制。（有关复制和本地数据库的更多信息，请参见[第
+    10 章](ch10.xhtml#chapter_d1e9405)。）
+- en: '*config*'
+  id: totrans-58
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*config*'
+- en: Sharded MongoDB clusters (see [Chapter 14](ch14.xhtml#chapter_d1e10482)) use
+    the *config* database to store information about each shard.
+  id: totrans-59
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分片MongoDB集群（参见[第 14 章](ch14.xhtml#chapter_d1e10482)）使用*config*数据库来存储每个分片的信息。
+- en: By concatenating a database name with a collection in that database you can
+    get a fully qualified collection name, which is called a *namespace*. For instance,
+    if you are using the *blog.posts* collection in the *cms* database, the namespace
+    of that collection would be *cms.blog.posts*. Namespaces are limited to 120 bytes
+    in length and, in practice, should be fewer than 100 bytes long. For more on namespaces
+    and the internal representation of collections in MongoDB, see [Appendix B](app02.xhtml#appendix_see).
+  id: totrans-60
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过将数据库名称与其中的集合连接起来，您可以获得一个完全限定的集合名称，这称为*命名空间*。例如，如果您正在使用*cms*数据库中的*blog.posts*集合，则该集合的命名空间将是*cms.blog.posts*。命名空间长度限制为120字节，在实践中应少于100字节长。有关命名空间和MongoDB中集合的内部表示的更多信息，请参见[附录
+    B](app02.xhtml#appendix_see)。
+- en: Getting and Starting MongoDB
+  id: totrans-61
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 获取和启动MongoDB
+- en: 'To start the server, run the *mongod* executable in the Unix command-line environment
+    of your choice:'
+  id: totrans-62
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要启动服务器，请在您选择的Unix命令行环境中运行*mongod*可执行文件：
+- en: '[PRE6]'
+  id: totrans-63
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'If you’re on Windows, run this:'
+  id: totrans-64
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您使用Windows，请运行以下命令：
+- en: '[PRE7]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: Tip
+  id: totrans-66
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: For detailed information on installing MongoDB on your system, see [Appendix A](app01.xhtml#appendix_d1e12346)
+    or the appropriate [installation tutorial](https://oreil.ly/5WP5e) in the MongoDB
+    documentation.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关在您的系统上安装MongoDB的详细信息，请参见[附录 A](app01.xhtml#appendix_d1e12346)或MongoDB文档中相应的[安装教程](https://oreil.ly/5WP5e)。
+- en: When run with no arguments, *mongod* will use the default data directory, */data/db/*
+    (or *\data\db\* on the current volume on Windows). If the data directory does
+    not already exist or is not writable, the server will fail to start. It is important
+    to create the data directory (e.g., `mkdir -p /data/db/`) and to make sure your
+    user has permission to write to the directory before starting MongoDB.
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当不带参数运行时，*mongod*将使用默认数据目录*/data/db/*（或Windows当前卷上的*\data\db\*）。如果数据目录不存在或不可写，则服务器将无法启动。在启动MongoDB之前，创建数据目录（例如，`mkdir
+    -p /data/db/`）并确保您的用户有写入目录的权限非常重要。
+- en: On startup, the server will print some version and system information and then
+    begin waiting for connections. By default MongoDB listens for socket connections
+    on port 27017\. The server will fail to start if that port is not available—the
+    most common cause of this is another instance of MongoDB that is already running.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在启动时，服务器将打印一些版本和系统信息，然后开始等待连接。默认情况下，MongoDB监听端口27017上的套接字连接。如果该端口不可用，服务器将无法启动——最常见的原因是已经运行另一个MongoDB实例。
+- en: Tip
+  id: totrans-70
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: You should always secure your *mongod* instances. See [Chapter 19](ch19.xhtml#chapter-data-admin)
+    for more information on securing MongoDB.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您应该始终保护您的*mongod*实例。有关如何保护MongoDB的更多信息，请参见[第 19 章](ch19.xhtml#chapter-data-admin)。
+- en: You can safely stop *mongod* by typing Ctrl-C in the command-line-environment
+    from which you launched the *mongod* server.
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以在启动*mongod*的命令行环境中键入Ctrl-C安全停止*mongod*服务器。
+- en: Tip
+  id: totrans-73
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 提示
+- en: For more information on starting or stopping MongoDB, see [Chapter 21](ch21.xhtml#chapter-start-stop).
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关启动或停止MongoDB的更多信息，请参见[第 21 章](ch21.xhtml#chapter-start-stop)。
+- en: Introduction to the MongoDB Shell
+  id: totrans-75
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: MongoDB Shell 简介
+- en: MongoDB comes with a JavaScript shell that allows interaction with a MongoDB
+    instance from the command line. The shell is useful for performing administrative
+    functions, inspecting a running instance, or just exploring MongoDB. The *mongo*
+    shell is a crucial tool for using MongoDB. We’ll use it extensively throughout
+    the rest of the text.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB附带一个JavaScript shell，允许从命令行与MongoDB实例交互。这个shell对于执行管理功能、检查运行中的实例或仅仅探索MongoDB非常有用。*mongo*
+    shell是使用MongoDB的关键工具。我们将在本文的其余部分广泛使用它。
+- en: Running the Shell
+  id: totrans-77
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 运行 Shell
+- en: 'To start the shell, run the *mongo* executable:'
+  id: totrans-78
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要启动shell，请运行*mongo*可执行文件：
+- en: '[PRE8]'
+  id: totrans-79
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: The shell automatically attempts to connect to a MongoDB server running on the
+    local machine on startup, so make sure you start *mongod* before starting the
+    shell.
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Shell 在启动时会自动尝试连接到本地机器上运行的 MongoDB 服务器，请确保在启动 Shell 之前启动 *mongod*。
+- en: 'The shell is a full-featured JavaScript interpreter, capable of running arbitrary
+    JavaScript programs. To illustrate this, let’s perform some basic math:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Shell 是一个功能齐全的 JavaScript 解释器，能够运行任意的 JavaScript 程序。为了说明这一点，让我们执行一些基本的数学运算：
+- en: '[PRE9]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'We can also leverage all of the standard JavaScript libraries:'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们还可以利用所有标准的 JavaScript 库：
+- en: '[PRE10]'
+  id: totrans-84
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'We can even define and call JavaScript functions:'
+  id: totrans-85
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们甚至可以定义和调用 JavaScript 函数：
+- en: '[PRE11]'
+  id: totrans-86
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: Note that you can create multiline commands. The shell will detect whether the
+    JavaScript statement is complete when you press Enter. If the statement is not
+    complete, the shell will allow you to continue writing it on the next line. Pressing
+    Enter three times in a row will cancel the half-formed command and get you back
+    to the `>` prompt.
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，您可以创建多行命令。当您按 Enter 键时，Shell 将检测 JavaScript 语句是否完整。如果语句不完整，Shell 将允许您在下一行继续编写它。连续按三次
+    Enter 将取消未完成的命令，并返回到 `>` 提示符。
+- en: A MongoDB Client
+  id: totrans-88
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 一个 MongoDB 客户端
+- en: Although the ability to execute arbitrary JavaScript is useful, the real power
+    of the shell lies in the fact that it is also a standalone MongoDB client. On
+    startup, the shell connects to the *test* database on a MongoDB server and assigns
+    this database connection to the global variable `db`. This variable is the primary
+    access point to your MongoDB server through the shell.
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管执行任意 JavaScript 的能力非常有用，但 Shell 的真正强大之处在于它也是一个独立的 MongoDB 客户端。在启动时，Shell 连接到
+    MongoDB 服务器上的 *test* 数据库，并将此数据库连接分配给全局变量 `db`。这个变量是通过 Shell 访问 MongoDB 服务器的主要接入点。
+- en: 'To see the database to which `db` is currently assigned, type in `db` and hit
+    Enter:'
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看当前分配给 `db` 的数据库，请键入 `db` 并按 Enter：
+- en: '[PRE12]'
+  id: totrans-91
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'The shell contains some add-ons that are not valid JavaScript syntax but were
+    implemented because of their familiarity to users of SQL shells. The add-ons do
+    not provide any extra functionality, but they are nice syntactic sugar. For instance,
+    one of the most important operations is selecting which database to use:'
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Shell 包含一些附加组件，这些组件不是有效的 JavaScript 语法，但由于其对 SQL shell 用户的熟悉性而实现。这些附加组件不提供任何额外的功能，但它们是很好的语法糖。例如，最重要的操作之一是选择要使用的数据库：
+- en: '[PRE13]'
+  id: totrans-93
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'Now if you look at the `db` variable, you can see that it refers to the *video*
+    database:'
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，如果查看 `db` 变量，可以看到它指向 *video* 数据库：
+- en: '[PRE14]'
+  id: totrans-95
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Because this is a JavaScript shell, typing a variable name will cause the name
+    to be evaluated as an expression. The value (in this case, the database name)
+    is then printed.
+  id: totrans-96
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为这是一个 JavaScript shell，键入一个变量名将导致该名称作为表达式进行评估。然后打印出值（在本例中是数据库名称）。
+- en: 'You may access collections from the `db` variable. For example:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以从 `db` 变量访问集合。例如：
+- en: '[PRE15]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: returns the *movies* collection in the current database. Now that we can access
+    a collection in the shell, we can perform almost any database operation.
+  id: totrans-99
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 返回当前数据库中 *movies* 集合。既然我们可以在 Shell 中访问集合，我们几乎可以执行任何数据库操作。
+- en: Basic Operations with the Shell
+  id: totrans-100
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: Shell 的基本操作
+- en: We can use the four basic operations, create, read, update, and delete (CRUD),
+    to manipulate and view data in the shell.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以使用四个基本操作，即创建（Create）、读取（Read）、更新（Update）和删除（Delete）（CRUD），来操作和查看 Shell 中的数据。
+- en: Create
+  id: totrans-102
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 创建
+- en: 'The `insertOne` function adds a document to a collection. For example, suppose
+    we want to store a movie. First, we’ll create a local variable called `movie`
+    that is a JavaScript object representing our document. It will have the keys `"title"`,
+    `"director"`, and `"year"` (the year it was released):'
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`insertOne` 函数将文档添加到集合中。例如，假设我们要存储一部电影。首先，我们将创建一个名为 `movie` 的本地变量，它是一个表示我们文档的
+    JavaScript 对象。它将具有键 `"title"`、`"director"` 和 `"year"`（发布年份）：'
+- en: '[PRE16]'
+  id: totrans-104
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'This object is a valid MongoDB document, so we can save it to the *movies*
+    collection using the `insertOne` method:'
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此对象是一个有效的 MongoDB 文档，因此我们可以使用 `insertOne` 方法将其保存到 *movies* 集合中：
+- en: '[PRE17]'
+  id: totrans-106
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'The movie has been saved to the database. We can see it by calling `find` on
+    the collection:'
+  id: totrans-107
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 电影已保存到数据库中。我们可以通过在集合上调用 `find` 来查看它：
+- en: '[PRE18]'
+  id: totrans-108
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: We can see that an `"_id"` key was added and that the other key/value pairs
+    were saved as we entered them. The reason for the sudden appearance of the `"_id"`
+    field is explained at the end of this chapter.
+  id: totrans-109
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们可以看到添加了 `"_id"` 键，并且其他键值对都按我们输入的方式保存了下来。关于 `"_id"` 字段突然出现的原因在本章末尾有解释。
+- en: Read
+  id: totrans-110
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 读取
+- en: '`find` and `findOne` can be used to query a collection. If we just want to
+    see one document from a collection, we can use `findOne`:'
+  id: totrans-111
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`find` 和 `findOne` 可用于查询集合。如果我们只想从集合中看到一个文档，我们可以使用 `findOne`：'
+- en: '[PRE19]'
+  id: totrans-112
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: '`find` and `findOne` can also be passed criteria in the form of a query document.
+    This will restrict the documents matched by the query. The shell will automatically
+    display up to 20 documents matching a `find`, but more can be fetched. (See [Chapter 4](ch04.xhtml#chapter_d1e3559)
+    for more information on querying.)'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`find` 和 `findOne` 也可以通过查询文档的形式传递条件。这将限制查询匹配的文档。Shell 将自动显示最多匹配 `find` 的 20
+    个文档，但可以获取更多。（有关查询的详细信息，请参见[第四章](ch04.xhtml#chapter_d1e3559)。）'
+- en: Update
+  id: totrans-114
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 更新
+- en: 'If we would like to modify our post, we can use `updateOne`. `updateOne` takes
+    (at least) two parameters: the first is the criteria to find which document to
+    update, and the second is a document describing the updates to make. Suppose we
+    decide to enable reviews for the movie we created earlier. We’ll need to add an
+    array of reviews as the value for a new key in our document.'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果我们想修改我们的文章，可以使用 `updateOne`。`updateOne` 至少需要两个参数：第一个是找到要更新的文档的条件，第二个是描述要进行的更新的文档。假设我们决定为之前创建的电影启用评论。我们需要在我们的文档中添加一个评论数组作为新键的值。
+- en: 'To perform the update, we’ll need to use an update operator, `set`:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要执行更新操作，我们需要使用更新操作符 `set`：
+- en: '[PRE20]'
+  id: totrans-117
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'Now the document has a `"reviews"` key. If we call `find` again, we can see
+    the new key:'
+  id: totrans-118
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在文档有一个 `"reviews"` 键。如果我们再次调用 `find`，我们可以看到新键：
+- en: '[PRE21]'
+  id: totrans-119
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: See [“Updating Documents”](ch03.xhtml#sect1_d1e2484) for detailed information
+    on updating documents.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关更新文档的详细信息，请参见[“更新文档”](ch03.xhtml#sect1_d1e2484)。
+- en: Delete
+  id: totrans-121
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 删除
+- en: '`deleteOne` and `deleteMany` permanently delete documents from the database.
+    Both methods take a filter document specifying criteria for the removal. For example,
+    this would remove the movie we just created:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`deleteOne` 和 `deleteMany` 从数据库中永久删除文档。这两种方法都接受一个过滤文档，指定要删除的条件。例如，这将删除我们刚刚创建的电影：'
+- en: '[PRE22]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: Use `deleteMany` to delete all documents matching a filter.
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `deleteMany` 删除匹配过滤器的所有文档。
+- en: Data Types
+  id: totrans-125
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 数据类型
+- en: The beginning of this chapter covered the basics of what a document is. Now
+    that you are up and running with MongoDB and can try things in the shell, this
+    section will dive a little deeper. MongoDB supports a wide range of data types
+    as values in documents. In this section, we’ll outline all the supported types.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章的开头介绍了文档的基础知识。现在你已经能够在 MongoDB 中使用 Shell 并进行尝试，本节将深入探讨一些内容。MongoDB 支持各种数据类型作为文档中的值。在本节中，我们将概述所有支持的类型。
+- en: Basic Data Types
+  id: totrans-127
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 基本数据类型
+- en: 'Documents in MongoDB can be thought of as “JSON-like” in that they are conceptually
+    similar to objects in JavaScript. [JSON](http://www.json.org) is a simple representation
+    of data: the specification can be described in about one paragraph (the website
+    proves it) and lists only six data types. This is a good thing in many ways: it’s
+    easy to understand, parse, and remember. On the other hand, JSON’s expressive
+    capabilities are limited because the only types are null, boolean, numeric, string,
+    array, and object.'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在 MongoDB 中，文档可以被视为“类似 JSON 的”，因为它们在概念上类似于 JavaScript 中的对象。[JSON](http://www.json.org)
+    是数据的简单表示形式：其规范可以用大约一段话描述（该网站证明了这一点），并且只列出六种数据类型。从许多方面来说，这是一件好事：它易于理解、解析和记忆。另一方面，由于其只有
+    null、布尔值、数字、字符串、数组和对象这六种类型，JSON 的表达能力有限。
+- en: Although these types allow for an impressive amount of expressivity, there are
+    a couple of additional types that are crucial for most applications, especially
+    when working with a database. For example, JSON has no date type, which makes
+    working with dates even more annoying than it usually is. There is a number type,
+    but only one—there is no way to differentiate floats and integers, never mind
+    any distinction between 32-bit and 64-bit numbers. There is no way to represent
+    other commonly used types, either, such as regular expressions or functions.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 虽然这些类型可以表达出色的表现力，但大多数应用程序，特别是在处理数据库时，关键的几种附加类型仍然至关重要。例如，JSON 没有日期类型，这使得处理日期比通常更加烦人。虽然有数值类型，但只有一种——无法区分浮点数和整数，更别提区分32位和64位数字了。也无法表示其他常用类型，如正则表达式或函数。
+- en: 'MongoDB adds support for a number of additional data types while keeping JSON’s
+    essential key/value–pair nature. Exactly how values of each type are represented
+    varies by language, but this is a list of the commonly supported types and how
+    they are represented as part of a document in the shell. The most common types
+    are:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB在保持JSON的基本键/值对性质的同时，增加了对许多其他数据类型的支持。每种类型的值如何表示因语言而异，但这是一个常见支持的类型列表以及它们在shell中作为文档的一部分如何表示的列表。最常见的类型有：
+- en: 'Null'
+  id: totrans-131
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 空
+- en: 'The null type can be used to represent both a null value and a nonexistent
+    field:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 空类型可用于表示空值和不存在的字段：
+- en: '[PRE23]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: Boolean
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 布尔
+- en: 'There is a boolean type, which can be used for the values `true` and `false`:'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存在布尔类型，可用于值`true`和`false`：
+- en: '[PRE24]'
+  id: totrans-136
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: Number
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数字
+- en: 'The shell defaults to using 64-bit floating-point numbers. Thus, these numbers
+    both look “normal” in the shell:'
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: shell默认使用64位浮点数。因此，这些数字在shell中看起来“正常”：
+- en: '[PRE25]'
+  id: totrans-139
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: '[PRE26]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: For integers, use the `NumberInt` or `NumberLong` classes, which represent 4-byte
+    or 8-byte signed integers, respectively.
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于整数，使用`NumberInt`或`NumberLong`类，分别表示4字节或8字节的有符号整数。
+- en: '[PRE27]'
+  id: totrans-142
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: String
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 字符串
+- en: 'Any string of UTF-8 characters can be represented using the string type:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 任何UTF-8字符的字符串都可以使用字符串类型表示：
+- en: '[PRE28]'
+  id: totrans-145
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: Date
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 日期
+- en: 'MongoDB stores dates as 64-bit integers representing milliseconds since the
+    Unix epoch (January 1, 1970). The time zone is not stored:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB将日期存储为表示自Unix纪元（1970年1月1日）以来的毫秒数的64位整数。不存储时区：
+- en: '[PRE29]'
+  id: totrans-148
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: Regular expression
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正则表达式
+- en: 'Queries can use regular expressions using JavaScript’s regular expression syntax:'
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询可以使用JavaScript的正则表达式语法来使用正则表达式：
+- en: '[PRE30]'
+  id: totrans-151
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: Array
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数组
+- en: 'Sets or lists of values can be represented as arrays:'
+  id: totrans-153
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 值的集合或列表可以表示为数组：
+- en: '[PRE31]'
+  id: totrans-154
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: Embedded document
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 嵌入式文档
+- en: 'Documents can contain entire documents embedded as values in a parent document:'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文档可以包含作为父文档中值嵌入的整个文档：
+- en: '[PRE32]'
+  id: totrans-157
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: Object ID
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对象ID
+- en: 'An object ID is a 12-byte ID for documents:'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对象ID是文档的12字节ID：
+- en: '[PRE33]'
+  id: totrans-160
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: See the section [“_id and ObjectIds”](#sect2_d1e1990) for details.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关详细信息，请参见[“_id和ObjectIds”](#sect2_d1e1990)部分。
+- en: 'There are also a few less common types that you may need, including:'
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 还有一些较少见的类型，您可能需要使用，包括：
+- en: Binary data
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二进制数据
+- en: Binary data is a string of arbitrary bytes. It cannot be manipulated from the
+    shell. Binary data is the only way to save non-UTF-8 strings to the database.
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 二进制数据是一串任意字节的字符串。无法从shell中操作它。二进制数据是将非UTF-8字符串保存到数据库的唯一方法。
+- en: Code
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 代码
+- en: 'MongoDB also makes it possible to store arbitrary JavaScript in queries and
+    documents:'
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB还可以在查询和文档中存储任意JavaScript：
+- en: '[PRE34]'
+  id: totrans-167
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: Finally, there are a few types that are mostly used internally (or superseded
+    by other types). These will be described in the text as needed.
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 最后，还有一些大多数情况下仅在内部使用的类型（或已被其他类型取代）。这些将根据需要在文本中描述。
+- en: For more information on MongoDB’s data format, see [Appendix B](app02.xhtml#appendix_see).
+  id: totrans-169
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关MongoDB数据格式的更多信息，请参见[附录 B](app02.xhtml#appendix_see)。
+- en: Dates
+  id: totrans-170
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 日期
+- en: In JavaScript, the `Date` class is used for MongoDB’s date type. When creating
+    a new `Date` object, always call `new Date()`, not just `Date()`. Calling the
+    constructor as a function (i.e., not including `new`) returns a string representation
+    of the date, not an actual `Date` object. This is not MongoDB’s choice; it is
+    how JavaScript works. If you are not careful to always use the `Date` constructor,
+    you can end up with a mishmash of strings and dates. Strings do not match dates
+    and vice versa, so this can cause problems with removing, updating, querying…pretty
+    much everything.
+  id: totrans-171
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在JavaScript中，`Date`类用于MongoDB的日期类型。创建新的`Date`对象时，始终调用`new Date()`，而不仅仅是`Date()`。调用构造函数作为函数（即不包括`new`）会返回日期的字符串表示，而不是实际的`Date`对象。这不是MongoDB的选择；这是JavaScript的工作原理。如果不小心始终使用`Date`构造函数，可能会得到一堆字符串和日期。字符串与日期不匹配，反之亦然，因此这可能会导致删除、更新、查询等方面出现问题。
+- en: For a full explanation of JavaScript’s `Date` class and acceptable formats for
+    the constructor, see [section 15.9 of the ECMAScript specification](http://www.ecma-international.org).
+  id: totrans-172
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关JavaScript的`Date`类的完整解释和构造函数的可接受格式，请参见[ECMAScript规范的第15.9节](http://www.ecma-international.org)。
+- en: Dates in the shell are displayed using local time zone settings. However, dates
+    in the database are just stored as milliseconds since the epoch, so they have
+    no time zone information associated with them. (Time zone information could, of
+    course, be stored as the value for another key.)
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: shell中的日期使用本地时区设置显示。但是，数据库中的日期仅存储为自纪元以来的毫秒数，因此它们没有与之关联的时区信息。（当然，时区信息可以作为另一个键的值存储。）
+- en: Arrays
+  id: totrans-174
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 数组
+- en: Arrays are values that can be used interchangeably for both ordered operations
+    (as though they were lists, stacks, or queues) and unordered operations (as though
+    they were sets).
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 数组是可以在有序操作（如列表、堆栈或队列）和无序操作（如集合）中互换使用的值。
+- en: 'In the following document, the key `"things"` has an array value:'
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在以下文档中，键`"things"`具有一个数组值：
+- en: '[PRE35]'
+  id: totrans-177
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: As you can see from this example, arrays can contain different data types as
+    values (in this case, a string and a floating-point number). In fact, array values
+    can be any of the supported value types for normal key/value pairs, even nested
+    arrays.
+  id: totrans-178
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从这个例子中可以看出，数组可以包含不同的数据类型作为值（在本例中是字符串和浮点数）。实际上，数组值可以是任何正常键/值对支持的值类型，甚至是嵌套数组。
+- en: One of the great things about arrays in documents is that MongoDB “understands”
+    their structure and knows how to reach inside of arrays to perform operations
+    on their contents. This allows us to query on arrays and build indexes using their
+    contents. For instance, in the previous example, MongoDB can query for all documents
+    where `3.14` is an element of the `"things"` array. If this is a common query,
+    you can even create an index on the `"things"` key to improve the query’s speed.
+  id: totrans-179
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文档中数组的一个很棒的地方是MongoDB“理解”它们的结构，并知道如何深入数组内部执行操作。这使得我们能够在数组上进行查询并使用它们的内容构建索引。例如，在前面的例子中，MongoDB可以查询所有包含`3.14`作为`"things"`数组元素的文档。如果这是一个常见的查询，甚至可以在`"things"`键上创建一个索引来提高查询速度。
+- en: MongoDB also allows atomic updates that modify the contents of arrays, such
+    as reaching into the array and changing the value `"pie"` to `pi`. We’ll see more
+    examples of these types of operations throughout the text.
+  id: totrans-180
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MongoDB还允许原子更新，可以修改数组的内容，例如深入数组并将值`"pie"`更改为`pi`。我们将在文本中看到更多这类操作的示例。
+- en: Embedded Documents
+  id: totrans-181
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 嵌入式文档
+- en: A document can be used as the value for a key. This is called an *embedded document*.
+    Embedded documents can be used to organize data in a more natural way than just
+    a flat structure of key/value pairs.
+  id: totrans-182
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 文档可以作为键的值。这称为*嵌入式文档*。嵌入式文档可以用于以比仅有键/值对的平坦结构更自然的方式组织数据。
+- en: 'For example, if we have a document representing a person and want to store
+    that person’s address, we can nest this information in an embedded `"address"`
+    document:'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，如果我们有一个表示人的文档，并希望存储该人的地址，我们可以将这些信息嵌套在嵌入式`"address"`文档中：
+- en: '[PRE36]'
+  id: totrans-184
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: The value for the `"address"` key in this example is an embedded document with
+    its own key/value pairs for `"street"`, `"city"`, and `"state"`.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这个例子中，`"address"`键的值是一个带有自己的键/值对（`"street"`、`"city"`和`"state"`）的嵌入式文档。
+- en: As with arrays, MongoDB “understands” the structure of embedded documents and
+    is able to reach inside them to build indexes, perform queries, or make updates.
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 就像数组一样，MongoDB“理解”嵌入式文档的结构，并能够深入其中来构建索引，执行查询或进行更新。
+- en: We’ll discuss schema design in-depth later, but even from this basic example
+    we can begin to see how embedded documents can change the way we work with data.
+    In a relational database, the previous document would probably be modeled as two
+    separate rows in two different tables (*people* and *addresses*). With MongoDB
+    we can embed the `"address"` document directly within the `"person"` document.
+    Thus, when used properly, embedded documents can provide a more natural representation
+    of information.
+  id: totrans-187
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们将深入讨论架构设计，但即使从这个基本例子中，我们也可以开始看到嵌入式文档如何改变我们处理数据的方式。在关系数据库中，前面的文档可能会被建模为两个不同表格（*people*和*addresses*）中的两行。使用MongoDB，我们可以直接将`"address"`文档嵌入`"person"`文档中。因此，当正确使用时，嵌入式文档可以提供更自然的信息表示。
+- en: The flip side of this is that there can be more data repetition with MongoDB.
+    Suppose *addresses* was a separate table in a relational database and we needed
+    to fix a typo in an address. When we did a join with *people* and *addresses*,
+    we’d get the updated address for everyone who shares it. With MongoDB, we’d need
+    to fix the typo in each person’s document.
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这样做的反面是在MongoDB中可能会有更多的数据重复。假设*addresses*在关系数据库中是一个单独的表，我们需要修正一个地址中的拼写错误。当我们与*people*和*addresses*进行联接时，我们会为所有共享地址的人得到更新后的地址。在MongoDB中，我们需要在每个人的文档中修正这个拼写错误。
+- en: _id and ObjectIds
+  id: totrans-189
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: _id和ObjectIds
+- en: Every document stored in MongoDB must have an `"_id"` key. The `"_id"` key’s
+    value can be any type, but it defaults to an `ObjectId`. In a single collection,
+    every document must have a unique value for `"_id"`, which ensures that every
+    document in a collection can be uniquely identified. That is, if you had two collections,
+    each one could have a document where the value for `"_id"` was `123`. However,
+    neither collection could contain more than one document with an `"_id"` of `123`.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 存储在 MongoDB 中的每个文档必须具有一个 `"_id"` 键。`"_id"` 键的值可以是任何类型，但默认为 `ObjectId`。在单个集合中，每个文档的
+    `"_id"` 必须具有唯一值，这确保了集合中的每个文档都可以被唯一标识。也就是说，如果您有两个集合，每个集合都可以有一个 `"_id"` 值为 `123`
+    的文档。但是，不能在任一集合中包含多个具有 `"_id"` 为 `123` 的文档。
+- en: ObjectIds
+  id: totrans-191
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 对象标识符
+- en: '`ObjectId` is the default type for `"_id"`. The `ObjectId` class is designed
+    to be lightweight, while still being easy to generate in a globally unique way
+    across different machines. MongoDB’s distributed nature is the main reason why
+    it uses `ObjectId`s as opposed to something more traditional, like an autoincrementing
+    primary key: it is difficult and time-consuming to synchronize autoincrementing
+    primary keys across multiple servers. Because MongoDB was designed to be a distributed
+    database, it was important to be able to generate unique identifiers in a sharded
+    environment.'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ObjectId` 是 `"_id"` 的默认类型。`ObjectId` 类被设计为轻量级，同时又能够以在不同机器间全局唯一的方式生成。MongoDB
+    的分布式特性是它使用 `ObjectId` 而不是像自增主键这样更传统的东西的主要原因：在多台服务器上同步自增主键是困难且耗时的。因为 MongoDB 设计为分布式数据库，能够在分片环境中生成唯一标识符至关重要。'
+- en: '`ObjectId`s use 12 bytes of storage, which gives them a string representation
+    that is 24 hexadecimal digits: 2 digits for each byte. This causes them to appear
+    larger than they are, which makes some people nervous. It’s important to note
+    that even though an `ObjectId` is often represented as a giant hexadecimal string,
+    the string is actually twice as long as the data being stored.'
+  id: totrans-193
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ObjectId`s 使用 12 字节的存储空间，这使它们具有一个包含 24 个十六进制数字的字符串表示形式：每个字节有 2 个数字。这导致它们看起来比它们实际上更大，这让一些人感到紧张。重要的是要注意，即使
+    `ObjectId` 经常被表示为一个巨大的十六进制字符串，这个字符串实际上是存储的数据的两倍长。'
+- en: 'If you create multiple new `ObjectId`s in rapid succession, you can see that
+    only the last few digits change each time. In addition, a couple of digits in
+    the middle of the `ObjectId` will change if you space the creations out by a couple
+    of seconds. This is because of the manner in which `ObjectId`s are created. The
+    12 bytes of an `ObjectId` are generated as follows:'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您快速连续创建多个新的 `ObjectId`s，您会看到每次仅最后几位数字发生变化。此外，如果您将创建间隔几秒钟，`ObjectId` 中间的一些数字将发生变化。这是由于
+    `ObjectId`s 的生成方式。`ObjectId` 的 12 字节生成如下：
+- en: '| 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |'
+  id: totrans-195
+  prefs: []
+  type: TYPE_TB
+  zh: '| 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 |'
+- en: '| Timestamp | Random | Counter (random start value) |'
+  id: totrans-196
+  prefs: []
+  type: TYPE_TB
+  zh: '| 时间戳 | 随机值 | 计数器（随机起始值） |'
+- en: 'The first four bytes of an `ObjectId` are a timestamp in seconds since the
+    epoch. This provides a couple of useful properties:'
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ObjectId` 的前四个字节是自纪元以来的秒数时间戳。这提供了一些有用的特性：'
+- en: The timestamp, when combined with the next five bytes (which will be described
+    in a moment), provides uniqueness at the granularity of a second.
+  id: totrans-198
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 时间戳与接下来的五个字节（稍后会描述）结合使用，以秒为粒度提供唯一性。
+- en: Because the timestamp comes first, `ObjectId`s will sort in *rough* insertion
+    order. This is not a strong guarantee but does have some nice properties, such
+    as making `ObjectId`s efficient to index.
+  id: totrans-199
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 因为时间戳首先出现，`ObjectId`s 将按照*大致*插入顺序排序。这不是一个强有力的保证，但确实具有一些好的属性，例如使 `ObjectId`s
+    易于索引。
+- en: In these four bytes exists an implicit timestamp of when each document was created.
+    Most drivers expose a method for extracting this information from an `ObjectId`.
+  id: totrans-200
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在这四个字节中存在一个隐含的时间戳，表示每个文档创建的时间。大多数驱动程序提供了从 `ObjectId` 提取此信息的方法。
+- en: Because the current time is used in `ObjectId`s, some users worry that their
+    servers will need to have synchronized clocks. Although synchronized clocks are
+    a good idea for other reasons (see [“Synchronizing Clocks”](ch24.xhtml#clock-sync)),
+    the actual timestamp doesn’t matter to `ObjectId`s, only that it is often new
+    (once per second) and increasing.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为当前时间用于 `ObjectId`s，一些用户担心他们的服务器需要具有同步时钟。尽管出于其他原因同步时钟是一个好主意（参见 [“同步时钟”](ch24.xhtml#clock-sync)），实际的时间戳对
+    `ObjectId`s 并不重要，只要它通常是新的（每秒一次）并且递增的。
+- en: The next five bytes of an `ObjectId` are a random value. The final three bytes
+    are a counter that starts with a random value to avoid generating colliding `ObjectId`s
+    on different machines.
+  id: totrans-202
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`ObjectId`的下一个五个字节是一个随机值。最后三个字节是一个计数器，从一个随机值开始，以避免在不同机器上生成冲突的`ObjectId`：'
+- en: These first nine bytes of an `ObjectId` therefore guarantee its uniqueness across
+    machines and processes for a single second. The last three bytes are simply an
+    incrementing counter that is responsible for uniqueness within a second in a single
+    process. This allows for up to 256³ (16,777,216) unique `ObjectId`s to be generated
+    *per process* in a single second.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因此，`ObjectId`的前九个字节确保了在单个秒内跨机器和进程的唯一性。最后三个字节仅仅是一个递增计数器，负责确保在单个进程内每秒生成的唯一性。这允许在单个秒内生成多达256³（16,777,216）个*进程内*的唯一`ObjectId`。
+- en: Autogeneration of _id
+  id: totrans-204
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 自动生成的_id
+- en: As stated earlier, if there is no `"_id"` key present when a document is inserted,
+    one will be automatically added to the inserted document. This can be handled
+    by the MongoDB server but will generally be done by the driver on the client side.
+  id: totrans-205
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，如果在插入文档时不存在`"_id"`键，则将自动向插入的文档添加一个。这可以由MongoDB服务器处理，但通常由客户端驱动程序执行。
+- en: Using the MongoDB Shell
+  id: totrans-206
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 使用MongoDB Shell
+- en: This section covers how to use the shell as part of your command-line toolkit,
+    customize it, and use some of its more advanced functionality.
+  id: totrans-207
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节涵盖了如何将shell作为命令行工具的一部分使用、自定义它以及使用一些更高级的功能。
+- en: 'Although we connected to a local *mongod* instance above, you can connect your
+    shell to any MongoDB instance that your machine can reach. To connect to a *mongod*
+    on a different machine or port, specify the hostname, port, and database when
+    starting the shell:'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管我们上面连接到了一个本地的*mongod*实例，你可以连接你的shell到你的机器可以访问的任何MongoDB实例。要连接到不同机器或端口的*mongod*，请在启动shell时指定主机名、端口和数据库：
+- en: '[PRE37]'
+  id: totrans-209
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: '`db` will now refer to *some-host:30000*’s `myDB` database.'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，`db`将引用*some-host:30000*的`myDB`数据库。
+- en: 'Sometimes it is handy to not connect to a *mongod* at all when starting the
+    *mongo* shell. If you start the shell with `--nodb`, it will start up without
+    attempting to connect to anything:'
+  id: totrans-211
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时，在启动*mongo* shell时根本不连接到*mongod*也很方便。如果你使用`--nodb`启动shell，它将在启动时不尝试连接任何东西：
+- en: '[PRE38]'
+  id: totrans-212
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'Once started, you can connect to a *mongod* at your leisure by running ``new
+    Mongo("*`hostname`*")``:'
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一旦启动，你可以通过运行``new Mongo("*`hostname`*")``随意连接到*mongod*：
+- en: '[PRE39]'
+  id: totrans-214
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: After these two commands, you can use `db` normally. You can use these commands
+    to connect to a different database or server at any time.
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在执行这两个命令之后，你可以正常使用`db`。你可以随时使用这些命令连接到不同的数据库或服务器。
+- en: Tips for Using the Shell
+  id: totrans-216
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用Shell的技巧
+- en: 'Because *mongo* is simply a JavaScript shell, you can get a great deal of help
+    for it by simply looking up JavaScript documentation online. For MongoDB-specific
+    functionality, the shell includes built-in help that can be accessed by typing
+    ``**`help`**``:'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 因为*mongo*仅仅是一个JavaScript shell，你可以通过简单地在线查阅JavaScript文档为其获取大量帮助。对于特定于MongoDB的功能，该shell包含内置帮助，可通过输入``**`help`**``来访问：
+- en: '[PRE40]'
+  id: totrans-218
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: Database-level help is provided by `db.help()` and collection-level help by
+    `db.foo.help()`.
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`db.help()`提供数据库级帮助，`db.foo.help()`提供集合级帮助。'
+- en: 'A good way of figuring out what a function is doing is to type it without the
+    parentheses. This will print the JavaScript source code for the function. For
+    example, if you are curious about how the `update` function works or cannot remember
+    the order of parameters, you can do the following:'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 弄清楚一个函数在做什么的一个好方法是不带括号地键入它。这将打印函数的JavaScript源代码。例如，如果你想知道`update`函数是如何工作的，或者无法记住参数的顺序，你可以执行以下操作：
+- en: '[PRE41]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: Running Scripts with the Shell
+  id: totrans-222
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 使用Shell运行脚本
+- en: 'In addition to using the shell interactively, you can also pass the shell JavaScript
+    files to execute. Simply pass in your scripts at the command line:'
+  id: totrans-223
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了交互式使用shell外，你还可以将shell JavaScript文件传递给执行。只需在命令行中传递你的脚本：
+- en: '[PRE42]'
+  id: totrans-224
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: The *mongo* shell will execute each script listed and exit.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*mongo* shell将执行列出的每个脚本并退出。'
+- en: 'If you want to run a script using a connection to a nondefault host/port *mongod*,
+    specify the address first, then the script(s):'
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你想使用连接到非默认主机/端口*mongod*的连接运行脚本，请首先指定地址，然后再指定脚本(s)：
+- en: '[PRE43]'
+  id: totrans-227
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: This would execute the three scripts with `db` set to the *foo* database on
+    *server-1:30000*.
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这将在*server-1:30000*上的*foo*数据库上设置`db`，并执行这三个脚本。
+- en: You can print to stdout in scripts (as the preceding scripts did) using the
+    `print` function. This allows you to use the shell as part of a pipeline of commands.
+    If you’re planning to pipe the output of a shell script to another command, use
+    the `--quiet` option to prevent the “MongoDB shell version v4.2.0” banner from
+    printing.
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以在脚本中使用 `print` 函数将输出打印到 stdout（如前述脚本所示）。这使您可以将 shell 作为命令管道的一部分使用。如果您计划将
+    shell 脚本的输出管道传递给另一个命令，请使用 `--quiet` 选项阻止打印“MongoDB shell version v4.2.0”横幅。
+- en: 'You can also run scripts from within the interactive shell using the `load`
+    function:'
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以使用 `load` 函数在交互式 shell 内运行脚本：
+- en: '[PRE44]'
+  id: totrans-231
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: Scripts have access to the `db` variable (as well as any other global). However,
+    shell helpers such as `use db` or `show collections` do not work from files. There
+    are valid JavaScript equivalents to each of these, as shown in [Table 2-1](#table-js-helpers).
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 脚本可以访问 `db` 变量（以及任何其他全局变量）。但是，诸如 `use db` 或 `show collections` 这样的 shell 辅助程序在文件中无效。每个这类辅助程序都有其有效的
+    JavaScript 等效方法，如 [Table 2-1](#table-js-helpers) 所示。
+- en: Table 2-1\. JavaScript equivalents to shell helpers
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 2-1\. shell 辅助程序的 JavaScript 等效功能
+- en: '| Helper | Equivalent |'
+  id: totrans-234
+  prefs: []
+  type: TYPE_TB
+  zh: '| 辅助功能 | 等效功能 |'
+- en: '| --- | --- |'
+  id: totrans-235
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `use video` | `db.getSisterDB("video")` |'
+  id: totrans-236
+  prefs: []
+  type: TYPE_TB
+  zh: '| `use video` | `db.getSisterDB("video")` |'
+- en: '| `show dbs` | `db.getMongo().getDBs()` |'
+  id: totrans-237
+  prefs: []
+  type: TYPE_TB
+  zh: '| `show dbs` | `db.getMongo().getDBs()` |'
+- en: '| `show collections` | `db.getCollectionNames()` |'
+  id: totrans-238
+  prefs: []
+  type: TYPE_TB
+  zh: '| `show collections` | `db.getCollectionNames()` |'
+- en: 'You can also use scripts to inject variables into the shell. For example, you
+    could have a script that simply initializes helper functions that you commonly
+    use. The following script, for instance, may be helpful for [Part III](part03.xhtml#part3_replication)
+    and [Part IV](part04.xhtml#part4_sharding). It defines a function, `connectTo`,
+    that connects to the locally running database on the given port and sets `db`
+    to that connection:'
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您还可以使用脚本将变量注入到 shell 中。例如，您可以编写一个简单的脚本，初始化您常用的辅助函数。例如，下面的脚本可能对 [Part III](part03.xhtml#part3_replication)
+    和 [Part IV](part04.xhtml#part4_sharding) 有帮助。它定义了一个名为 `connectTo` 的函数，该函数连接到给定端口上的本地运行数据库，并将
+    `db` 设置为该连接：
+- en: '[PRE45]'
+  id: totrans-240
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: 'If you load this script in the shell, `connectTo` is now defined:'
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果在 shell 中加载此脚本，则现在已定义了 `connectTo`：
+- en: '[PRE46]'
+  id: totrans-242
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: In addition to adding helper functions, you can use scripts to automate common
+    tasks and administrative activities.
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了添加辅助函数外，您还可以使用脚本自动化常见任务和管理活动。
+- en: By default, the shell will look in the directory that you started the shell
+    in (use `pwd()` to see what directory that is). If the script is not in your current
+    directory, you can give the shell a relative or absolute path to it. For example,
+    if you wanted to put your shell scripts in *~/my-scripts*, you could load *defineConnectTo.js*
+    with `load("/home/myUser/my-scripts/defineConnectTo.js")`. Note that `load` cannot
+    resolve `~`.
+  id: totrans-244
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，shell 将查找您启动 shell 的目录（使用 `pwd()` 查看该目录）。如果脚本不在当前目录中，可以向 shell 提供相对或绝对路径。例如，如果您想将
+    shell 脚本放在 *~/my-scripts* 中，可以使用 `load("/home/myUser/my-scripts/defineConnectTo.js")`
+    加载 *defineConnectTo.js*。请注意，`load` 无法解析 `~`。
+- en: 'You can use `run` to run command-line programs from the shell. You can pass
+    arguments to the function as parameters:'
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用 `run` 从 shell 运行命令行程序。您可以将参数作为参数传递给该函数：
+- en: '[PRE47]'
+  id: totrans-246
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: This is of limited use, generally, as the output is formatted oddly and it doesn’t
+    support pipes.
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于输出格式化不正常且不支持管道，这是有限使用的。
+- en: Creating a .mongorc.js
+  id: totrans-248
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 创建一个 .mongorc.js
+- en: If you have frequently loaded scripts, you might want to put them in your *.mongorc.js*
+    file. This file is run whenever you start up the shell.
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您经常加载脚本，可能希望将它们放在 *.mongorc.js* 文件中。每当您启动 shell 时，该文件都会运行。
+- en: 'For example, suppose you would like the shell to greet you when you log in.
+    Create a file called *.mongorc.js* in your home directory, and then add the following
+    lines to it:'
+  id: totrans-250
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设您希望 shell 在您登录时向您打招呼。在您的主目录中创建一个名为 *.mongorc.js* 的文件，然后将以下行添加到该文件中：
+- en: '[PRE48]'
+  id: totrans-251
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: 'Then, when you start the shell, you’ll see something like:'
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后，当您启动 shell 时，您将看到如下内容：
+- en: '[PRE49]'
+  id: totrans-253
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'More practically, you can use this script to set up any global variables you’d
+    like to use, alias long names to shorter ones, and override built-in functions.
+    One of the most common uses for *.mongorc.js* is to remove some of the more “dangerous”
+    shell helpers. You can override functions like `dropDatabase` or `deleteIndexes`
+    with no-ops or undefine them altogether:'
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更实际地说，您可以使用此脚本设置任何您想要使用的全局变量，将长名称别名为更短的名称，并覆盖内置函数。*.mongorc.js* 最常用的用途之一是删除一些更“危险”的
+    shell 辅助程序。您可以通过无操作或完全未定义来覆盖诸如 `dropDatabase` 或 `deleteIndexes` 等函数：
+- en: '[PRE50]'
+  id: totrans-255
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: Now if you try to call any of these functions, it will simply print an error
+    message. Note that this technique does not protect you against malicious users;
+    it can only help with fat-fingering.
+  id: totrans-256
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，如果您尝试调用任何这些函数，它将简单地打印一个错误消息。请注意，这种技术不能保护您免受恶意用户的攻击；它只能帮助防止输错。
+- en: You can disable loading your *.mongorc.js* by using the `--norc` option when
+    starting the shell.
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以通过在启动 shell 时使用 `--norc` 选项来禁用加载您的 *.mongorc.js*。
+- en: Customizing Your Prompt
+  id: totrans-258
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 自定义您的提示符
+- en: 'The default shell prompt can be overridden by setting the `prompt` variable
+    to either a string or a function. For example, if you are running a query that
+    takes minutes to complete, you may want to have a prompt that displays the current
+    time so you can see when the last operation finished:'
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可通过将 `prompt` 变量设置为字符串或函数来覆盖默认的 shell 提示符。例如，如果您运行一个需要几分钟才能完成的查询，您可能希望有一个提示符显示当前时间，以便您知道最后操作完成的时间：
+- en: '[PRE51]'
+  id: totrans-260
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: 'Another handy prompt might show the current database you’re using:'
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个方便的提示可能会显示你正在使用的当前数据库：
+- en: '[PRE52]'
+  id: totrans-262
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: 'Note that prompt functions should return strings and be very cautious about
+    catching exceptions: it can be extremely confusing if your prompt turns into an
+    exception!'
+  id: totrans-263
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，提示函数应返回字符串，并且在捕获异常时应非常谨慎：如果您的提示变成异常，这可能会极其令人困惑！
+- en: In general, your prompt function should include a call to `getLastError`. This
+    catches errors on writes and reconnects you automatically if the shell gets disconnected
+    (e.g., if you restart *mongod*).
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常，您的提示函数应包括对 `getLastError` 的调用。这可以捕获写入时的错误，并在 shell 断开连接时自动重新连接您（例如，如果重新启动
+    *mongod*）。
+- en: The *.mongorc.js* file is a good place to set your prompt if you want to always
+    use a custom one (or set up a couple of custom prompts that you can switch between
+    in the shell).
+  id: totrans-265
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您希望始终使用自定义提示符（或设置几个可以在 shell 中切换的自定义提示符），*.mongorc.js* 文件是一个不错的选择。
+- en: Editing Complex Variables
+  id: totrans-266
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 编辑复杂的变量
+- en: 'The multiline support in the shell is somewhat limited: you cannot edit previous
+    lines, which can be annoying when you realize that the first line has a typo and
+    you’re currently working on line 15\. Thus, for larger blocks of code or objects,
+    you may want to edit them in an editor. To do so, set the `EDITOR` variable in
+    the shell (or in your environment, but since you’re already in the shell…):'
+  id: totrans-267
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Shell 中的多行支持有些有限：您无法编辑之前的行，当您意识到第一行有拼写错误并且当前正在处理第 15 行时，这可能会令人恼火。因此，对于更大的代码块或对象，您可能希望在编辑器中编辑它们。要这样做，请在
+    shell 中设置 `EDITOR` 变量（或在您的环境中设置，但既然您已经在 shell 中了…）：
+- en: '[PRE53]'
+  id: totrans-268
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 'Now, if you want to edit a variable, you can say *`edit varname`*—for example:'
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 现在，如果您想编辑一个变量，您可以说 *`edit varname`* —例如：
+- en: '[PRE54]'
+  id: totrans-270
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: When you’re done making changes, save and exit the editor. The variable will
+    be parsed and loaded back into the shell.
+  id: totrans-271
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您完成更改时，请保存并退出编辑器。变量将被解析并加载回到 shell 中。
+- en: Add ``EDITOR="*`/path/to/editor`*";`` to your *.mongorc.js* file and you won’t
+    have to worry about setting it again.
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 向您的 *.mongorc.js* 文件添加 ``EDITOR="*`/path/to/editor`*";``，这样您就不必担心再次设置它了。
+- en: Inconvenient Collection Names
+  id: totrans-273
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 不方便的集合名称
+- en: Fetching a collection with the ``db.*`collectionName`*`` syntax almost always
+    works, unless the collection name is a reserved word or is an invalid JavaScript
+    property name.
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 ``db.*`collectionName`*`` 语法获取集合几乎总是有效，除非集合名称是保留字或无效的 JavaScript 属性名称。
+- en: 'For example, suppose we are trying to access the *version* collection. We cannot
+    say `db.version` because `db.version` is a method on `db` (it returns the version
+    of the running MongoDB server):'
+  id: totrans-275
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，假设我们正在尝试访问 *version* 集合。我们不能说 `db.version`，因为 `db.version` 是 `db` 上的一个方法（它返回运行中的
+    MongoDB 服务器的版本）：
+- en: '[PRE55]'
+  id: totrans-276
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: 'To actually access the *version* collection, you must use the `getCollection`
+    function:'
+  id: totrans-277
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要实际访问 *version* 集合，您必须使用 `getCollection` 函数：
+- en: '[PRE56]'
+  id: totrans-278
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: This can also be used for collection names with characters that aren’t valid
+    JavaScript property names, such as *foo-bar-baz* and *123abc* (JavaScript property
+    names can only contain letters, numbers, *$* and *_*, and cannot start with a
+    number).
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这也适用于具有不是有效 JavaScript 属性名称的字符的集合名称，例如 *foo-bar-baz* 和 *123abc*（JavaScript 属性名称只能包含字母、数字、*$*
+    和 *_*，并且不能以数字开头）。
+- en: 'Another way of getting around invalid properties is to use array-access syntax.
+    In JavaScript, `x.y` is identical to `x[''y'']`. This means that subcollections
+    can be accessed using variables, not just literal names. Thus, if you needed to
+    perform some operation on every *blog* subcollection, you could iterate through
+    them with something like this:'
+  id: totrans-280
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种避免无效属性的方法是使用数组访问语法。在 JavaScript 中，`x.y` 和 `x['y']` 是相同的。这意味着可以使用变量访问子集合，而不仅仅是字面名称。因此，如果你需要对每个
+    *blog* 子集合执行某些操作，可以像这样进行迭代：
+- en: '[PRE57]'
+  id: totrans-281
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: 'instead of this:'
+  id: totrans-282
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 而不是这样：
+- en: '[PRE58]'
+  id: totrans-283
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: Note that you cannot do `db.blog.i`, which would be interpreted as `test.blog.i`,
+    not `test.blog.posts`. You must use the `db.blog[i]` syntax for `i` to be interpreted
+    as a variable.
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意，你不能执行 `db.blog.i`，这会被解释为 `test.blog.i`，而不是 `test.blog.posts`。你必须使用 `db.blog[i]`
+    语法，使 `i` 被解释为一个变量。
+- en: 'You can use this technique to access awkwardly named collections:'
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你可以使用这种技术来访问命名奇特的集合：
+- en: '[PRE59]'
+  id: totrans-286
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: Attempting to query `db.@#&!` would be illegal, but `db[name]` would work.
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尝试查询 `db.@#&!` 是不合法的，但 `db[name]` 是可以的。

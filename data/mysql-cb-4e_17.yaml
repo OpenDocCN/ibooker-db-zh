@@ -1,0 +1,1924 @@
+- en: Chapter 17\. Statistical Techniques
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第17章 统计技术
+- en: 17.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 17.0 介绍
+- en: 'This chapter covers several topics that relate to basic statistical techniques.
+    For the most part, these recipes build on those described in earlier chapters,
+    such as the summary techniques discussed in [Chapter 10](ch10.xhtml#nch-sum),
+    and join techniques from [Chapter 16](ch16.xhtml#nch-multi). The examples here
+    thus show additional ways to apply the material from those chapters. Broadly speaking,
+    the topics discussed in this chapter include:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章涵盖了几个与基本统计技术相关的主题。在很大程度上，这些配方是建立在早期章节描述的技术之上的，比如在[第10章](ch10.xhtml#nch-sum)中描述的摘要技术，以及在[第16章](ch16.xhtml#nch-multi)中的连接技术。因此，这里的示例展示了应用这些章节材料的其他方法。总体而言，本章讨论的主题包括：
+- en: Techniques for characterizing a dataset, such as calculating descriptive statistics,
+    generating frequency distributions, counting missing values, and calculating least-squares
+    regressions or correlation coefficients
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 技术，如计算描述性统计、生成频率分布、计数缺失值以及计算最小二乘回归或相关系数，来描述数据集。
+- en: Randomization methods, such as how to generate random numbers and apply them
+    to randomizing a set of rows or to selecting individual items randomly from the
+    rows
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 随机化方法，例如如何生成随机数并将其应用于随机化一组行或从行中随机选择个体项
+- en: Techniques for calculating successive-observation differences, cumulative sums,
+    and running averages.
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 计算连续观测差异、累积和和移动平均的技术。
+- en: Methods for producing rank assignments and generating team standings
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 生成排名分配和生成团队排名的方法
+- en: Statistics covers such a large and diverse array of topics that this chapter
+    necessarily only scratches the surface and simply illustrates a few of the potential
+    areas in which MySQL may be applied to statistical analysis. Note that some statistical
+    measures can be defined in different ways (for example, do you calculate standard
+    deviation based on *`n`* degrees of freedom, or *`n`*–1?). If the definition I
+    use for a given term doesn’t match the one you prefer, adapt the queries or algorithms
+    shown here appropriately.
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 统计涵盖了如此广泛和多样的主题，以至于本章只能浅尝辄止，并且只是简单地说明了 MySQL 可以应用于统计分析的一些潜在领域。请注意，某些统计量可以以不同的方式定义（例如，您是基于
+    *`n`* 自由度还是 *`n`*–1 来计算标准差？）。如果我用于某个术语的定义与您偏好的定义不符，请相应地调整此处展示的查询或算法。
+- en: You can find scripts related to the examples discussed here in the *stats* directory
+    of the `recipes` distribution, and scripts for creating example tables in the
+    *tables* directory.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以在`recipes`分发的*stats*目录中找到与此处讨论的示例相关的脚本，并且在*tables*目录中找到创建示例表格的脚本。
+- en: 17.1 Calculating Descriptive Statistics
+  id: totrans-9
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 17.1 计算描述性统计
+- en: Problem
+  id: totrans-10
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to characterize a dataset by computing general descriptive or summary
+    statistics.
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望通过计算一般的描述性或摘要统计来描述数据集。
+- en: Solution
+  id: totrans-12
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Many common descriptive statistics, such as mean and standard deviation, are
+    obtained by applying aggregate functions to your data. Others, such as median
+    or mode, are calculated based on counting queries.
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 许多常见的描述性统计，如均值和标准差，都是通过将聚合函数应用于您的数据来获得的。其他的，如中位数或众数，则是基于计数查询计算的。
+- en: Discussion
+  id: totrans-14
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Suppose that a `testscore` table contains observations representing subject
+    ID, age, sex, and test score:'
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设一个`testscore`表包含表示主题 ID、年龄、性别和测试分数的观测：
+- en: '[PRE0]'
+  id: totrans-16
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'A good first step in analyzing a set of observations is to generate some descriptive
+    statistics that summarize their general characteristics as a whole. Common statistical
+    values of this kind include:'
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 分析一组观察结果的一个良好的第一步是生成一些总结其整体特征的描述性统计。这类常见的统计值包括：
+- en: The number of observations, their sum, and their range (minimum and maximum)
+  id: totrans-18
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 观测数量、它们的总和和它们的范围（最小和最大）
+- en: Measures of central tendency, such as mean, median, and mode
+  id: totrans-19
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 中心趋势的度量，如均值、中位数和众数
+- en: Measures of variation, such as standard deviation and variance
+  id: totrans-20
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 变异度量，如标准差和方差
+- en: 'Aside from the median and mode, all of these can be calculated easily by invoking
+    aggregate functions:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 除了中位数和众数外，所有这些都可以通过调用聚合函数轻松计算：
+- en: '[PRE1]'
+  id: totrans-22
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: The `STDDEV_SAMP()` and `VAR_SAMP()` functions produce sample measures rather
+    than population measures. That is, for a set of *`n`* values, they produce a result
+    that is based on *`n`*–1 degrees of freedom. For the population measures, which
+    are based on *`n`* degrees of freedom, use `STDDEV_POP()` and `VAR_POP()` instead.
+    `STDDEV()` and `VARIANCE()` are synonyms for `STDDEV_POP()` and `VAR_POP()`.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`STDDEV_SAMP()`和`VAR_SAMP()`函数生成样本度量而不是总体度量。也就是说，对于一组*`n`*个值，它们生成基于*`n`*–1自由度的结果。对于基于*`n`*自由度的总体度量，请使用`STDDEV_POP()`和`VAR_POP()`。`STDDEV()`和`VARIANCE()`是`STDDEV_POP()`和`VAR_POP()`的同义词。'
+- en: 'Standard deviation can be used to identify outliers—values that are uncharacteristically
+    far from the mean. For example, to select values that lie more than a standard
+    deviation from the mean, do this:'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 标准差可用于识别异常值——与平均值相距异常远的值。例如，要选择距离平均值超过一个标准差的值，请执行以下操作：
+- en: '[PRE2]'
+  id: totrans-25
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: 'MySQL has no built-in function for computing the mode or median of a set of
+    values, but you can compute them yourself. To determine the mode (the value that
+    occurs most frequently), count each value and see which is most common:'
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL没有内置函数来计算一组值的众数或中位数，但您可以自行计算它们。要确定众数（最常出现的值），请计算每个值的计数并查看哪个最常见：
+- en: '[PRE3]'
+  id: totrans-27
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: In this case, 9 is the modal score value.
+  id: totrans-28
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，9是模态分数值。
+- en: The median of a set of ordered values can be calculated like this:^([1](ch17.xhtml#idm45820338373088))
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以像这样计算一组有序值的中位数：^([1](ch17.xhtml#idm45820338373088))
+- en: If the number of values is odd, the median is the middle value.
+  id: totrans-30
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果值的数量为奇数，则中位数是中间值。
+- en: If the number of values is even, the median is the average of the two middle
+    values.
+  id: totrans-31
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果值的数量为偶数，则中位数是两个中间值的平均值。
+- en: 'Based on that definition, use the following procedure to determine the median
+    of a set of observations stored in the database:'
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 基于该定义，使用以下过程确定存储在数据库中的一组观察值的中位数：
+- en: Issue a query to count the number of observations. From the count, you can determine
+    whether the median calculation requires one or two values, and what their indexes
+    are within the ordered set of observations.
+  id: totrans-33
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 发出查询以计算观察次数。从计数中，您可以确定中位数计算是否需要一个或两个值，并且它们在有序观察值集合中的索引是什么。
+- en: Issue a query that includes an `ORDER` `BY` clause to sort the observations
+    and a `LIMIT` clause to pull out the middle value or values.
+  id: totrans-34
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 发出包含`ORDER BY`子句以对观察进行排序和包含`LIMIT`子句以提取中间值或值的查询。
+- en: If there is a single middle value, it is the median. Otherwise, take the average
+    of the middle values.
+  id: totrans-35
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果有单个中间值，则它是中位数。否则，取中间值的平均值。
+- en: 'Suppose that a table `t` contains a `score` column with 37 values (an odd number).
+    To get the median, select a single value using a statement like this:'
+  id: totrans-36
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设表`t`包含一个带有37个值（奇数）的`score`列。要获取中位数，请使用类似以下语句的选择单个值：
+- en: '[PRE4]'
+  id: totrans-37
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: 'If the column contains 38 values (an even number), select two values:'
+  id: totrans-38
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果列包含38个值（偶数），则选择两个值：
+- en: '[PRE5]'
+  id: totrans-39
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: Then take the values returned by the statement and compute the median from their
+    average.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后从语句返回的值中取值，并从它们的平均值计算中位数。
+- en: 'The following Perl function implements a median calculation. It takes a database
+    handle and the names of the database, table, and column that contain the set of
+    observations. Then it generates the statement that retrieves the relevant values
+    and returns their average:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面的Perl函数实现了中位数计算。它接受一个数据库句柄以及包含一组观察值的数据库、表和列的名称。然后它生成检索相关值并返回它们平均值的语句：
+- en: '[PRE6]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'The preceding technique works for a set of values stored in the database. If
+    you have already fetched an ordered set of values into an array `@val`, compute
+    the median like this instead:'
+  id: totrans-43
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前面的技术适用于存储在数据库中的一组值。如果您已经将有序的一组值提取到数组`@val`中，可以像这样计算中位数：
+- en: '[PRE7]'
+  id: totrans-44
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: The code works for arrays that have an initial subscript of 0; for languages
+    that use 1-based array indexes, adjust the algorithm accordingly.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该代码适用于具有初始下标为0的数组；对于使用基于1的数组索引的语言，请相应调整算法。
+- en: 17.2 Calculating Descriptive Statistics for Groups
+  id: totrans-46
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 17.2 为组计算描述性统计信息
+- en: Problem
+  id: totrans-47
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to produce descriptive statistics for each subgroup of a set of observations.
+  id: totrans-48
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想为一组观察值的每个子组生成描述性统计信息。
+- en: Solution
+  id: totrans-49
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use aggregate functions, but employ a `GROUP` `BY` clause to arrange observations
+    into the appropriate groups.
+  id: totrans-50
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用聚合函数，但使用`GROUP BY`子句将观察值排列成适当的组。
+- en: Discussion
+  id: totrans-51
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: '[Recipe 17.1](#nch-stats-stats-descriptive) shows how to compute descriptive
+    statistics for the entire set of scores in the `testscore` table. To be more specific,
+    use `GROUP` `BY` to divide the observations into groups and calculate statistics
+    for each of them. For example, the subjects in the `testscore` table are listed
+    by age and sex, so it’s possible to calculate similar statistics by age or sex
+    (or both) by application of appropriate `GROUP` `BY` clauses.'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[配方 17.1](#nch-stats-stats-descriptive)展示了如何为`testscore`表中的整组分数计算描述性统计数据。更具体地说，使用`GROUP`
+    `BY`将观察结果分组，并为每组计算统计数据。例如，`testscore`表中的对象按年龄和性别列出，因此可以通过适当的`GROUP` `BY`子句按年龄或性别（或两者）计算类似的统计数据。'
+- en: 'Here’s how to calculate by age:'
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面是按年龄计算的方法：
+- en: '[PRE8]'
+  id: totrans-54
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'By sex:'
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 按性别：
+- en: '[PRE9]'
+  id: totrans-56
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'By age and sex:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 按年龄和性别：
+- en: '[PRE10]'
+  id: totrans-58
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 17.3 Generating Frequency Distributions
+  id: totrans-59
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 17.3 生成频率分布
+- en: Problem
+  id: totrans-60
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know the frequency of occurrence for each value in a table.
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想知道表中每个值的发生频率。
+- en: Solution
+  id: totrans-62
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Derive a frequency distribution that summarizes the contents of your dataset.
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 汇总数据集内容的频率分布。
+- en: Discussion
+  id: totrans-64
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'A common application for per-group summary techniques is to generate a *frequency
+    distribution* that shows how often each value occurs. For the `testscore` table,
+    the frequency distribution looks like this:'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 常见的按组汇总技术应用包括生成*频率分布*，显示每个值出现的频率。对于`testscore`表，频率分布如下：
+- en: '[PRE11]'
+  id: totrans-66
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'Expressing the results in percentages rather than counts yields relative frequency
+    distribution. To show each count as a percentage of the total, use one query to
+    get the total number of observations and another to calculate the percentages
+    for each group:'
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将结果表达为百分比而不是计数，得到相对频率分布。为了显示每个计数占总数的百分比，使用一个查询获取观测总数，另一个查询计算每组的百分比：
+- en: '[PRE12]'
+  id: totrans-68
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: The distributions just shown summarize the number of values for individual scores.
+    However, if the dataset contains a large number of distinct values and you want
+    a distribution that shows only a small number of categories, you may want to lump
+    values into categories and produce a count for each category. [Recipe 10.13](ch10.xhtml#nch-sum-sum-noncat)
+    discusses <q>lumping</q> techniques.
+  id: totrans-69
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述分布总结了个别分数值的数量。然而，如果数据集包含大量不同的值，并且您希望显示只有少量类别的分布，则可能希望将值合并到类别中，并为每个类别生成计数。[配方
+    10.13](ch10.xhtml#nch-sum-sum-noncat)讨论了“合并”技术。
+- en: 'One typical use of frequency distributions is to export the results for use
+    in a graphing program. But MySQL itself can generate a simple ASCII chart as a
+    visual representation of the distribution. To display an ASCII bar chart of the
+    test score counts, convert the counts to strings of `*` characters:'
+  id: totrans-70
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 频率分布的一个典型用途是将结果导出到图形程序中使用。但MySQL本身可以生成一个简单的ASCII图表，作为分布的视觉表示。要显示测试分数计数的ASCII条形图，请将计数转换为`*`字符的字符串：
+- en: '[PRE13]'
+  id: totrans-71
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: 'To chart the relative frequency distribution instead, use the percentage values:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要绘制相对频率分布而不是频数值，使用百分比值：
+- en: '[PRE14]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: The ASCII chart method is crude, obviously, but it’s a quick way to get a picture
+    of the distribution of observations and requires no other tools.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 显然，ASCII图表方法很粗糙，但是它是获取观察分布图的快速方式，不需要其他工具。
+- en: 'If you generate a frequency distribution for a range of categories where some
+    of the categories are not represented in your observations, the missing categories
+    do not appear in the output. To force each category to be displayed, use a reference
+    table and a `LEFT` `JOIN` (a technique discussed in [Recipe 16.8](ch16.xhtml#nch-multi-multi-fill-hole)).
+    For the `testscore` table, the possible scores range from 0 to 10, so a reference
+    table should contain each of those values:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果为一系列类别生成频率分布，其中某些类别在您的观测中没有表示，则输出中不显示缺少的类别。要强制显示每个类别，请使用参考表和`LEFT` `JOIN`（在[配方
+    16.8](ch16.xhtml#nch-multi-multi-fill-hole)中讨论的技术）。对于`testscore`表，可能的分数范围从0到10，因此参考表应包含每一个这些值：
+- en: '[PRE15]'
+  id: totrans-76
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Then join the reference table to the test scores to generate the frequency
+    distribution. This query shows the counts as well as the histogram:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后将参考表与测试分数连接，生成频率分布。此查询显示计数以及直方图：
+- en: '[PRE16]'
+  id: totrans-78
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: This distribution includes rows for scores 0 through 3, none of which appear
+    in the frequency distribution shown earlier.
+  id: totrans-79
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此分布包括分数0到3的行，而在前面显示的频率分布中没有出现。
+- en: 'The same principle applies to relative frequency distributions:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 相对频率分布也适用相同的原则：
+- en: '[PRE17]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 17.4 Counting Missing Values
+  id: totrans-82
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 17.4 计数缺失值
+- en: Problem
+  id: totrans-83
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: A set of observations is incomplete. You want to find out how many values are
+    missing.
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一组观察结果不完整。您想知道缺失多少个值。
+- en: Solution
+  id: totrans-85
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Count the number of `NULL` values in the set.
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 计算集合中的`NULL`值数量。
+- en: Discussion
+  id: totrans-87
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Values can be missing from a set of observations for any number of reasons:
+    a test may not yet have been administered, something may have gone wrong during
+    the test that requires invalidating the observation, and so forth. You can represent
+    such observations in a dataset as `NULL` values to signify that they’re missing
+    or otherwise invalid, then use summary statements to characterize the completeness
+    of the dataset.'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于任何数量的原因，观察结果集中可能缺少值：可能尚未进行测试，测试过程中可能出现错误导致无效观察等。您可以在数据集中表示这样的观察结果，将它们表示为`NULL`值，表示它们缺失或无效，然后使用摘要语句来描述数据集的完整性。
+- en: 'If a table `testscore_withmisses` contains values to be summarized along a
+    single dimension, a simple summary suffices to characterize the missing values.
+    Suppose that `testscore_withmisses` looks like this:'
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果表`testscore_withmisses`包含要在单个维度上汇总的值，则简单摘要足以描述缺失的值。假设`testscore_withmisses`如下所示：
+- en: '[PRE18]'
+  id: totrans-90
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: '`COUNT(*)` counts the total number of rows, and `COUNT(score)` counts the number
+    of nonmissing scores. The difference between the two values is the number of missing
+    scores, and that difference in relation to the total provides the percentage of
+    missing scores. Perform these calculations as follows:'
+  id: totrans-91
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`COUNT(*)`计算总行数，而`COUNT(score)`计算非缺失分数的数量。两个值之间的差异是缺失分数的数量，并且与总数的关系提供了缺失分数的百分比。进行以下计算：'
+- en: '[PRE19]'
+  id: totrans-92
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'As an alternative to counting `NULL` values as the difference between counts,
+    count them directly using `SUM(ISNULL(score))`. The `ISNULL()` function returns
+    1 if its argument is `NULL`, zero otherwise:'
+  id: totrans-93
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 作为计数`NULL`值的替代方法，直接使用`SUM(ISNULL(score))`来计数它们。`ISNULL()`函数在其参数为`NULL`时返回1，否则返回零：
+- en: '[PRE20]'
+  id: totrans-94
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'If values are arranged in groups, occurrences of `NULL` values can be assessed
+    on a per-group basis. Suppose that `testscore_withmisses2` contains scores for
+    subjects that are distributed among conditions for two factors A and B, each of
+    which has two levels:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果值按组排列，则可以按组评估`NULL`值的发生次数。假设`testscore_withmisses2`包含分数，分布在两个因素A和B的条件中的主题，每个因素有两个水平：
+- en: '[PRE21]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'To produce a summary for each combination of conditions, use a `GROUP` `BY`
+    clause:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为每个条件组合生成摘要，使用`GROUP` `BY`子句：
+- en: '[PRE22]'
+  id: totrans-98
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 17.5 Calculating Linear Regressions or Correlation Coefficients
+  id: totrans-99
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 计算线性回归或相关系数17.5
+- en: Problem
+  id: totrans-100
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to calculate the least-squares regression line for two variables or
+    the correlation coefficient that expresses the strength of the relationship between
+    them.
+  id: totrans-101
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您要计算两个变量的最小二乘回归线或表达它们之间关系强度的相关系数。
+- en: Solution
+  id: totrans-102
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Apply summary functions to make these calculations.
+  id: totrans-103
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 应用摘要函数进行这些计算。
+- en: Discussion
+  id: totrans-104
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: When the data values for two variables X and Y are stored in a database, the
+    least-squares regression for them can be calculated easily using aggregate functions.
+    The same is true for the correlation coefficient. The two calculations are actually
+    fairly similar, and many terms for performing the computations are common to the
+    two procedures.
+  id: totrans-105
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当存储两个变量X和Y的数据值在数据库中时，可以使用聚合函数轻松计算它们的最小二乘回归。相关系数也是如此。这两个计算实际上非常相似，并且执行这两个过程的许多术语是共通的。
+- en: 'Suppose that you want to calculate a least-squares regression using the age
+    and test score values for the observations in the `testscore` table:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您要使用`testscore`表中观察到的年龄和测试分数值计算最小二乘回归：
+- en: '[PRE23]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'The following equation expresses the regression line, where `a` and `b` are
+    the intercept and slope of the line:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下方程表示回归线，其中`a`和`b`是线条的截距和斜率：
+- en: '[PRE24]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: Letting `age` be *`X`* and `score` be *`Y`*, begin by computing the terms needed
+    for the regression equation. These include the number of observations; the means,
+    sums, and sums of squares for each variable; and the sum of the products of each
+    variable:^([2](ch17.xhtml#idm45820337870752))
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 让`age`为*`X`*，`score`为*`Y`*，首先计算回归方程所需的项。这些项包括观测数量；每个变量的均值、总和和平方和；以及每个变量乘积的总和：^([2](ch17.xhtml#idm45820337870752))
+- en: '[PRE25]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 'From those terms, calculate the regression slope and intercept as follows:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从这些术语中，按以下方式计算回归斜率和截距：
+- en: '[PRE26]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'The regression equation then is:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 则回归方程为：
+- en: '[PRE27]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'To compute the correlation coefficient, use many of the same terms:'
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要计算相关系数，请使用许多相同的术语：
+- en: '[PRE28]'
+  id: totrans-117
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 17.6 Generating Random Numbers
+  id: totrans-118
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 17.6 生成随机数
+- en: Problem
+  id: totrans-119
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You need a source of random numbers.
+  id: totrans-120
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要一组随机数来源。
+- en: Solution
+  id: totrans-121
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the `RAND()` function.
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`RAND()`函数。
+- en: Discussion
+  id: totrans-123
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'MySQL has a `RAND()` function that produces random numbers between 0 and 1:'
+  id: totrans-124
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL有一个`RAND()`函数，可以生成0到1之间的随机数：
+- en: '[PRE29]'
+  id: totrans-125
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'When invoked with an integer argument, `RAND()` uses that value to seed the
+    random number generator. You can use this feature to produce a repeatable series
+    of numbers for a column of a query result. The following example shows that `RAND()`
+    without an argument produces a different column of values per query, whereas `RAND(`*`N`*`)`
+    produces a repeatable column:'
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当使用整数参数调用`RAND()`时，会用该值来种子化随机数生成器。您可以利用这一特性为查询结果的列生成可重复的数字系列。以下示例显示，没有参数的`RAND()`在每次查询时产生不同的列值，而`RAND(`*`N`*`)`则生成一个可重复的列：
+- en: '[PRE30]'
+  id: totrans-127
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'To seed `RAND()` randomly, pick a seed value based on a source of entropy.
+    Possible sources are the current timestamp or connection identifier, alone or
+    perhaps in combination:'
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了以随机方式种子化`RAND()`，请选择基于熵源的种子值。可能的来源包括当前时间戳或连接标识符，可以单独使用，也可以组合使用：
+- en: '[PRE31]'
+  id: totrans-129
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: However, it’s probably better to use other seed value sources if you have them.
+    For example, if your system has a */dev/random* or */dev/urandom* device, read
+    the device and use it to generate a value for seeding `RAND()`.
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但是，如果有其他种子值来源，则最好使用它们。例如，如果您的系统有*/dev/random*或*/dev/urandom*设备，请读取该设备并使用它生成种子值以种子化`RAND()`。
+- en: 17.7 Randomizing a Set of Rows
+  id: totrans-131
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 17.7 随机化一组行
+- en: Problem
+  id: totrans-132
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to randomize a set of rows or values.
+  id: totrans-133
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望随机化一组行或值。
+- en: Solution
+  id: totrans-134
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use `ORDER` `BY` `RAND()`.
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`ORDER` `BY` `RAND()`。
+- en: Discussion
+  id: totrans-136
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'MySQL’s `RAND()` function can be used to randomize the order in which a query
+    returns its rows. Somewhat paradoxically, this randomization is achieved by adding
+    an `ORDER` `BY` clause to the query. The technique is roughly equivalent to a
+    spreadsheet randomization method. Suppose that a spreadsheet contains this set
+    of values:'
+  id: totrans-137
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL的`RAND()`函数可用于随机化查询返回行的顺序。有些讽刺的是，通过在查询中添加`ORDER` `BY`子句来实现此随机化。该技术与电子表格随机化方法大致相当。假设电子表格包含以下一组值：
+- en: '[PRE32]'
+  id: totrans-138
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'To place these in random order, first add another column that contains randomly
+    chosen numbers:'
+  id: totrans-139
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将这些值随机排序，首先添加另一列，其中包含随机选择的数字：
+- en: '[PRE33]'
+  id: totrans-140
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'Then sort the rows according to the values of the random numbers:'
+  id: totrans-141
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后根据随机数的值对行进行排序：
+- en: '[PRE34]'
+  id: totrans-142
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: At this point, the original values have been placed in random order; the effect
+    of sorting the random numbers is to randomize the values associated with them.
+    To rerandomize the values, choose another set of random numbers, and sort the
+    rows again.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此时，原始值已随机排序；根据随机数排序行的效果是使与之相关联的值随机化。为重新随机化这些值，选择另一组随机数，并再次对行进行排序。
+- en: 'In MySQL, achieve a similar effect by associating a set of random numbers with
+    a query result and sorting the result by those numbers. To do this, add an `ORDER`
+    `BY` `RAND()` clause:'
+  id: totrans-144
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在MySQL中，通过将一组随机数与查询结果关联并按这些数字排序来实现类似效果。为此，请添加一个`ORDER` `BY` `RAND()`子句：
+- en: '[PRE35]'
+  id: totrans-145
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'Applications for randomizing a set of rows include any scenario that uses selection
+    without replacement (choosing each item from a set of items until there are no
+    more items left). Some examples of this are:'
+  id: totrans-146
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随机化一组行的应用包括任何使用无替换选择（从一组项目中选择每个项目直到没有项目为止）的情况。其中一些例子包括：
+- en: Determining the starting order for participants in an event. List the participants
+    in a table, and select them in random order.
+  id: totrans-147
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 确定事件参与者的起始顺序。在表中列出参与者，然后随机选择他们的顺序。
+- en: Assigning starting lanes or gates to participants in a race. List the lanes
+    in a table, and select a random lane order.
+  id: totrans-148
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在比赛中为参与者分配起始车道或门。在表中列出车道，然后随机选择一个车道顺序。
+- en: Choosing the order in which to present a set of quiz questions.
+  id: totrans-149
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 选择展示一组测验问题的顺序。
+- en: Shuffling a deck of cards. Represent each card by a row in a table, and shuffle
+    the deck by selecting the rows in random order. Deal them one by one until the
+    deck is exhausted.
+  id: totrans-150
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 洗牌一副牌。在表中以每张牌一行的方式表示每张牌，并通过以随机顺序选择行来洗牌整副牌。逐张发牌直到牌组耗尽。
+- en: 'To use the last example as an illustration, let’s implement a card deck-shuffling
+    algorithm. Shuffling and dealing cards is randomization plus selection without
+    replacement: each card is dealt once before any is dealt twice; when the deck
+    is used up, it is reshuffled to rerandomize it for a new dealing order. Within
+    a program, this task can be performed with MySQL using a table named `deck` that
+    has 52 rows, assuming a set of cards with each combination of 13 face values and
+    4 suits:'
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要使用最后一个示例作为说明，让我们实现一个卡牌洗牌算法。洗牌和发牌是随机化加上无重复选择：每张卡牌在再次发牌之前只发出一次；当牌堆用完时，重新洗牌以重新随机化其发牌顺序。在程序内，可以使用名为
+    `deck` 的 MySQL 表来执行此任务，该表具有 52 行，假设每张卡牌有 13 个面值和 4 种花色的组合：
+- en: Select the entire table, and store it into an array.
+  id: totrans-152
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 选择整个表，并将其存储到数组中。
+- en: Each time a card is needed, take the next element from the array.
+  id: totrans-153
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 每次需要一张卡时，从数组中取下一个元素。
+- en: When the array is exhausted, all the cards have been dealt. <q>Reshuffle</q>
+    the table to generate a new card order.
+  id: totrans-154
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 当数组耗尽时，所有卡牌已发放。重新洗牌表以生成新的卡牌顺序。
+- en: 'Setting up the `deck` table is a tedious task if you insert the 52 card records
+    by writing all the `INSERT` statements manually. The `deck` contents can be generated
+    more easily in combinatorial fashion within a program by generating each pairing
+    of face value with suit. Here’s some PHP code that creates a `deck` table with
+    `face` and `suit` columns, then populates the table using nested loops to generate
+    the pairings for the `INSERT` statements:'
+  id: totrans-155
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您通过手动编写所有 `INSERT` 语句插入 52 张卡片记录来设置 `deck` 表格，这将是一项乏味的任务。在程序中，可以更轻松地以组合方式生成
+    `deck` 内容，生成每个面值和花色的配对。以下是一些 PHP 代码，创建了一个带有 `face` 和 `suit` 列的 `deck` 表，并使用嵌套循环为
+    `INSERT` 语句生成配对：
+- en: '[PRE36]'
+  id: totrans-156
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: 'Shuffling the cards is a matter of issuing this statement:'
+  id: totrans-157
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 洗牌牌堆只需发出以下语句即可：
+- en: '[PRE37]'
+  id: totrans-158
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: 'To do that and store the results in an array within a script, write a `shuffle_deck()`
+    function that issues the query and returns the resulting values in an array (again
+    shown in PHP):'
+  id: totrans-159
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要执行此操作并将结果存储在脚本内的数组中，请编写一个 `shuffle_deck()` 函数，该函数发出查询并将返回的值存储在数组中（再次以 PHP 显示）：
+- en: '[PRE38]'
+  id: totrans-160
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: Deal the cards by keeping a counter that ranges from 0 to 51 to indicate which
+    card to select. When the counter reaches 52, the deck is exhausted and should
+    be shuffled again.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用一个计数器，其范围从 0 到 51，来表示选择哪张卡牌。当计数器达到 52 时，牌堆耗尽，应重新洗牌。
+- en: Warning
+  id: totrans-162
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 警告
+- en: Use this method only for tables with small number of rows. Ordering by `RAND()`
+    does not allow MySQL to use indexes to resolve `ORDER BY`, therefore such queries
+    will be slow on large tables.
+  id: totrans-163
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 仅适用于行数较少的表格。按 `RAND()` 排序不允许 MySQL 使用索引解析 `ORDER BY`，因此在大表上执行此类查询将会很慢。
+- en: 17.8 Selecting Random Items from a Set of Rows
+  id: totrans-164
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 17.8 从一组行中选择随机项目
+- en: Problem
+  id: totrans-165
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to pick an item or items randomly from a set of values.
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想从一组值中随机选择一个或多个项目。
+- en: Solution
+  id: totrans-167
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Randomize the values, then pick the first one (or the first few, if you need
+    more than one).
+  id: totrans-168
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 随机化值，然后选择第一个（或更多，如果需要多个）。
+- en: Discussion
+  id: totrans-169
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'If a set of items is stored in MySQL, choose one at random as follows:'
+  id: totrans-170
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果一组项目存储在 MySQL 中，请按以下方式随机选择其中一个：
+- en: Select the items in the set in random order, using `ORDER` `BY` `RAND()` as
+    described in [Recipe 17.7](#nch-stats-stats-rand-rows).
+  id: totrans-171
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 按照 [配方 17.7](#nch-stats-stats-rand-rows) 中描述的 `ORDER BY RAND()` 的随机顺序选择集合中的项目。
+- en: Add `LIMIT` `1` to the query to pick the first item.
+  id: totrans-172
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在查询中添加 `LIMIT 1` 来选择第一个项目。
+- en: 'For example, to perform a simple simulation of tossing a die, create a `die`
+    table containing rows with values from 1 to 6 corresponding to the six faces of
+    a die cube:'
+  id: totrans-173
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，要执行掷骰子的简单模拟，请创建一个包含值从 1 到 6 的行的 `die` 表，对应骰子的六个面：
+- en: '[PRE39]'
+  id: totrans-174
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'Then pick rows from the table at random:'
+  id: totrans-175
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后随机选择表中的行：
+- en: '[PRE40]'
+  id: totrans-176
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 'As you repeat this operation, you pick a random sequence of items from the
+    set. This is a form of selection with replacement: an item is chosen from a pool
+    of items and then returned to the pool for the next pick. Because items are replaced,
+    it’s possible to pick the same item multiple times when making successive choices
+    this way. Other examples of selection with replacement include:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您重复此操作时，您将从集合中选择随机序列的项目。这是一种带替换的选择形式：从项目池中选择一个项目，然后将其返回到池中进行下一次选择。因为项目被替换，所以在连续选择时可能多次选择相同的项目。其他带替换的选择示例包括：
+- en: Selecting a banner ad to display on a web page
+  id: totrans-178
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在网页上选择要显示的横幅广告
+- en: Picking a row for a <q>quote of the day</q> application
+  id: totrans-179
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 为每日引用应用选择一行
+- en: <q>Pick a card, any card</q> magic tricks that begin with a full deck of cards
+    each time
+  id: totrans-180
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: <q>挑一张牌，随便挑</q> 每次以一副完整的牌开始的魔术技巧
+- en: 'To pick more than one item, change the `LIMIT` argument. For example, to draw
+    five winning entries at random from a table named `drawing` that contains contest
+    entries, use `RAND()` in combination with `LIMIT`:'
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要选择多个项目，请更改 `LIMIT` 参数。例如，要从包含比赛参赛作品的名为 `drawing` 的表中随机抽取五个获奖条目，请使用 `RAND()`
+    结合 `LIMIT`：
+- en: '[PRE41]'
+  id: totrans-182
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'A special case occurs when you pick a single row from a table that you know
+    contains a column with values in the range from 1 to *`n`* in unbroken sequence.
+    Under these circumstances, it’s possible to avoid performing an `ORDER` `BY` operation
+    on the entire table. Pick a random number in that range and select the matching
+    row:'
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您从包含在某一列中包含从1到`n`的值的表中选择单个行时，会出现特殊情况。在这些情况下，可以避免对整个表进行 `ORDER` `BY` 操作。选择该范围内的一个随机数并选择匹配的行：
+- en: '[PRE42]'
+  id: totrans-184
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: This is much quicker than `ORDER` `BY` `RAND()` `LIMIT` `1` as the table size
+    increases.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这比随机选择一个表的 `ORDER` `BY` `RAND()` `LIMIT` `1` 更快，特别是在表的大小增加时。
+- en: 17.9 Calculating Successive-Row Differences
+  id: totrans-186
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 17.9 计算连续行差值
+- en: Problem
+  id: totrans-187
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: A table contains successive cumulative values in its rows, and you want to compute
+    the differences between pairs of successive rows.
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表格中的行包含连续的累积值，并且您希望计算连续行之间的差值。
+- en: Solution
+  id: totrans-189
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a self-join that matches pairs of adjacent rows and calculates the differences
+    between members of each pair.
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用自连接匹配相邻行对并计算每对成员之间的差值。
+- en: Discussion
+  id: totrans-191
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Self-joins are useful when you have a set of absolute (or cumulative) values
+    that you want to convert to relative values representing the differences between
+    successive pairs of rows. For example, if you take an automobile trip and write
+    down the total miles traveled at each stopping point, you can compute the difference
+    between successive points to determine the distance from one stop to the next.
+    Here is such a table that shows the stops for a trip from San Antonio, Texas to
+    Madison, Wisconsin. Each row shows the total miles driven as of each stop:'
+  id: totrans-192
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您有一组绝对（或累积）值，并希望将其转换为表示连续行对之间差值的相对值时，自连接非常有用。例如，如果您进行一次汽车旅行并在每个停靠点记录总行驶英里数，则可以计算连续点之间的差值以确定从一个停靠点到下一个停靠点的距离。以下是这样一张表格，显示了从得克萨斯州圣安东尼奥到威斯康星州麦迪逊的旅行停靠点。每一行显示了每次停靠时的总英里数：
+- en: '[PRE43]'
+  id: totrans-193
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'A self-join can convert these cumulative values to successive differences that
+    represent the distances from each city to the next. The following statement shows
+    how to use the sequence numbers in the rows to match pairs of successive rows
+    and compute the differences between each pair of mileage values:'
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自连接可以将这些累积值转换为连续的差值，这些差值表示从每个城市到下一个城市的距离。以下语句显示了如何使用行中的序列号来匹配连续行对并计算每对里程值之间的差值：
+- en: '[PRE44]'
+  id: totrans-195
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: The presence of the `seq` column in the `trip_log` table is important for calculating
+    successive difference values. It’s needed for establishing which row precedes
+    another and matching each row *`n`* with row *`n`*`+1`. The implication is that
+    to perform relative-difference calculations using a table of absolute or cumulative
+    values, it must include a sequence column that has no gaps. If the table contains
+    a sequence column but there are gaps, renumber it (see [Recipe 15.5](ch15.xhtml#nch-sequences-seq-reseq)).
+    If the table contains no such column, add one (see [Recipe 15.9](ch15.xhtml#nch-sequences-seq-add-seq)).
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`trip_log` 表中的 `seq` 列的存在对于计算连续差值值非常重要。它用于确定哪一行是另一行的前置行，并将每一行 `n` 与行 `n` `+1`
+    进行匹配。这意味着，要使用包含绝对或累积值的表格执行相对差值计算，必须包括一个没有间隙的序列列。如果表中包含序列列但存在间隙，请重新编号它（参见 [Recipe
+    15.5](ch15.xhtml#nch-sequences-seq-reseq)）。如果表中不包含这样的列，请添加一个（参见 [Recipe 15.9](ch15.xhtml#nch-sequences-seq-add-seq)）。'
+- en: A more complex situation occurs when you compute successive differences for
+    more than one column and use the results in a calculation. The following table,
+    `player_stats`, shows some cumulative numbers for a baseball player at the end
+    of each month of his season. `ab` indicates the total at-bats, and `h` the total
+    hits the player has had as of a given date. (The first row indicates the starting
+    point of the player’s season, which is why the `ab` and `h` values are zero.)
+  id: totrans-197
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您为多个列计算连续差值并在计算中使用结果时，情况会变得更加复杂。以下表 `player_stats` 显示了一个棒球选手在赛季的每个月末的累积数字。`ab`
+    表示总打数，`h` 表示截至某一日期球员的总安打数。（第一行显示球员赛季的起始点，因此 `ab` 和 `h` 值为零。）
+- en: '[PRE45]'
+  id: totrans-198
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: 'The last column of the query result also shows the player’s batting average
+    as of each date. This column is not stored in the table but is easily computed
+    as the ratio of hits to at-bats. The result provides a general idea of how the
+    player’s hitting performance changed over the course of the season, but it provides
+    no picture of how the player did during each individual month. To determine that,
+    calculate relative differences between pairs of rows. This is easily done with
+    a self-join that matches row *`n`* with row *`n`*`+1` to calculate differences
+    between pairs of at-bats and hits values. These differences enable computation
+    of batting average during each month:'
+  id: totrans-199
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 查询结果的最后一列还显示了每个日期的球员击球平均数。这一列未存储在表中，但可以轻松计算为击中数与上场数的比率。结果提供了球员赛季内击球表现变化的总体印象，但并未展示球员在每个单独月份的表现。要确定这一点，计算成对行之间的相对差异。通过将行*n*与行*n*`+1`自连接，可以轻松完成这些差异的计算，以计算每月的击球平均数：
+- en: '[PRE46]'
+  id: totrans-200
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: These results show much more clearly than the original table that the player
+    started off well but had a slump in the middle of the season, particularly in
+    July. They also indicate just how strong his performance was in August.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些结果比原始表格清楚地显示了球员赛季初表现不错，但在中段有所下滑，尤其是在七月份。它们还显示了球员在八月份表现多么出色。
+- en: 17.10 Finding Cumulative Sums and Running Averages
+  id: totrans-202
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 17.10 查找累积和与移动平均
+- en: Problem
+  id: totrans-203
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You have a set of observations measured over time and want to compute the cumulative
+    sum of the observations at each measurement point. Or you want to compute a running
+    average at each point.
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您有一组随时间测量的观测值，想要计算每个测量点的累积和。或者您想要计算每个点的移动平均。
+- en: Solution
+  id: totrans-205
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a self-join to produce the sets of successive observations at each measurement
+    point, then apply aggregate functions to each set of values to compute its sum
+    or average.
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用自连接在每个测量点生成连续观测值集，然后应用聚合函数计算其总和或平均值。
+- en: Discussion
+  id: totrans-207
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: '[Recipe 17.9](#nch-stats-stats-abs-to-rel) illustrates how a self-join can
+    produce relative values from absolute values. A self-join can do the opposite
+    as well, producing cumulative values at each successive stage of a set of observations.
+    The following table shows a set of rainfall measurements taken over a series of
+    days. The values in each row show the observation date and precipitation in inches:'
+  id: totrans-208
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[配方 17.9](#nch-stats-stats-abs-to-rel)展示了如何通过自连接从绝对值计算相对值。自连接也可以相反地产生一系列观测值的累积值。以下表格显示了一系列连续几天内的降水测量值。每行的值显示了观测日期和英寸单位的降水量：'
+- en: '[PRE47]'
+  id: totrans-209
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: 'To calculate cumulative rainfall for a given day, add that day’s precipitation
+    value to the values for all the previous days. For example, determine the cumulative
+    rainfall as of `2014-06-03` like this:'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要计算特定日期的累积降水量，将该日的降水量值加到所有先前日期的值中。例如，像这样确定截至`2014-06-03`的累积降水量：
+- en: '[PRE48]'
+  id: totrans-211
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: 'To get the cumulative figures for all days represented in the table, it’s tedious
+    to compute the value separately for each day. A self-join can do this for all
+    days with a single statement. Use one instance of the `rainfall` table as a reference,
+    and determine for the date in each row the sum of the `precip` values in all rows
+    occurring up through that date in another instance of the table. The following
+    statement shows the daily and cumulative precipitation for each day:'
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取表中表示的所有日期的累积数据，单独为每一天计算数值是很繁琐的。通过一个自连接语句可以在一次操作中完成所有日期的计算。使用`rainfall`表的一个实例作为参照，并确定每行中的日期在另一个表的所有行中到该日期的`precip`值的总和。以下语句显示了每天的日常和累积降水量：
+- en: '[PRE49]'
+  id: totrans-213
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: 'The self-join can be extended to display the number of days elapsed at each
+    date, as well as the running averages for amount of precipitation each day:'
+  id: totrans-214
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自连接可以扩展到显示每个日期的经过的天数，以及每天降水量的移动平均值：
+- en: '[PRE50]'
+  id: totrans-215
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: 'In the preceding statement, the number of days elapsed and the precipitation
+    running averages can be computed easily using `COUNT()` and `AVG()` because there
+    are no missing days in the table. If missing days are permitted, the calculation
+    becomes more complicated because the number of days elapsed for each calculation
+    is no longer the same as the number of rows. You can see this by deleting the
+    rows for the days that had no precipitation to produce <q>holes</q> in the table:'
+  id: totrans-216
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前面的语句中，可以通过`COUNT()`和`AVG()`轻松计算经过的天数和降水的移动平均值，因为表中没有缺失的天数。如果允许缺失的天数，则计算会变得更加复杂，因为每次计算的天数不再与行数相同。您可以通过删除没有降水的天的行来看到这一点，以生成表中的<q>空洞</q>：
+- en: '[PRE51]'
+  id: totrans-217
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: 'Deleting those rows doesn’t change the cumulative sum or running average for
+    the dates that remain, but it does change how they must be calculated. If you
+    execute the self-join again, it yields incorrect results for the days-elapsed
+    and average precipitation columns:'
+  id: totrans-218
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 删除这些行不会改变保留日期的累积总和或移动平均值，但必须改变它们的计算方法。如果再次执行自连接，则会导致天数和平均降水列的结果不正确：
+- en: '[PRE52]'
+  id: totrans-219
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: 'To fix the problem, determine the number of days elapsed a different way. Take
+    the minimum and maximum date involved in each sum and calculate a days-elapsed
+    value from them:'
+  id: totrans-220
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要修复这个问题，用另一种方法确定经过的天数。获取每个求和中涉及的最小和最大日期，并从中计算天数：
+- en: '[PRE53]'
+  id: totrans-221
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 'That value must be used for the days-elapsed column and for computing the running
+    averages. The resulting statement is as follows:'
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那个数值必须用于天数列和计算移动平均值。生成的语句如下：
+- en: '[PRE54]'
+  id: totrans-223
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: As this example illustrates, calculation of cumulative values from relative
+    values requires only a column that enables rows to be placed into the proper order.
+    (For the `rainfall` table, that’s the `date` column.) Values in the column need
+    not be sequential, or even numeric. This differs from calculations that produce
+    difference values from cumulative values (see [Recipe 17.9](#nch-stats-stats-abs-to-rel)),
+    which require a table that has a column containing an unbroken sequence.
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 正如这个例子所示，从相对值计算累积值只需要一个能够将行放置到正确顺序中的列（对于`rainfall`表来说，这是`date`列）。列中的值不必是连续的，甚至不必是数值。这与产生累积值的差异值的计算不同（参见[Recipe
+    17.9](#nch-stats-stats-abs-to-rel)），后者需要一个包含不间断序列的表。
+- en: The running averages in the rainfall examples are based on dividing cumulative
+    precipitation sums by number of days elapsed as of each day. When the table has
+    no gaps, the number of days is the same as the number of values summed, making
+    it easy to find successive averages. When rows are missing, the calculations become
+    more complex. This demonstrates that it’s necessary to consider the nature of
+    your data and calculate averages appropriately. The next example is conceptually
+    similar to the previous ones in that it calculates cumulative sums and running
+    averages, but performs the computations yet another way.
+  id: totrans-225
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 雨量示例中的移动平均值基于将累积降水总和除以截至每天的天数。当表中没有间隔时，天数与求和的值数相同，因此可以轻松找到连续的平均值。当行缺失时，计算变得更加复杂。这表明有必要考虑数据的性质并适当计算平均值。下一个示例在概念上与前面的示例类似，它计算累积总和和移动平均值，但以另一种方式执行计算。
+- en: 'The following table shows a marathon runner’s performance at each stage of
+    a 26-kilometer run. The values in each row show the length of each stage in kilometers
+    and how long the runner took to complete the stage. In other words, the values
+    pertain to intervals within the marathon and thus are relative to the whole:'
+  id: totrans-226
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下表显示了马拉松选手在26公里赛程的每个阶段的表现。每行中的值显示了每个阶段的长度（以公里为单位）以及选手完成该阶段所需的时间。换句话说，这些值涉及马拉松内的间隔，因此相对于整体而言是相对的：
+- en: '[PRE55]'
+  id: totrans-227
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: 'To calculate cumulative distance in kilometers at each stage, use a self-join
+    like this:'
+  id: totrans-228
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要计算每个阶段的累积距离（以公里为单位），可以使用类似于这样的自连接：
+- en: '[PRE56]'
+  id: totrans-229
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: 'Cumulative distances are easy to compute because they can be summed directly.
+    The calculation for accumulating time values is more involved: convert times to
+    seconds, total the resulting values, and convert the sum back to a time value.
+    To compute the runner’s average speed at the end of each stage, take the ratio
+    of cumulative distance over cumulative time. Putting all this together yields
+    the following statement:'
+  id: totrans-230
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 累积距离易于计算，因为它们可以直接求和。累积时间值的计算更为复杂：将时间转换为秒，对结果值进行总和，并将总和转换回时间值。要计算每个阶段结束时选手的平均速度，取累积距离除以累积时间的比率。将所有这些内容组合在一起得到以下语句：
+- en: '[PRE57]'
+  id: totrans-231
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: We can see from this that the runner’s average pace increased a little during
+    the second stage of the race but then decreased thereafter, presumably as a result
+    of fatigue.
+  id: totrans-232
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从这可以看出，运动员在比赛第二阶段的平均速度略有增加，但之后又下降，这可能是疲劳导致的结果。
+- en: 17.11 Assigning Ranks
+  id: totrans-233
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 17.11 分配排名
+- en: Problem
+  id: totrans-234
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to assign ranks to a set of values.
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望对一组值分配排名。
+- en: Solution
+  id: totrans-236
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Decide on a ranking method, then put the values in the desired order and apply
+    the method to them.
+  id: totrans-237
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 决定排名方法，然后按所需顺序排列值并应用该方法。
+- en: Discussion
+  id: totrans-238
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Some kinds of statistical tests require assignment of ranks. This section describes
+    three ranking methods and shows how each can be implemented by using window functions.
+    The examples assume that a table `ranks` contains the following scores, which
+    are to be ranked with the values in descending order:'
+  id: totrans-239
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些统计测试需要对数值进行排名。本节描述了三种排名方法，并展示了如何使用窗口函数实现每种方法。示例假设表`ranks`包含以下要按降序排名的分数：
+- en: '[PRE58]'
+  id: totrans-240
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: 'One type of ranking simply assigns each value its row number within the ordered
+    set of values. To produce such rankings, use window function `ROW_NUMBER()`:'
+  id: totrans-241
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一种排名方法简单地将每个值分配到其值有序集合内的行号。要生成这样的排名，请使用窗口函数`ROW_NUMBER()`：
+- en: '[PRE59]'
+  id: totrans-242
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: 'That kind of ranking doesn’t take into account the possibility of ties (instances
+    of values that are the same). Window function `DENSE_RANK()` does so by advancing
+    the rank only when values change:'
+  id: totrans-243
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种排名方法不考虑可能出现的并列情况（数值相同的情况）。窗口函数`DENSE_RANK()`通过仅在数值变化时提升排名来解决这一问题：
+- en: '[PRE60]'
+  id: totrans-244
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: Window function `RANK()` is something of a combination of the other two methods.
+    It ranks values by row number, except when ties occur. In that case, the tied
+    values each get a rank equal to the row number of the first of the values.
+  id: totrans-245
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 窗口函数`RANK()`有点像其他两种方法的组合。它按行号对值进行排名，但在出现并列情况时，每个并列的值都获得与第一个值行号相同的排名。
+- en: '[PRE61]'
+  id: totrans-246
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: 'Ranks are easy to assign within a program as well. For example, the following
+    Ruby fragment ranks the scores in `ranks` using the third ranking method:'
+  id: totrans-247
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在程序中分配排名也很容易。例如，以下Ruby片段使用第三种排名方法对`ranks`中的分数进行排名：
+- en: '[PRE62]'
+  id: totrans-248
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: 'The third type of ranking is commonly used for sporting events. The following
+    table contains the American League pitchers who won 15 or more games during the
+    2001 baseball season:'
+  id: totrans-249
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第三种排名方法通常用于体育赛事。以下表格包含了2001棒球赛季中赢得15场或更多比赛的美国联盟投手：
+- en: '[PRE63]'
+  id: totrans-250
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: 'These pitchers can be assigned ranks using the third method as follows:'
+  id: totrans-251
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以按第三种方法对这些投手进行排名如下：
+- en: '[PRE64]'
+  id: totrans-252
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: See Also
+  id: totrans-253
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: For additional information about window functions, see [Recipe 15.15](ch15.xhtml#nch-sequences-seq-window-functions).
+  id: totrans-254
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 关于窗口函数的更多信息，请参见[Recipe 15.15](ch15.xhtml#nch-sequences-seq-window-functions)。
+- en: 17.12 Computing Team Standings
+  id: totrans-255
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 17.12 计算球队排名
+- en: Problem
+  id: totrans-256
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to compute team standings from their win-loss records, including the
+    games-behind (GB) values.
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望根据胜负记录计算球队的排名，包括落后的比赛（GB）值。
+- en: Solution
+  id: totrans-258
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Determine which team is in first place, then join that result to the original
+    rows.
+  id: totrans-259
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确定哪个队伍处于第一名，然后将该结果连接到原始行中。
+- en: Discussion
+  id: totrans-260
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Standings for sports teams that compete against each other is a ranking problem,
+    but ranks are not based on a single measure as in [Recipe 17.11](#nch-stats-stats-ranks).
+    Standings are based on two values, wins and losses. Teams are ranked according
+    to which has the best win-loss record, and teams not in first place are assigned
+    a <q>games-behind</q> value indicating how many games out of first place they
+    are. This section shows how to calculate those values. The first example uses
+    a table containing a single set of team records to illustrate the logic of the
+    calculations. The second example uses a table containing several sets of records
+    (that is, the records for all teams in both divisions of a league, for both halves
+    of the season). In this case, it’s necessary to use a join to perform the calculations
+    independently for each group of teams.
+  id: totrans-261
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 竞争对手之间的排名问题，但排名不基于单一度量，如[Recipe 17.11](#nch-stats-stats-ranks)中所述。排名基于两个值，即胜利和失败。球队根据谁有最佳的胜负记录进行排名，不在第一名的球队被分配一个“落后比赛”的值，指示他们落后第一名多少比赛。本节展示了如何计算这些值。第一个示例使用一个包含单个球队记录的表来说明计算逻辑。第二个示例使用一个包含多组记录的表（即联盟的两个分区以及赛季的两半）来说明计算逻辑。在这种情况下，需要使用连接来独立为每组球队执行计算。
+- en: 'Consider the following table, `standings1`, which contains a single set of
+    baseball team records representing the final standings for the Northern League
+    in the year 1902:'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 考虑以下表格`standings1`，其中包含了一组单一的棒球队记录，代表了1902年北方联盟的最终排名：
+- en: '[PRE65]'
+  id: totrans-263
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: 'The rows are sorted by the win-loss differential, which is how to place teams
+    in order from first place to last place. But displays of team standings typically
+    include each team’s winning percentage and a figure indicating how many games
+    behind the leader all the other teams are. So let’s add that information to the
+    output. Calculating the percentage is easy. It’s the ratio of wins to total games
+    played and can be determined using this expression:'
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 行按胜负差异排序，这是将球队按照从第一名到最后一名的顺序排列的方法。但是球队排名的显示通常包括每支球队的胜率以及一个指示其他所有球队落后领先者多少场的数字。因此，让我们在输出中添加这些信息。计算百分比很容易。它是赢得的比赛数与总比赛数的比率，可以使用以下表达式确定：
+- en: '[PRE66]'
+  id: totrans-265
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: 'This expression involves division by zero when a team has not played any games
+    yet. For simplicity, I’ll assume a nonzero number of games. To handle this condition,
+    you’d use a more general expression:'
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当一个球队还没有打过比赛时，这个表达式会涉及除以零的除法。为简单起见，我将假设至少有一个非零的比赛数。要处理这种情况，您可以使用一个更通用的表达式：
+- en: '[PRE67]'
+  id: totrans-267
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: This expression relies on the fact that no division operation is necessary unless
+    the team has won at least one game.
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这个表达式依赖于一个事实，即除非球队至少赢了一场比赛，否则不需要除法运算。
+- en: 'Determining the games-behind value is a little trickier. It’s based on the
+    relationship of the win-loss records for two teams, calculated as the average
+    of two values:'
+  id: totrans-269
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确定GB值有点棘手。它基于两支球队的胜负记录的关系，计算为两个值的平均数：
+- en: How many more wins the first-place team has than the second-place team
+  id: totrans-270
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第一名球队比第二名球队多赢多少场比赛
+- en: How many fewer losses the first-place team has than the second-place team
+  id: totrans-271
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 第一名球队比第二名球队少多少场败仗
+- en: 'Suppose that two teams A and B have the following win-loss records:'
+  id: totrans-272
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设两支球队A和B的胜负记录如下：
+- en: '[PRE68]'
+  id: totrans-273
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: 'Here, team B has to win three more games, and team A has to lose one more game
+    for the teams to be even. The average of three and one is two, thus B is two games
+    behind A. Mathematically, the games-behind calculation for the two teams is:'
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，B队必须再赢三场比赛，而A队必须再输一场比赛，才能使两支队伍平均。三和一的平均数是二，因此B队落后A队两场比赛。在数学上，计算两支球队的GB值如下：
+- en: '[PRE69]'
+  id: totrans-275
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: 'With a little rearrangement of terms, the expression becomes:'
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 稍微调整一下术语，表达式变成：
+- en: '[PRE70]'
+  id: totrans-277
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: The second expression is equivalent to the first, but it has each factor written
+    as a single team’s win-loss differential, rather than as a comparison between
+    teams. That makes it easier to work with because each factor can be determined
+    independently from a single team record. The first factor represents the first-place
+    team’s win-loss differential, so if we calculate that value first, the other team
+    GB values can be determined in relation to it.
+  id: totrans-278
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第二个表达式等同于第一个，但它将每个因素写为单个球队的胜负差异，而不是作为两支球队之间的比较。这样做更容易处理，因为可以独立确定每个因素从单一球队记录中。第一个因素代表第一名球队的胜负差异，因此如果首先计算该值，其他球队的GB值可以与之关联确定。
+- en: 'The first-place team is the one with the largest win-loss differential. To
+    find that value and save it in a variable, use this statement:'
+  id: totrans-279
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 第一名球队是胜负差异最大的球队。要找到该值并将其保存在一个变量中，请使用以下语句：
+- en: '[PRE71]'
+  id: totrans-280
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: 'Then use the differential as follows to produce team standings that include
+    winning percentage and GB values:'
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后按如下方式使用微分来生成包括胜率和GB值在内的球队排名：
+- en: '[PRE72]'
+  id: totrans-282
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: 'There are a couple minor formatting issues to address at this point. Typically,
+    standings listings display percentages to three decimal places, and the GB value
+    to one decimal place (except that the GB value for the first-place team is displayed
+    as `-`). To display *`n`* decimal places, use `TRUNCATE(`*`expr`*`,`*`n`*`).`
+    To display the GB value for the first-place team appropriately, use an `IF()`
+    expression that maps 0 to a dash:'
+  id: totrans-283
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此时需要解决几个微小的格式问题。通常，排名列表将百分比显示为三位小数，并将GB值显示为一位小数（但是第一名球队的GB值显示为`-`）。要显示*`n`*位小数，使用`TRUNCATE(`*`expr`*`,`*`n`*`)`。为了正确显示第一名球队的GB值，请使用`IF()`表达式将0映射到破折号：
+- en: '[PRE73]'
+  id: totrans-284
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: 'These statements order the teams by win-loss differential, using winning percentage
+    as a tie-breaker in case there are teams with the same differential value. It’s
+    simpler to sort by percentage, of course, but then you wouldn’t always get the
+    correct ordering. It’s a curious fact that a team with a lower winning percentage
+    can actually be higher in the standings than a team with a higher percentage.
+    (This generally occurs early in the season, when teams may have played highly
+    disparate numbers of games, relatively speaking.) Consider the case in which two
+    teams, A and B, have the following rows:'
+  id: totrans-285
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些语句按照胜负差异对团队进行排序，使用胜率作为打结者以防存在具有相同差异值的团队。当然，按百分比排序更简单，但这样做并不总能得到正确的排序。有趣的是，一个胜率较低的团队实际上可能在排名中高于一个胜率较高的团队。
+    （这通常发生在赛季初期，当团队可能已经相对不均匀地进行了大量比赛时。）考虑以下情况，即两支团队A和B，它们具有以下行：
+- en: '[PRE74]'
+  id: totrans-286
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: 'Applying the GB and percentage calculations to these team records yields the
+    following result, in which the first-place team actually has a lower winning percentage
+    than the second-place team:'
+  id: totrans-287
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 应用GB和百分比计算到这些团队记录上得到以下结果，其中第一名的团队实际上比第二名的团队拥有更低的胜率：
+- en: '[PRE75]'
+  id: totrans-288
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: 'The standings calculations shown thus far can be done without a join. They
+    involve only a single set of team records, so the first-place team’s win-loss
+    differential can be stored in a variable. A more complex situation occurs when
+    a dataset includes several sets of team records. For example, the 1997 Northern
+    League had two divisions (Eastern and Western). In addition, separate standings
+    were maintained for the first and second halves of the season because season-half
+    winners in each division played each other for the right to compete in the league
+    championship. The following table, `standings2`, shows what these rows look like,
+    ordered by season half, division, and win-loss differential:'
+  id: totrans-289
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 到目前为止展示的排名计算可以在没有join的情况下完成。它们仅涉及单一组团队记录，因此第一名团队的胜负差异可以存储在一个变量中。当数据集包含多组团队记录时，则会出现更复杂的情况。例如，1997年北部联赛有两个分区（东部和西部）。此外，因为赛季的上半部分和下半部分的赢家在每个分区内争夺联赛冠军的权利，所以单独的排名保持了分别的排名。以下表`standings2`按赛季半程、分区和胜负差异排序，展示了这些行：
+- en: '[PRE76]'
+  id: totrans-290
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: 'Generating the standings for these rows requires computing the GB values separately
+    for each of the four combinations of season half and division. First, calculate
+    the win-loss differential for the first-place team in each group and save the
+    values into a separate `firstplace` table:'
+  id: totrans-291
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为这些行生成排名需要分别为赛季的四个组合计算GB值。首先，计算每组的第一名团队的胜负差异并将其值保存到单独的`firstplace`表中：
+- en: '[PRE77]'
+  id: totrans-292
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: 'Then join the `firstplace` table to the original standings, associating each
+    team record with the proper win-loss differential to compute its GB value:'
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然后将`firstplace`表与原始排名表连接，将每个团队记录与正确的胜负差异关联起来计算其GB值：
+- en: '[PRE78]'
+  id: totrans-294
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: 'That output is difficult to read, however. To make it easier to understand,
+    you might execute the statement from within a program and reformat its results
+    to display each set of team records separately. Here’s some Perl code that does
+    that by beginning a new output group each time it encounters a new group of standings.
+    The code assumes that the join statement has just been executed and that its results
+    are available through the statement handle `$sth`:'
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 然而，那种输出很难阅读。为了使其更易理解，您可以在程序内执行语句并重新格式化其结果，以单独显示每组团队记录。以下是一些Perl代码，通过在遇到新的排名组时开始新的输出组来实现这一点。代码假设刚刚执行了join语句，并且其结果通过语句句柄`$sth`可用：
+- en: '[PRE79]'
+  id: totrans-296
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: 'The reformatted output looks like this:'
+  id: totrans-297
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重新格式化的输出如下所示：
+- en: '[PRE80]'
+  id: totrans-298
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: The code just shown comes from the *calc_standings.pl* script in the *stats*
+    directory of the `recipes` distribution. That directory also contains a PHP script,
+    *calc_standings.php*, that produces output in the form of HTML tables, which you
+    might prefer for generating standings in a web environment.
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 刚刚显示的代码来自`recipes`发行版的`stats`目录中的*calc_standings.pl*脚本。该目录还包含一个PHP脚本*calc_standings.php*，以HTML表格的形式生成输出，您可能更喜欢在Web环境中生成排名。
+- en: ^([1](ch17.xhtml#idm45820338373088-marker)) The definition of median given here
+    isn’t fully general; it doesn’t address what to do if the middle values in the
+    dataset are duplicated.
+  id: totrans-300
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([1](ch17.xhtml#idm45820338373088-marker)) 此处给出的中位数定义并不完全通用；它没有解决数据集中中间值重复的情况。
+- en: ^([2](ch17.xhtml#idm45820337870752-marker)) To see where these terms come from,
+    consult any standard statistics text.
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: ^([2](ch17.xhtml#idm45820337870752-marker)) 要了解这些术语的来源，请参阅任何一本标准统计学教材。

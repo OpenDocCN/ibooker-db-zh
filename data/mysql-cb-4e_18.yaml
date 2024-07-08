@@ -1,0 +1,1159 @@
+- en: Chapter 18\. Handling Duplicates
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第18章 处理重复行
+- en: 18.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 18.0 Introduction
+- en: 'Tables or result sets sometimes contain duplicate rows. In some cases this
+    is acceptable. For example, if you conduct a web poll that records date and client
+    IP number along with the votes, duplicate rows may be permitted because it’s possible
+    for large numbers of votes to appear to originate from the same IP number for
+    an Internet service that routes traffic from its customers through a single proxy
+    host. In other cases, duplicates are unacceptable, and you’ll want to take steps
+    to avoid them. Operations involved in handling duplicate rows include the following:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表格或结果集有时会包含重复行。在某些情况下这是可以接受的。例如，如果你进行了记录日期、客户IP地址以及投票结果的网络民意调查，重复行可能是允许的，因为大量的投票可能看起来来自同一个IP地址，这是因为某些互联网服务通过单一代理主机路由客户流量。在其他情况下，重复行是不可接受的，你会想要采取措施来避免它们。处理重复行涉及以下操作：
+- en: Preventing duplicates from being created in the first place. If each row in
+    a table is intended to represent a single entity (such as a person, an item in
+    a catalog, or a specific observation in an experiment), the occurrence of duplicates
+    makes it impossible to refer to each row unambiguously, so it’s best to make sure
+    duplicates never occur.
+  id: totrans-3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 首先防止创建重复行。如果表中的每一行都代表一个单一实体（例如一个人、目录中的一个项目或实验中的特定观察），重复的发生会使得无法明确地引用每一行，因此最好确保永远不会发生重复。
+- en: Counting the number of duplicates to determine whether they are present and
+    to what extent.
+  id: totrans-4
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 计算重复行的数量，以确定它们的存在程度。
+- en: Identifying duplicated values (or the rows containing them) so you can see where
+    they occur.
+  id: totrans-5
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 识别重复值（或包含它们的行），以便看到它们出现的位置。
+- en: Eliminating duplicates to ensure that each row is unique. This may involve removing
+    rows from a table to leave only unique rows or selecting a result set in such
+    a way that no duplicates appear in the output. For example, to display a list
+    of the states in which you have customers, you probably don’t want a long list
+    of state names from all customer records. A list showing each state name only
+    once suffices and is easier to understand.
+  id: totrans-6
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 消除重复行以确保每一行都是唯一的。这可能包括从表中删除行，只留下唯一的行，或者选择一个结果集以使输出中不出现重复。例如，要显示你的客户所在的各州列表，你可能不希望看到来自所有客户记录的长长的州名称列表。只显示每个州名称一次就足够了，而且更容易理解。
+- en: 'Several tools are at your disposal for dealing with duplicate rows. Choose
+    them according to the objective that you want to achieve:'
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有多种工具可供处理重复行。根据你想要实现的目标选择这些工具：
+- en: When you create a table, include a primary key or unique index to prevent duplicates
+    from being added to the table. MySQL uses the index as a constraint to enforce
+    the requirement that each row in the table contains a unique key in the indexed
+    column or columns.
+  id: totrans-8
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 创建表时，包括主键或唯一索引，以防止重复行添加到表中。MySQL使用索引作为约束来强制要求表中的每一行在索引列或列组中包含唯一键。
+- en: In conjunction with a unique index, the `INSERT` `IGNORE` and `REPLACE` statements
+    enable you to handle insertion of duplicate rows gracefully without generating
+    errors. For bulk-loading operations, the same options are available in the form
+    of the `IGNORE` or `REPLACE` modifiers for the `LOAD` `DATA` statement.
+  id: totrans-9
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 与唯一索引结合使用，`INSERT IGNORE`和`REPLACE`语句使您能够优雅地处理重复行的插入，而不会产生错误。对于批量加载操作，可以使用`LOAD
+    DATA`语句的`IGNORE`或`REPLACE`修饰符来实现相同的选项。
+- en: To determine whether a table contains duplicates, use `GROUP` `BY` to categorize
+    rows into groups, and `COUNT()` to see how many rows are in each group. [Chapter 10](ch10.xhtml#nch-sum)
+    describes these techniques in the context of producing summaries, but they’re
+    useful for duplicate counting and identification as well. A counting summary groups
+    values into categories to determine how frequently each one occurs.
+  id: totrans-10
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要确定表是否包含重复值，可以使用`GROUP BY`将行分组，并使用`COUNT()`查看每个组中有多少行。[第10章](ch10.xhtml#nch-sum)在生成摘要的上下文中描述了这些技术，但它们也适用于重复计数和识别。计数摘要将值分组为类别，以确定每个值出现的频率。
+- en: '`SELECT` `DISTINCT` removes duplicate rows from a result set (see [Recipe 5.4](ch05.xhtml#nch-select-select-nodup)
+    for more information). For an existing table that already contains duplicates,
+    you can select unique rows into a second table and use it to replace the original
+    table. Or, if you determine that there are *`n`* identical rows in a table, you
+    can use `DELETE` … `LIMIT` to eliminate *`n`*–1 instances from that specific set
+    of rows.'
+  id: totrans-11
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`SELECT` `DISTINCT`从结果集中删除重复行（参见[Recipe 5.4](ch05.xhtml#nch-select-select-nodup)获取更多信息）。对于已包含重复项的现有表，您可以选择唯一行到第二个表并用其替换原始表。或者，如果确定表中有*`n`*个相同行，可以使用`DELETE`
+    … `LIMIT`从该特定行集中消除*`n`*–1个实例。'
+- en: Scripts related to the examples shown in this chapter are located in the *dups*
+    directory of the `recipes` distribution. For scripts that create the tables used
+    here, look in the *tables* directory.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章节展示的示例相关脚本位于`recipes`发行版的*dups*目录中。要查找创建这里使用的表的脚本，请查看*tables*目录。
+- en: 18.1 Preventing Duplicates from Occurring in a Table
+  id: totrans-13
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 18.1 在表中防止重复项的出现
+- en: Problem
+  id: totrans-14
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to prevent a table from ever containing duplicates.
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望防止表中永远包含重复项。
+- en: Solution
+  id: totrans-16
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a `PRIMARY` `KEY` or a `UNIQUE` index.
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`PRIMARY` `KEY`或`UNIQUE`索引。
+- en: Discussion
+  id: totrans-18
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'To ensure that rows in a table are unique, some column or combination of columns
+    must be required to contain unique values in each row. When this requirement is
+    satisfied, you can refer to any row in the table unambiguously by using its unique
+    identifier. To make sure a table has this characteristic, include a `PRIMARY`
+    `KEY` or `UNIQUE` index in the table structure. The following table contains no
+    such index, so it permits duplicate rows:'
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确保表中的行是唯一的，某些列或列组合必须要求每行包含唯一值。当满足此要求时，可以使用其唯一标识符明确引用表中的任何行。为确保表具有此特性，请在表结构中包含`PRIMARY`
+    `KEY`或`UNIQUE`索引。以下表格不包含此类索引，因此允许重复行：
+- en: '[PRE0]'
+  id: totrans-20
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: 'To prevent multiple rows with the same first and last name values from being
+    created in this table, add a `PRIMARY` `KEY` to its definition. When you do this,
+    the indexed columns must be `NOT` `NULL`, because a `PRIMARY` `KEY` prohibits
+    `NULL` values:'
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要防止在此表中创建具有相同名字和姓氏值的多行，请在其定义中添加`PRIMARY` `KEY`。在执行此操作时，索引列必须为`NOT` `NULL`，因为`PRIMARY`
+    `KEY`不允许`NULL`值：
+- en: '[PRE1]'
+  id: totrans-22
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: The presence of a unique index in a table normally causes an error to occur
+    if you insert a row into the table that duplicates an existing row in the column
+    or columns that define the index. [Recipe 18.3](#nch-dups-dups-errors) discusses
+    how to handle such errors or modify MySQL’s duplicate-handling behavior.
+  id: totrans-23
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表中的唯一索引存在时，如果向表中插入与定义索引的列中的现有行重复的行，则通常会导致错误。[Recipe 18.3](#nch-dups-dups-errors)讨论如何处理此类错误或修改MySQL的重复处理行为。
+- en: 'Another way to enforce uniqueness is to add a `UNIQUE` index rather than a
+    `PRIMARY` `KEY` to a table. The two types of indexes are similar, but a `UNIQUE`
+    index can be created on columns that permit `NULL` values. For the `person` table,
+    it’s likely that you’d require both the first and last names to be filled in.
+    If so, you still declare the columns as `NOT` `NULL`, and the following table
+    definition is effectively equivalent to the preceding one:'
+  id: totrans-24
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 强制实现唯一性的另一种方法是向表中添加`UNIQUE`索引而不是`PRIMARY` `KEY`。这两种索引类型类似，但可以在允许`NULL`值的列上创建`UNIQUE`索引。对于`person`表，可能需要填写名字和姓氏。如果是这样，仍然将列声明为`NOT`
+    `NULL`，并且以下表定义与前面的表定义实际上是等效的：
+- en: '[PRE2]'
+  id: totrans-25
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: If a `UNIQUE` index does happen to permit `NULL` values, `NULL` is special because
+    it is the one value that can occur multiple times. The rationale for this is that
+    it is not possible to know whether one unknown value is the same as another, so
+    multiple unknown values are permitted.
+  id: totrans-26
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果`UNIQUE`索引确实允许`NULL`值，那么`NULL`是特殊的，因为它是唯一可能多次出现的值。其理由在于无法确定一个未知值是否与另一个相同，因此允许多个未知值。
+- en: 'Of course, you might want the `person` table to reflect the real world, in
+    which people do sometimes have the same name. In this case, you cannot set up
+    a unique index based on the name columns, because duplicate names must be permitted.
+    Instead, each person must be assigned some sort of unique identifier, which becomes
+    the value that distinguishes one row from another. In MySQL, it’s common to accomplish
+    this by using an `AUTO_INCREMENT` column:'
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当然，您可能希望 `person` 表反映现实世界，其中人们有时确实会有相同的姓名。在这种情况下，您不能基于姓名列设置唯一索引，因为必须允许重复的姓名。相反，每个人必须被分配某种唯一标识符，这成为区分一行与另一行的值。在
+    MySQL 中，通常通过使用 `AUTO_INCREMENT` 列来实现这一点：
+- en: '[PRE3]'
+  id: totrans-28
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: 'In this case, when you create a row with an `id` value of `NULL`, MySQL assigns
+    that column a unique ID automatically. Another possibility is to assign identifiers
+    externally and use those IDs as unique keys. For example, citizens in a given
+    country might have unique taxpayer ID numbers. If so, those numbers can serve
+    as the basis for a unique index:'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这种情况下，如果使用 `NULL` 值的 `id` 创建行，则 MySQL 会自动分配该列的唯一 ID。另一种可能性是外部分配标识符并将这些 ID 用作唯一键。例如，特定国家的公民可能具有唯一的纳税人身份证号码。如果是这样，这些号码可以作为唯一索引的基础：
+- en: '[PRE4]'
+  id: totrans-30
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: See Also
+  id: totrans-31
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: If an existing table already contains duplicate rows that you want to remove,
+    see [Recipe 18.5](#nch-dups-dups-elim-table). [Chapter 15](ch15.xhtml#nch-sequences)
+    further discusses `AUTO_INCREMENT` columns.
+  id: totrans-32
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果现有表已包含您希望删除的重复行，请参见 [Recipe 18.5](#nch-dups-dups-elim-table)。[第 15 章](ch15.xhtml#nch-sequences)
+    进一步讨论了 `AUTO_INCREMENT` 列。
+- en: 18.2 Having More than One Unique Key in the Table
+  id: totrans-33
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 18.2 在表中拥有多个唯一键
+- en: Problem
+  id: totrans-34
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You need two or more column sets in the table to have unique values.
+  id: totrans-35
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要在表中具有两个或更多列集合，这些列集合需要具有唯一值。
+- en: Solution
+  id: totrans-36
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Define as many unique keys as needed.
+  id: totrans-37
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 定义所需的多个唯一键。
+- en: Discussion
+  id: totrans-38
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: It maybe possible that two or more column combinations that need to have unique
+    values independently from each other. For example, table `person` from the last
+    example in the [Recipe 18.1](#nch-dups-dups-prevent), has a column `tax_id` representing
+    a taxpayer ID, thus needs to store unique values. Still you may want to keep unique
+    index on `(last_name, first_name)`. This way you can be sure that each person
+    has its own taxpayer ID and any taxpayer ID belongs to the only one person.
+  id: totrans-39
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可能存在两个或多个需要独立具有唯一值的列组合。例如，在 [Recipe 18.1](#nch-dups-dups-prevent) 中的最后一个示例中的
+    `person` 表具有代表纳税人 ID 的 `tax_id` 列，因此需要存储唯一值。仍然可能希望在 `(last_name, first_name)`
+    上保持唯一索引。这样，您可以确保每个人都有自己的纳税人 ID，而任何纳税人 ID 都属于唯一的人。
+- en: Any table can have at most one primary key. Therefore you need to choose which
+    key will be primary and which will be secondary unique key. As we describe in
+    [Recipe 21.2](ch21.xhtml#nch-queryperf-queryperf-create-index-innodbpk) primary
+    keys for InnoDB storage engine are included into all secondary indexes and it
+    is critical for performance to define them using the smallest data type possible.
+    Therefore it is straightforward to define primary key for the `tax_id` column
+    and a key on `(last_name, first_name)` as a secondary unique index.
+  id: totrans-40
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 任何表最多只能有一个主键。因此，您需要选择哪个键将成为主键，哪个键将成为次要的唯一键。正如我们在 [Recipe 21.2](ch21.xhtml#nch-queryperf-queryperf-create-index-innodbpk)
+    中描述的那样，对于 InnoDB 存储引擎，主键包含在所有次要索引中，使用尽可能小的数据类型来定义它们对性能至关重要。因此，可以直接为 `tax_id` 列定义主键，以及在
+    `(last_name, first_name)` 上定义一个次要的唯一索引。
+- en: 'The resulting table definition will look like this:'
+  id: totrans-41
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 结果表定义如下所示：
+- en: '[PRE5]'
+  id: totrans-42
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: 18.3 Dealing with Duplicates When Loading Rows into a Table
+  id: totrans-43
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 18.3 在将行加载到表中时处理重复项
+- en: Problem
+  id: totrans-44
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You’ve created a table with a unique index to prevent duplicate values in the
+    indexed column or columns. But this results in an error if you attempt to insert
+    a duplicate row, and you want to avoid having to deal with such errors.
+  id: totrans-45
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您已创建了一个带有唯一索引的表，以防止索引列或列中的重复值。但是，如果尝试插入重复行，则会出现错误，您希望避免处理此类错误。
+- en: Solution
+  id: totrans-46
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: One approach is to just ignore the error. Another is to use an `INSERT` `IGNORE`,
+    `REPLACE`, or `INSERT` … `ON` `DUPLICATE` `KEY` `UPDATE` statement, each of which
+    modifies MySQL’s duplicate-handling behavior. For bulk-loading operations, `LOAD`
+    `DATA` has modifiers that enable you to specify how to handle duplicates.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一种方法是简单地忽略错误。另一种方法是使用 `INSERT IGNORE`、`REPLACE` 或 `INSERT ... ON DUPLICATE KEY
+    UPDATE` 语句，每种方法都会修改 MySQL 的重复处理行为。对于批量加载操作，`LOAD DATA` 有修饰符，允许您指定如何处理重复项。
+- en: Discussion
+  id: totrans-48
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'By default, MySQL generates an error when you insert a row that duplicates
+    an existing unique key value. Suppose that the `person` table has the following
+    structure, with a unique index on the `last_name` and `first_name` columns:'
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下，当插入重复现有唯一键值的行时，MySQL会生成错误。假设`person`表具有以下结构，并在`last_name`和`first_name`列上有唯一索引：
+- en: '[PRE6]'
+  id: totrans-50
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 'An attempt to insert a row with duplicate values in the indexed columns results
+    in an error:'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尝试在索引列中插入具有重复值的行会导致错误：
+- en: '[PRE7]'
+  id: totrans-52
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: If you issue the statements from the *mysql* program interactively, you can
+    simply say, <q>Okay, that didn’t work,</q> ignore the error, and continue. But
+    if you write a program to insert the rows, an error may terminate the program.
+    One way to avoid this is to modify the program’s error-handling behavior to trap
+    the error and then ignore it. See [Recipe 4.2](ch04.xhtml#nch-api-api-error) for
+    information about error-handling techniques.
+  id: totrans-53
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您在*mysql*程序中交互地发出这些语句，您可以简单地说：<q>好吧，那不起作用，</q>忽略错误，然后继续。但如果你编写一个程序来插入行，错误可能会终止程序。避免这种情况的一种方法是修改程序的错误处理行为以捕获错误，然后忽略它。参见[Recipe
+    4.2](ch04.xhtml#nch-api-api-error)获取有关错误处理技术的信息。
+- en: 'To prevent the error from occurring in the first place, you might consider
+    using a two-query method to solve the duplicate-row problem:'
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要在第一次就防止错误发生，可以考虑使用两个查询方法来解决重复行问题：
+- en: Issue a `SELECT` to check whether the row is already present.
+  id: totrans-55
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 发出`SELECT`以检查行是否已存在。
+- en: Issue an `INSERT` if the row is not present.
+  id: totrans-56
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果行不存在，则发出`INSERT`。
+- en: 'But that doesn’t really work: another client might insert the same row after
+    the `SELECT` and before the `INSERT`, in which case the error would still occur
+    for your `INSERT`. To make sure that doesn’t happen, you could use a transaction
+    or lock the tables, but then you’ve gone from two statements to four. MySQL provides
+    three single-query solutions to the problem of handling duplicate rows. Choose
+    from among them depending on the duplicate-handling behavior you want:'
+  id: totrans-57
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但这并不起作用：另一个客户可能会在`SELECT`和`INSERT`之间插入相同的行，这样你的`INSERT`仍然会出错。为了确保这种情况不会发生，你可以使用事务或锁定表，但这样一来，你的两个语句就变成了四个。MySQL提供了处理重复行问题的三种单查询解决方案。根据你想要的重复处理行为，从中选择一种：
+- en: 'To keep the original row when a duplicate occurs, use `INSERT` `IGNORE` rather
+    than `INSERT`. If the row duplicates no existing row, MySQL inserts it as usual.
+    If the row is a duplicate, the `IGNORE` keyword tells MySQL to discard it silently
+    without generating an error:'
+  id: totrans-58
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 若要在重复出现时保留原始行，请使用`INSERT` `IGNORE`而不是`INSERT`。如果行不重复现有行，则MySQL会像往常一样插入它。如果行是重复的，则`IGNORE`关键字告诉MySQL静默丢弃它，而不生成错误：
+- en: '[PRE8]'
+  id: totrans-59
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: The row count value indicates whether the row was inserted or ignored. From
+    within a program, you can obtain this value by checking the rows-affected function
+    provided by your API (see [Recipe 4.4](ch04.xhtml#nch-api-api-statement) and [Recipe
+    12.1](ch12.xhtml#nch-meta-meta-rows)).
+  id: totrans-60
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 行计数值指示是否插入或忽略了行。从程序内部，您可以通过检查API提供的影响行数函数来获取此值（参见[Recipe 4.4](ch04.xhtml#nch-api-api-statement)和[Recipe
+    12.1](ch12.xhtml#nch-meta-meta-rows)）。
+- en: 'To replace the original row with the new one when a duplicate occurs, use `REPLACE`
+    rather than `INSERT`. If the row is new, it’s inserted just as with `INSERT`.
+    If it’s a duplicate, the new row replaces the old one:'
+  id: totrans-61
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 若要在重复出现时用新行替换原始行，请使用`REPLACE`而不是`INSERT`。如果行是新的，则像`INSERT`一样插入它。如果是重复的，则新行将替换旧行：
+- en: '[PRE9]'
+  id: totrans-62
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: The rows-affected value in the second case is 2 because the original row is
+    deleted and the new row is inserted in its place.
+  id: totrans-63
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在第二种情况下，受影响的行数为2，因为原始行被删除，新行插入到其位置。
+- en: 'To modify columns of an existing row when a duplicate occurs, use `INSERT`
+    … `ON` `DUPLICATE` `KEY` `UPDATE`. If the row is new, it’s inserted. If it’s a
+    duplicate, the `ON` `DUPLICATE` `KEY` `UPDATE` clause indicates how to modify
+    the existing row in the table. In other words, this statement can insert or update
+    a row as necessary. The rows-affected count indicates what happened: 1 for an
+    insert, 2 for an update.'
+  id: totrans-64
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要在重复出现时修改现有行的列，请使用`INSERT`…`ON` `DUPLICATE` `KEY` `UPDATE`。如果行是新的，则插入它。如果是重复的，则`ON`
+    `DUPLICATE` `KEY` `UPDATE`子句指示如何在表中修改现有行。换句话说，此语句可以根据需要插入或更新行。受影响的行数指示发生了什么：插入为1，更新为2。
+- en: '`INSERT` `IGNORE` is more efficient than `REPLACE` because it doesn’t actually
+    insert duplicates. Thus, it’s most applicable when you just want to make sure
+    a copy of a given row is present in a table. `REPLACE`, on the other hand, is
+    often more appropriate for tables in which other nonkey columns need to be replaced.
+    `INSERT` … `ON` `DUPLICATE` `KEY` `UPDATE` is appropriate when you must insert
+    a record if it doesn’t exist, but just update some of its columns if the new record
+    is a duplicate in the indexed columns.'
+  id: totrans-65
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INSERT` `IGNORE`比`REPLACE`更高效，因为它实际上不会插入重复项。因此，在您只想确保表中存在给定行的副本时，它最为适用。另一方面，`REPLACE`通常更适用于需要替换其他非关键列的表。`INSERT`
+    … `ON` `DUPLICATE` `KEY` `UPDATE`在必须在记录不存在时插入记录，但如果新记录在索引列中是重复的，则仅更新其中一些列时非常适用。'
+- en: 'Suppose that you maintain a table named `passtbl` for a web application that
+    contains email addresses and password hash values, and that is indexed by email
+    address:'
+  id: totrans-66
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您为包含电子邮件地址和密码哈希值的Web应用程序维护名为`passtbl`的表，并且该表由电子邮件地址索引：
+- en: '[PRE10]'
+  id: totrans-67
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: 'How do you create new rows for new users, but change passwords of existing
+    rows for existing users? Here’s a typical algorithm for handling row maintenance:'
+  id: totrans-68
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如何为新用户创建新行，但为现有用户更改现有行的密码？以下是处理行维护的典型算法：
+- en: Issue a `SELECT` to check whether a row already exists with a given `email`
+    value.
+  id: totrans-69
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 发出`SELECT`以检查是否已存在具有给定`email`值的行。
+- en: If no such row exists, add a new one with `INSERT`.
+  id: totrans-70
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果不存在这样的行，请使用`INSERT`添加新行。
+- en: If the row does exist, update it with `UPDATE`.
+  id: totrans-71
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 如果行存在，则使用`UPDATE`更新它。
+- en: 'These steps must be performed within a transaction or with the tables locked
+    to prevent other users from changing the tables while you’re using them. In MySQL,
+    you can use `REPLACE` to simplify both cases to the same single-statement operation:'
+  id: totrans-72
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 必须在事务内执行这些步骤或锁定表，以防其他用户在您使用表时更改表。在MySQL中，您可以使用`REPLACE`来简化这两种情况为同一个单语句操作：
+- en: '[PRE11]'
+  id: totrans-73
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: If no row with the given email address exists, MySQL creates a new one. Otherwise,
+    MySQL replaces it, in effect updating the `password` column of the row associated
+    with the address.
+  id: totrans-74
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果不存在具有给定电子邮件地址的行，则MySQL创建一个新行。否则，MySQL替换它，实际上更新与该地址相关的行的`password`列。
+- en: '`INSERT` `IGNORE` and `REPLACE` are useful when you know exactly what values
+    should be stored in the table when you attempt to insert a row. That’s not always
+    the case. For example, you might want to insert a row if it doesn’t exist, but
+    update only certain parts of it otherwise. This commonly occurs when you use a
+    table for counting. Suppose that you record votes for candidates in polls, using
+    the following table:'
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`INSERT` `IGNORE`和`REPLACE`在您尝试插入行时知道确切的值应存储在表中时很有用。情况并非总是如此。例如，您可能希望仅在行不存在时插入一行，否则仅更新其中的某些部分。这在您使用表进行计数时经常发生。假设您在选举中记录候选人的投票，使用以下表格：'
+- en: '[PRE12]'
+  id: totrans-76
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'The primary key is the combination of poll and candidate number. The table
+    should be used like this:'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 主键是投票和候选人编号的组合。应该像这样使用表：
+- en: For the first vote received for a given poll candidate, insert a new row with
+    a vote count of 1.
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于给定投票候选人的第一次投票收到，插入一个新行，投票计数为1。
+- en: For subsequent votes for that candidate, increment the vote count of the existing
+    record.
+  id: totrans-79
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于该候选人的后续投票，增加现有记录的投票计数。
+- en: 'Neither `INSERT` `IGNORE` nor `REPLACE` are appropriate here because for all
+    votes except the first, you don’t know what the vote count should be. `INSERT`
+    … `ON` `DUPLICATE` `KEY` `UPDATE` works better here. The following example shows
+    how it works, beginning with an empty table:'
+  id: totrans-80
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里既不适用`INSERT` `IGNORE`也不适用`REPLACE`，因为除第一次投票外，您不知道投票计数应该是多少。在这种情况下，`INSERT`
+    … `ON` `DUPLICATE` `KEY` `UPDATE`更为合适。以下示例显示了它的工作原理，从空表开始：
+- en: '[PRE13]'
+  id: totrans-81
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: '[PRE14]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: 'For the first `INSERT`, no row for the candidate exists, so the row is inserted.
+    For the second `INSERT`, the row exists, so MySQL just updates the vote count.
+    With `INSERT` … `ON` `DUPLICATE` `KEY` `UPDATE`, you need not check whether the
+    row exists; MySQL does it for you. The row count indicates what action the `INSERT`
+    statement performs: 1 for a new row and 2 for an update to an existing row.'
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于第一个`INSERT`，不存在候选人的行，因此插入该行。对于第二个`INSERT`，行存在，因此MySQL只更新投票计数。使用`INSERT` …
+    `ON` `DUPLICATE` `KEY` `UPDATE`，您无需检查行是否存在；MySQL会为您执行。行计数指示`INSERT`语句执行的操作：对于新行为1，对于现有行的更新为2。
+- en: The techniques just described have the benefit of eliminating overhead that
+    might otherwise be required for a transaction. But this benefit comes at the price
+    of portability because they all involve MySQL-specific syntax. If portability
+    is a high priority, you might prefer to use a transactional approach as we discuss
+    in [Chapter 20](ch20.xhtml#nch-xact).
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 刚才描述的技术的好处是减少可能需要的事务开销。但是，这种好处是以可移植性为代价的，因为它们都涉及特定于 MySQL 的语法。如果可移植性是高优先级的话，您可能更喜欢使用我们在
+    [第 20 章](ch20.xhtml#nch-xact) 中讨论的事务性方法。
+- en: See Also
+  id: totrans-85
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 参见
+- en: For bulk record-loading operations in which you use the `LOAD` `DATA` statement
+    to load a set of rows from a file into a table, control duplicate-row handling
+    using the statement’s `IGNORE` and `REPLACE` modifiers. These produce behavior
+    analogous to that of the `INSERT` `IGNORE` and `REPLACE` statements. For more
+    information, see [Recipe 13.1](ch13.xhtml#nch-xfer-xfer-load-data).
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于使用 `LOAD` `DATA` 语句从文件加载一组行到表中进行批量记录加载操作，请使用该语句的 `IGNORE` 和 `REPLACE` 修饰符来控制重复行处理。这些修饰符的行为类似于
+    `INSERT` `IGNORE` 和 `REPLACE` 语句。有关更多信息，请参阅 [Recipe 13.1](ch13.xhtml#nch-xfer-xfer-load-data)。
+- en: '[Recipe 15.12](ch15.xhtml#nch-sequences-seq-counter) further demonstrates the
+    use of `INSERT` … `ON` `DUPLICATE` `KEY` `UPDATE` for initializing and updating
+    counts.'
+  id: totrans-87
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[Recipe 15.12](ch15.xhtml#nch-sequences-seq-counter) 进一步展示了使用 `INSERT` … `ON`
+    `DUPLICATE` `KEY` `UPDATE` 来初始化和更新计数的方法。'
+- en: 18.4 Counting and Identifying Duplicates
+  id: totrans-88
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 18.4 计数和识别重复项
+- en: Problem
+  id: totrans-89
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to determine whether a table contains duplicates, and to what extent
+    they occur. Or you want to see the rows that contain the duplicated values.
+  id: totrans-90
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想确定表中是否存在重复项，以及它们的程度。或者您想查看包含重复值的行。
+- en: Solution
+  id: totrans-91
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a counting summary that displays duplicated values. To see the rows in which
+    the duplicated values occur, join the summary to the original table to display
+    the matching rows.
+  id: totrans-92
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用显示重复值的计数摘要。要查看包含重复值的行，请将摘要与原始表连接，以显示匹配的行。
+- en: Discussion
+  id: totrans-93
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Suppose that your website has a sign-up page that enables visitors to add themselves
+    to your mailing list to receive periodic product catalog mailings. But you forgot
+    to include a unique index in the table when you created it, and now you suspect
+    that some people are signed up multiple times. Perhaps they forgot they were already
+    on the list, or perhaps people added friends to the list who were already signed
+    up. Either way, the result of having duplicate rows is that you mail out duplicate
+    catalogs. This is an additional expense to you, and it annoys the recipients.
+    This section discusses how to determine whether there are duplicate rows in a
+    table, how prevalent they are, and how to display them. (For tables that do contain
+    duplicates, [Recipe 18.5](#nch-dups-dups-elim-table) describes how to eliminate
+    them.)
+  id: totrans-94
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您的网站有一个注册页面，访客可以在该页面上将自己添加到邮寄产品目录的邮件列表中。但是，当您创建表时，忘记在表中包含唯一索引，现在您怀疑有些人多次注册。也许他们忘记了已经在列表上，或者可能有人添加了已经在列表上的朋友。无论如何，重复行的结果是您会重复邮寄目录。这对您来说是额外的开支，也会令收件人感到烦恼。本节讨论如何确定表中是否存在重复行，它们的普遍程度以及如何显示它们。（对于包含重复项的表，[Recipe
+    18.5](#nch-dups-dups-elim-table) 描述了如何消除它们。）
+- en: 'To determine whether duplicates occur in a table, use a counting summary (a
+    topic covered in [Chapter 10](ch10.xhtml#nch-sum)). Summary techniques can be
+    applied to identifying and counting duplicates by grouping rows with `GROUP` `BY`
+    and counting the rows in each group using `COUNT()`. For the examples here, assume
+    that catalog recipients are listed in a table named `catalog_list` that has the
+    following contents:'
+  id: totrans-95
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定表中是否存在重复项，请使用计数摘要（在 [第 10 章](ch10.xhtml#nch-sum) 中讨论）。摘要技术可应用于通过 `GROUP`
+    `BY` 对行进行分组并使用 `COUNT()` 计数每个组中的行来识别和计数重复项。在这里的示例中，假设收件人目录在名为 `catalog_list` 的表中列出，其内容如下：
+- en: '[PRE15]'
+  id: totrans-96
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'Suppose that you define <q>duplicate</q> using the `last_name` and `first_name`
+    columns. That is, recipients with the same name are assumed to be the same person.
+    The following statements characterize the table and assess the existence and extent
+    of duplicate values:'
+  id: totrans-97
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设您使用 `last_name` 和 `first_name` 列来定义 <q>重复</q>。也就是说，拥有相同姓名的收件人被视为同一人。以下语句描述了表格并评估了重复值的存在和程度：
+- en: 'The total number of rows in the table:'
+  id: totrans-98
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 表中的总行数：
+- en: '[PRE16]'
+  id: totrans-99
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'The number of distinct names:'
+  id: totrans-100
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 不同名称的数量：
+- en: '[PRE17]'
+  id: totrans-101
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: 'The number of rows containing duplicated names:'
+  id: totrans-102
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 含有重复名称的行数：
+- en: '[PRE18]'
+  id: totrans-103
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: 'The fraction of the rows that contain unique or nonunique names:'
+  id: totrans-104
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 包含唯一或非唯一名称的行的比例：
+- en: '[PRE19]'
+  id: totrans-105
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: 'Those statements help you characterize the extent of duplicates, but they don’t
+    show you which values are duplicated. To see the duplicated names in the `catalog_list`
+    table, use a summary statement that displays the nonunique values along with the
+    counts:'
+  id: totrans-106
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些语句帮助您描述重复项的范围，但不显示重复的值。要查看`catalog_list`表中重复的名称，请使用显示非唯一值以及计数的汇总语句：
+- en: '[PRE20]'
+  id: totrans-107
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'The statement includes a `HAVING` clause that restricts the output to include
+    only those names that occur more than once. In general, to identify sets of values
+    that are duplicated, do the following:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 语句包含一个`HAVING`子句，该子句限制输出仅包括出现多次的名称。通常，要识别重复的值集，请执行以下操作：
+- en: Determine which columns contain the values that may be duplicated.
+  id: totrans-109
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 确定包含可能重复值的列。
+- en: List those columns in the column selection list, along with `COUNT(*)`.
+  id: totrans-110
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在列选择列表中列出这些列，并包括`COUNT(*)`。
+- en: List the columns in the `GROUP` `BY` clause as well.
+  id: totrans-111
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 在`GROUP` `BY`子句中列出列。
+- en: Add a `HAVING` clause that eliminates unique values by requiring group counts
+    to be greater than one.
+  id: totrans-112
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 添加一个`HAVING`子句，通过要求组计数大于一来消除唯一值。
+- en: 'Queries constructed that way have the following form:'
+  id: totrans-113
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以以下形式构建的查询：
+- en: '[PRE21]'
+  id: totrans-114
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: 'It’s easy to generate duplicate-finding queries like that within a program,
+    given database and table names and a nonempty set of column names. For example,
+    here is a Perl function `make_dup_count_query()` that generates the proper query
+    for finding and counting duplicated values in the specified columns:'
+  id: totrans-115
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在程序内很容易生成此类查找重复项的查询，只需提供数据库和表名以及非空列名集。例如，下面是一个Perl函数`make_dup_count_query()`，用于生成查找和计算指定列中重复值的正确查询：
+- en: '[PRE22]'
+  id: totrans-116
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: '`make_dup_count_query()` returns the query as a string. If you invoke it like
+    this:'
+  id: totrans-117
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`make_dup_count_query()`将查询作为字符串返回。如果像这样调用它：'
+- en: '[PRE23]'
+  id: totrans-118
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: 'the resulting value of `$str` is:'
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`$str`的结果是：'
+- en: '[PRE24]'
+  id: totrans-120
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: What you do with the query string is up to you. You can execute it from within
+    the script that creates it, pass it to another program, or write it to a file
+    for execution later. The *dups* directory of the `recipes` distribution contains
+    a script named *dup_count.pl* that you can use to try the function (as well as
+    some translations into other languages). [Recipe 18.5](#nch-dups-dups-elim-table)
+    discusses use of `make_dup_count_query()` to implement a duplicate-removal technique.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对查询字符串的处理方式取决于您。您可以在创建它的脚本中执行它，将它传递给另一个程序，或者将其写入文件以供稍后执行。`recipes`分发的*dups*目录包含一个名为*dup_count.pl*的脚本，您可以使用它来尝试该函数（以及其他语言的翻译）。[Recipe
+    18.5](#nch-dups-dups-elim-table)讨论了使用`make_dup_count_query()`来实现重复删除技术。
+- en: 'Summary techniques are useful for assessing the existence of duplicates, how
+    often they occur, and displaying which values are duplicated. But if duplicates
+    are determined using only a subset of a table’s columns, a summary in itself cannot
+    display the entire content of the rows that contain the duplicate values. (For
+    example, the summaries shown thus far display counts of duplicated names in the
+    `catalog_list` table or the names themselves, but don’t show the addresses associated
+    with those names.) To see the original rows containing the duplicate names, join
+    the summary information to the table from which it’s generated. The following
+    example shows how to do this to display the `catalog_list` rows that contain duplicated
+    names. The summary is written to a temporary table, which then is joined to the
+    `catalog_list` table to produce the rows that match those names:'
+  id: totrans-122
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 摘要技术对于评估重复项的存在性、频率以及显示哪些值重复是有用的。但是，如果仅使用表的一部分列确定重复项，则汇总本身无法显示包含重复值的行的整个内容。（例如，迄今显示的摘要仅显示了`catalog_list`表中重复名称的计数或名称本身，但没有显示与这些名称相关联的地址。）要查看包含重复名称的原始行，请将汇总信息与生成它的表进行连接。以下示例显示如何执行此操作以显示包含重复名称的`catalog_list`行。摘要写入临时表，然后与`catalog_list`表连接以生成与这些名称匹配的行：
+- en: '[PRE25]'
+  id: totrans-123
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: 18.5 Eliminating Duplicates from a Table
+  id: totrans-124
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 18.5 从表中消除重复项
+- en: Problem
+  id: totrans-125
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to remove duplicate rows from a table, leaving only unique rows.
+  id: totrans-126
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望从表中删除重复行，仅保留唯一行。
+- en: Solution
+  id: totrans-127
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Select the unique rows from the table into a second table, then use that table
+    to replace the original one. Or use `DELETE` … `LIMIT` *`n`* to remove all but
+    one instance of a specific set of duplicate rows.
+  id: totrans-128
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 从表中选择唯一行到第二个表中，然后使用该表替换原始表。或者使用`DELETE` … `LIMIT` *`n`*来删除特定一组重复行的所有实例之外的所有行。
+- en: Discussion
+  id: totrans-129
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: '[Recipe 18.1](#nch-dups-dups-prevent) discusses how to prevent duplicates from
+    being added to a table by creating it with a unique index. However, if you forget
+    to include the index when you create a table, you may discover later that it contains
+    duplicates and that it’s necessary to apply some sort of duplicate-removal technique.
+    The `catalog_list` table used earlier is an example of this because it contains
+    several instances in which the same person appears multiple times:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[配方 18.1](#nch-dups-dups-prevent)讨论了如何通过创建具有唯一索引的表来防止将重复项添加到表中。然而，如果在创建表时忘记包括索引，则可能会后来发现它包含重复项，并且需要应用某种去重技术。之前使用的`catalog_list`表就是一个例子，因为它包含多个相同人物出现多次的情况：'
+- en: '[PRE26]'
+  id: totrans-131
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'To eliminate duplicates, you may use one of these two options:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要消除重复项，您可以使用以下两种选项之一：
+- en: Select the table’s unique rows into another table, then use that table to replace
+    the original one. This works when <q>duplicate</q> means <q>the entire row is
+    the same as another.</q>
+  id: totrans-133
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 选择表的唯一行并插入另一个表中，然后使用该表替换原始表。这在“重复”表示“整行与另一行完全相同”的情况下有效。
+- en: To remove duplicates for a specific set of duplicate rows, use `DELETE` … `LIMIT`
+    *`n`* to remove all but one row.
+  id: totrans-134
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于特定集合的重复行，使用`DELETE` … `LIMIT` *`n`*来删除除一行外的所有行。
+- en: 'This recipe discusses each duplicate-removal method. When deciding upon which
+    method to choose for your circumstance, consider these questions::'
+  id: totrans-135
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本配方讨论了每种去重方法。在为您的情况选择方法时，请考虑以下问题：
+- en: Does the method require the table to have a unique index?
+  id: totrans-136
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 方法是否要求表具有唯一索引？
+- en: If the columns in which duplicate values occur may contain `NULL`, will the
+    method remove duplicate `NULL` values?
+  id: totrans-137
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果表中可能包含`NULL`的列中有重复值，该方法会移除重复的`NULL`值吗？
+- en: Does the method prevent duplicates from occurring in the future?
+  id: totrans-138
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 该方法是否能防止将来发生重复项？
+- en: Removing duplicates using table replacement
+  id: totrans-139
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用表替换删除重复项
+- en: 'If a row is considered to duplicate another only if the entire row is the same,
+    one way to eliminate duplicates from a table is to select its unique rows into
+    a new table that has the same structure, and then replace the original table with
+    the new one:'
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果仅当整行完全相同时才认为一行是另一行的副本，那么从一个表中选择其唯一行到一个具有相同结构的新表中，然后用新表替换原始表是消除重复项的一种方法：
+- en: 'Create a new table that has the same structure as the original one. `CREATE`
+    `TABLE` … `LIKE` is useful for this (see [Recipe 6.1](ch06.xhtml#nch-tblmgmt-tblmgmt-clone)):'
+  id: totrans-141
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建具有与原始表相同结构的新表。使用`CREATE` `TABLE` … `LIKE`对此非常有用（见[配方 6.1](ch06.xhtml#nch-tblmgmt-tblmgmt-clone)）：
+- en: '[PRE27]'
+  id: totrans-142
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: 'Use `INSERT` `INTO` … `SELECT` `DISTINCT` to select the unique rows from the
+    original table into the new one:'
+  id: totrans-143
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 使用`INSERT` `INTO` … `SELECT` `DISTINCT`将原始表中的唯一行选择到新表中：
+- en: '[PRE28]'
+  id: totrans-144
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'Select rows from the `tmp` table to verify that the new table contains no duplicates:'
+  id: totrans-145
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 从`tmp`表中选择行以验证新表不包含重复项：
+- en: '[PRE29]'
+  id: totrans-146
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'After creating the new `tmp` table that contains unique rows, use it to replace
+    the original `catalog_list` table:'
+  id: totrans-147
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 创建包含唯一行的新`tmp`表后，使用它来替换原始`catalog_list`表：
+- en: '[PRE30]'
+  id: totrans-148
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: The effective result of this procedure is that `catalog_list` no longer contains
+    duplicates.
+  id: totrans-149
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 此过程的有效结果是`catalog_list`不再包含重复项。
+- en: This table-replacement method works in the absence of an index (although it
+    might be slow for large tables). For tables that contain duplicate `NULL` values,
+    it removes those duplicates. It does not prevent the occurrence of duplicates
+    in the future.
+  id: totrans-150
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这种表替换方法适用于没有索引的情况（尽管对于大表可能会比较慢）。对于包含重复`NULL`值的表，它会删除这些重复项。它不能防止未来重复项的出现。
+- en: This method requires rows to be completely identical to be considered duplicates.
+    Thus, it treats as distinct those rows for Wallace Baxter that have slightly different
+    `street` values.
+  id: totrans-151
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该方法要求行完全相同才被视为重复。因此，它将对 Wallace Baxter 的那些`street`值略有不同的行视为不同。
+- en: 'If duplicates are defined only with respect to a subset of the columns in the
+    table, create a new table that has a unique index for those columns, select rows
+    into it using `INSERT` `IGNORE`, and replace the original table with the new one:'
+  id: totrans-152
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果仅当表中列的子集存在重复值时，可以创建一个具有这些列的唯一索引的新表，使用`INSERT` `IGNORE`将行插入其中，并用新表替换原始表：
+- en: '[PRE31]'
+  id: totrans-153
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: The unique index prevents rows with duplicate key values from being inserted
+    into `tmp`, and `IGNORE` tells MySQL not to stop with an error if a duplicate
+    is found. One shortcoming of this method is that if the indexed columns can contain
+    `NULL` values, you must use a `UNIQUE` index rather than a `PRIMARY` `KEY`, in
+    which case the index will not remove duplicate `NULL` keys. (`UNIQUE` indexes
+    permit multiple `NULL` values.) This method does prevent occurrence of duplicates
+    in the future.
+  id: totrans-154
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 唯一索引防止具有重复键值的行插入到 `tmp` 中，而 `IGNORE` 告诉 MySQL 如果发现重复项，则不要停止并显示错误。这种方法的一个缺点是，如果索引列可以包含
+    `NULL` 值，则必须使用 `UNIQUE` 索引而不是 `PRIMARY` `KEY`，在这种情况下，索引将不会删除重复的 `NULL` 键（`UNIQUE`
+    索引允许多个 `NULL` 值）。这种方法确实可以防止将来出现重复。
+- en: Removing duplicates of a particular row
+  id: totrans-155
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 删除特定行的重复项
+- en: 'You can use `LIMIT` to restrict the effect of a `DELETE` statement to a subset
+    of the rows that it otherwise would delete. This makes the statement applicable
+    to removing duplicate rows. Suppose that the original unindexed `catalog_list`
+    table contains duplicates:'
+  id: totrans-156
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以使用 `LIMIT` 限制 `DELETE` 语句的影响范围，以便仅适用于删除重复行的子集。假设原始的未索引 `catalog_list` 表包含重复项：
+- en: '[PRE32]'
+  id: totrans-157
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: 'To remove the extra instances of each name, do this:'
+  id: totrans-158
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要删除每个名称的额外实例，请执行以下操作：
+- en: '[PRE33]'
+  id: totrans-159
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: This technique works in the absence of a unique index, and it eliminates duplicate
+    `NULL` values. It’s handy for removing duplicates only for a specific set of rows
+    within a table. However, if there are many different sets of duplicates to remove,
+    this is not a procedure you’d want to carry out by hand. The process can be automated
+    by using the techniques discussed earlier in [Recipe 18.4](#nch-dups-dups-count)
+    for determining which values are duplicated. There, we wrote a `make_dup_count_query()`
+    function to generate the statement needed to count the number of duplicate values
+    in a given set of columns in a table. The result of that statement can be used
+    to generate a set of `DELETE` … `LIMIT` *`n`* statements that remove duplicate
+    rows and leave only unique rows. The *dups* directory of the `recipes` distribution
+    contains code that shows how to generate these statements.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在没有唯一索引的情况下，这种技术可以消除重复的 `NULL` 值。这对于仅删除表内特定行集的重复项非常方便。但是，如果需要移除多个不同集合的重复项，则不建议手动进行此过程。可以通过使用[食谱
+    18.4](#nch-dups-dups-count)中讨论的技术自动化此过程，以确定哪些值是重复的。在那里，我们编写了一个 `make_dup_count_query()`
+    函数来生成需要计算表中给定列集中重复值数量的语句。该语句的结果可以用来生成一组 `DELETE` … `LIMIT` *`n`* 语句，以删除重复行并仅保留唯一行。`recipes`
+    发行版的 *dups* 目录包含显示如何生成这些语句的代码。
+- en: In general, using `DELETE` … `LIMIT` *`n`* is likely to be slower than removing
+    duplicates by using a second table or by adding a unique index. Those methods
+    keep the data on the server side and let the server do all the work. `DELETE`
+    … `LIMIT` *`n`* involves a lot of client-server interaction because it uses a
+    `SELECT` statement to retrieve information about duplicates, followed by several
+    `DELETE` statements to remove instances of duplicated rows. Also, this technique
+    does not prevent duplicates from occurring in the future.
+  id: totrans-161
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常情况下，使用 `DELETE` … `LIMIT` *`n`* 可能比通过使用第二个表或添加唯一索引来删除重复项要慢。这些方法将数据保留在服务器端，并让服务器完成所有工作。
+    `DELETE` … `LIMIT` *`n`* 包含大量的客户端-服务器交互，因为它使用 `SELECT` 语句来检索关于重复项的信息，然后使用多个 `DELETE`
+    语句来删除重复行的实例。此外，这种技术不能防止将来出现重复。

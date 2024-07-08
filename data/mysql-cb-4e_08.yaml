@@ -1,0 +1,3634 @@
+- en: Chapter 8\. Working with Dates and Times
+  id: totrans-0
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 第8章：处理日期和时间
+- en: 8.0 Introduction
+  id: totrans-1
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.0介绍
+- en: 'MySQL has several data types for representing dates and times, and many functions
+    for operating on them. MySQL stores dates and times in specific formats, and it’s
+    important to understand them to avoid surprises in results from manipulating temporal
+    data. This chapter covers the following aspects of working with date and time
+    values in MySQL:'
+  id: totrans-2
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL拥有多种数据类型来表示日期和时间，并提供许多操作这些数据的函数。MySQL以特定的格式存储日期和时间，了解这些格式对于避免处理时间数据时的意外结果非常重要。本章涵盖了在MySQL中处理日期和时间值时的以下几个方面：
+- en: Choosing a temporal data type
+  id: totrans-3
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 选择合适的时间数据类型
+- en: MySQL provides several temporal data types to choose from when you create tables.
+    Knowing their properties enables you to choose them appropriately.
+  id: totrans-4
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在创建表时，MySQL提供了多种时间数据类型可供选择。了解它们的属性有助于适当地选择。
+- en: Displaying dates and times
+  id: totrans-5
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 显示日期和时间
+- en: MySQL displays temporal values using specific formats by default. You can produce
+    other formats by using the appropriate functions.
+  id: totrans-6
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL默认使用特定格式显示时间值。您可以通过使用适当的函数生成其他格式。
+- en: Changing the client time zone
+  id: totrans-7
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 更改客户端时区
+- en: The server interprets `TIMESTAMP` and `DATETIME`values in the client’s current
+    time zone, not its own. Clients in different time zones should set their zone
+    so that the server can properly interpret `TIMESTAMP` values for them.
+  id: totrans-8
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务器在客户端的当前时区解释`TIMESTAMP`和`DATETIME`值，而不是服务器自身的时区。不同时区的客户端应设置其时区，以便服务器能够正确解释它们的`TIMESTAMP`值。
+- en: Determining the current date and time
+  id: totrans-9
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 确定当前日期和时间
+- en: MySQL provides functions that return the date and time. These are useful for
+    applications that must know these values or need to calculate other temporal values
+    in relation to them.
+  id: totrans-10
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL提供了返回日期和时间的函数。这些对于必须知道这些值或需要根据它们计算其他时间值的应用程序非常有用。
+- en: Tracking row modification times
+  id: totrans-11
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 跟踪行修改时间
+- en: The `TIMESTAMP` and `DATETIME` data types have special properties that enable
+    you to record row-creation and last-modification times automatically.
+  id: totrans-12
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TIMESTAMP`和`DATETIME`数据类型具有特殊属性，可以自动记录行的创建和最后修改时间。'
+- en: Breaking dates and times into component values, creating dates and times from
+    component values
+  id: totrans-13
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将日期和时间拆分为组件值，从组件值创建日期和时间
+- en: You can split date and time values when you need only a component, such as the
+    month part of a date or the hour part of a time. Conversely, you can combine component
+    values to synthesize dates and times.
+  id: totrans-14
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您只需要组件（如日期的月份部分或时间的小时部分）时，可以拆分日期和时间值。反之，您可以组合组件值来合成日期和时间。
+- en: Converting between dates or times and basic units
+  id: totrans-15
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在日期或时间之间进行转换以及与基本单位之间的转换
+- en: Some temporal calculations such as date arithmetic operations are more easily
+    performed using the number of days or seconds represented by a date or time value
+    than by using the value itself. MySQL can perform conversions between date and
+    time values and more basic units such as days or seconds.
+  id: totrans-16
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些时间计算，如日期算术运算，通过使用日期或时间值所代表的天数或秒数而不是值本身，更容易执行。MySQL可以在日期和时间值与天数或秒数等更基本的单位之间进行转换。
+- en: Date and time arithmetic
+  id: totrans-17
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 日期和时间算术
+- en: You can add or subtract temporal values to produce other temporal values or
+    calculate intervals between values. Applications include age determination, relative
+    date computation, and date shifting.
+  id: totrans-18
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您可以添加或减去时间值以生成其他时间值或计算值之间的间隔。应用包括年龄确定、相对日期计算和日期偏移。
+- en: Selecting data based on temporal constraints
+  id: totrans-19
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据时间约束选择数据
+- en: The calculations discussed in the preceding sections to produce output values
+    can also be used in `WHERE` clauses to specify how to select rows using temporal
+    conditions.
+  id: totrans-20
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在前述章节讨论的计算以产生输出值的同时，也可以用于`WHERE`子句中，指定如何使用时间条件选择行。
+- en: This chapter covers several MySQL functions for operating on date and time values,
+    but there are many others. To familiarize yourself with the full set, consult
+    the [MySQL Reference Manual](https://dev.mysql.com/doc/refman/8.0/en/date-and-time-functions.html).
+    The variety of functions available to you means that it’s often possible to perform
+    a given temporal calculation more than one way. We sometimes illustrate alternative
+    methods for achieving a given result, and many of the problems addressed in this
+    chapter can be solved in ways other than shown here. We invite you to experiment
+    to find other solutions. You may find a method that’s more efficient or that you
+    find more intuitive.
+  id: totrans-21
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章涵盖了几个MySQL函数，用于操作日期和时间值，但还有许多其他函数。要了解完整集合，请参阅[MySQL参考手册](https://dev.mysql.com/doc/refman/8.0/en/date-and-time-functions.html)。您可以利用提供给您的多种函数进行给定的时间计算。我们有时会展示达到给定结果的替代方法，本章讨论的许多问题可以用其他方法解决。我们邀请您进行实验以寻找其他解决方案。您可能会找到更有效或更直观的方法。
+- en: Scripts that implement recipes discussed in this chapter are located in the
+    *dates* directory of the `recipes` source distribution. Scripts that create tables
+    used here are located in the *tables* directory.
+  id: totrans-22
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章讨论的配方实现脚本位于`recipes`源分发的*dates*目录中。创建这些表的脚本位于*tables*目录中。
+- en: 8.1 Choosing a Temporal Data Type
+  id: totrans-23
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.1 选择一个时间数据类型
+- en: Problem
+  id: totrans-24
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You need to store temporal data but aren’t sure which is the most appropriate
+    data type.
+  id: totrans-25
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您需要存储时间数据，但不确定哪种数据类型最合适。
+- en: Solution
+  id: totrans-26
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Choose the data type according to the characteristics of the information to
+    be stored and how you need to use it.
+  id: totrans-27
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 根据要存储的信息特性及其使用需求选择数据类型。
+- en: Discussion
+  id: totrans-28
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'To choose a temporal data type, consider questions such as these:'
+  id: totrans-29
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要选择时间数据类型，请考虑以下问题：
+- en: Do you need times only, dates only, or combined date and time values?
+  id: totrans-30
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您只需要时间、日期或组合日期和时间值？
+- en: What range of values do you require?
+  id: totrans-31
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您需要哪个值范围？
+- en: Do you want automatic initialization of the column to the current date and time?
+  id: totrans-32
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 您是否希望列自动初始化为当前日期和时间？
+- en: 'MySQL provides `DATE` and `TIME` data types for representing date and time
+    values separately, and `DATETIME` and `TIMESTAMP` types for combined date-and-time
+    values. These values have the following characteristics:'
+  id: totrans-33
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL提供`DATE`和`TIME`数据类型，用于分别表示日期和时间值，以及`DATETIME`和`TIMESTAMP`类型，用于表示组合的日期和时间值。这些数值具有以下特点：
+- en: '`DATE` values have *`YYYY-MM-DD`* format, where *`YY`*, *`MM`*, and *`DD`*
+    represent the year, month, and day parts of the date. The supported range for
+    `DATE` values is `1000-01-01` to `9999-12-31`.'
+  id: totrans-34
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`DATE`数值采用*`YYYY-MM-DD`*格式，其中*`YY`*、*`MM`*和*`DD`*分别表示年、月和日部分。支持的`DATE`数值范围是`1000-01-01`至`9999-12-31`。'
+- en: '`TIME` values have *`hh:mm:ss`* format, where *`hh`*, *`mm`*, and *`ss`* are
+    the hours, minutes, and seconds parts of the time. `TIME` values often can be
+    thought of as time-of-day values, but MySQL actually treats them as elapsed time.
+    Thus, they may be greater than `23:59:59` or even negative. (The actual range
+    of a `TIME` column is `-838:59:59` to `838:59:59`.)'
+  id: totrans-35
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`TIME`数值采用*`hh:mm:ss`*格式，其中*`hh`*、*`mm`*和*`ss`*分别表示小时、分钟和秒部分。`TIME`数值通常可以视为一天中的时间值，但MySQL实际上将它们视为经过的时间。因此，它们可以大于`23:59:59`甚至为负数。（`TIME`列的实际范围是`-838:59:59`至`838:59:59`。）'
+- en: '`DATETIME` and `TIMESTAMP` are combined date-and-time values in *`YYYY-MM-DD`*
+    *`hh:mm:ss`* format.'
+  id: totrans-36
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`DATETIME`和`TIMESTAMP`是组合的日期和时间值，采用*`YYYY-MM-DD`* *`hh:mm:ss`*格式。'
+- en: 'The `DATETIME` and `TIMESTAMP` data types are similar in many respects, but
+    watch out for these differences:'
+  id: totrans-37
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '`DATETIME`和`TIMESTAMP`数据类型在许多方面相似，但要注意以下差异：'
+- en: '`DATETIME` has a supported range of `1000-01-01 00:00:00` to `9999-12-31 23:59:59`,
+    whereas `TIMESTAMP` values are valid only from the year 1970 partially through
+    2038.'
+  id: totrans-38
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`DATETIME`支持范围为`1000-01-01 00:00:00`至`9999-12-31 23:59:59`，而`TIMESTAMP`数值仅在1970年部分到2038年之间有效。'
+- en: '`TIMESTAMP` and `DATETIME` have special auto-initialization and auto-update
+    properties (see [Recipe 8.8](#nch-dates-dates-automatic)), but for `DATETIME`
+    they are not available before MySQL 5.6.5.'
+  id: totrans-39
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`TIMESTAMP`和`DATETIME`具有特殊的自动初始化和自动更新属性（参见[配方 8.8](#nch-dates-dates-automatic)），但在MySQL
+    5.6.5之前，`DATETIME`不具备此功能。'
+- en: When a client inserts a `TIMESTAMP` value, the server converts it from the time
+    zone associated with the client session to UTC and stores the UTC value. When
+    the client retrieves a `TIMESTAMP` value, the server performs the reverse operation
+    to convert the UTC value back to the client session time zone. A client in a time
+    zone different from the server can configure its session so that this conversion
+    is appropriate for its own time zone (see [Recipe 8.4](#nch-dates-dates-client-time-zone)).
+  id: totrans-40
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当客户端插入`TIMESTAMP`值时，服务器将其从与客户端会话关联的时区转换为UTC并存储UTC值。当客户端检索`TIMESTAMP`值时，服务器执行相反操作，将UTC值转换回客户端会话时区。如果客户端位于与服务器不同的时区，则可以配置其会话，使此转换适合其自己的时区（参见[Recipe
+    8.4](#nch-dates-dates-client-time-zone)）。
+- en: Types that include a time part can have a fractional seconds part for subsecond
+    resolution (see [Recipe 8.2](#nch-dates-fractional-seconds)).
+  id: totrans-41
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 包含时间部分的类型可以具有用于毫秒级分辨率的分数秒部分（参见[Recipe 8.2](#nch-dates-fractional-seconds)）。
+- en: Many of the examples in this chapter draw on the following tables, which contain
+    columns representing time, date, and date-and-time values. (The `time_val` table
+    has two columns for use in time interval calculation examples.)
+  id: totrans-42
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本章中许多示例使用以下表，其中包含表示时间、日期和日期时间值的列。（`time_val`表有两列，用于时间间隔计算示例。）
+- en: '[PRE0]'
+  id: totrans-43
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE0]'
+- en: It is a good idea to create the `time_val`, `date_val`, and `datetime_val` tables
+    right now before reading further. (Use the appropriate scripts in the *tables*
+    directory of the `recipes` distribution.)
+  id: totrans-44
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在继续阅读之前，立即创建`time_val`、`date_val`和`datetime_val`表是个好主意。（在`recipes`分发的*tables*目录中使用适当的脚本。）
+- en: 8.2 Using Fractional Seconds Support
+  id: totrans-45
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.2 使用分数秒支持
+- en: Problem
+  id: totrans-46
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Your application requires subsecond resolution of time values.
+  id: totrans-47
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您的应用程序需要毫秒级时间值的分辨率。
+- en: Solution
+  id: totrans-48
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Specify fractional seconds.
+  id: totrans-49
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 指定分数秒。
+- en: Discussion
+  id: totrans-50
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'As of MySQL 5.6.4, fractional seconds are supported for temporal types that
+    include a time part: `DATETIME`, `TIME`, and `TIMESTAMP`. For applications that
+    require subsecond resolution of time values, this enables you to specify fractional
+    seconds precision down to the microsecond level.'
+  id: totrans-51
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 自MySQL 5.6.4起，支持包含时间部分的时间类型的分数秒：`DATETIME`、`TIME`和`TIMESTAMP`。对于需要毫秒级时间值分辨率的应用程序，这使您能够指定分数秒的精度，甚至可以达到微秒级别。
+- en: 'The default is to have no fractional seconds part, so to include it for temporal
+    types that support this capability, specify it explicitly in the column declaration:
+    include `(`*`fsp`*`)` after the data type name in a column definition. *`fsp`*
+    can be from 0 to 6 to indicate the number of fractional digits. 0 means <q>none</q>
+    (resolution to seconds), 6 means resolution to microseconds. For example, to create
+    a `TIME` column with two fractional digits (resolution to hundredths of a second),
+    use this syntax:'
+  id: totrans-52
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认情况下没有分数秒部分，因此对于支持此功能的时间类型，需要在列声明中明确指定：在数据类型名称后包含`(`*`fsp`*`)`。*`fsp`*可以从0到6，表示小数位数。0表示<q>无</q>（分辨率为秒），6表示分辨率为微秒。例如，要创建带有两位小数的`TIME`列（分辨率为百分之一秒），请使用以下语法：
+- en: '[PRE1]'
+  id: totrans-53
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE1]'
+- en: A precision timing is crucial for specific events such as races. One of the
+    most popular and time-sensitive event is Formula 1 races worldwide. Time tracking
+    for the fastest motorsport requires detailed timekeeping and technology. In short,
+    the necessary time to be tracked is within ten thousand of a second by using multiple
+    transponders.
+  id: totrans-54
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于特定事件（如赛车），精确的时间跟踪至关重要。全球最流行且最具时间敏感性的赛事之一是世界各地的F1赛车比赛。对于最快的赛车运动，时间跟踪需要详细的计时和技术支持。简而言之，使用多个转发器，必须跟踪的时间在万分之一秒内。
+- en: Table 8-1\. FORMULA 1 ROLEX TURKISH GRAND PRIX 2021 - RACE RESULT
+  id: totrans-55
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表8-1. 2021年土耳其大奖赛 - F1罗斯表格
+- en: '| Driver | Car | Time |'
+  id: totrans-56
+  prefs: []
+  type: TYPE_TB
+  zh: '| 驾驶员 | 车辆 | 时间 |'
+- en: '| --- | --- | --- |'
+  id: totrans-57
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- | --- |'
+- en: '| Max Verstappen | RED BULL RACING HONDA | `1:17.301` |'
+  id: totrans-58
+  prefs: []
+  type: TYPE_TB
+  zh: '| 马克斯·维斯塔潘 | 红牛赛车本田 | `1:17.301` |'
+- en: '| Valtteri Bottas | MERCEDES | `1:17.725` |'
+  id: totrans-59
+  prefs: []
+  type: TYPE_TB
+  zh: '| 瓦尔特利·博塔斯 | 梅赛德斯 | `1:17.725` |'
+- en: '| Lewis Hamilton | MERCEDES | `1:17.810` |'
+  id: totrans-60
+  prefs: []
+  type: TYPE_TB
+  zh: '| 路易斯·汉密尔顿 | 梅赛德斯 | `1:17.810` |'
+- en: 'Temporal functions that return current time or date-and-time values also support
+    fractional seconds. The default without an argument is no fractional part. Otherwise,
+    the argument specifies the desired resolution. Permitted values are 0 to 6, the
+    same as when declaring temporal columns:'
+  id: totrans-61
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 返回当前时间或日期时间值的时间函数也支持分数秒。如果没有参数，默认值为无小数部分。否则，参数指定所需的分辨率。允许的值为0到6，与声明时间列时相同：
+- en: '[PRE2]'
+  id: totrans-62
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE2]'
+- en: In order to better demonstrate we will take example of having Formula 1 race
+    standings from one of the latest races held in Turkey ([Table 8-1](#nch-dates-fractional-seconds-formula1)).
+  id: totrans-63
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了更好地演示，我们将以土耳其最近举行的一场Formula 1赛事的赛果为例（[表 8-1](#nch-dates-fractional-seconds-formula1)）。
+- en: '[PRE3]'
+  id: totrans-64
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE3]'
+- en: '[PRE4]'
+  id: totrans-65
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE4]'
+- en: '[PRE5]'
+  id: totrans-66
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE5]'
+- en: In order to get proper listing of this time gaps between the driver performance
+    we will use a CTE. We will be discussing CTEs (Common Table Expressions) in [Recipe
+    10.18](ch10.xhtml#nch-sum-sum-with). Here is the solution.
+  id: totrans-67
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了得到驾驶员表现时间间隔的正确列表，我们将使用一个CTE。我们将在[食谱 10.18](ch10.xhtml#nch-sum-sum-with)中讨论CTE（公共表达式）。以下是解决方案。
+- en: '[PRE6]'
+  id: totrans-68
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE6]'
+- en: 8.3 Changing MySQL’s Date Format
+  id: totrans-69
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.3 改变MySQL的日期格式
+- en: Problem
+  id: totrans-70
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to change the ISO format that MySQL uses for representing date values.
+  id: totrans-71
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要更改MySQL用于表示日期值的ISO格式。
+- en: Solution
+  id: totrans-72
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: You can’t. However, you can rewrite non-ISO input values into ISO format when
+    storing dates, and you can rewrite ISO values to other formats for display with
+    the `DATE_FORMAT()` function.
+  id: totrans-73
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你不能。然而，当存储日期时，你可以将非ISO输入值重写为ISO格式，并且你可以使用`DATE_FORMAT()`函数将ISO值重写为其他格式以便显示。
+- en: Discussion
+  id: totrans-74
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: The *`YYYY-MM-DD`* format that MySQL uses for `DATE` values follows the ISO
+    8601 standard for representing dates. Because the year, month, and day parts have
+    a fixed length and appear left to right in date strings, this format has the useful
+    property that dates sort naturally into the proper temporal order. [Recipe 9.5](ch09.xhtml#nch-sort-sort-date)
+    and [Recipe 10.15](ch10.xhtml#nch-sum-sum-date) discuss ordering and grouping
+    techniques for date-based values.
+  id: totrans-75
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL用于`DATE`值的*`YYYY-MM-DD`*格式遵循ISO 8601标准表示日期。由于日期字符串中年、月和日部分具有固定长度且从左到右显示，这种格式具有将日期自然排序到适当时间顺序的有用属性。[食谱
+    9.5](ch09.xhtml#nch-sort-sort-date)和[食谱 10.15](ch10.xhtml#nch-sum-sum-date)讨论了基于日期值的排序和分组技术。
+- en: ISO format, although common, is not used by all database systems, which can
+    cause problems if you move data between different systems. Moreover, people commonly
+    like to represent dates in other formats such as *`MM/DD/YY`* or *`DD-MM-YYYY`*.
+    This too can be a source of trouble, due to mismatches between human expectations
+    of how dates should look and how MySQL actually represents them.
+  id: totrans-76
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 尽管ISO格式很常见，但并非所有数据库系统都使用它，这可能会在不同系统之间移动数据时引发问题。此外，人们通常喜欢以*`MM/DD/YY`*或*`DD-MM-YYYY`*等其他格式表示日期。这也可能是问题的源头，因为人们对日期的期望与MySQL实际表示它们的方式不匹配。
+- en: 'A question frequently asked by newcomers to MySQL is, <q>How do I tell MySQL
+    to store dates in a specific format such as *`MM/DD/YYYY`*?</q> That’s the wrong
+    question. Instead, ask, <q>If I have a date in a specific format, how can I store
+    it in MySQL’s supported format, and vice versa?</q> MySQL always stores dates
+    in ISO format, a fact with implications both for data entry (input) and for displaying
+    query results (output):'
+  id: totrans-77
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL新手经常问的一个问题是，“如何告诉MySQL以特定格式（例如*`MM/DD/YYYY`*）存储日期？”这是错误的问题。相反，应该问，“如果我有一个特定格式的日期，如何将其存储为MySQL支持的格式，反之亦然？”MySQL始终以ISO格式存储日期，这一事实对数据输入（输入）和显示查询结果（输出）都有影响：
+- en: For data-entry purposes, to store values that are not in ISO format, you normally
+    must rewrite them first. If you don’t want to rewrite them, you can store them
+    as strings (for example, in a `CHAR` column). But then you can’t operate on them
+    as dates.
+  id: totrans-78
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于数据输入目的，要存储不是ISO格式的值，通常必须首先重写它们。如果不想重写它们，可以将它们存储为字符串（例如，在`CHAR`列中）。但是然后你无法将它们作为日期操作。
+- en: '[Chapter 13](ch13.xhtml#nch-xfer) covers the topic of date rewriting for data
+    entry, and [Chapter 14](ch14.xhtml#nch-format) discusses checking dates to verify
+    that they’re valid. In some cases, if your values are close to ISO format, rewriting
+    may not be necessary. For example, MySQL interprets the string values `87-1-7`
+    and `1987-1-7` and the numbers `870107` and `19870107` as the date `1987-01-07`
+    when storing them into a `DATE` column.'
+  id: totrans-79
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: '[第13章](ch13.xhtml#nch-xfer)涵盖了数据输入的日期重写主题，而[第14章](ch14.xhtml#nch-format)讨论了检查日期以验证其有效性。在某些情况下，如果您的值接近ISO格式，则可能不需要重写。例如，当将它们存储到`DATE`列中时，MySQL将解释字符串值`87-1-7`和`1987-1-7`以及数字`870107`和`19870107`为日期`1987-01-07`。'
+- en: For display purposes, you can rewrite dates to non-ISO formats. The `DATE_FORMAT()`
+    function provides a lot of flexibility for changing date values into other formats
+    (see later in this section). You can also use functions such as `YEAR()` to extract
+    parts of dates for display (see [Recipe 8.9](#nch-dates-dates-decomp)). For additional
+    discussion, see [Recipe 14.17](ch14.xhtml#nch-format-format-date-export).
+  id: totrans-80
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 为了显示目的，可以将日期重写为非 ISO 格式。`DATE_FORMAT()` 函数提供了将日期值转换为其他格式的灵活性（请参阅本节后面的详细信息）。您还可以使用函数如
+    `YEAR()` 来提取日期的部分以供显示（请参见 [Recipe 8.9](#nch-dates-dates-decomp)）。有关进一步讨论，请参见 [Recipe
+    14.17](ch14.xhtml#nch-format-format-date-export)。
+- en: 'One way to rewrite non-ISO values for date entry is to use the `STR_TO_DATE()`
+    function, which takes a string representing a temporal value and a format string
+    that specifies the <q>syntax</q> of the value. Within the formatting string, use
+    special sequences of the form `%`*`c`*, where *`c`* specifies which part of the
+    date to expect. For example, `%Y`, `%M`, and `%d` signify the four-digit year,
+    the month name, and the two-digit day of the month. To insert the value `May`
+    `13,` `2007` into a `DATE` column, do this:'
+  id: totrans-81
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重写非 ISO 格式日期输入的一种方法是使用 `STR_TO_DATE()` 函数，该函数接受表示时间值的字符串和指定值的语法的格式字符串。<br>在格式化字符串中，使用形式为
+    `%`*`c`* 的特殊序列，其中 *`c`* 指定要期望的日期部分。<br>例如，`%Y`、`%M` 和 `%d` 表示四位数年份、月份名称和两位数日期。<br>要将值
+    `May` `13,` `2007` 插入到 `DATE` 列中，请执行以下操作：
+- en: '[PRE7]'
+  id: totrans-82
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE7]'
+- en: For date display, MySQL uses ISO format (*`YYYY-MM-DD`*) unless you tell it
+    otherwise. To display dates or times in other formats, use the `DATE_FORMAT()`
+    or `TIME_FORMAT()` function to rewrite them. If you require a more specialized
+    format those functions cannot provide, write a stored function.
+  id: totrans-83
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于日期显示，MySQL 使用 ISO 格式（*`YYYY-MM-DD`*），除非另有说明。要以其他格式显示日期或时间，请使用 `DATE_FORMAT()`
+    或 `TIME_FORMAT()` 函数进行重写。如果需要更专业化的格式，这些函数无法提供，请编写存储函数。
+- en: 'The `DATE_FORMAT()` function takes two arguments: a `DATE`, `DATETIME`, or
+    `TIMESTAMP` value, and a string describing how to display the value. The format
+    string uses the same kind of specifiers as `STR_TO_DATE()`. The following statement
+    shows the values in the `date_val` table, both as MySQL displays them by default
+    and as reformatted with `DATE_FORMAT()`:'
+  id: totrans-84
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DATE_FORMAT()` 函数接受两个参数：`DATE`、`DATETIME` 或 `TIMESTAMP` 值，以及描述如何显示该值的字符串。格式字符串使用与
+    `STR_TO_DATE()` 相同类型的指示符。<br>以下语句显示了 `date_val` 表中的值，一是 MySQL 默认显示它们的方式，二是使用 `DATE_FORMAT()`
+    重新格式化它们：'
+- en: '[PRE8]'
+  id: totrans-85
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE8]'
+- en: 'Because `DATE_FORMAT()` produces long column headings, it’s often useful to
+    provide an alias (see [Recipe 5.2](ch05.xhtml#nch-select-select-column-alias))
+    to make a heading more concise or meaningful:'
+  id: totrans-86
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 由于 `DATE_FORMAT()` 生成的列标题很长，通常很有用为其提供别名（请参见 [Recipe 5.2](ch05.xhtml#nch-select-select-column-alias)），以使标题更简洁或更有意义：
+- en: '[PRE9]'
+  id: totrans-87
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE9]'
+- en: 'The [MySQL Reference Manual](https://dev.mysql.com/doc/refman/8.0/en/date-and-time-functions.html).
+    provides a complete list of format sequences to use with `DATE_FORMAT()`, `TIME_FORMAT()`,
+    and `STR_TO_DATE()`. The [Table 8-2](#nch-dates-dates-format-syntax) shows some
+    of them:'
+  id: totrans-88
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[MySQL 参考手册](https://dev.mysql.com/doc/refman/8.0/en/date-and-time-functions.html)
+    提供了与 `DATE_FORMAT()`、`TIME_FORMAT()` 和 `STR_TO_DATE()` 一起使用的完整格式序列列表。<br>[Table 8-2](#nch-dates-dates-format-syntax)
+    显示了其中的一些：'
+- en: Table 8-2\. Format sequences to use with date and time formatting functions
+  id: totrans-89
+  prefs: []
+  type: TYPE_NORMAL
+  zh: Table 8-2\. 用于日期和时间格式化函数的格式序列
+- en: '| Sequence | Meaning |'
+  id: totrans-90
+  prefs: []
+  type: TYPE_TB
+  zh: '| Sequence | Meaning |'
+- en: '| --- | --- |'
+  id: totrans-91
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `%Y` | Four-digit year |'
+  id: totrans-92
+  prefs: []
+  type: TYPE_TB
+  zh: '| `%Y` | 四位数年份 |'
+- en: '| `%y` | Two-digit year |'
+  id: totrans-93
+  prefs: []
+  type: TYPE_TB
+  zh: '| `%y` | 两位数年份 |'
+- en: '| `%M` | Complete month name |'
+  id: totrans-94
+  prefs: []
+  type: TYPE_TB
+  zh: '| `%M` | 完整的月份名称 |'
+- en: '| `%b` | Month name, initial three letters |'
+  id: totrans-95
+  prefs: []
+  type: TYPE_TB
+  zh: '| `%b` | 月份名称的前三个字母 |'
+- en: '| `%m` | Two-digit month of year (01..12) |'
+  id: totrans-96
+  prefs: []
+  type: TYPE_TB
+  zh: '| `%m` | 两位数年份的月份（01..12） |'
+- en: '| `%c` | Month of year (1..12) |'
+  id: totrans-97
+  prefs: []
+  type: TYPE_TB
+  zh: '| `%c` | 年份中的月份（1..12） |'
+- en: '| `%d` | Two-digit day of month (01..31) |'
+  id: totrans-98
+  prefs: []
+  type: TYPE_TB
+  zh: '| `%d` | 两位数日期（01..31） |'
+- en: '| `%e` | Day of month (1..31) |'
+  id: totrans-99
+  prefs: []
+  type: TYPE_TB
+  zh: '| `%e` | 月份中的日期（1..31） |'
+- en: '| `%W` | Weekday name (Sunday..Saturday) |'
+  id: totrans-100
+  prefs: []
+  type: TYPE_TB
+  zh: '| `%W` | 星期名称（Sunday..Saturday） |'
+- en: '| `%r` | 12-hour time with AM or PM suffix |'
+  id: totrans-101
+  prefs: []
+  type: TYPE_TB
+  zh: '| `%r` | 带有 AM 或 PM 后缀的 12 小时制时间 |'
+- en: '| `%T` | 24-hour time |'
+  id: totrans-102
+  prefs: []
+  type: TYPE_TB
+  zh: '| `%T` | 24 小时制时间 |'
+- en: '| `%H` | Two-digit hour |'
+  id: totrans-103
+  prefs: []
+  type: TYPE_TB
+  zh: '| `%H` | 两位数小时 |'
+- en: '| `%i` | Two-digit minute |'
+  id: totrans-104
+  prefs: []
+  type: TYPE_TB
+  zh: '| `%i` | 两位数分钟 |'
+- en: '| `%s` | Two-digit second |'
+  id: totrans-105
+  prefs: []
+  type: TYPE_TB
+  zh: '| `%s` | 两位数秒 |'
+- en: '| `%f` | Six-digit microsecond |'
+  id: totrans-106
+  prefs: []
+  type: TYPE_TB
+  zh: '| `%f` | 六位数微秒 |'
+- en: '| `%%` | Literal `%` |'
+  id: totrans-107
+  prefs: []
+  type: TYPE_TB
+  zh: '| `%%` | 字面上的 `%` |'
+- en: 'The time-related format sequences shown in the table are useful only when you
+    pass `DATE_FORMAT()` a value that has both date and time parts (a `DATETIME` or
+    `TIMESTAMP`). The following statement displays `DATETIME` values from the `datetime_val`
+    table using formats that include the time of day:'
+  id: totrans-108
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表中显示的与时间相关的格式序列仅在您向`DATE_FORMAT()`传递同时包含日期和时间部分（`DATETIME`或`TIMESTAMP`）的值时才有用。以下语句显示`datetime_val`表中的`DATETIME`值，使用包含每天时间的格式：
+- en: '[PRE10]'
+  id: totrans-109
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE10]'
+- en: '`TIME_FORMAT()` is similar to `DATE_FORMAT()`. It works with `TIME`, `DATETIME`,
+    or `TIMESTAMP` values, but understands only time-related specifiers in the format
+    string:'
+  id: totrans-110
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TIME_FORMAT()`类似于`DATE_FORMAT()`。它适用于`TIME`、`DATETIME`或`TIMESTAMP`值，但只理解格式字符串中与时间相关的说明符：'
+- en: '[PRE11]'
+  id: totrans-111
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE11]'
+- en: 'If `DATE_FORMAT()` or `TIME_FORMAT()` cannot produce the results that you want,
+    write a stored function that does. Suppose that you want to convert 24-hour `TIME`
+    values to 12-hour format but with a suffix of `a.m.` or `p.m.` rather than `AM`
+    or `PM`. The following function accomplishes that task. It uses `TIME_FORMAT()`
+    to do most of the work, then strips the suffix supplied by `%r` and replaces it
+    with the desired suffix:'
+  id: totrans-112
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果`DATE_FORMAT()`或`TIME_FORMAT()`无法生成您想要的结果，请编写一个存储函数来实现。假设您想将24小时制的`TIME`值转换为带有`a.m.`或`p.m.`后缀而不是`AM`或`PM`的12小时制格式。以下函数可以完成此任务。它使用`TIME_FORMAT()`来执行大部分工作，然后去掉`%r`提供的后缀并替换为所需的后缀：
+- en: '[PRE12]'
+  id: totrans-113
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE12]'
+- en: 'Use the function like this:'
+  id: totrans-114
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用如下函数：
+- en: '[PRE13]'
+  id: totrans-115
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE13]'
+- en: For more information about writing stored functions, see [Chapter 11](ch11.xhtml#nch-routines).
+  id: totrans-116
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有关编写存储函数的更多信息，请参见[第11章](ch11.xhtml#nch-routines)。
+- en: 8.4 Setting the Client Time Zone
+  id: totrans-117
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.4 设置客户端时区
+- en: Problem
+  id: totrans-118
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You have a client application that connects from a time zone different from
+    the server. Consequently, when it stores `TIMESTAMP` values, they don’t have the
+    correct UTC values.
+  id: totrans-119
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您有一个客户端应用程序，它从与服务器不同的时区连接。因此，当它存储`TIMESTAMP`值时，这些值没有正确的UTC值。
+- en: Solution
+  id: totrans-120
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: The client should set the `time_zone` system variable after connecting to the
+    server.
+  id: totrans-121
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 客户端在连接到服务器后应设置`time_zone`系统变量。
+- en: Discussion
+  id: totrans-122
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'Time zone settings have an important effect on `TIMESTAMP` values:'
+  id: totrans-123
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 时区设置对`TIMESTAMP`值有重要影响：
+- en: When the MySQL server starts, it examines its operating environment to determine
+    its time zone. (To use a different value, start the server with the `--default-time-zone`
+    option.)
+  id: totrans-124
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当MySQL服务器启动时，它会检查其操作环境以确定其时区。（要使用不同的值，请使用`--default-time-zone`选项启动服务器。）
+- en: For each client that connects, the server interprets `TIMESTAMP` values with
+    respect to the time zone associated with the client session. When a client inserts
+    a `TIMESTAMP` value, the server converts it from the client time zone to UTC and
+    stores the UTC value. (Internally, the server stores a `TIMESTAMP` value as the
+    number of seconds since `1970-01-01` `00:00:00` UTC.) When the client retrieves
+    a `TIMESTAMP` value, the server performs the reverse operation to convert the
+    UTC value back to the client time zone.
+  id: totrans-125
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于每个连接的客户端，服务器根据客户端会话关联的时区解释`TIMESTAMP`值。当客户端插入`TIMESTAMP`值时，服务器将其从客户端时区转换为UTC并存储UTC值。（在内部，服务器将`TIMESTAMP`值存储为自`1970-01-01
+    00:00:00` UTC以来的秒数。）当客户端检索`TIMESTAMP`值时，服务器执行相反的操作，将UTC值转换回客户端时区。
+- en: The default session time zone for each client when it connects is the server
+    time zone. If all clients are in the same time zone as the server, nothing special
+    need be done for proper `TIMESTAMP` time zone conversion to occur. But if a client
+    is in a time zone different from the server and it inserts `TIMESTAMP` values
+    without making the proper time zone correction, the UTC values won’t be correct.
+  id: totrans-126
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 每个客户端在连接时的默认会话时区是服务器时区。如果所有客户端与服务器处于同一时区，则无需为正确的`TIMESTAMP`时区转换做任何特殊处理。但是，如果客户端位于与服务器不同的时区，并且在不进行正确时区校正的情况下插入`TIMESTAMP`值，则UTC值将不正确。
+- en: 'Suppose that the server and client C1 are in the same time zone, and client
+    C1 issues these statements:'
+  id: totrans-127
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设服务器和客户端C1处于同一时区，并且客户端C1发出以下语句：
+- en: '[PRE14]'
+  id: totrans-128
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE14]'
+- en: Here, client C1 sees the same value that it stored. A different client, C2,
+    will also see the same value if it retrieves it, but if client C2 is in a different
+    time zone, that value isn’t correct for its zone. Conversely, if client C2 stores
+    a value, that value when returned by client C1 won’t be correct for the client
+    C1 time zone.
+  id: totrans-129
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在这里，客户端C1看到与其存储的相同值。不同的客户端C2，如果检索它，也将看到相同的值，但是如果客户端C2位于不同的时区，则该值对其时区来说不正确。相反，如果客户端C2存储一个值，则当客户端C1检索时，该值对于客户端C1的时区也不正确。
+- en: 'To deal with this problem so that `TIMESTAMP` conversions use the proper time
+    zone, a client should set its time zone explicitly by setting the session value
+    of the `time_zone` system variable. Suppose that the server has a global time
+    zone of six hours ahead of UTC. Each client initially is assigned that same value
+    as its session time zone:'
+  id: totrans-130
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 为了解决这个问题，使得`TIMESTAMP`转换使用正确的时区，客户端应通过设置`time_zone`系统变量的会话值来显式设置其时区。假设服务器的全局时区比UTC提前六小时。每个客户端最初分配相同的值作为其会话时区：
+- en: '[PRE15]'
+  id: totrans-131
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE15]'
+- en: 'When client C2 connects, it sees the same `TIMESTAMP` value as client C1:'
+  id: totrans-132
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当客户端C2连接时，它看到与客户端C1相同的`TIMESTAMP`值：
+- en: '[PRE16]'
+  id: totrans-133
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE16]'
+- en: 'But that value is incorrect if client C2 is only four hours ahead of UTC. C2
+    should set its time zone after connecting so that retrieved `TIMESTAMP` values
+    are properly adjusted for its own session:'
+  id: totrans-134
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 但如果客户端C2比UTC仅提前四小时，则该值是不正确的。C2应在连接后设置其时区，以便检索到的`TIMESTAMP`值适当地调整为其自身的会话：
+- en: '[PRE17]'
+  id: totrans-135
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE17]'
+- en: To see the `System Timezone` check global variables.
+  id: totrans-136
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看`System Timezone`，请检查全局变量。
+- en: '[PRE18]'
+  id: totrans-137
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE18]'
+- en: The client time zone also affects the values displayed from functions that return
+    the current date and time (see [Recipe 8.7](#nch-dates-dates-current)).
+  id: totrans-138
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 客户端时区也会影响从返回当前日期和时间的函数中显示的值（请参阅[Recipe 8.7](#nch-dates-dates-current)）。
+- en: See Also
+  id: totrans-139
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 另请参阅
+- en: To convert individual date-and-time values from one time zone to another, use
+    the `CONVERT_TZ()` function (see [Recipe 8.6](#nch-dates-dates-time-zone-convert)).
+  id: totrans-140
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将一个时区的单个日期和时间值转换为另一个时区，请使用`CONVERT_TZ()`函数（请参阅[Recipe 8.6](#nch-dates-dates-time-zone-convert)）。
+- en: 8.5 Setting the Server Time Zone
+  id: totrans-141
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.5 设置服务器时区
+- en: Problem
+  id: totrans-142
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You have a localized application to serve customers, but you want to have a
+    global time zone setting.
+  id: totrans-143
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您有一个本地化的应用程序用于服务客户，但您希望拥有全局时区设置。
+- en: Solution
+  id: totrans-144
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: The server should set the `time_zone` system variable to `SYSTEM` at the server.
+    This setting should point to `UTC` value. Accordingly system timezone `system_time_zone`
+    value should be set to `UTC`.
+  id: totrans-145
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 服务器应该将`time_zone`系统变量设置为服务器上的`SYSTEM`值。该设置应该指向`UTC`值。因此系统时区`system_time_zone`值应设置为`UTC`。
+- en: Discussion
+  id: totrans-146
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'MySQL Server maintains several time zone settings:'
+  id: totrans-147
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL服务器维护多个时区设置：
+- en: The server system time zone. When MySQL starts it attempts to determine `system_time_zone`
+    variable. In order to explicitly set the system time zone for MySQL set the `TZ`
+    environment variable before starting `mysqld`. Alternatively start the `mysqld_safe`
+    with its `--timezone` option. The values for these variables are permissible by
+    your operating system settings.
+  id: totrans-148
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 服务器系统时区。当MySQL启动时，它会尝试确定`system_time_zone`变量。为了显式设置MySQL的系统时区，请在启动`mysqld`之前设置`TZ`环境变量。或者使用`mysqld_safe`的`--timezone`选项启动。这些变量的值受您的操作系统设置的允许。
+- en: The server current time zone is set by the global `time_zone` value. It’s generally
+    set to `SYSTEM` on modern Linux operating systems.
+  id: totrans-149
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 服务器当前时区由全局`time_zone`值设置。在现代Linux操作系统上通常设置为`SYSTEM`。
+- en: '[PRE19]'
+  id: totrans-150
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE19]'
+- en: You may choose to set the global timezone variable using `SET GLOBAL` This will
+    not change the `@@session.time_zone` value.
+  id: totrans-151
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 您可以选择使用`SET GLOBAL`设置全局时区变量。这不会更改`@@session.time_zone`的值。
+- en: '[PRE20]'
+  id: totrans-152
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE20]'
+- en: 'The string indicating the `time_zone` value offset from UTC (Universal Coordinated
+    Time). Prior to MySQL 8.0.19, this value had to be in the range ''-12:59’ to ''+13:00'',
+    inclusive; beginning with MySQL 8.0.19, the permitted range is ''-13:59’ to ''+14:00'',
+    inclusive. Populated time zones are not permitted unless they are pre-loaded to
+    MySQL tables hence you can not use names like `UTC`:'
+  id: totrans-153
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 表示与UTC（协调世界时）相差的`time_zone`值偏移的字符串。在MySQL 8.0.19之前，此值必须在'-12:59'到'+13:00'（含）的范围内；从MySQL
+    8.0.19开始，允许范围为'-13:59'到'+14:00'（含）。未填充的时区不允许使用，除非它们预先加载到MySQL表中，因此您不能使用`UTC`等名称：
+- en: '[PRE21]'
+  id: totrans-154
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE21]'
+- en: For instructions on Populating the Timezone Tables see [MySQL Reference Manual](https://dev.mysql.com/doc/refman/8.0/en/time-zone-support.html#time-zone-installation).
+  id: totrans-155
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 如需填充时区表的说明，请参阅[MySQL参考手册](https://dev.mysql.com/doc/refman/8.0/en/time-zone-support.html#time-zone-installation)。
+- en: The `system_time_zone` variable is set when the server inherits a time zone
+    setting from the machine defaults. Unlike the `time_zone` variable this is not
+    dynamic to set after the server starts. As of MySQL 8.0.26 if the server host
+    time zone changes such as during daylight saving time `system_time_zone` will
+    reflect the change. If a change happens during execution of a query the previous
+    value will be cached.
+  id: totrans-156
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 变量`system_time_zone`在服务器继承机器默认时区设置时设置。与`time_zone`变量不同，此变量在服务器启动后无法动态设置。从MySQL
+    8.0.26开始，如果服务器主机的时区发生变化，例如夏令时期间，`system_time_zone`将反映这些更改。如果在执行查询期间发生更改，则将缓存先前的值。
+- en: '[PRE22]'
+  id: totrans-157
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE22]'
+- en: 8.6 Shifting Temporal Values Between Time Zones
+  id: totrans-158
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.6 在时区之间转移时间值
+- en: Problem
+  id: totrans-159
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You have a date-and-time value, but need to know what it would be in a different
+    time zone. For example, you’re having a teleconference with people in different
+    parts of the world and you must tell them the meeting time in their local time
+    zones.
+  id: totrans-160
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您有一个日期时间值，但需要知道在另一个时区中会是什么时间。例如，您正在与世界各地的人进行电话会议，必须告诉他们在其当地时区的会议时间。
+- en: Solution
+  id: totrans-161
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the `CONVERT_TZ()` function.
+  id: totrans-162
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`CONVERT_TZ()`函数。
+- en: Discussion
+  id: totrans-163
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'The `CONVERT_TZ()` function converts temporal values between time zones. It
+    takes three arguments: a date-and-time value and two time zone indicators. The
+    function interprets the date-and-time value as a value in the first time zone
+    and returns the value shifted into the second time zone.'
+  id: totrans-164
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`CONVERT_TZ()`函数在不同时区之间转换时间值。它接受三个参数：日期时间值和两个时区指示器。该函数将日期时间值解释为第一个时区中的值，并返回转换为第二个时区的值。'
+- en: 'Suppose that we live in Chicago, Illinois in the US, and that we have a meeting
+    with people in several other parts of the world. The [Table 8-3](#nch-dates-dates-time-zone-convert-meeting)
+    shows the location of each meeting participant and the time zone name for each:'
+  id: totrans-165
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 假设我们居住在美国伊利诺伊州芝加哥，并且与世界各地的人有会议。[表8-3](#nch-dates-dates-time-zone-convert-meeting)显示了每个会议参与者的位置及其时区名称：
+- en: Table 8-3\. Meeting participants
+  id: totrans-166
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表8-3 会议参与者
+- en: '| Location | Time zone name |'
+  id: totrans-167
+  prefs: []
+  type: TYPE_TB
+  zh: '| 位置 | 时区名称 |'
+- en: '| --- | --- |'
+  id: totrans-168
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| Chicago, Illinois, US | `US/Central` |'
+  id: totrans-169
+  prefs: []
+  type: TYPE_TB
+  zh: '| 美国伊利诺伊州芝加哥 | `US/Central` |'
+- en: '| Istanbul, Turkey | `Europe/Istanbul` |'
+  id: totrans-170
+  prefs: []
+  type: TYPE_TB
+  zh: '| 土耳其伊斯坦布尔 | `Europe/Istanbul` |'
+- en: '| London, United Kingdom | `Europe/London` |'
+  id: totrans-171
+  prefs: []
+  type: TYPE_TB
+  zh: '| 英国伦敦 | `Europe/London` |'
+- en: '| Edmonton, Alberta, Canada | `America/Edmonton` |'
+  id: totrans-172
+  prefs: []
+  type: TYPE_TB
+  zh: '| 加拿大阿尔伯塔埃德蒙顿 | `America/Edmonton` |'
+- en: '| Brisbane, Australia | `Australia/Brisbane` |'
+  id: totrans-173
+  prefs: []
+  type: TYPE_TB
+  zh: '| 澳大利亚布里斯班 | `Australia/Brisbane` |'
+- en: 'If the meeting is to take place at 8 AM local time for us on November 28, 2021,
+    what time will that be for the other participants? The following statement uses
+    `CONVERT_TZ()` to calculate the local times for each time zone:'
+  id: totrans-174
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果会议计划在2021年11月28日我们当地时间上午8点进行，那么其他参与者的当地时间将是多少？以下语句使用`CONVERT_TZ()`计算每个时区的本地时间：
+- en: '[PRE23]'
+  id: totrans-175
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE23]'
+- en: Let’s hope the Brisbane participant doesn’t mind being up after midnight.
+  id: totrans-176
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 希望布里斯班的参与者不介意在午夜后参加。
+- en: 'The preceding example uses time zone names, so it requires that you have the
+    time zone tables in the `mysql` database initialized with support for named time
+    zones. (See the [MySQL Reference Manual](https://dev.mysql.com/doc/refman/8.0/en/time-zone-support.html)
+    for information about setting up the time zone tables.) If you can’t use named
+    time zones, specify them in terms of their numeric relationship to UTC. (This
+    can be a little trickier; you might need to account for daylight saving time.)
+    The corresponding statement with numeric time zones looks like this:'
+  id: totrans-177
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前述示例使用时区名称，因此需要您在`mysql`数据库中初始化支持命名时区的时区表（有关设置时区表的信息，请参阅[MySQL参考手册](https://dev.mysql.com/doc/refman/8.0/en/time-zone-support.html)）。如果无法使用命名时区，请用其相对于UTC的数字关系指定它们（这可能有些棘手；您可能需要考虑夏令时）。具有数字时区的相应语句如下所示：
+- en: '[PRE24]'
+  id: totrans-178
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE24]'
+- en: 8.7 Determining the Current Date or Time
+  id: totrans-179
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.7 确定当前日期或时间
+- en: Problem
+  id: totrans-180
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know what today’s date isand/or what time it is.
+  id: totrans-181
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想知道今天的日期和/或时间。
+- en: Solution
+  id: totrans-182
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the `CURDATE()`, `CURTIME()`, or `NOW()` functions to obtain values expressed
+    in the client session time zone. Use `UTC_DATE()`, `UTC_TIME()`, or `UTC_TIMESTAMP()`
+    for values in UTC time.
+  id: totrans-183
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`CURDATE()`、`CURTIME()`或`NOW()`函数获取客户端会话时区中表达的值。使用`UTC_DATE()`、`UTC_TIME()`或`UTC_TIMESTAMP()`获取UTC时间的值。
+- en: Discussion
+  id: totrans-184
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Some applications must know the current date or time, such as those that write
+    timestamped log records. This kind of information is also useful for date calculations
+    performed in relation to the current date, such as finding the first (or last)
+    day of the month, or determining the date for Wednesday of next week.
+  id: totrans-185
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 某些应用程序必须知道当前日期或时间，例如写入时间戳日志记录的应用程序。这类信息对于与当前日期相关的日期计算也很有用，例如查找本月的第一天（或最后一天）或确定下周星期三的日期。
+- en: 'The `CURDATE()` and `CURTIME()` functions return the current date and time
+    separately, and `NOW()` returns both as a combined date-and-time value:'
+  id: totrans-186
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`CURDATE()`和`CURTIME()`函数分别返回当前日期和时间，而`NOW()`则返回合并的日期和时间值：'
+- en: '[PRE25]'
+  id: totrans-187
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE25]'
+- en: '`CURRENT_DATE`, `CURRENT_TIME`, and `CURRENT_TIMESTAMP` are synonyms for `CURDATE()`,
+    `CURTIME()`, and `NOW()`, respectively.'
+  id: totrans-188
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`CURRENT_DATE`、`CURRENT_TIME`和`CURRENT_TIMESTAMP`是`CURDATE()`、`CURTIME()`和`NOW()`的同义词，分别用于获取当前日期、时间或合并的日期和时间。'
+- en: The preceding functions return values in the client session time zone (see [Recipe
+    8.4](#nch-dates-dates-client-time-zone)). For values in UTC time, use the `UTC_DATE()`,
+    `UTC_TIME()`, or `UTC_TIMESTAMP()` functions instead.
+  id: totrans-189
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 上述函数返回客户端会话时区中的值（参见[Recipe 8.4](#nch-dates-dates-client-time-zone)）。若需使用UTC时间的值，请改用`UTC_DATE()`、`UTC_TIME()`或`UTC_TIMESTAMP()`函数。
+- en: To determine the current date and time for an arbitrary time zone, pass the
+    value of the appropriate UTC function to `CONVERT_TZ()` (see [Recipe 8.6](#nch-dates-dates-time-zone-convert)).
+  id: totrans-190
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定任意时区的当前日期和时间，请将适当的UTC函数值传递给`CONVERT_TZ()`（参见[Recipe 8.6](#nch-dates-dates-time-zone-convert)）。
+- en: To obtain subparts of these values, such as the current day of the month or
+    current hour of the day, use the decomposition techniques discussed in [Recipe
+    8.9](#nch-dates-dates-decomp).
+  id: totrans-191
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要获取这些值的子部分，例如当前月份的日期或当前小时数，请使用[Recipe 8.9](#nch-dates-dates-decomp)中讨论的分解技术。
+- en: 8.8 Using TIMESTAMP or DATETIME to Track Row-Modification Times
+  id: totrans-192
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.8 使用TIMESTAMP或DATETIME跟踪行修改时间
+- en: Problem
+  id: totrans-193
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to record row-creation time or last modification time automatically.
+  id: totrans-194
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你希望自动记录行创建时间或最后修改时间。
+- en: Solution
+  id: totrans-195
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the auto-initialization and auto-update properties of the `TIMESTAMP` and
+    `DATETIME` data types.
+  id: totrans-196
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`TIMESTAMP`和`DATETIME`数据类型的自动初始化和自动更新属性。
+- en: Discussion
+  id: totrans-197
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'MySQL supports `TIMESTAMP` and `DATETIME` data types that store date-and-time
+    values. [Recipe 8.1](#nch-dates-dates-types) covers the range of values for these
+    types. This recipe focuses on special column attributes that enable you to track
+    row-creation and -update times automatically:'
+  id: totrans-198
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL支持存储日期时间值的`TIMESTAMP`和`DATETIME`数据类型。[Recipe 8.1](#nch-dates-dates-types)介绍了这些类型的值范围。本篇重点介绍了能够自动跟踪行创建和更新时间的特殊列属性：
+- en: A `TIMESTAMP` or `DATETIME` column declared with the `DEFAULT` `CURRENT_TIMESTAMP`
+    attribute initializes automatically for new rows. Simply omit the column from
+    `INSERT` statements and MySQL sets it to the row-creation time.
+  id: totrans-199
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 声明为带有`DEFAULT` `CURRENT_TIMESTAMP`属性的`TIMESTAMP`或`DATETIME`列会自动初始化为新行。只需在`INSERT`语句中省略该列，MySQL会将其设置为行创建时间。
+- en: A `TIMESTAMP` or `DATETIME` column declared with the `ON` `UPDATE` `CURRENT_TIMESTAMP`
+    attribute automatically updates to the current date and time when you change any
+    other column in the row from its current value.
+  id: totrans-200
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当你改变行中的任何其他列的当前值时，声明为带有`ON` `UPDATE` `CURRENT_TIMESTAMP`属性的`TIMESTAMP`或`DATETIME`列会自动更新为当前日期和时间。
+- en: These special properties make the `TIMESTAMP` and `DATETIME` data types particularly
+    suited for applications that require recording the times at which rows are inserted
+    or updated. The following discussion shows how to take advantage of these properties
+    using `TIMESTAMP` columns. With some differences to be noted later, the discussion
+    also applies to `DATETIME` columns.
+  id: totrans-201
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这些特殊属性使得`TIMESTAMP`和`DATETIME`数据类型特别适合需要记录插入或更新行时的时间的应用程序。以下讨论展示了如何利用`TIMESTAMP`列的这些特性。尽管有一些稍后需要注意的差异，但是这些讨论同样适用于`DATETIME`列。
+- en: Note
+  id: totrans-202
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The default `SQL_MODE` does not allow `NULL` values unless relaxed. Also `NO_ZERO_DATE`
+    deprecated as of MySQL 8.0 should be used in conjunction with `STRICT MODE`.
+  id: totrans-203
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 默认的`SQL_MODE`不允许`NULL`值，除非放宽条件。而MySQL 8.0之后不推荐使用`NO_ZERO_DATE`，应与`STRICT MODE`结合使用。
+- en: 'Our example table looks like this:'
+  id: totrans-204
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 我们的示例表如下：
+- en: '[PRE26]'
+  id: totrans-205
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE26]'
+- en: 'The `TIMESTAMP` columns have these properties:'
+  id: totrans-206
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TIMESTAMP`列具有以下属性：'
+- en: '`ts_both` auto-initializes and auto-updates. This is useful for tracking the
+    time of any change to a row, for both inserts and updates.'
+  id: totrans-207
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ts_both`自动初始化并自动更新。这对于跟踪行的任何更改时间（无论是插入还是更新）非常有用。'
+- en: '`ts_create` auto-initializes only. This is useful when you want a column to
+    be set to the time at which a row is created, but remain constant thereafter.'
+  id: totrans-208
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ts_create`仅自动初始化。当您希望列设置为创建行时的时间，但在此后保持恒定时，这将非常有用。'
+- en: '`ts_update` auto-updates only. It is set to the column default (or value you
+    specify explicitly) at row-creation time and it auto-updates for changes to the
+    row thereafter. The use cases for this are more limited—for example, to track
+    row-creation and last-modification times separately (using `ts_update` in conjunction
+    with `ts_create`), rather than together in a single column like `ts_both`.'
+  id: totrans-209
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`ts_update`仅自动更新。它在创建行时设置为列默认值（或您明确指定的值），并在之后对行的更改自动更新。这种用法更为有限，例如，单独跟踪行创建和最后修改时间（使用`ts_update`与`ts_create`结合），而不是在单个列中像`ts_both`一样一起。'
+- en: 'To see how the table works, insert some rows into the table (a few seconds
+    apart so the timestamps differ), then select its contents:'
+  id: totrans-210
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看表的工作原理，请向表中插入一些行（时间间隔几秒钟，使时间戳不同），然后选择其内容：
+- en: '[PRE27]'
+  id: totrans-211
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE27]'
+- en: The first two `INSERT` statements shows that you can set the auto-initialize
+    columns to the current date and time by omitting them from the `INSERT` statement
+    entirely. The third insert shows that you can set a `TIMESTAMP` column to the
+    current date and time by setting it explicitly to `NULL`, even one that does not
+    auto-initialize. This `NULL`-assignment behavior is not specific to `INSERT` statements;
+    it works for `UPDATE` as well. You can disable this special handling of `NULL`
+    assignments, as we’ll cover later in this recipe.
+  id: totrans-212
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 前两个`INSERT`语句表明，通过完全省略它们从`INSERT`语句中省略它们，您可以将自动初始化列设置为当前日期和时间。第三个插入显示，您可以将`TIMESTAMP`列显式设置为当前日期和时间，即使它不自动初始化。这种`NULL`赋值行为不仅适用于`INSERT`语句；它也适用于`UPDATE`。您可以禁用对`NULL`赋值的特殊处理，我们将在本章后面介绍这个方法。
+- en: 'To see auto-updating in action, issue a statement that changes one row’s `val`
+    column and check its effect on the table’s contents. The result shows that the
+    auto-update columns are updated (in the modified row only):'
+  id: totrans-213
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要查看自动更新的实际效果，请发出一个改变一行中`val`列的语句，并检查其对表内容的影响。结果显示自动更新列已更新（仅在修改的行中）：
+- en: '[PRE28]'
+  id: totrans-214
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE28]'
+- en: 'If you modify multiple rows, updates occur for the auto-update columns in each
+    row:'
+  id: totrans-215
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果修改多行，则每行中的自动更新列都会发生更新：
+- en: '[PRE29]'
+  id: totrans-216
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE29]'
+- en: 'An `UPDATE` statement that doesn’t actually change any value in a row doesn’t
+    modify auto-update columns. To see this, set every row’s `val` column to its current
+    value, then review the table contents to see that auto-update columns retain their
+    values:'
+  id: totrans-217
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果`UPDATE`语句实际上没有更改行中的任何值，则不会修改自动更新列。要查看这一点，请将每行的`val`列设置为其当前值，然后查看表内容，以查看自动更新列保留其值：
+- en: '[PRE30]'
+  id: totrans-218
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE30]'
+- en: 'As stated previously, automatic `TIMESTAMP` properties also apply to `DATETIME`,
+    with some differences:'
+  id: totrans-219
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如前所述，自动`TIMESTAMP`属性也适用于`DATETIME`，但有些差异：
+- en: For the first `TIMESTAMP` column in a table, if neither of the `DEFAULT` or
+    `ON` `UPDATE` attributes are specified, the column is implicitly defined with
+    both. For `DATETIME`, automatic properties never apply implicitly; only those
+    specified explicitly.
+  id: totrans-220
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于表中的第一个`TIMESTAMP`列，如果未指定`DEFAULT`或`ON UPDATE`属性，则该列隐式定义为两者都包括。对于`DATETIME`，自动属性从不隐式应用；只有明确指定的那些属性。
+- en: It is not possible to set `NULL` to `TIMESTAMP` anymore. To assign the current
+    timestamp, set the column to `CURRENT_TIMESTAMP` or a synonym such as `NOW()`.
+  id: totrans-221
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 现在不再可能将`NULL`设置为`TIMESTAMP`。要分配当前时间戳，请将列设置为`CURRENT_TIMESTAMP`或其同义词，例如`NOW()`。
+- en: To determine for any given `TIMESTAMP` column what happens when `NULL` is assigned
+    to it, use `SHOW` `CREATE` `TABLE` to see the column definition. If the definition
+    includes the `NULL` attribute, assigning `NULL` stores `NULL`. If the definition
+    includes the `NOT` `NULL` attribute, you can specify `NULL` as the value to be
+    assigned, but you cannot *store* `NULL` because MySQL stores the current date
+    and time instead.
+  id: totrans-222
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定对于任何给定的`TIMESTAMP`列，当将`NULL`赋值给它时会发生什么，请使用`SHOW CREATE TABLE`查看列定义。如果定义包括`NULL`属性，则赋值`NULL`会存储`NULL`。如果定义包括`NOT
+    NULL`属性，则可以指定`NULL`作为要赋值的值，但不能*存储*`NULL`，因为MySQL会存储当前日期和时间。
+- en: See Also
+  id: totrans-223
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 另请参阅
+- en: To simulate `TIMESTAMP` auto-initialization and auto-update properties for other
+    temporal types, you can use triggers (see [Chapter 11](ch11.xhtml#nch-routines)).
+  id: totrans-224
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要模拟其他时间类型的`TIMESTAMP`自动初始化和自动更新属性，可以使用触发器（参见[第11章](ch11.xhtml#nch-routines)）。
+- en: 8.9 Extracting Parts of Dates or Times
+  id: totrans-225
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.9 提取日期或时间的部分
+- en: Problem
+  id: totrans-226
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to obtain just a part of a date or a time.
+  id: totrans-227
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望仅获取日期或时间的一部分。
+- en: Solution
+  id: totrans-228
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Invoke a function specifically intended for extracting part of a temporal value,
+    such as `MONTH()` or `MINUTE()`. This is usually the fastest method for component
+    extraction if you need only a single component of a value. Alternatively, use
+    a formatting function such as `DATE_FORMAT()` or `TIME_FORMAT()` with a format
+    string that includes a specifier for the part of the value you want to obtain.
+  id: totrans-229
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 调用专门用于提取时间值部分的函数，如`MONTH()`或`MINUTE()`。如果您只需要值的单个组件，这通常是最快的提取方法。或者，使用包含您想获取的值部分的格式字符串的格式化函数，如`DATE_FORMAT()`或`TIME_FORMAT()`。
+- en: Discussion
+  id: totrans-230
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: The following discussion shows different ways to extract parts of temporal values.
+  id: totrans-231
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面的讨论展示了提取时间值部分的不同方法。
+- en: Decomposing dates or times using component-extraction functions
+  id: totrans-232
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用组件提取函数分解日期或时间
+- en: 'MySQL includes many functions for extracting date and time subparts. For example,
+    `DATE()` and `TIME()` extract the date and time components of temporal values:'
+  id: totrans-233
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL包括许多用于提取日期和时间子部分的函数。例如，`DATE()`和`TIME()`提取时间值的日期和时间组件：
+- en: '[PRE31]'
+  id: totrans-234
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE31]'
+- en: 'The [Table 8-4](#nch-dates-dates-decomp-extract) shows some several component-extraction
+    functions; consult the [MySQL Reference Manual](https://dev.mysql.com/doc/refman/8.0/en/date-and-time-functions.html#function_to-days)
+    for a complete list. The date-related functions work with `DATE`, `DATETIME`,
+    or `TIMESTAMP` values. The time-related functions work with `TIME`, `DATETIME`,
+    or `TIMESTAMP` values:'
+  id: totrans-235
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[表 8-4](#nch-dates-dates-decomp-extract)展示了一些组件提取函数；请参阅[MySQL参考手册](https://dev.mysql.com/doc/refman/8.0/en/date-and-time-functions.html#function_to-days)获取完整列表。日期相关函数适用于`DATE`、`DATETIME`或`TIMESTAMP`值。时间相关函数适用于`TIME`、`DATETIME`或`TIMESTAMP`值：'
+- en: Table 8-4\. Component-extraction functions
+  id: totrans-236
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 表 8-4\. 组件提取函数
+- en: '| Function | Return value |'
+  id: totrans-237
+  prefs: []
+  type: TYPE_TB
+  zh: '| 函数 | 返回值 |'
+- en: '| --- | --- |'
+  id: totrans-238
+  prefs: []
+  type: TYPE_TB
+  zh: '| --- | --- |'
+- en: '| `YEAR()` | Year of date |'
+  id: totrans-239
+  prefs: []
+  type: TYPE_TB
+  zh: '| `YEAR()` | 年份 |'
+- en: '| `MONTH()` | Month number (1..12) |'
+  id: totrans-240
+  prefs: []
+  type: TYPE_TB
+  zh: '| `MONTH()` | 月份数字（1至12） |'
+- en: '| `MONTHNAME()` | Month name (January..December) |'
+  id: totrans-241
+  prefs: []
+  type: TYPE_TB
+  zh: '| `MONTHNAME()` | 月份名称（一月至十二月） |'
+- en: '| `DAYOFMONTH()` | Day of month (1..31) |'
+  id: totrans-242
+  prefs: []
+  type: TYPE_TB
+  zh: '| `DAYOFMONTH()` | 月中的天数（1至31） |'
+- en: '| `DAYNAME()` | Day name (Sunday..Saturday) |'
+  id: totrans-243
+  prefs: []
+  type: TYPE_TB
+  zh: '| `DAYNAME()` | 星期几名称（星期日至星期六） |'
+- en: '| `DAYOFWEEK()` | Day of week (1..7 for Sunday..Saturday) |'
+  id: totrans-244
+  prefs: []
+  type: TYPE_TB
+  zh: '| `DAYOFWEEK()` | 星期几（1至7，分别对应星期日至星期六） |'
+- en: '| `WEEKDAY()` | Day of week (0..6 for Monday..Sunday) |'
+  id: totrans-245
+  prefs: []
+  type: TYPE_TB
+  zh: '| `WEEKDAY()` | 星期几（0至6，分别对应星期一到星期日） |'
+- en: '| `DAYOFYEAR()` | Day of year (1..366) |'
+  id: totrans-246
+  prefs: []
+  type: TYPE_TB
+  zh: '| `DAYOFYEAR()` | 年中的天数（1至366） |'
+- en: '| `HOUR()` | Hour of time (0..23) |'
+  id: totrans-247
+  prefs: []
+  type: TYPE_TB
+  zh: '| `HOUR()` | 时间的小时（0至23） |'
+- en: '| `MINUTE()` | Minute of time (0..59) |'
+  id: totrans-248
+  prefs: []
+  type: TYPE_TB
+  zh: '| `MINUTE()` | 时间的分钟（0至59） |'
+- en: '| `SECOND()` | Second of time (0..59) |'
+  id: totrans-249
+  prefs: []
+  type: TYPE_TB
+  zh: '| `SECOND()` | 时间的秒（0至59） |'
+- en: '| `MICROSECOND()` | Microsecond of time (0..59) |'
+  id: totrans-250
+  prefs: []
+  type: TYPE_TB
+  zh: '| `MICROSECOND()` | 时间的微秒（0至59） |'
+- en: '| `EXTRACT()` | Varies |'
+  id: totrans-251
+  prefs: []
+  type: TYPE_TB
+  zh: '| `EXTRACT()` | 各不相同 |'
+- en: 'Here’s an example:'
+  id: totrans-252
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下是一个示例：
+- en: '[PRE32]'
+  id: totrans-253
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE32]'
+- en: '[PRE33]'
+  id: totrans-254
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE33]'
+- en: 'Functions such as `YEAR()` or `DAYOFMONTH()` extract values that have an obvious
+    correspondence to a substring of the temporal value to which you apply them. Other
+    component-extraction functions provide access to values that have no such correspondence.
+    One is the day-of-year value:'
+  id: totrans-255
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数如`YEAR()`或`DAYOFMONTH()`提取的值与应用它们的时间值的子字符串具有明显的对应关系。其他组件提取函数提供了访问没有此类对应关系的值。其中一个是一年中的日期值：
+- en: '[PRE34]'
+  id: totrans-256
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE34]'
+- en: 'Another is the day of the week, which is available by name or number:'
+  id: totrans-257
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一个是星期几，可以按名称或数字获取：
+- en: '`DAYNAME()` returns the complete day name. There is a `DATE_FORMAT(d, ''%a'')`
+    function for returning the three-character name abbreviation, that you can get
+    it easily by passing the full name to `DATE_FORMAT()`:'
+  id: totrans-258
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`DAYNAME()`返回完整的星期几名称。有一个`DATE_FORMAT(d, ''%a'')`函数用于返回三字符名称缩写，您可以通过将全名传递给`DATE_FORMAT()`轻松获取它：'
+- en: '[PRE35]'
+  id: totrans-259
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE35]'
+- en: 'To get the day of the week as a number, use `DAYOFWEEK()` or `WEEKDAY()`, but
+    pay attention to the range of values each function returns. `DAYOFWEEK()` returns
+    values from 1 to 7, corresponding to Sunday through Saturday. `WEEKDAY()` returns
+    values from 0 to 6, corresponding to Monday through Sunday:'
+  id: totrans-260
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要获得星期几的数字形式，请使用`DAYOFWEEK()`或`WEEKDAY()`，但要注意每个函数返回的值范围。`DAYOFWEEK()`返回1至7的值，分别对应星期日到星期六。`WEEKDAY()`返回0至6的值，分别对应星期一到星期日：
+- en: '[PRE36]'
+  id: totrans-261
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE36]'
+- en: '`EXTRACT()` is another function for obtaining individual parts of temporal
+    values:'
+  id: totrans-262
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`EXTRACT()`是另一个用于获取时间值各部分的函数：'
+- en: '[PRE37]'
+  id: totrans-263
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE37]'
+- en: The keyword indicating what to extract from the value should be a unit specifier
+    such as `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE`, or `SECOND`. Unit specifiers
+    are singular, not plural. (Check the [MySQL Reference Manual](https://dev.mysql.com/doc/refman/8.0/en/date-and-time-functions.html#function_to-days)
+    for the full list.)
+  id: totrans-264
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 指示从值中提取什么的关键字应该是像 `YEAR`、`MONTH`、`DAY`、`HOUR`、`MINUTE` 或 `SECOND` 这样的单位说明符。单位说明符是单数形式，而不是复数形式。（请查看[MySQL参考手册](https://dev.mysql.com/doc/refman/8.0/en/date-and-time-functions.html#function_to-days)获取完整列表。）
+- en: Decomposing dates or times using formatting functions
+  id: totrans-265
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用格式化函数分解日期或时间
+- en: 'The `DATE_FORMAT()` and `TIME_FORMAT()` functions reformat date and time values.
+    By specifying appropriate format strings, you can extract individual parts of
+    temporal values:'
+  id: totrans-266
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DATE_FORMAT()` 和 `TIME_FORMAT()` 函数重新格式化日期和时间值。通过指定适当的格式字符串，您可以提取时间值的各个部分：'
+- en: '[PRE38]'
+  id: totrans-267
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE38]'
+- en: 'Formatting functions are advantageous when you want to extract more than one
+    part of a value, or display extracted values in a format different from the default.
+    For example, to extract the entire date or time from `DATETIME` values, do this:'
+  id: totrans-268
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当您希望提取值的多个部分或以与默认格式不同的格式显示提取的值时，格式化函数非常有利。例如，要从 `DATETIME` 值中提取整个日期或时间，请执行以下操作：
+- en: '[PRE39]'
+  id: totrans-269
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE39]'
+- en: 'To present a date in other than *`YYYY-MM-DD`* format or a time without the
+    seconds part, do this:'
+  id: totrans-270
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要以非 *`YYYY-MM-DD`* 格式显示日期或者不显示秒部分的时间，请执行以下操作：
+- en: '[PRE40]'
+  id: totrans-271
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE40]'
+- en: 8.10 Synthesizing Dates or Times from Component Values
+  id: totrans-272
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.10 从组件值合成日期或时间
+- en: Problem
+  id: totrans-273
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to combine the parts of a date or time to produce a complete date or
+    time value. Or you want to replace parts of a date to produce another date.
+  id: totrans-274
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望将日期或时间的各部分组合起来以生成完整的日期或时间值。或者您希望替换日期的部分以生成另一个日期。
+- en: Solution
+  id: totrans-275
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: 'You have several options:'
+  id: totrans-276
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您有几个选项：
+- en: Use `MAKETIME()` to construct a `TIME` value from hour, minute, and second parts.
+  id: totrans-277
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 `MAKETIME()` 从小时、分钟和秒部分构造 `TIME` 值。
+- en: Use `DATE_FORMAT()` or `TIME_FORMAT()` to combine parts of the existing value
+    with parts you want to replace.
+  id: totrans-278
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用 `DATE_FORMAT()` 或 `TIME_FORMAT()` 来组合现有值的部分和您想要替换的部分。
+- en: Pull out the parts that you need with component-extraction functions and recombine
+    the parts with `CONCAT()`.
+  id: totrans-279
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用组件提取函数提取所需的部分，并使用 `CONCAT()` 重新组合这些部分。
+- en: Discussion
+  id: totrans-280
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: The reverse of splitting a date or time value into components is synthesizing
+    a temporal value from its constituent parts. Techniques for date and time synthesis
+    include using composition functions, formatting functions, and string concatenation.
+  id: totrans-281
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将日期或时间值分解为组件的逆过程是从其组成部分合成时间值。合成日期和时间的技术包括使用组合函数、格式化函数和字符串连接。
+- en: 'The `MAKETIME()` function takes component hour, minute, and second values as
+    arguments and combines them to produce a time:'
+  id: totrans-282
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`MAKETIME()` 函数将组件小时、分钟和秒值作为参数，并将它们组合成时间：'
+- en: '[PRE41]'
+  id: totrans-283
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE41]'
+- en: 'Date synthesis often is performed beginning with a given date, then keeping
+    parts that you want to use and replacing the rest. For example, to produce the
+    first day of the month in which a date falls, use `DATE_FORMAT()` to extract the
+    year and month parts from the date, combining them with a day part of `01`:'
+  id: totrans-284
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 日期合成通常是从给定日期开始执行，然后保留您希望使用的部分并替换其余部分。例如，要生成日期所在月份的第一天，请使用 `DATE_FORMAT()` 提取日期中的年份和月份部分，并将它们与
+    `01` 的日部分组合：
+- en: '[PRE42]'
+  id: totrans-285
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE42]'
+- en: '`TIME_FORMAT()` can be used similarly. The following example produces time
+    values that have the seconds part set to `00`:'
+  id: totrans-286
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TIME_FORMAT()` 可以类似地使用。以下示例生成秒部分设置为 `00` 的时间值：'
+- en: '[PRE43]'
+  id: totrans-287
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE43]'
+- en: 'Another way to construct temporal values is to use date-part extraction functions
+    in conjunction with `CONCAT()`. However, this method often is messier than the
+    `DATE_FORMAT()` technique just discussed, and it sometimes yields slightly different
+    results:'
+  id: totrans-288
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种构造时间值的方法是将日期部分提取函数与 `CONCAT()` 结合使用。然而，这种方法通常比刚讨论的 `DATE_FORMAT()` 技术更混乱，并且有时会产生稍微不同的结果：
+- en: '[PRE44]'
+  id: totrans-289
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE44]'
+- en: 'Note that the month values in some of these dates have only a single digit.
+    To ensure that the month has two digits—as required for ISO format—use `LPAD()`
+    to add a leading zero as necessary:'
+  id: totrans-290
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 请注意，其中一些日期的月份值只有一个数字。为确保月份具有两位数（如ISO格式所需），请使用 `LPAD()` 根据需要添加前导零：
+- en: '[PRE45]'
+  id: totrans-291
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE45]'
+- en: '[Recipe 8.18](#nch-dates-dates-canonize) shows other ways to solve the problem
+    of producing ISO dates from not-quite-ISO dates.'
+  id: totrans-292
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[Recipe 8.18](#nch-dates-dates-canonize) 展示了解决从非完全ISO日期生成ISO日期的问题的其他方法。'
+- en: '`TIME` values can be produced from hours, minutes, and seconds values using
+    methods analogous to those for creating `DATE` values. For example, to change
+    a `TIME` value so that its seconds part is `00`, extract the hour and minute parts,
+    and then recombine them with `CONCAT()`:'
+  id: totrans-293
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 可以使用类似于创建`DATE`值的方法从小时、分钟和秒值生成`TIME`值。例如，要修改`TIME`值以使其秒部分为`00`，请提取小时和分钟部分，然后使用`CONCAT()`重新组合它们：
+- en: '[PRE46]'
+  id: totrans-294
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE46]'
+- en: 'To produce a combined date-and-time value from separate date and time values,
+    simply concatenate them separated by a space:'
+  id: totrans-295
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要从单独的日期和时间值生成组合的日期时间值，只需将它们用空格分隔连接起来：
+- en: '[PRE47]'
+  id: totrans-296
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE47]'
+- en: 8.11 Converting Between Temporal Values and Basic Units
+  id: totrans-297
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.11 将时间值和基本单位之间进行转换
+- en: Problem
+  id: totrans-298
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to convert a temporal value such as a time or date to basic units such
+    as seconds or days. This is often useful or necessary for performing temporal
+    arithmetic operations (see [Recipe 8.12](#nch-dates-dates-calc-difference) and
+    [Recipe 8.13](#nch-dates-dates-calc-sum)).
+  id: totrans-299
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将诸如时间或日期之类的临时值转换为基本单位，例如秒或天。这通常对执行时间算术运算（参见[Recipe 8.12](#nch-dates-dates-calc-difference)和[Recipe
+    8.13](#nch-dates-dates-calc-sum)）非常有用或必要。
+- en: Solution
+  id: totrans-300
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: 'The conversion method depends on the type of value to be converted:'
+  id: totrans-301
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 转换方法取决于要转换的值类型：
+- en: To convert between time values and seconds, use the `TIME_TO_SEC()` and `SEC_TO_TIME()`
+    functions.
+  id: totrans-302
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要在时间值和秒之间进行转换，请使用`TIME_TO_SEC()`和`SEC_TO_TIME()`函数。
+- en: To convert between date values and days, use the `TO_DAYS()` and `FROM_DAYS()`
+    functions.
+  id: totrans-303
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要在日期值和天之间进行转换，请使用`TO_DAYS()`和`FROM_DAYS()`函数。
+- en: To convert between date-and-time values and seconds, use the `UNIX_TIMESTAMP()`
+    and `FROM_UNIXTIME()` functions.
+  id: totrans-304
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 要在日期时间值和秒之间进行转换，请使用`UNIX_TIMESTAMP()`和`FROM_UNIXTIME()`函数。
+- en: Discussion
+  id: totrans-305
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: The following discussion shows how to convert several types of temporal values
+    to basic units and vice versa.
+  id: totrans-306
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下讨论展示了如何将多种类型的时间值转换为基本单位，反之亦然。
+- en: Converting between times and seconds
+  id: totrans-307
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 在时间和秒之间进行转换
+- en: '`TIME` values are specialized representations of a simpler unit (seconds).
+    To convert from one to the other, use the `TIME_TO_SEC()` and `SEC_TO_TIME()`
+    functions.'
+  id: totrans-308
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TIME`值是较简单单位（秒）的专业表示。要在它们之间进行转换，请使用`TIME_TO_SEC()`和`SEC_TO_TIME()`函数。'
+- en: '`TIME_TO_SEC()` converts a `TIME` value to the equivalent number of seconds,
+    and `SEC_TO_TIME()` does the opposite. The following statement demonstrates a
+    simple conversion in both directions:'
+  id: totrans-309
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TIME_TO_SEC()`将`TIME`值转换为相应的秒数，`SEC_TO_TIME()`则反之。以下语句演示了如何简单地进行双向转换：'
+- en: '[PRE48]'
+  id: totrans-310
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE48]'
+- en: 'To express time values as minutes, hours, or days, perform the appropriate
+    divisions:'
+  id: totrans-311
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将时间值表示为分钟、小时或天，请执行适当的除法：
+- en: '[PRE49]'
+  id: totrans-312
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE49]'
+- en: Use `FLOOR()` on the division results if you prefer integer values that have
+    no fractional part.
+  id: totrans-313
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您希望整数值不包含小数部分，请在除法结果上使用`FLOOR()`。
+- en: 'If you pass `TIME_TO_SEC()` a date-and-time value, it extracts the time part
+    and discards the date. This provides another means of extracting times from `DATETIME`
+    (or `TIMESTAMP`) values, in addition to those already discussed in [Recipe 8.9](#nch-dates-dates-decomp):'
+  id: totrans-314
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果将`TIME_TO_SEC()`传递给日期时间值，则会提取时间部分并丢弃日期部分。这提供了从`DATETIME`（或`TIMESTAMP`）值中提取时间的另一种方法，除了已在[Recipe
+    8.9](#nch-dates-dates-decomp)中讨论过的方法之外：
+- en: '[PRE50]'
+  id: totrans-315
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE50]'
+- en: Converting between dates and days
+  id: totrans-316
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 在日期和天之间进行转换
+- en: If you have a date but want a value in days, or vice versa, use the `TO_DAYS()`
+    and `FROM_DAYS()` functions. Date-and-time values also can be converted to days
+    if you can suffer loss of the time part since the year 0.
+  id: totrans-317
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您有一个日期但想要一个以天为单位的值，或反之，请使用`TO_DAYS()`和`FROM_DAYS()`函数。如果可以接受丢失时间部分，也可以将日期时间值转换为天自从公元前0年以来。
+- en: '`TO_DAYS()` converts a date to the corresponding number of days, and `FROM_DAYS()`
+    does the opposite:'
+  id: totrans-318
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TO_DAYS()`将日期转换为相应的天数，`FROM_DAYS()`则反之：'
+- en: '[PRE51]'
+  id: totrans-319
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE51]'
+- en: When using `TO_DAYS()`, it’s best to stick to the advice of the [MySQL Reference
+    Manual](https://dev.mysql.com/doc/refman/8.0/en/date-and-time-functions.html#function_to-days)
+    and avoid `DATE` values that occur before the beginning of the Gregorian calendar
+    (1582). Changes in the lengths of calendar years and months prior to that date
+    make it difficult to speak meaningfully of what the value of <q>day 0</q> might
+    be. This differs from `TIME_TO_SEC()`, where the correspondence between a `TIME`
+    value and the resulting seconds value is obvious and has a meaningful reference
+    point of 0 seconds.
+  id: totrans-320
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`TO_DAYS()`时，最好遵循[MySQL 参考手册](https://dev.mysql.com/doc/refman/8.0/en/date-and-time-functions.html#function_to-days)的建议，避免使用格里高利历（1582
+    年之前）开始的`DATE`值。在该日期之前的日历年和月份长度的变化使得谈论<q>day 0</q>的值变得困难。这与`TIME_TO_SEC()`不同，后者在`TIME`值和结果秒值之间的对应关系是明显的，并且具有0秒的有意义参考点。
+- en: 'If you pass `TO_DAYS()` a date-and-time value, it extracts the date part and
+    discards the time. This provides another means of extracting dates from `DATETIME`
+    (or `TIMESTAMP`) values, in addition to those already discussed in [Recipe 8.9](#nch-dates-dates-decomp):'
+  id: totrans-321
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你向`TO_DAYS()`传递一个日期和时间值，它将提取日期部分并丢弃时间部分。这提供了从`DATETIME`（或`TIMESTAMP`）值中提取日期的另一种方法，除了已在[配方
+    8.9](#nch-dates-dates-decomp)中讨论过的方法之外：
+- en: '[PRE52]'
+  id: totrans-322
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE52]'
+- en: Converting between date-and-time values and seconds
+  id: totrans-323
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 在日期和时间值与秒之间进行转换
+- en: 'For `DATETIME` or `TIMESTAMP` values that lie within the range of the `TIMESTAMP`
+    data type (from the beginning of 1970 partially through 2038), the `UNIX_TIMESTAMP()`
+    and `FROM_UNIXTIME()` functions convert to and from the number of seconds elapsed
+    since the beginning of 1970\. The conversion to seconds offers higher precision
+    for date-and-time values than a conversion to days, at the cost of a more limited
+    range of values for which the conversion may be performed (`TIME_TO_SEC()` is
+    unsuitable for this because it discards the date):'
+  id: totrans-324
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于`DATETIME`或`TIMESTAMP`值，它们在`TIMESTAMP`数据类型的范围内（从1970年初部分到2038年），`UNIX_TIMESTAMP()`和`FROM_UNIXTIME()`函数将秒数转换为1970年初以来经过的秒数，转换为秒比转换为天提供了更高的日期和时间值精度，尽管转换的值范围更为有限（`TIME_TO_SEC()`不适用于此，因为它丢弃日期）：
+- en: '[PRE53]'
+  id: totrans-325
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE53]'
+- en: 'There is a relationship between <q>UNIX</q> in the function names and the fact
+    that the applicable range of values begins with 1970: the <q>Unix epoch</q> begins
+    at `1970-01-01` `00:00:00` UTC. The epoch is time zero, or the reference point
+    for measuring time in Unix systems. That being so, you may find it curious that
+    the preceding example shows a `UNIX_TIMESTAMP()` value of `21600` for the first
+    value in the `datetime_val` table. Why isn’t it `0`? The apparent discrepancy
+    is due to the fact that the MySQL server interprets the `UNIX_TIMESTAMP()` argument
+    as a value in the client’s local time zone and converts it to UTC (see [Recipe
+    8.4](#nch-dates-dates-client-time-zone)). Our server is in the US Central time
+    zone, six hours (21,600 seconds) west of UTC. The `DATETIME` interpreted based
+    on the time zone and the numbers would not change with a timestamp. Change the
+    session time zone to `''+00:00''` for UTC time and run the query again to observe
+    a different result:'
+  id: totrans-326
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 函数名称中的<q>UNIX</q>与1970年开始的适用值范围之间存在关系：<q>Unix 纪元</q>始于`1970-01-01` `00:00:00`
+    UTC。纪元是时间零点，或在Unix系统中测量时间的参考点。因此，你可能会发现前面的例子显示`datetime_val`表中第一个值的`UNIX_TIMESTAMP()`值为`21600`为什么不是`0`？这种明显的不一致是由于MySQL服务器将`UNIX_TIMESTAMP()`参数解释为客户端本地时区的值，并将其转换为UTC（参见[配方
+    8.4](#nch-dates-dates-client-time-zone)）。我们的服务器位于美国中部时区，比UTC西6小时（21600秒）。根据时区解释`DATETIME`和数字，时间戳不会改变。将会话时区更改为`'+00:00'`以获取UTC时间，然后再次运行查询以观察不同的结果：
+- en: '[PRE54]'
+  id: totrans-327
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE54]'
+- en: '`UNIX_TIMESTAMP()` can convert `DATE` values to seconds, too. It treats such
+    values as having an implicit time-of-day part of `00:00:00`:'
+  id: totrans-328
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`UNIX_TIMESTAMP()`也可以将`DATE`值转换为秒。它将这些值视为具有隐式时间部分`00:00:00`：'
+- en: '[PRE55]'
+  id: totrans-329
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE55]'
+- en: 8.12 Calculating Intervals Between Dates or Times
+  id: totrans-330
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.12 计算日期或时间间隔
+- en: Problem
+  id: totrans-331
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know how long it is between two dates or times; that is, the interval
+    between them.
+  id: totrans-332
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 想知道两个日期或时间之间的间隔长短；也就是说，它们之间的间隔。
+- en: Solution
+  id: totrans-333
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: To calculate an interval, use one of the temporal-difference functions, or convert
+    your values to basic units and take the difference. The permitted functions depend
+    on the types of the values for which you want to know the interval.
+  id: totrans-334
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要计算间隔，请使用一个时间差函数，或将你的值转换为基本单位并取差值。允许的函数取决于你想知道间隔的值的类型。
+- en: Discussion
+  id: totrans-335
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: The following discussion shows several ways to perform interval calculations.
+  id: totrans-336
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面的讨论展示了执行区间计算的几种方法。
+- en: Calculating intervals with temporal-difference functions
+  id: totrans-337
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用时间差函数计算间隔
+- en: 'To calculate an interval in days between two date values, use the `DATEDIFF()`
+    function:'
+  id: totrans-338
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要计算两个日期值之间的天数间隔，使用 `DATEDIFF()` 函数：
+- en: '[PRE56]'
+  id: totrans-339
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE56]'
+- en: '`DATEDIFF()` also works with date-and-time values, but ignores the time part.
+    This makes it suitable for producing day intervals for `DATE`, `DATETIME`, or
+    `TIMESTAMP` values.'
+  id: totrans-340
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DATEDIFF()` 也适用于日期和时间值，但会忽略时间部分。这使其适用于为 `DATE`、`DATETIME` 或 `TIMESTAMP` 值生成日间隔。'
+- en: 'To calculate an interval between `TIME` values as another `TIME` value, use
+    the `TIMEDIFF()` function:'
+  id: totrans-341
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将 `TIME` 值作为另一个 `TIME` 值的间隔计算，使用 `TIMEDIFF()` 函数：
+- en: '[PRE57]'
+  id: totrans-342
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE57]'
+- en: '`TIMEDIFF()` also works for date-and-time values. That is, it accepts either
+    time or date-and-time values, but the types of the arguments must match.'
+  id: totrans-343
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TIMEDIFF()` 也适用于日期和时间值。也就是说，它接受时间或日期和时间值，但参数的类型必须匹配。'
+- en: 'A time interval expressed as a `TIME` value can be broken down into components
+    using the techniques shown in [Recipe 8.9](#nch-dates-dates-decomp). For example,
+    to express a time interval in terms of its constituent hours, minutes, and seconds
+    values, calculate time interval subparts using the `HOUR()`, `MINUTE()`, and `SECOND()`
+    functions. (Don’t forget that if your intervals may be negative, you must take
+    that into account.) The following SQL statement shows how to determine the components
+    of the interval between the `t1` and `t2` columns of the `time_val` table:'
+  id: totrans-344
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将时间间隔表示为 `TIME` 值可以使用 [Recipe 8.9](#nch-dates-dates-decomp) 中展示的技术来分解其组件。例如，要按其组成的小时、分钟和秒值表达时间间隔，可以使用
+    `HOUR()`、`MINUTE()` 和 `SECOND()` 函数计算时间间隔的子部分。（别忘了，如果你的间隔可能为负数，你必须考虑这一点。）以下 SQL
+    语句展示了如何确定 `time_val` 表的 `t1` 和 `t2` 列之间间隔的组成部分：
+- en: '[PRE58]'
+  id: totrans-345
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE58]'
+- en: 'If you work with date or date-and-time values, the `TIMESTAMPDIFF()` function
+    provides another way to calculate intervals. It enables you to specify the units
+    in which intervals should be expressed:'
+  id: totrans-346
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你使用日期或日期和时间值，`TIMESTAMPDIFF()` 函数提供了另一种计算间隔的方式。它使你能够指定应以哪些单位表示间隔：
+- en: '[PRE59]'
+  id: totrans-347
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE59]'
+- en: '*`unit`* is the interval unit and *`val1`* and *`val2`* are the values between
+    which to calculate the interval. With `TIMESTAMPDIFF()`, you can express an interval
+    in many different ways:'
+  id: totrans-348
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*`unit`* 是区间单位，*`val1`* 和 *`val2`* 是计算区间的值。使用 `TIMESTAMPDIFF()`，你可以以多种不同的方式表示区间：'
+- en: '[PRE60]'
+  id: totrans-349
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE60]'
+- en: Permitted *`unit`* specifiers are `MICROSECOND`, `SECOND`, `MINUTE`, `HOUR`,
+    `DAY`, `WEEK`, `MONTH`, `QUARTER`, or `YEAR`. Note that each is singular, not
+    plural.
+  id: totrans-350
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 允许的 *`unit`* 规范器包括 `MICROSECOND`、`SECOND`、`MINUTE`、`HOUR`、`DAY`、`WEEK`、`MONTH`、`QUARTER`
+    或 `YEAR`。请注意，每个都是单数形式，而不是复数形式。
+- en: 'Be aware of these properties of `TIMESTAMPDIFF()`:'
+  id: totrans-351
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意 `TIMESTAMPDIFF()` 的这些属性：
+- en: Its value is negative if the first temporal value is greater than the second,
+    which is opposite the order of the arguments for `DATEDIFF()` and `TIMEDIFF()`.
+  id: totrans-352
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 如果第一个时间值大于第二个时间值，则其值为负数，这与 `DATEDIFF()` 和 `TIMEDIFF()` 的参数顺序相反。
+- en: Despite the `TIMESTAMP` in its name, `TIMESTAMPDIFF()` arguments are not limited
+    to the range of the `TIMESTAMP` data type.
+  id: totrans-353
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 尽管其名称中包含 `TIMESTAMP`，但 `TIMESTAMPDIFF()` 的参数并不限于 `TIMESTAMP` 数据类型的范围。
+- en: Time interval calculation using basic units
+  id: totrans-354
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用基本单位进行时间间隔计算
+- en: 'To calculate intervals in seconds between pairs of time values, convert them
+    to seconds with `TIME_TO_SEC()` and take the difference. To express the resulting
+    interval as a `TIME` value, pass it to `SEC_TO_TIME()`. The following statement
+    calculates the intervals between the `t1` and `t2` columns of the `time_val` table,
+    expressing each interval both in seconds and as a `TIME` value:'
+  id: totrans-355
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要计算时间值对之间的秒数间隔，可以使用 `TIME_TO_SEC()` 将它们转换为秒，并取其差值。要将结果的区间表达为 `TIME` 值，将其传递给
+    `SEC_TO_TIME()`。以下语句计算了 `time_val` 表的 `t1` 和 `t2` 列之间的区间，同时用秒和 `TIME` 值表示每个区间：
+- en: '[PRE61]'
+  id: totrans-356
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE61]'
+- en: Date or date-and-time interval calculation using basic units
+  id: totrans-357
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用基本单位进行日期或日期和时间间隔计算
+- en: 'When you calculate an interval between dates by converting both dates to a
+    common unit in relation to a given reference point and take the difference, the
+    range of your values determines which conversions are available:'
+  id: totrans-358
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你计算日期之间的间隔时，通过将两个日期转换为相对于给定参考点的共同单位，并取其差值，你的值范围决定了可用的转换方式：
+- en: '`DATE`, `DATETIME`, or `TIMESTAMP` values dating back to `1970-01-01` `00:00:00`
+    UTC—the Unix epoch—can be converted to seconds elapsed since the epoch. With dates
+    in that range, you can calculate intervals to an accuracy of one second.'
+  id: totrans-359
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: '`DATE`、`DATETIME`或`TIMESTAMP`值可追溯到`1970-01-01` `00:00:00` UTC——Unix纪元——可以转换为自纪元以来经过的秒数。在这个范围内的日期，您可以计算精确到一秒的间隔。'
+- en: Older dates from the beginning of the Gregorian calendar (1582) on can be converted
+    to day values and used to compute intervals in days.
+  id: totrans-360
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 自1582年格里高利历开始的旧日期可以转换为日值，并用于计算以天为间隔的间隔。
+- en: Dates that begin earlier than either of these reference points present more
+    of a problem. In such cases, you may find that your programming language offers
+    computations that are not available or are difficult to perform in SQL. If so,
+    consider processing date values directly from within your API language. For example,
+    the Date::Calc and Date::Manip modules are available from CPAN for use in Perl
+    scripts.
+  id: totrans-361
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 早于这两个参考点的日期提出了更多问题。在这种情况下，您可能会发现您的编程语言提供了在SQL中不可用或难以执行的计算。如果是这样，请考虑直接从API语言中处理日期值。例如，Date::Calc和Date::Manip模块可用于Perl脚本。
+- en: 'To calculate an interval in days between date or date-and-time values, convert
+    them to days with `TO_DAYS()` and take the difference. For an interval in weeks,
+    do the same thing and divide the result by seven:'
+  id: totrans-362
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要计算日期或日期时间值之间的天数间隔，请使用`TO_DAYS()`将它们转换为天数，并取差值。对于一周的间隔，做同样的事情并将结果除以七：
+- en: '[PRE62]'
+  id: totrans-363
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE62]'
+- en: You cannot convert days to months or years by simple division because those
+    units vary in length. To yield date intervals expressed in those units, use `TIMESTAMPDIFF()`,
+    discussed earlier in this recipe.
+  id: totrans-364
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 不能通过简单的除法将天数转换为月份或年份，因为这些单位的长度不同。要产生以这些单位表示的日期间隔，请使用之前在本配方中讨论过的`TIMESTAMPDIFF()`。
+- en: 'For date-and-time values occurring within the `TIMESTAMP` range from 1970 partially
+    through 2038, you can determine intervals to a resolution in seconds using the
+    `UNIX_TIMESTAMP()` function. For intervals in other units, seconds are easily
+    converted to minutes, hours, days, or weeks, as this expression shows for dates
+    that lie two weeks apart:'
+  id: totrans-365
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于在1970年部分至2038年之间的`TIMESTAMP`范围内发生的日期时间值，您可以使用`UNIX_TIMESTAMP()`函数确定以秒为分辨率的间隔。对于以其他单位表示的间隔，可以轻松地将秒转换为分钟、小时、天或周，就像这个表达式展示的那样，这个表达式显示了两周之间的日期：
+- en: '[PRE63]'
+  id: totrans-366
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE63]'
+- en: Use `FLOOR()` on the division results if you prefer integer values that have
+    no fractional part.
+  id: totrans-367
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果您更喜欢没有小数部分的整数值，请在除法结果上使用`FLOOR()`。
+- en: 'For values that occur outside the `TIMESTAMP` range, this interval calculation
+    method is more general (but messier):'
+  id: totrans-368
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于超出`TIMESTAMP`范围的值，这种间隔计算方法更为通用（但更为混乱）：
+- en: Take the difference in days between the date parts of the values and multiply
+    by 24 × 60 × 60 to convert to seconds.
+  id: totrans-369
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 取值的日期部分之间的天数差，乘以24 × 60 × 60以转换为秒。
+- en: Adjust the result by the difference in seconds between the time parts of the
+    values.
+  id: totrans-370
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 根据值的时间部分之间的秒数差调整结果。
+- en: 'Here’s an example, using two date-and-time values that lie slightly less than
+    three days apart:'
+  id: totrans-371
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个示例，使用两个日期时间值，它们相隔略少于三天：
+- en: '[PRE64]'
+  id: totrans-372
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE64]'
+- en: 8.13 Adding Date or Time Values
+  id: totrans-373
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.13 添加日期或时间值
+- en: Problem
+  id: totrans-374
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to add temporal values. For example, you want to add a given number
+    of seconds to a time or determine what the date will be three weeks from today.
+  id: totrans-375
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想要添加时间值。例如，您想要在时间中添加给定数量的秒，或者确定三周后的日期是什么。
+- en: Solution
+  id: totrans-376
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: 'To add date or time values, you have several options:'
+  id: totrans-377
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要添加日期或时间值，您有几个选项：
+- en: Use one of the temporal-addition functions.
+  id: totrans-378
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用其中一种时间添加函数。
+- en: Use the `+` `INTERVAL` or `-` `INTERVAL` operator.
+  id: totrans-379
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 使用`+` `INTERVAL`或`-` `INTERVAL`运算符。
+- en: Convert the values to basic units, and take the sum.
+  id: totrans-380
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 将值转换为基本单位，并求和。
+- en: The applicable functions or operators depend on the types of the values.
+  id: totrans-381
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 适用的函数或运算符取决于值的类型。
+- en: Discussion
+  id: totrans-382
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: The following discussion shows several ways to add temporal values.
+  id: totrans-383
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 以下讨论展示了几种添加时间值的方法。
+- en: Adding temporal values using temporal-addition functions or operators
+  id: totrans-384
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用时间添加函数或运算符添加时间值
+- en: 'To add a time to a time or date-and-time value, use the `ADDTIME()` function:'
+  id: totrans-385
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将时间添加到时间或日期时间值中，请使用`ADDTIME()`函数：
+- en: '[PRE65]'
+  id: totrans-386
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE65]'
+- en: 'To add a time to a date or date-and-time value, use the `TIMESTAMP()` function:'
+  id: totrans-387
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要将时间添加到日期或日期时间值中，请使用`TIMESTAMP()`函数：
+- en: '[PRE66]'
+  id: totrans-388
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE66]'
+- en: 'MySQL also provides `DATE_ADD()` and `DATE_SUB()` functions for adding intervals
+    to dates and subtracting intervals from dates. Each function takes a date (or
+    date-and-time) value `d` and an interval, expressed using the following syntax:'
+  id: totrans-389
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL还提供了`DATE_ADD()`和`DATE_SUB()`函数，用于向日期添加间隔或从日期减去间隔。每个函数接受一个日期（或日期时间）值`d`和一个使用以下语法表示的间隔：
+- en: '[PRE67]'
+  id: totrans-390
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE67]'
+- en: 'The `+` `INTERVAL` and `-` `INTERVAL` operators are similar:'
+  id: totrans-391
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`+` `INTERVAL`和`-` `INTERVAL`运算符类似：'
+- en: '[PRE68]'
+  id: totrans-392
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE68]'
+- en: '*`unit`* is the interval unit and *`val`* is an expression indicating the number
+    of units. Some common unit specifiers are `SECOND`, `MINUTE`, `HOUR`, `DAY`, `MONTH`,
+    and `YEAR`. Note that each is singular, not plural. (Check the [MySQL Reference
+    Manual](https://dev.mysql.com/doc/refman/8.0/en/date-and-time-functions.html#function_to-days)
+    for the full list.)'
+  id: totrans-393
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '*`unit`*是间隔单位，*`val`*是指示单位数量的表达式。一些常见的单位指示器包括`SECOND`、`MINUTE`、`HOUR`、`DAY`、`MONTH`和`YEAR`。请注意，每个单位都是单数形式，而不是复数形式。（查看[MySQL参考手册](https://dev.mysql.com/doc/refman/8.0/en/date-and-time-functions.html#function_to-days)获取完整列表。）'
+- en: 'Use `DATE_ADD()` or `DATE_SUB()` to perform date arithmetic operations such
+    as these:'
+  id: totrans-394
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用`DATE_ADD()`或`DATE_SUB()`执行日期算术运算，例如这些操作：
+- en: 'Determine the date three days from today:'
+  id: totrans-395
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 确定从今天起三天后的日期：
+- en: '[PRE69]'
+  id: totrans-396
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE69]'
+- en: 'Find the date a week ago:'
+  id: totrans-397
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 找到一周前的日期：
+- en: '[PRE70]'
+  id: totrans-398
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE70]'
+- en: 'For questions where you need to know both the date and the time, begin with
+    a `DATETIME` or `TIMESTAMP` value. To answer the question, <q>What time will it
+    be in 60 hours?</q> do this:'
+  id: totrans-399
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 对于需要知道日期和时间的问题，请从`DATETIME`或`TIMESTAMP`值开始。要回答“60小时后是什么时间？”这个问题，请执行以下操作：
+- en: '[PRE71]'
+  id: totrans-400
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE71]'
+- en: 'Some interval specifiers have both date and time parts. The following adds
+    14.5 hours to the current date and time:'
+  id: totrans-401
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 一些间隔指示器具有日期和时间部分。以下将14.5小时添加到当前日期和时间：
+- en: '[PRE72]'
+  id: totrans-402
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE72]'
+- en: 'Similarly, adding 3 days and 4 hours produces this result:'
+  id: totrans-403
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 类似地，添加3天和4小时会产生以下结果：
+- en: '[PRE73]'
+  id: totrans-404
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE73]'
+- en: '`DATE_ADD()` and `DATE_SUB()` are interchangeable because one is the same as
+    the other with the sign of the interval value flipped. These two expressions are
+    equivalent for any date value `d`:'
+  id: totrans-405
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DATE_ADD()`和`DATE_SUB()`可以互换使用，因为一个与另一个在间隔值的符号方面是相同的。对于任何日期值`d`，这两个表达式是等价的：'
+- en: '[PRE74]'
+  id: totrans-406
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE74]'
+- en: 'You can also use the `+` `INTERVAL` or `-` `INTERVAL` operator to perform date
+    interval addition or subtraction:'
+  id: totrans-407
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你也可以使用`+` `INTERVAL`或`-` `INTERVAL`运算符执行日期间隔的加法或减法：
+- en: '[PRE75]'
+  id: totrans-408
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE75]'
+- en: '`TIMESTAMPADD()` is an alternative function for adding intervals to date or
+    date-and-time values. Its arguments are similar to those for `DATE_ADD()`, and
+    the following equivalence holds:'
+  id: totrans-409
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TIMESTAMPADD()`是另一种用于向日期或日期时间值添加间隔的函数。它的参数与`DATE_ADD()`类似，以下等式成立：'
+- en: '[PRE76]'
+  id: totrans-410
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE76]'
+- en: Adding temporal values using basic units
+  id: totrans-411
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用基本单位添加时间值
+- en: Another way to add intervals to date or date-and-time values is to perform temporal
+    <q>shifting</q> via functions that convert to and from basic units. For background
+    information about the applicable functions, see [Recipe 8.11](#nch-dates-dates-basic-units).
+  id: totrans-412
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 另一种向日期或日期时间值添加间隔的方法是通过执行转换为基本单位的函数进行时间“移位”。有关适用函数的背景信息，请参阅[Recipe 8.11](#nch-dates-dates-basic-units)。
+- en: Adding time values using basic units
+  id: totrans-413
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用基本单位添加时间值
+- en: 'Adding times with basic units is similar to calculating intervals between times,
+    except that you compute a sum rather than a difference. To add an interval value
+    in seconds to a `TIME` value, convert the `TIME` to seconds so that both values
+    are represented in the same units, add the values and convert the result back
+    to a `TIME`. For example, two hours is 7,200 seconds (2 × 60 × 60), so the following
+    statement adds two hours to each `t1` value in the `time_val` table:'
+  id: totrans-414
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用基本单位添加时间类似于计算时间间隔，不同之处在于计算的是总和而不是差值。要将一个以秒为单位的间隔值添加到`TIME`值中，将`TIME`转换为秒，以便两个值都表示为相同的单位，然后将这些值相加，并将结果转换回`TIME`。例如，两小时等于7,200秒（2
+    × 60 × 60），因此以下语句将两小时添加到`time_val`表中每个`t1`值：
+- en: '[PRE77]'
+  id: totrans-415
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE77]'
+- en: 'If the interval itself is expressed as a `TIME`, it too should be converted
+    to seconds before adding the values together. The following example calculates
+    the sum of the two `TIME` values in each row of the `time_val` table:'
+  id: totrans-416
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果间隔本身表示为`TIME`，在将这些值相加之前，它也应转换为秒。以下示例计算`time_val`表中每行的两个`TIME`值的总和：
+- en: '[PRE78]'
+  id: totrans-417
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE78]'
+- en: 'It’s important to recognize that MySQL `TIME` values represent elapsed time,
+    not time of day, so they don’t reset to 0 after reaching 24 hours. You can see
+    this in the first and third output rows from the previous statement. To produce
+    time-of-day values, enforce a 24-hour wraparound using a modulo operation before
+    converting the seconds value back to a `TIME` value. The number of seconds in
+    a day is 24 × 60 × 60, or 86,400\. To convert any seconds value `s` to lie within
+    a 24-hour range, use the `MOD()` function or the `%` modulo operator like this:'
+  id: totrans-418
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重要的是要认识到MySQL `TIME`值表示经过的时间，而不是一天中的时间，因此它们在达到24小时后不会重置为0。您可以在上一条语句的第一和第三输出行中看到这一点。要生成一天中的时间值，可以在将秒值转换回`TIME`值之前使用取模操作来执行24小时循环：一天中的秒数是24
+    × 60 × 60，即86,400。要将任何秒值`s`转换为在24小时范围内，使用`MOD()`函数或`%`取模运算符，如下所示：
+- en: '[PRE79]'
+  id: totrans-419
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE79]'
+- en: 'The three expressions are equivalent. Applying the first of them to the time
+    calculations from the preceding example produces the following result:'
+  id: totrans-420
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这三个表达式是等效的。将它们中的第一个应用于前面示例中的时间计算，得到以下结果：
+- en: '[PRE80]'
+  id: totrans-421
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE80]'
+- en: Note
+  id: totrans-422
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+  zh: 注意
+- en: The permitted range of a `TIME` column is `-838:59:59` to `838:59:59` (that
+    is, `-3020399` to `3020399` seconds). However, the range of `TIME` *expressions*
+    can be greater, so when you add time values, you can easily produce a result that
+    lies outside this range and cannot be stored as is into a `TIME` column.
+  id: totrans-423
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TIME`列的允许范围是`-838:59:59`到`838:59:59`（即`-3020399`到`3020399`秒）。但是，`TIME` *表达式*的范围可以更大，因此当您添加时间值时，可能会产生超出此范围的结果，并且不能直接存储到`TIME`列中。'
+- en: Alternatively you can use `TIMESTAMPDIFF()` function to go outside of the `TIMEDIFF()`
+    function limits.
+  id: totrans-424
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者可以使用`TIMESTAMPDIFF()`函数来超出`TIMEDIFF()`函数的限制。
+- en: '[PRE81]'
+  id: totrans-425
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE81]'
+- en: '[PRE82]'
+  id: totrans-426
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE82]'
+- en: Adding to date or date-and-time values using basic units
+  id: totrans-427
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 使用基本单位添加到日期或日期时间值
+- en: 'Date or date-and-time values converted to basic units can be shifted to produce
+    other dates. For example, to shift a date forward or backward a week (seven days),
+    use `TO_DAYS()` and `FROM_DAYS()`:'
+  id: totrans-428
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将日期或日期时间值转换为基本单位后，可以进行偏移以生成其他日期。例如，要将日期向前或向后移动一周（七天），可以使用`TO_DAYS()`和`FROM_DAYS()`函数：
+- en: '[PRE83]'
+  id: totrans-429
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE83]'
+- en: '`TO_DAYS()` also can convert date-and-time values to days, if you don’t mind
+    having it chop off the time part.'
+  id: totrans-430
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 如果你不介意时间部分被截断，`TO_DAYS()`也可以将日期时间值转换为天数。
+- en: 'To preserve the time, you can use `UNIX_TIMESTAMP()` and `FROM_UNIXTIME()`
+    instead, if the initial and resulting values both lie in the permitted range for
+    `TIMESTAMP` values (from 1970 partially through 2038). The following statement
+    shifts a `DATETIME` value forward and backward by an hour (3,600 seconds):'
+  id: totrans-431
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要保留时间部分，可以使用`UNIX_TIMESTAMP()`和`FROM_UNIXTIME()`，只要初始值和结果值都在`TIMESTAMP`值的允许范围内（从1970年到2038年部分）即可。以下语句将`DATETIME`值向前或向后移动一个小时（3,600秒）：
+- en: '[PRE84]'
+  id: totrans-432
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE84]'
+- en: 8.14 Calculating Ages
+  id: totrans-433
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.14 计算年龄
+- en: Problem
+  id: totrans-434
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know how old someone is.
+  id: totrans-435
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 想要知道某人多大年龄。
+- en: Solution
+  id: totrans-436
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: This is a date-arithmetic problem. It amounts to computing the interval between
+    dates, but with a twist. For an age in years, it’s necessary to account for the
+    relative placement of the start and end dates within the calendar year. For an
+    age in months, it’s also necessary to account for the placement of the months
+    and the days within the month.
+  id: totrans-437
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是一个日期算术问题。它等同于计算日期间隔，但有所不同。对于年龄以年为单位的计算，需要考虑起始日期和结束日期在日历年中的相对位置。对于以月为单位的年龄计算，还需要考虑月份和日期在月份中的位置。
+- en: Discussion
+  id: totrans-438
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Age determination is a type of date-interval calculation. However, you cannot
+    simply compute a difference in days and divide by 365 because leap years throw
+    off the calculation. (It is 365 days from 1995-03-01 to 1996-02-29, but that is
+    not a year in age terms.) Dividing by 365.25 is slightly more accurate, but still
+    not correct for all dates.
+  id: totrans-439
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 年龄确定是一种日期间隔计算类型。然而，您不能简单地计算天数差并除以365，因为闰年会影响计算结果。（从1995-03-01到1996-02-29是365天，但在年龄计算中不算一年。）除以365.25略微更精确，但对于所有日期仍然不正确。
+- en: 'To calculate ages, use the `TIMESTAMPDIFF()` function. Pass it a birth date,
+    a current date, and the unit in which you want the age expressed:'
+  id: totrans-440
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要计算年龄，请使用`TIMESTAMPDIFF()`函数。向其传递一个出生日期、当前日期和希望年龄以什么单位表达的参数：
+- en: '[PRE85]'
+  id: totrans-441
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE85]'
+- en: '`TIMESTAMPDIFF()` handles the calculations necessary to adjust for differing
+    month and year lengths and relative positions of the dates within the calendar
+    year. Suppose that a `sibling` table lists the birth dates of Ilayda and her sister
+    Lara.'
+  id: totrans-442
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`TIMESTAMPDIFF()`处理必要的计算，以调整不同月份和年份长度以及日期在日历年中的相对位置。假设一个`sibling`表列出了Ilayda和她妹妹Lara的出生日期。'
+- en: '[PRE86]'
+  id: totrans-443
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE86]'
+- en: 'Using `TIMESTAMPDIFF()`, you can answer questions such as these:'
+  id: totrans-444
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `TIMESTAMPDIFF()`，您可以回答以下类似的问题：
+- en: How old are the Alkin’s children today, in years, months and days?
+  id: totrans-445
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: Alkin 的孩子今天多少岁、多少个月和多少天了？
+- en: '[PRE87]'
+  id: totrans-446
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE87]'
+- en: How old was Ilayda when Lara was born, in years and months?
+  id: totrans-447
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 当 Lara 出生时，Ilayda 多大了，以年和月计算？
+- en: '[PRE88]'
+  id: totrans-448
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE88]'
+- en: For further information about date calculation using these functions, consult
+    the [MySQL Reference Manual](https://dev.mysql.com/doc/refman/8.0/en/date-calculations.html).
+  id: totrans-449
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 欲了解更多关于使用这些函数进行日期计算的信息，请参阅 [MySQL 参考手册](https://dev.mysql.com/doc/refman/8.0/en/date-calculations.html)。
+- en: 8.15 Finding the First Day, Last Day, or Length of a Month
+  id: totrans-450
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.15 寻找月份的第一天、最后一天或长度
+- en: Problem
+  id: totrans-451
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: Given a date, you want to determine the date for the first or last day of the
+    month in which the date occurs, or the first or last day for the month *`n`* months
+    away. A related problem is to determine the number of days in a month.
+  id: totrans-452
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 给定一个日期，您想确定该日期所在月份的第一天或最后一天的日期，或者与该日期相隔 *`n`* 个月的月份的第一天或最后一天。相关问题是确定某月的天数。
+- en: Solution
+  id: totrans-453
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: To determine the date for the first day in a month, use date shifting (an application
+    of date arithmetic). To determine the date for the last day, use the `LAST_DAY()`
+    function. To determine the number of days in a month, find the date for its last
+    day and use it as the argument to `DAYOFMONTH()`.
+  id: totrans-454
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定某月的第一天的日期，请使用日期移动（日期算术的一种应用）。要确定最后一天的日期，请使用 `LAST_DAY()` 函数。要确定某月的天数，找到其最后一天的日期，并将其作为
+    `DAYOFMONTH()` 的参数使用。
+- en: Discussion
+  id: totrans-455
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Sometimes you have a reference date and want to reach a target date that doesn’t
+    have a fixed relationship to the reference date. For example, the first or last
+    days of the current month aren’t a fixed number of days from the current date.
+  id: totrans-456
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时您有一个参考日期，并希望达到一个与参考日期没有固定关系的目标日期。例如，当前月份的第一天或最后一天不是从当前日期固定天数的。
+- en: 'To find the first day of the month for a given date, shift the date back by
+    one fewer days than its `DAYOFMONTH()` value:'
+  id: totrans-457
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要找到给定日期的月份的第一天，请将日期向后移动比其 `DAYOFMONTH()` 值少一天：
+- en: '[PRE89]'
+  id: totrans-458
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE89]'
+- en: 'In the general case, to find the first of the month for any month *`n`* months
+    away from a given date, calculate the first of the month for the date and shift
+    the result by *`n`* months:'
+  id: totrans-459
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通常情况下，要找到距离给定日期 *`n`* 个月的任何月份的第一天，计算该日期的月初，并将结果移动 *`n`* 个月：
+- en: '[PRE90]'
+  id: totrans-460
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE90]'
+- en: 'For example, to find the first day of the previous and following months relative
+    to a given date, *`n`* is `-1` and `1`:'
+  id: totrans-461
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，要找到相对于给定日期的前一个和后一个月的第一天，*`n`* 分别为 `-1` 和 `1`：
+- en: '[PRE91]'
+  id: totrans-462
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE91]'
+- en: 'It’s easier to find the last day of the month for a given date because there
+    is a function for it:'
+  id: totrans-463
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于给定日期，找到该月的最后一天更容易，因为有相应的函数：
+- en: '[PRE92]'
+  id: totrans-464
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE92]'
+- en: 'For the general case, to find the last of the month for any month *`n`* months
+    away from a given date, shift the date by that many months first, then pass it
+    to `LAST_DAY()`:'
+  id: totrans-465
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于一般情况，要找到任何日期 *`n`* 个月后的月末，先将日期移动该月数，然后将其传递给 `LAST_DAY()`：
+- en: '[PRE93]'
+  id: totrans-466
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE93]'
+- en: 'For example, to find the last day of the previous and following months relative
+    to a given date, *`n`* is `-1` and `1`:'
+  id: totrans-467
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 例如，要找到相对于给定日期的前一个和后一个月的最后一天，*`n`* 分别为 `-1` 和 `1`：
+- en: '[PRE94]'
+  id: totrans-468
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE94]'
+- en: 'To find the length of a month in days, determine the date of its last day with
+    `LAST_DAY()`, then use `DAYOFMONTH()` to extract the day-of-month component from
+    the result:'
+  id: totrans-469
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要找到某月的天数长度，请确定其最后一天的日期并使用 `DAYOFMONTH()` 从结果中提取日-月组件：
+- en: '[PRE95]'
+  id: totrans-470
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE95]'
+- en: 8.16 Finding the Day of the Week for a Date
+  id: totrans-471
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.16 确定日期的星期几
+- en: Problem
+  id: totrans-472
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to know the day of the week on which a date falls.
+  id: totrans-473
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想知道某个日期是星期几。
+- en: Solution
+  id: totrans-474
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use the `DAYNAME()` function.
+  id: totrans-475
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用 `DAYNAME()` 函数。
+- en: Discussion
+  id: totrans-476
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'To determine the name of the day of the week for a given date, use `DAYNAME()`:'
+  id: totrans-477
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定给定日期的星期几名称，请使用 `DAYNAME()`：
+- en: '[PRE96]'
+  id: totrans-478
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE96]'
+- en: '`DAYNAME()` is often useful in conjunction with other date-related techniques.
+    For example, to determine the day of the week for the first of the month, use
+    the first-of-month expression from [Recipe 8.15](#nch-dates-dates-day-firstlast)
+    as the argument to `DAYNAME()`:'
+  id: totrans-479
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '`DAYNAME()` 经常与其他日期相关技术结合使用。例如，要确定月初的星期几，使用来自 [Recipe 8.15](#nch-dates-dates-day-firstlast)
+    的月初表达式作为 `DAYNAME()` 的参数：'
+- en: '[PRE97]'
+  id: totrans-480
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE97]'
+- en: 8.17 Finding Dates for Any Weekday of a Given Week
+  id: totrans-481
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.17 寻找给定周的任意工作日日期
+- en: Problem
+  id: totrans-482
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to compute the date of some weekday for the week in which a given date
+    lies. Suppose that you want to know the date of the Tuesday that falls in the
+    same week as `2014-07-09`.
+  id: totrans-483
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您想计算给定日期所在周的某个工作日的日期。假设您想知道与 `2014-07-09` 相同周内的星期二的日期。
+- en: Solution
+  id: totrans-484
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: This is an application of date shifting. Figure out the number of days between
+    the starting weekday of the given date and the desired day, and shift the date
+    by that many days.
+  id: totrans-485
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这是日期偏移的一个应用。找出给定日期的起始星期几与所需日期之间的天数，并将日期向前或向后偏移这么多天。
+- en: Discussion
+  id: totrans-486
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: This section and the next describe how to convert one date to another when the
+    target date is specified in terms of days of the week. To solve such problems,
+    you need to know day-of-week values. Suppose you begin with a target date of `2014-07-09`.
+    To determine the date for Tuesday of the week in which that date lies, the calculation
+    depends on what weekday it is. If it’s a Monday, you add a day to produce `2014-07-10`,
+    but if it’s a Wednesday, you subtract a day to produce `2014-07-08`.
+  id: totrans-487
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 本节和下一节描述了在目标日期以星期天数指定时如何将一个日期转换为另一个日期。为了解决这类问题，您需要知道星期几的值。假设您从目标日期 `2014-07-09`
+    开始。要确定该日期所在星期中的星期二的日期，计算依赖于它是星期几。如果是星期一，则添加一天得到 `2014-07-10`，但如果是星期三，则减去一天得到 `2014-07-08`。
+- en: MySQL provides two functions that are useful here. `DAYOFWEEK()` treats Sunday
+    as the first day of the week and returns 1 through 7 for Sunday through Saturday.
+    `WEEKDAY()` treats Monday as the first day of the week and returns 0 through 6
+    for Monday through Sunday. (The examples shown here use `DAYOFWEEK()`.) Another
+    kind of day-of-week operation involves determining the name of the day. `DAYNAME()`
+    can be used for that.
+  id: totrans-488
+  prefs: []
+  type: TYPE_NORMAL
+  zh: MySQL提供了两个在此非常有用的函数。`DAYOFWEEK()` 将星期日视为一周的第一天，并返回 1 到 7，分别代表星期日到星期六。（这里的示例使用了
+    `DAYOFWEEK()`。）另一种星期几的操作涉及确定星期几的名称。`DAYNAME()` 可以用于此操作。
+- en: 'Calculations that determine one day of the week from another depend on the
+    day you start from as well as the day you want to reach. I find it easiest to
+    shift the reference date first to a known point relative to the beginning of the
+    week, and then shift forward:'
+  id: totrans-489
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 决定从某天到另一天的日期的计算，取决于您起始的那天以及您想要到达的那天。我发现最容易首先将参考日期移至一周的开始的已知点，然后再向前移动：
+- en: Shift the reference date back by its `DAYOFWEEK()` value, which always produces
+    the date for the Saturday preceding the week.
+  id: totrans-490
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将参考日期向前移动其 `DAYOFWEEK()` 值，这总是产生前一周的星期六日期。
+- en: Shift the Saturday date by one day to reach the Sunday date, by two days to
+    reach the Monday date, and so forth.
+  id: totrans-491
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+  zh: 将星期六的日期向前移动一天，得到星期日的日期；向前移动两天，得到星期一的日期，依此类推。
+- en: 'In SQL, those operations can be expressed as follows for a date `d`, where
+    *`n`* is 1 through 7 to produce the dates for Sunday through Saturday:'
+  id: totrans-492
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在SQL中，这些操作可以针对日期 `d` 表达如下，其中 *`n`* 为 1 到 7，分别代表星期日到星期六的日期：
+- en: '[PRE98]'
+  id: totrans-493
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE98]'
+- en: 'That expression splits the <q>shift back to Saturday</q> and <q>shift forward</q>
+    phases into separate operations, but because the intervals for both `DATE_SUB()`
+    and `DATE_ADD()` are in days, the expression can be simplified into a single `DATE_ADD()`
+    call:'
+  id: totrans-494
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该表达式将“返回到星期六”和“前进”阶段拆分为单独的操作，但由于`DATE_SUB()`和`DATE_ADD()`的间隔都是以天为单位，该表达式可以简化为单个`DATE_ADD()`调用：
+- en: '[PRE99]'
+  id: totrans-495
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE99]'
+- en: 'Applying this formula to the dates in our `date_val` table, using an *`n`*
+    of 1 for Sunday and 7 for Saturday to find the first and last days of the week,
+    yields this result:'
+  id: totrans-496
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 将此公式应用于我们的 `date_val` 表中的日期，使用 *`n`* 为 1 表示星期日，为 7 表示星期六，以找到一周的第一天和最后一天，得到如下结果：
+- en: '[PRE100]'
+  id: totrans-497
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE100]'
+- en: To determine the date of some weekday in a week relative to that of the target
+    date, modify the preceding procedure a bit. First, determine the date of the desired
+    weekday in the week containing the target date and then shift the result into
+    the desired week.
+  id: totrans-498
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要确定目标日期所在星期的某个星期几的日期，相对于目标日期进行稍微修改。首先，确定包含目标日期的星期中所需星期几的日期，然后将结果偏移到所需的星期。
+- en: 'Calculating the date for a day of the week in some other week is a problem
+    that breaks down into a day-within-week shift (using the formula just given) plus
+    a week shift. These operations can be done in either order because the amount
+    of shift within the week is the same whether or not you shift the reference date
+    into a different week first. For example, to calculate Wednesday of a week by
+    the preceding formula, *`n`* is 4\. To compute the date for Wednesday two weeks
+    ago, you can perform the day-within-week shift first, like this:'
+  id: totrans-499
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 计算某周的某天日期是一个问题，可以分解为一个周内日期偏移（使用刚才给出的公式）和一个周偏移。这两个操作可以按任何顺序执行，因为在周内的偏移量不受是否首先将参考日期移到另一周中的影响。例如，按照上述公式计算一个星期的星期三，*`n`*
+    为 4。要计算两周前的星期三的日期，可以先执行周内日期偏移，如下所示：
+- en: '[PRE101]'
+  id: totrans-500
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE101]'
+- en: 'Or you can perform the week shift first:'
+  id: totrans-501
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 或者您可以先执行星期转换：
+- en: '[PRE102]'
+  id: totrans-502
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE102]'
+- en: Some applications need to determine dates such as the *`n`*-th instance of particular
+    weekdays. For example, to administer a payroll for which paydays are the second
+    and fourth Thursdays of each month, you must know what those dates are. One way
+    to do this for any given month is to begin with the first-of-month date and shift
+    it forward. It’s easy enough to shift the date to the Thursday in that week; the
+    trick is to figure out how many weeks forward to shift the result to reach the
+    second and fourth Thursdays. If the first of the month occurs on any day from
+    Sunday through Thursday, you shift forward one week to reach the second Thursday.
+    If the first of the month occurs on Friday or later, you shift forward by two
+    weeks. The fourth Thursday is, of course, two weeks after that.
+  id: totrans-503
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 一些应用程序需要确定特定工作日的第*n*个实例的日期。例如，管理发薪日为每月第二个和第四个星期四的工资单，您必须知道这些日期。为了在任何给定月份执行此操作，您可以从月初日期开始并向前移动。将日期移动到该周的星期四很容易；关键是要计算向前移动多少周才能达到第二个和第四个星期四。如果月初日期在周日到周四之间的任何一天，则向前移动一周即可到达第二个星期四。如果月初日期在周五或之后，则向前移动两周。第四个星期四当然是再往后两周。
+- en: 'The following Perl code implements this logic to find all paydays in the year
+    2021\. It runs a loop that constructs the first-of-month date for the months of
+    the year. For each month, it issues a statement that determines the dates of the
+    second and fourth Thursdays:'
+  id: totrans-504
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面的Perl代码实现了这一逻辑，以找到2021年的所有发薪日。它运行一个循环，构造每年月份的第一天日期。对于每个月，它执行一个语句来确定第二个和第四个星期四的日期：
+- en: '[PRE103]'
+  id: totrans-505
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE103]'
+- en: 'The program produces this output:'
+  id: totrans-506
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 该程序产生以下输出：
+- en: '[PRE104]'
+  id: totrans-507
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE104]'
+- en: 8.18 Canonizing Not-Quite-ISO Date Strings
+  id: totrans-508
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.18 规范非完全ISO日期字符串
+- en: Problem
+  id: totrans-509
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You have a date that is in a format that’s close to, but not exactly in, ISO
+    format, and you want to convert it into an ISO format date..
+  id: totrans-510
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您有一个接近但不完全符合ISO格式的日期，想要将其转换为ISO格式的日期。
+- en: Solution
+  id: totrans-511
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Canonize the date by passing it to a function that always returns an ISO-format
+    date result.
+  id: totrans-512
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 通过传递日期到一个始终返回ISO格式日期结果的函数来规范日期。
+- en: Discussion
+  id: totrans-513
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: 'In [Recipe 8.10](#nch-dates-dates-synth), we ran into the problem that synthesizing
+    dates with `CONCAT()` may produce values that are not quite in ISO format. For
+    example, the following statement produces first-of-month values in which the month
+    part may have only a single digit:'
+  id: totrans-514
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在[配方 8.10](#nch-dates-dates-synth)中，我们遇到了使用`CONCAT()`合成日期可能产生不完全符合ISO格式的问题。例如，以下语句生成的每月第一天的值可能月份部分只有一位数：
+- en: '[PRE105]'
+  id: totrans-515
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE105]'
+- en: '[Recipe 8.10](#nch-dates-dates-synth) shows a technique using `LPAD()` for
+    making sure the month values have two digits. Another way to standardize a close-to-ISO
+    date is to use it in an expression that produces an ISO date result. For a date
+    `d`, any of the following expressions will do:'
+  id: totrans-516
+  prefs: []
+  type: TYPE_NORMAL
+  zh: '[配方 8.10](#nch-dates-dates-synth)展示了使用`LPAD()`确保月份值为两位数的技术。另一种标准化接近ISO日期的方法是将其用于生成ISO日期结果的表达式中。对于日期`d`，以下任何表达式均可：'
+- en: '[PRE106]'
+  id: totrans-517
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE106]'
+- en: 'Using those expressions with the non-ISO results from the `CONCAT()` operation
+    yields ISO format in several ways:'
+  id: totrans-518
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 使用这些表达式与`CONCAT()`操作的非ISO结果以多种方式产生ISO格式：
+- en: '[PRE107]'
+  id: totrans-519
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE107]'
+- en: 8.19 Selecting Rows Based on Temporal Characteristics
+  id: totrans-520
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+  zh: 8.19 基于时间特性选择行
+- en: Problem
+  id: totrans-521
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 问题
+- en: You want to select rows based on temporal conditions.
+  id: totrans-522
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 您希望基于时间条件选择行。
+- en: Solution
+  id: totrans-523
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 解决方案
+- en: Use a date or time condition in the `WHERE` clause. This may be based on direct
+    comparison of column values with known values. Or it may be necessary to apply
+    a function to column values to convert them to a more appropriate form for testing,
+    such as using `MONTH()` to test the month part of a date.
+  id: totrans-524
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 在`WHERE`子句中使用日期或时间条件。这可能基于直接比较列值与已知值，或者可能需要对列值应用函数以将其转换为更适合测试的形式，例如使用`MONTH()`来测试日期的月份部分。
+- en: Discussion
+  id: totrans-525
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+  zh: 讨论
+- en: Most of the preceding date-based techniques were illustrated by example statements
+    that produce date or time values as output. To place date-based restrictions on
+    the rows selected by a statement, use the same techniques in a `WHERE` clause.
+    For example, you can select rows by looking for values that occur before or after
+    a given date, within a date range, or that match particular month or day values.
+  id: totrans-526
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 大多数前面基于日期的技术都是通过示例语句来说明输出日期或时间值。要在语句中选择行并基于日期进行限制，请在`WHERE`子句中使用相同的技术。例如，您可以通过查找发生在给定日期之前或之后、在日期范围内的值，或匹配特定月份或日期值来选择行。
+- en: Comparing dates to one another
+  id: totrans-527
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 比较日期之间的差异
+- en: 'The following statements find rows from the `date_val` table that occur either
+    before 1900 or during the 1900s:'
+  id: totrans-528
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 下面的语句查找来自 `date_val` 表的在1900年之前或在1900年代期间发生的行：
+- en: '[PRE108]'
+  id: totrans-529
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE108]'
+- en: 'When you don’t know the exact date needed for a comparison in a `WHERE` clause,
+    you can often calculate it using an expression. For example, to perform an <q>on
+    this day in history</q> statement to search for rows in a table named `history`
+    to find events occurring exactly 50 years ago, do this:'
+  id: totrans-530
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 当你不知道在 `WHERE` 子句中需要什么确切日期时，通常可以使用表达式来计算它。例如，执行一个“历史上的今天”语句来搜索名为 `history` 的表中恰好发生在50年前的事件时，可以这样做：
+- en: '[PRE109]'
+  id: totrans-531
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE109]'
+- en: You see this kind of thing in newspapers that run columns showing what the news
+    events were in times past. (In essence, the statement identifies those events
+    that have reached their *`n`*-th anniversary.) To retrieve events that occurred
+    <q>on this day</q> for any year rather than <q>on this date</q> for a specific
+    year, the statement is a bit different. In that case, you need to find rows that
+    match the current calendar day, ignoring the year. That topic is discussed in
+    [“Comparing dates to calendar days”](#dates_to_calendar).
+  id: totrans-532
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 你会在报纸上看到这种事情，它们会列出过去时间的新闻事件。（实质上，该语句标识了那些达到其*`n`*周年纪念的事件。）为了检索发生在“今天”任何年份而不是特定年份“这一日期”的事件，该语句有些不同。在这种情况下，您需要查找与当前日历日匹配的行，忽略年份。有关该主题的讨论见[“将日期与日历日进行比较”](#dates_to_calendar)。
+- en: 'Calculated dates are useful for range testing as well. For example, to find
+    dates that occur later than 20 years ago, use `DATE_SUB()` to calculate the cutoff
+    date:'
+  id: totrans-533
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 计算日期对于范围测试也是有用的。例如，要查找晚于20年前的日期，请使用 `DATE_SUB()` 计算截止日期：
+- en: '[PRE110]'
+  id: totrans-534
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE110]'
+- en: 'Note that the expression in the `WHERE` clause isolates the date column `d`
+    on one side of the comparison operator. This is usually a good idea; if the column
+    is indexed, placing it alone on one side of a comparison enables MySQL to process
+    the statement more efficiently. To illustrate, the preceding `WHERE` clause can
+    be written in a way that’s logically equivalent but much less efficient for MySQL
+    to execute:'
+  id: totrans-535
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 注意 `WHERE` 子句中的表达式将日期列 `d` 孤立在比较操作符的一侧。这通常是个好主意；如果列被索引，将其单独放在比较的一侧使得MySQL能够更高效地处理语句。为了说明这一点，前面的
+    `WHERE` 子句可以以逻辑上等效但对MySQL执行效率较低的方式编写：
+- en: '[PRE111]'
+  id: totrans-536
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE111]'
+- en: Here, the `d` column is used within an expression. That means *every* row must
+    be retrieved so that the expression can be evaluated and tested, which makes any
+    index on the column useless.
+  id: totrans-537
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 这里，`d` 列在表达式中被使用。这意味着必须检索*每一行*，以便可以评估和测试表达式，这使得列上的任何索引都变得无用。
+- en: 'Sometimes it’s not so obvious how to rewrite a comparison to isolate a date
+    column on one side. For example, the following `WHERE` clause uses only part of
+    the date column in the comparisons:'
+  id: totrans-538
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 有时候不太明显如何重写比较以将日期列孤立在一侧。例如，下面的 `WHERE` 子句仅在比较中使用了日期列的一部分：
+- en: '[PRE112]'
+  id: totrans-539
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE112]'
+- en: 'To rewrite the first comparison, eliminate the `YEAR()` call, and replace its
+    right side with a complete date:'
+  id: totrans-540
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要重写第一个比较，请消除 `YEAR()` 调用，并将其右侧替换为完整日期：
+- en: '[PRE113]'
+  id: totrans-541
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE113]'
+- en: 'Rewriting the second comparison is a little trickier. You can eliminate the
+    `YEAR()` call on the left side, just as with the first expression, but you can’t
+    just add `-01-01` to the year on the right side. That produces the following result,
+    which is incorrect:'
+  id: totrans-542
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 重写第二个比较有些棘手。你可以消除左侧的 `YEAR()` 调用，就像第一个表达式一样，但你不能只是在右侧的年份后面添加 `-01-01`。这会产生以下错误的结果：
+- en: '[PRE114]'
+  id: totrans-543
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE114]'
+- en: 'That fails because dates from `1991-01-02` to `1991-12-31` fail the test, but
+    should pass. To rewrite the second comparison correctly, do this:'
+  id: totrans-544
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 那样做失败了，因为从 `1991-01-02` 到 `1991-12-31` 的日期未通过测试，但应该通过。要正确重写第二个比较，请执行以下操作：
+- en: '[PRE115]'
+  id: totrans-545
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE115]'
+- en: 'Another use for calculated dates occurs frequently in applications that create
+    rows that have a limited lifetime. Such applications must be able to determine
+    which rows to delete when performing an expiration operation. You can approach
+    this problem a couple ways:'
+  id: totrans-546
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 计算日期的另一种用途经常出现在创建有限生命周期行的应用程序中。这些应用程序必须能够确定在执行过期操作时要删除哪些行。你可以通过以下几种方式解决这个问题：
+- en: 'Store a date in each row indicating when it was created. (Do this by making
+    the column a `TIMESTAMP` or by setting it to `NOW()`; see [Recipe 8.8](#nch-dates-dates-automatic)
+    for details.) To perform an expiration operation later, determine which rows have
+    a creation date that is too old by comparing that date to the current date. For
+    example, the statement to expire rows that were created more than *`n`* days ago
+    might look like this:'
+  id: totrans-547
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在每行中存储一个日期，指示其创建时间。（通过将列设置为`TIMESTAMP`或将其设置为`NOW()`来实现；详情请参见[Recipe 8.8](#nch-dates-dates-automatic)。）稍后执行过期操作时，通过将该日期与当前日期进行比较，确定哪些行的创建日期过早。例如，过期超过*n*天的行的语句可能如下所示：
+- en: '[PRE116]'
+  id: totrans-548
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE116]'
+- en: 'Store an explicit expiration date in each row by calculating the expiration
+    date with `DATE_ADD()` when the row is created. For a row that should expire in
+    *`n`* days, do this:'
+  id: totrans-549
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 在每行中存储一个明确的过期日期，通过在创建行时使用`DATE_ADD()`计算过期日期。对于应在*n*天后过期的行，操作如下：
+- en: '[PRE117]'
+  id: totrans-550
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE117]'
+- en: 'To perform the expiration operation in this case, compare the expiration dates
+    to the current date to see which have been reached:'
+  id: totrans-551
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 在这种情况下执行过期操作，比较过期日期与当前日期，以查看哪些已到期：
+- en: '[PRE118]'
+  id: totrans-552
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE118]'
+- en: Comparing times to one another
+  id: totrans-553
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 比较时间之间的差异
+- en: 'Comparisons involving times are similar to those involving dates. For example,
+    to find times in the `t1` column that occurred from 9 AM to 2 PM, use an expression
+    like one of these:'
+  id: totrans-554
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 涉及时间的比较类似于涉及日期的比较。例如，要查找在`t1`列中发生在上午9点到下午2点的时间，可以使用以下表达式之一：
+- en: '[PRE119]'
+  id: totrans-555
+  prefs: []
+  type: TYPE_PRE
+  zh: '[PRE119]'
+- en: For an indexed `TIME` column, the first method is more efficient. The second
+    method has the property that it works not only for `TIME` columns, but for `DATETIME`
+    and `TIMESTAMP` columns as well.
+  id: totrans-556
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 对于索引的`TIME`列，第一种方法更有效。第二种方法的特性是不仅适用于`TIME`列，还适用于`DATETIME`和`TIMESTAMP`列。
+- en: Comparing dates to calendar days
+  id: totrans-557
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+  zh: 比较日期与日历日期
+- en: 'To answer questions about particular days of the year, use calendar-day testing.
+    The following examples illustrate how to do this in the context of looking for
+    birthdays:'
+  id: totrans-558
+  prefs: []
+  type: TYPE_NORMAL
+  zh: 要回答关于一年中特定日期的问题，请使用日历日期测试。以下示例演示了在查找生日时如何做到这一点：
+- en: 'Who has a birthday today? This requires matching a particular calendar day,
+    so you extract the month and day but ignore the year when performing comparisons:'
+  id: totrans-559
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 今天谁过生日？这要求匹配特定的日历日期，因此在执行比较时提取月份和日期，但忽略年份：
+- en: '[PRE120]'
+  id: totrans-560
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE120]'
+- en: This kind of statement commonly is applied to biographical data to find lists
+    of actors, politicians, musicians, and so forth, who were born on a particular
+    day of the year.
+  id: totrans-561
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 这种语句通常用于生物数据，以找出出生在特定日期的演员、政治家、音乐家等列表。
+- en: It’s tempting to use `DAYOFYEAR()` to solve <q>on this day</q> problems because
+    it results in simpler statements. But `DAYOFYEAR()` doesn’t work properly for
+    leap years. The presence of February 29 throws off the values for days from March
+    through December.
+  id: totrans-562
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+  zh: 使用`DAYOFYEAR()`来解决“在这一天”的问题很诱人，因为它会生成更简单的语句。但是`DAYOFYEAR()`对闰年的处理不正确。2月29日的存在会导致3月到12月的日期值出错。
+- en: 'Who has a birthday this month? In this case, it’s necessary to check only the
+    month:'
+  id: totrans-563
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 本月谁过生日？在这种情况下，只需检查月份即可：
+- en: '[PRE121]'
+  id: totrans-564
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE121]'
+- en: 'Who has a birthday next month? The trick here is that you can’t just add one
+    to the current month to get the month number that qualifying dates must match.
+    That gives you 13 for dates in December. To make sure that you get 1 (January),
+    use either of the following techniques:'
+  id: totrans-565
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+  zh: 下个月谁过生日？这里的技巧在于，不能简单地在当前月份上加一来获取符合日期的月份编号。这样会导致12月的日期得到13。要确保获得1（即1月），可以使用以下任一技术：
+- en: '[PRE122]'
+  id: totrans-566
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+  zh: '[PRE122]'

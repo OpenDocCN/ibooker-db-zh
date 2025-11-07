@@ -4,3 +4,4 @@
 +   [MySQL 学习指南第二版](docs/lrn-mysql-2e/README.md)
 +   [MongoDB 权威指南第三版](docs/mongo-dfngd-3e/README.md)
 +   [MySQL 秘籍第四版](docs/mysql-cb-4e/README.md)
++   [Redis 实战](docs/rds-ia/README.md)
